@@ -1,6 +1,6 @@
 {
   "name": "@gemstack/ai-skills",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "Portable capability bundles for @gemstack/ai-sdk agents: load SKILL.md skills (instructions + tools + resources) and compose them onto an Agent.",
   "keywords": [
     "ai",

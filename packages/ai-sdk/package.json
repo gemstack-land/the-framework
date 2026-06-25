@@ -1,6 +1,6 @@
 {
   "name": "@gemstack/ai-sdk",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "AI engine: providers, agents, tools, streaming, middleware. The first GemStack package.",
   "keywords": [
     "ai",
