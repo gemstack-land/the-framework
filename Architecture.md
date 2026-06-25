@@ -93,9 +93,15 @@ MCP shows up in GemStack in two fundamentally different roles. They point in opp
 
 There is a tiny surface overlap (both can "produce an MCP server"), but from different inputs: `mcpServerFromAgent(anAgent)` versus a hand-authored `McpServer`. That is expected, not duplication.
 
-## Open question on `ai-mcp`
+## `ai-mcp` carve-out (decided — see [issue #7](https://github.com/gemstack-land/gemstack/issues/7))
 
-The bridge is two functions today. It can be promoted to its own package `@gemstack/ai-mcp` (symmetry with the family, justifies its own optional-dep boundary, makes a clean first carve-out), or kept as a subpath `@gemstack/ai-sdk/mcp` until it grows. Current lean: promote to a package, as the first carve-out that proves the dependency seam works.
+The bridge is two functions today. Decisions:
+
+- **Promote to a package**, not keep a subpath. Beyond family symmetry, this makes the optional-dep boundary honest: `@modelcontextprotocol/sdk` is a peer of `ai-sdk` today, so every AI consumer sees it even though only `/mcp` uses it. As a package, only `ai-mcp` declares that peer. It is also the cheapest seam to prove the carve-out mechanism on before applying it to something heavier (`eval`).
+- **Hard-move, no shim.** External importers of `@gemstack/ai-sdk/mcp` = 0 (ai-sdk is days old); internal = exactly 1 (`@rudderjs/ai/mcp`, a shim we control). A re-export shim would also create the cycle `ai-sdk -> ai-mcp -> ai-sdk`, violating the one-directional rule. So: remove the `./mcp` export and the `@modelcontextprotocol/sdk` peer from `ai-sdk` (breaking 0.x minor `0.2.0 -> 0.3.0`), start `ai-mcp` at a fresh `0.1.0`, repoint the one internal consumer, and add a migration note. Keep the deprecated-shim-for-one-minor play in reserve for the first carve-out *after* 1.0, where a real installed base exists.
+- **Bridge only.** The standalone server framework (`@gemstack/mcp`) stays the other taxonomy axis and a separate graduation, not part of this carve-out. Ship the "which MCP do I use?" line (below) in `ai-mcp`'s README + npm description so the two never read as duplicates.
+
+The seam is small and one-directional: `mcp/*` imports one runtime value (`dynamicTool`) plus four types (`Agent`, `HasTools`, `Tool`, `ToolCallContext`) from `ai-sdk`; `ai-sdk` imports nothing back. Still gated on family alignment with the Vike team before code lands.
 
 ## Suggested ship order
 
