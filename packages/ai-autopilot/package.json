@@ -1,0 +1,57 @@
+{
+  "name": "@gemstack/ai-autopilot",
+  "version": "0.0.0",
+  "description": "Orchestration for @gemstack/ai-sdk agents: a Supervisor that plans, dispatches subagents (bounded concurrency + budget guardrails), and synthesizes the result.",
+  "keywords": [
+    "ai",
+    "agent",
+    "agents",
+    "orchestration",
+    "multi-agent",
+    "supervisor",
+    "autonomy",
+    "planning",
+    "gemstack"
+  ],
+  "license": "MIT",
+  "homepage": "https://github.com/gemstack-land/gemstack/tree/main/packages/ai-autopilot#readme",
+  "bugs": {
+    "url": "https://github.com/gemstack-land/gemstack/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/gemstack-land/gemstack",
+    "directory": "packages/ai-autopilot"
+  },
+  "type": "module",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "files": [
+    "dist"
+  ],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "dev": "tsc -p tsconfig.build.json --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "tsc -p tsconfig.test.json && cd dist-test && node --test",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@gemstack/ai-sdk": "workspace:^",
+    "zod": "^4.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.4.0"
+  },
+  "author": "Suleiman Shahbari"
+}

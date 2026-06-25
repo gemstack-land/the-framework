@@ -18,6 +18,22 @@ importers:
         specifier: ^5.4.0
         version: 5.9.3
 
+  packages/ai-autopilot:
+    dependencies:
+      '@gemstack/ai-sdk':
+        specifier: workspace:^
+        version: link:../ai-sdk
+      zod:
+        specifier: ^4.0.0
+        version: 4.4.3
+    devDependencies:
+      '@types/node':
+        specifier: ^20.0.0
+        version: 20.19.43
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+
   packages/ai-mcp:
     dependencies:
       '@gemstack/ai-sdk':
