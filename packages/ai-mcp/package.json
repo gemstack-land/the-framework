@@ -1,6 +1,6 @@
 {
   "name": "@gemstack/ai-mcp",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "Bridge between @gemstack/ai-sdk Agents and Model Context Protocol servers: consume remote MCP tools as Agent tools, and expose an Agent as an MCP server.",
   "keywords": [
     "ai",
