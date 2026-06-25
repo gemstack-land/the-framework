@@ -1,0 +1,17 @@
+node_modules/
+dist/
+dist-test/
+.turbo/
+*.tsbuildinfo
+*.log
+.DS_Store
+.env
+.env.*
+!.env.example
+
+# Claude Code / agent harness state — not framework code
+.claude/
+.agents/
+
+# Test output
+test-results/

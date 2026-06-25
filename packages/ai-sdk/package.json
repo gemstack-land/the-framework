@@ -1,0 +1,141 @@
+{
+  "name": "@gemstack/ai-sdk",
+  "version": "0.1.0",
+  "description": "AI engine: providers, agents, tools, streaming, middleware. The first GemStack package.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/gemstack-land/gemstack",
+    "directory": "packages/ai-sdk"
+  },
+  "type": "module",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "files": [
+    "dist",
+    "boost"
+  ],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./node": {
+      "import": "./dist/node/index.js",
+      "types": "./dist/node/index.d.ts"
+    },
+    "./server": {
+      "import": "./dist/server/index.js",
+      "types": "./dist/server/index.d.ts"
+    },
+    "./commands/make-agent": {
+      "import": "./dist/commands/make-agent.js",
+      "types": "./dist/commands/make-agent.d.ts"
+    },
+    "./commands/ai-eval": {
+      "import": "./dist/commands/ai-eval.js",
+      "types": "./dist/commands/ai-eval.d.ts"
+    },
+    "./doctor": {
+      "import": "./dist/doctor.js",
+      "types": "./dist/doctor.d.ts"
+    },
+    "./observers": {
+      "import": "./dist/observers.js",
+      "types": "./dist/observers.d.ts"
+    },
+    "./mcp": {
+      "import": "./dist/mcp/index.js",
+      "types": "./dist/mcp/index.d.ts"
+    },
+    "./chat-mentions": {
+      "import": "./dist/chat-mentions.js",
+      "types": "./dist/chat-mentions.d.ts"
+    },
+    "./conversation-orm": {
+      "import": "./dist/conversation-orm/index.js",
+      "types": "./dist/conversation-orm/index.d.ts"
+    },
+    "./gateway": {
+      "import": "./dist/gateway/index.js",
+      "types": "./dist/gateway/index.d.ts"
+    },
+    "./memory-orm": {
+      "import": "./dist/memory-orm/index.js",
+      "types": "./dist/memory-orm/index.d.ts"
+    },
+    "./budget-orm": {
+      "import": "./dist/budget-orm/index.js",
+      "types": "./dist/budget-orm/index.d.ts"
+    },
+    "./memory-embedding": {
+      "import": "./dist/memory-embedding/index.js",
+      "types": "./dist/memory-embedding/index.d.ts"
+    },
+    "./eval": {
+      "import": "./dist/eval/index.js",
+      "types": "./dist/eval/index.d.ts"
+    },
+    "./computer-use": {
+      "import": "./dist/computer-use/index.js",
+      "types": "./dist/computer-use/index.d.ts"
+    },
+    "./react": {
+      "import": "./dist/react/index.js",
+      "types": "./dist/react/index.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "dev": "tsc -p tsconfig.build.json --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "tsc -p tsconfig.test.json && cd dist-test && node --test",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@rudderjs/console": "^1.4.3",
+    "@rudderjs/json-schema": "^1.1.0",
+    "zod": "^4.0.0"
+  },
+  "peerDependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@rudderjs/core": "^1.13.3",
+    "@rudderjs/orm": "^1.22.0",
+    "react": ">=19.2.0"
+  },
+  "peerDependenciesMeta": {
+    "@rudderjs/core": {
+      "optional": true
+    },
+    "@rudderjs/orm": {
+      "optional": true
+    },
+    "@modelcontextprotocol/sdk": {
+      "optional": true
+    },
+    "react": {
+      "optional": true
+    }
+  },
+  "optionalDependencies": {
+    "@anthropic-ai/sdk": ">=0.91.1",
+    "@aws-sdk/client-bedrock-runtime": ">=3.600.0",
+    "@google/genai": ">=1.0.0",
+    "cohere-ai": ">=7.0.0",
+    "openai": ">=4.70.0"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@rudderjs/console": "^1.4.3",
+    "@rudderjs/core": "^1.13.3",
+    "@rudderjs/orm": "^1.22.0",
+    "@types/node": "^20.0.0",
+    "@types/react": "^19.2.0",
+    "react": "^19.2.0",
+    "typescript": "^5.4.0"
+  },
+  "author": "Suleiman Shahbari"
+}

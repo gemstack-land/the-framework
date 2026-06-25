@@ -1,0 +1,23 @@
+{
+  "name": "gemstack",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "description": "GemStack: a collection of high-quality, framework-agnostic tools. Home of @gemstack/ai-sdk.",
+  "packageManager": "pnpm@11.5.3",
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev",
+    "typecheck": "turbo run typecheck",
+    "clean": "turbo run clean",
+    "test": "turbo run test",
+    "changeset": "changeset",
+    "changeset:version": "changeset version",
+    "release": "turbo run build --filter=./packages/* && changeset publish"
+  },
+  "devDependencies": {
+    "@changesets/cli": "^2.27.0",
+    "turbo": "^2.9.16",
+    "typescript": "^5.4.0"
+  }
+}
