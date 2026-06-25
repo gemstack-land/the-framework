@@ -81,6 +81,25 @@ importers:
         specifier: '>=4.70.0'
         version: 6.44.0(ws@8.21.0)(zod@4.4.3)
 
+  packages/ai-skills:
+    dependencies:
+      '@gemstack/ai-sdk':
+        specifier: workspace:^
+        version: link:../ai-sdk
+      yaml:
+        specifier: ^2.5.0
+        version: 2.9.0
+      zod:
+        specifier: ^4.0.0
+        version: 4.4.3
+    devDependencies:
+      '@types/node':
+        specifier: ^20.0.0
+        version: 20.19.43
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+
 packages:
 
   '@anthropic-ai/sdk@0.105.0':
@@ -1332,6 +1351,11 @@ packages:
         optional: true
       utf-8-validate:
         optional: true
+
+  yaml@2.9.0:
+    resolution: {integrity: sha512-2AvhNX3mb8zd6Zy7INTtSpl1F15HW6Wnqj0srWlkKLcpYl/gMIMJiyuGq2KeI2YFxUPjdlB+3Lc10seMLtL4cA==}
+    engines: {node: '>= 14.6'}
+    hasBin: true
 
   yargs-parser@20.2.9:
     resolution: {integrity: sha512-y11nGElTIV+CT3Zv9t7VKl+Q3hTQoT9a1Qzezhhl6Rp21gJ/IVTW7Z3y9EWXhuUBC2Shnf+DX0antecpAwSP8w==}
@@ -2867,6 +2891,8 @@ snapshots:
 
   ws@8.21.0:
     optional: true
+
+  yaml@2.9.0: {}
 
   yargs-parser@20.2.9:
     optional: true
