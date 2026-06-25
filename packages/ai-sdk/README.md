@@ -2,7 +2,7 @@
 
 AI engine: providers, agents, tools, streaming, middleware, structured output, conversation memory, evals, MCP, computer-use, and testing fakes.
 
-The first [GemStack](https://gemstack.land) package. Spun out of Rudder's `@rudderjs/ai` (carried forward from the 1.17.x line, renamed and re-versioned under the GemStack umbrella). The Rudder package now ships as a thin deprecated re-export of this one.
+The first [GemStack](https://github.com/gemstack-land/gemstack) package. Spun out of Rudder's `@rudderjs/ai` (carried forward from the 1.17.x line, renamed and re-versioned under the GemStack umbrella). The Rudder package now ships as a thin deprecated re-export of this one.
 
 ## Installation
 

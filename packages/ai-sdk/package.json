@@ -2,7 +2,33 @@
   "name": "@gemstack/ai-sdk",
   "version": "0.1.0",
   "description": "AI engine: providers, agents, tools, streaming, middleware. The first GemStack package.",
+  "keywords": [
+    "ai",
+    "llm",
+    "agent",
+    "agents",
+    "ai-agents",
+    "tools",
+    "tool-calling",
+    "streaming",
+    "mcp",
+    "model-context-protocol",
+    "computer-use",
+    "eval",
+    "structured-output",
+    "anthropic",
+    "claude",
+    "openai",
+    "gpt",
+    "gemini",
+    "bedrock",
+    "gemstack"
+  ],
   "license": "MIT",
+  "homepage": "https://github.com/gemstack-land/gemstack/tree/main/packages/ai-sdk#readme",
+  "bugs": {
+    "url": "https://github.com/gemstack-land/gemstack/issues"
+  },
   "repository": {
     "type": "git",
     "url": "https://github.com/gemstack-land/gemstack",
