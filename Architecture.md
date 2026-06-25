@@ -28,6 +28,24 @@ Packages join GemStack by **graduating**, one at a time, when they prove framewo
 - A `vike-*` package moves here only if a genuinely agnostic *core* falls out of it that is useful beyond its framework. In that case the core graduates (e.g. `@gemstack/<core>`) while the framework binding stays `vike-*`.
 - Because both repos are co-governed and the `vike-*` set sits in the Vike orbit, any such move is decided with the Vike team, when there is brand traction, not unilaterally.
 
+### Graduation candidates already in `vike-data`
+
+An audit of `vike-data` shows the agnostic engines are not in the `vike-*` packages (those are bindings) but in the `universal-*` packages, which already carry **zero Vike imports**. These are the real candidates, in priority order after `@gemstack/ai-sdk`:
+
+| Candidate (today) | Would become | Notes |
+|---|---|---|
+| `@universal-orm/core` (+ `@universal-orm/drizzle` / `/memory` / `/rudder`) | `@gemstack/orm` (+ adapters) | The ORM analog of `@gemstack/ai-sdk`. Mature, clearly agnostic. The strongest next candidate; move the core + its adapter family together. |
+| `@vike-data/universal-schema` | `@gemstack/schema` | "Usable standalone by any framework or ORM." Agnostic, but currently mis-scoped under `@vike-data`. |
+| `@vike-data/kit` | (stays) | Agnostic primitives (`createPort`), but it is the kit for *authoring bindings*, so it belongs with the binding ecosystem, not the engine umbrella, unless GemStack later wants a shared-primitives package. |
+
+Realized fully, GemStack is the unified home for agnostic engines: `@gemstack/ai-sdk` (AI), `@gemstack/orm` (data), `@gemstack/schema` (schema).
+
+### The open brand-consolidation question (for the Vike team)
+
+These are not orphaned code needing a home: `@universal-orm` is already its own deliberate npm scope, and `universal-schema` sits under `@vike-data`. So there are **three agnostic-ish scopes in play** (`@gemstack`, `@universal-orm`, `@vike-data`). The decision is therefore not "where should this code live" but **"do we consolidate the agnostic engines under one umbrella (`@gemstack`), or keep `@universal-orm` as a parallel brand?"** Since `@universal-orm` is co-developed, this is a decide-with-the-Vike-team call, gated on brand traction.
+
+When a candidate does graduate, follow the `@gemstack/ai-sdk` playbook exactly: copy the source in, rename to the `@gemstack/*` name, leave a deprecated re-export shim at the old name, reset to a fresh `0.x` line, then repoint dependents.
+
 ## The AI family
 
 ```
