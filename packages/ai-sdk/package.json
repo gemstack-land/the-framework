@@ -122,17 +122,19 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@rudderjs/console": "^1.4.3",
-    "@rudderjs/json-schema": "^1.1.0",
     "zod": "^4.0.0"
   },
   "peerDependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
+    "@rudderjs/console": "^1.4.3",
     "@rudderjs/core": "^1.13.3",
     "@rudderjs/orm": "^1.22.0",
     "react": ">=19.2.0"
   },
   "peerDependenciesMeta": {
+    "@rudderjs/console": {
+      "optional": true
+    },
     "@rudderjs/core": {
       "optional": true
     },

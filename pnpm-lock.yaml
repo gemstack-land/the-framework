@@ -20,12 +20,6 @@ importers:
 
   packages/ai-sdk:
     dependencies:
-      '@rudderjs/console':
-        specifier: ^1.4.3
-        version: 1.4.3
-      '@rudderjs/json-schema':
-        specifier: ^1.1.0
-        version: 1.1.0
       zod:
         specifier: ^4.0.0
         version: 4.4.3
@@ -33,6 +27,9 @@ importers:
       '@modelcontextprotocol/sdk':
         specifier: ^1.29.0
         version: 1.29.0(zod@4.4.3)
+      '@rudderjs/console':
+        specifier: ^1.4.3
+        version: 1.4.3
       '@rudderjs/core':
         specifier: ^1.13.3
         version: 1.13.3
@@ -352,10 +349,6 @@ packages:
         optional: true
       postgres:
         optional: true
-
-  '@rudderjs/json-schema@1.1.0':
-    resolution: {integrity: sha512-HMfuxXdJVE75W6Rk4VxXdoyfJWrXr4xixjt9SJQhjkSRmPYyhoxeIJKp0AlpAvpG584+H24gFOs+VDdvP5JhYQ==}
-    engines: {node: '>=22.12.0'}
 
   '@rudderjs/orm@1.22.0':
     resolution: {integrity: sha512-c8E99UkKv7TaT3J748I8VwY+6Roztw/OfSKhbIQoqzk41kjaV6VdzoPpcpr6okrdkMNuO8zb+AGzIUAoZwASRQ==}
@@ -1873,11 +1866,6 @@ snapshots:
   '@rudderjs/database@1.5.5':
     dependencies:
       '@rudderjs/contracts': 1.19.0
-
-  '@rudderjs/json-schema@1.1.0':
-    dependencies:
-      '@rudderjs/contracts': 1.19.0
-      zod: 4.4.3
 
   '@rudderjs/orm@1.22.0(@rudderjs/console@1.4.3)(@rudderjs/core@1.13.3)':
     dependencies:

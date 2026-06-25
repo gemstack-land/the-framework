@@ -25,7 +25,13 @@ pnpm add @aws-sdk/client-bedrock-runtime # AWS Bedrock
 
 ## Status
 
-`@gemstack/ai-sdk` starts at `0.1.0`. The code is mature, but the version line is intentionally reset: the public surface is being decoupled from Rudder (the `@rudderjs/core` / `@rudderjs/orm` coupling and the ORM-backed subpaths are moving behind a neutral, optional adapter seam) so the package stands alone in any Node app. Expect the API to firm up toward `1.0.0` as that decoupling lands.
+As of `0.2.0` the core stands alone: `@gemstack/ai-sdk`'s only required runtime dependency is `zod`. Every framework integration is an optional, opt-in subpath behind an optional peer dependency:
+
+- the Rudder `/server` provider (optional peer `@rudderjs/core`)
+- the ORM-backed stores `/conversation-orm`, `/memory-orm`, `/budget-orm` (optional peer `@rudderjs/orm`)
+- the doctor check + `make:agent` scaffolder (optional peer `@rudderjs/console`)
+
+The neutral storage contracts (`UserMemory`, `ConversationStore`, `BudgetStorage`) ship in-memory defaults, so a non-Rudder app uses the SDK with zero `@rudderjs/*` installed. The version line stays `0.x` while the API settles toward `1.0.0`.
 
 ## Subpath exports
 

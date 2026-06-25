@@ -17,7 +17,5 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
-      # TODO(#3): re-enable typecheck + test once @gemstack/ai-sdk is decoupled
-      # from @rudderjs/core/orm. Today the .test.ts files import broader
-      # @rudderjs/* packages that aren't dependencies here, so neither passes
-      # standalone. build (which excludes tests) is the meaningful gate for now.
+      - run: pnpm typecheck
+      - run: pnpm test
