@@ -93,7 +93,7 @@ MCP shows up in GemStack in two fundamentally different roles. They point in opp
 
 There is a tiny surface overlap (both can "produce an MCP server"), but from different inputs: `mcpServerFromAgent(anAgent)` versus a hand-authored `McpServer`. That is expected, not duplication.
 
-## `ai-mcp` carve-out (decided — see [issue #7](https://github.com/gemstack-land/gemstack/issues/7))
+## `ai-mcp` carve-out (decided - see [issue #7](https://github.com/gemstack-land/gemstack/issues/7))
 
 The bridge is two functions today. Decisions:
 
@@ -102,6 +102,27 @@ The bridge is two functions today. Decisions:
 - **Bridge only.** The standalone server framework (`@gemstack/mcp`) stays the other taxonomy axis and a separate graduation, not part of this carve-out. Ship the "which MCP do I use?" line (below) in `ai-mcp`'s README + npm description so the two never read as duplicates.
 
 The seam is small and one-directional: `mcp/*` imports one runtime value (`dynamicTool`) plus four types (`Agent`, `HasTools`, `Tool`, `ToolCallContext`) from `ai-sdk`; `ai-sdk` imports nothing back. Still gated on family alignment with the Vike team before code lands.
+
+## `ai-skills` design (decided - see [issue #8](https://github.com/gemstack-land/gemstack/issues/8))
+
+Largely greenfield: it builds the registry + loader + runtime around the existing `boost/skills` convention. Decisions:
+
+- **Manifest = `SKILL.md` frontmatter** (markdown-first), not a TS-first definition. YAML frontmatter (`name`, `description`, `trigger`, `skip`, `appliesTo`, `metadata`) + a markdown instructions body, exactly as `boost/skills` already ships. This keeps zero divergence from the shipped convention, matches the Anthropic Agent Skills shape (the portability moat: skills authored for Claude load here, gemstack skills ship as plain folders), and makes progressive disclosure fall out for free (index the cheap frontmatter, load the body on `trigger`).
+- **Tools = reuse `ai-sdk` `tool()` directly.** A skill folder is `SKILL.md` + an optional co-located `tools.ts` exporting plain `tool()` objects; the loader imports and merges them. Namespacing / scoping (active only while loaded) is handled by the loader at composition time, not via a new authoring API. One tool API across the framework; skills stay self-contained. Portability note: the `SKILL.md` instructions/resources stay portable across agents, the typed `tools.ts` is the gemstack-specific binding (Anthropic skills bundle scripts instead) - an expected split, not a problem.
+- **Security = explicit trust boundary, no in-process sandbox.** A skill is code you install/author, like any Vite/ESLint plugin; loading it runs its code. The framework makes the boundary honest: no auto-loading of untrusted directories (skills come from explicit, registered/allowlisted sources), surface-before-compose (report a skill's instructions/tools/resources before attaching), and reuse the existing tool-approval/middleware flow for the risky moment (tool execution). A true out-of-process / VM sandbox is out of scope (Node `vm` is not a security boundary, the permission model is process-wide) - recommend OS/container isolation around the app if real isolation is needed.
+- **Composition = declarative `skills()` class method**, mirroring `tools()`/`middleware()`. Precedence is unambiguous: the agent's own declarations are authoritative and skills augment + yield on conflict. Instructions: the agent's `instructions()` is the base identity (first/wins), skill instructions composed in after. Tools: union of `agent.tools()` + skill tools in declaration order; on a name collision the agent's own tool wins, with the loader's namespacing as backstop. Progressive disclosure is independent of declaration - you declare the available set, the runtime loads each skill's body/tools lazily on `trigger` match.
+
+Follow-up authoring options (low priority, revisit on demand): TS-first `defineSkill` (#11), a skill-scoped `skillTool()` wrapper (#12), and imperative `agent.use(skill)` runtime composition (#13). Still gated on family alignment before code lands.
+
+## `ai-autopilot` design (direction set, parked - see [issue #9](https://github.com/gemstack-land/gemstack/issues/9))
+
+The most speculative of the family, so this records direction, not a committed API. It sits above the real `ai-sdk` primitives (`asTool`, `resumeAsTool`, `resumeManyAsTool`, `SubAgentRunStore`, stop conditions).
+
+- **Scope = policy, not mechanism.** The primitives are mechanism (transfer control, run a subagent, resume a paused run); autopilot is the reusable control loop deciding which agents run, in what order, how results combine, when to stop, under a budget/guardrail. Enforced rule: if a feature is just calling a primitive, it stays in `ai-sdk`; `ai-autopilot` only earns its keep as the topology / control-policy / run-lifecycle layer.
+- **Seed slice = Supervisor:** plan -> dispatch subagents (fan-out via `asTool` / `resumeManyAsTool`) -> synthesize. The smallest thing clearly more than the primitives; a universally useful topology. Other topologies (pipelines, etc.) come later, on demand.
+- **Durability = in-process first.** Reuse the existing `SubAgentRunStore` + resume primitives for pause/resume; no new peer dep in v1. A durable / queue-backed runner is deferred to a concrete long-running use case and should arrive as an optional adapter/peer, not core.
+
+Stays parked as a design sketch: revisit once `ai-mcp` and `ai-skills` land and real orchestration use cases emerge. Gated on family alignment before code lands.
 
 ## Suggested ship order
 
