@@ -63,10 +63,6 @@
       "import": "./dist/commands/ai-eval.js",
       "types": "./dist/commands/ai-eval.d.ts"
     },
-    "./doctor": {
-      "import": "./dist/doctor.js",
-      "types": "./dist/doctor.d.ts"
-    },
     "./observers": {
       "import": "./dist/observers.js",
       "types": "./dist/observers.d.ts"
