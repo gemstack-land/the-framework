@@ -2,7 +2,7 @@
 
 An agent-agnostic framework for **authoring Model Context Protocol (MCP) servers** in TypeScript: declare tools, resources, and prompts as classes; serve them over a framework-neutral HTTP handler or stdio; protect them with OAuth 2.1. No framework required.
 
-This is the graduation of the mature `@rudderjs/mcp` server framework into a standalone, dependency-light package. Its only runtime dependencies are `@modelcontextprotocol/sdk`, `zod`, and `reflect-metadata`.
+It is standalone and dependency-light: its only runtime dependencies are `@modelcontextprotocol/sdk`, `zod`, and `reflect-metadata`. (It graduated from the mature `@rudderjs/mcp` server framework, re-versioned under the GemStack umbrella.)
 
 ## Which MCP package do I want?
 
@@ -70,7 +70,7 @@ app.all('/mcp', (c) => handler(c.req.raw))
 
 For a CLI/stdio server, use `startStdio` from the same subpath.
 
-> **Runnable example:** [`examples/mcp-quickstart`](../../examples/mcp-quickstart) is a complete, framework-neutral server (tool + resource + prompt, `@Handle` DI, OAuth 2.1) served over both `node:http` and Hono, with a CI smoke test, and **zero `@rudderjs/*` packages**.
+> **Runnable example:** [`examples/mcp-quickstart`](../../examples/mcp-quickstart) is a complete, framework-neutral server (tool + resource + prompt, `@Handle` DI, OAuth 2.1) served over both `node:http` and Hono, with a CI smoke test and **zero framework dependencies**.
 
 ### Resources and prompts
 
@@ -131,21 +131,40 @@ If a `@Handle` method requests a dependency and no resolver is provided — or t
 
 ## OAuth 2.1
 
-Protect a web endpoint with bearer tokens. The core is auth-agnostic: you supply a `verifyToken` that validates the JWT (signature, expiry, revocation) and returns its claims, or `null`/throws when invalid.
+Protect a web endpoint with bearer tokens. The core is auth-agnostic: you supply a `verifyToken` that validates the JWT (signature, expiry, revocation) and returns its claims, or `null`/throws when invalid. Back it with any JWT library (`jose` shown here), a token-introspection endpoint, or a framework's auth integration.
+
+Two pieces work together, and you need **both**:
+
+1. `oauth2McpMiddleware('/mcp', ...)` guards the MCP endpoint and, on failure, returns an RFC 9728 `WWW-Authenticate` challenge.
+2. `registerOAuth2Metadata(router, '/mcp', ...)` serves the protected-resource metadata document at `/.well-known/oauth-protected-resource/mcp` that the challenge points clients to. Without it, compliant clients can't discover the authorization server.
 
 ```ts
-import { oauth2McpMiddleware } from '@gemstack/mcp'
+import { oauth2McpMiddleware, registerOAuth2Metadata } from '@gemstack/mcp'
+import { createRemoteJWKSet, jwtVerify } from 'jose'
 
-const mw = oauth2McpMiddleware('/mcp', {
+const JWKS = createRemoteJWKSet(new URL('https://issuer.example.com/.well-known/jwks.json'))
+
+const options = {
   scopes: ['mcp.read'],
-  verifyToken: async (jwt) => {
-    // validate however you like; return claims or null
-    return { sub: 'user-1', scopes: ['mcp.read'] }
+  scopesSupported: ['mcp.read', 'mcp.write'],
+  authorizationServers: ['https://issuer.example.com'],
+  verifyToken: async (jwt: string) => {
+    try {
+      const { payload } = await jwtVerify(jwt, JWKS, { audience: 'https://api.example.com/mcp' })
+      // map your token's claims onto { sub?, scopes? }
+      return { sub: payload.sub, scopes: String(payload['scope'] ?? '').split(' ').filter(Boolean) }
+    } catch {
+      return null   // invalid/expired -> 401
+    }
   },
-})
+}
+
+// Express/Connect-style wiring:
+app.use('/mcp', oauth2McpMiddleware('/mcp', options))
+registerOAuth2Metadata(app, '/mcp', options)
 ```
 
-On success the verified claims are attached to the request as `req.mcpAuth`. `registerOAuth2Metadata(...)` emits the RFC 9728 protected-resource metadata document.
+On success the verified claims are attached to the request as `req.mcpAuth` (`{ sub?, scopes?, claims }`). Missing required `scopes` yields a `403 insufficient_scope`; a missing/invalid token yields `401 invalid_token`.
 
 ## Testing
 

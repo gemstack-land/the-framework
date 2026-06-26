@@ -1251,7 +1251,7 @@ describe('oauth2McpMiddleware — happy paths', () => {
     }
   }
 
-  // A stand-in for the binding's verifier (the Rudder binding wires passport here).
+  // A stand-in for an app-supplied verifier (real ones validate the JWT).
   function verifier(opts: { scopes?: string[]; sub?: string } = {}): VerifyToken {
     return async () => ({
       sub: opts.sub ?? 'user-1',
@@ -1324,6 +1324,21 @@ describe('oauth2McpMiddleware — happy paths', () => {
     let nextCalled = false
     await mw(mockReq('Bearer abc') as never, res as never, async () => { nextCalled = true })
     assert.equal(nextCalled, false)
+    assert.equal(calls.status, 401)
+    assert.ok(calls.headers['www-authenticate']?.includes('invalid_token'))
+  })
+
+  it('an empty bearer token ("Bearer ") is rejected without calling the verifier', async () => {
+    const { oauth2McpMiddleware } = await import('./auth/oauth2.js')
+    let verifierCalled = false
+    const mw = oauth2McpMiddleware('/mcp/secure', {
+      verifyToken: async () => { verifierCalled = true; return { sub: 'x' } },
+    })
+    const { res, calls } = mockRes()
+    let nextCalled = false
+    await mw(mockReq('Bearer    ') as never, res as never, async () => { nextCalled = true })
+    assert.equal(nextCalled, false)
+    assert.equal(verifierCalled, false)
     assert.equal(calls.status, 401)
     assert.ok(calls.headers['www-authenticate']?.includes('invalid_token'))
   })
