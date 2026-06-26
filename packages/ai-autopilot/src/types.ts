@@ -34,7 +34,11 @@ export interface SupervisorRun {
   plan: PlannedSubtask[]
   /** One result per dispatched subtask, in plan order. */
   results: SubtaskResult[]
-  /** Aggregate token usage across planning, dispatch, and synthesis. */
+  /**
+   * Aggregate token usage across the dispatched subtasks. Planning and
+   * synthesis usage is not included: the `Planner` / `Synthesizer` contracts
+   * return data, not usage, so the supervisor cannot observe their token spend.
+   */
   usage: TokenUsage
   /** True when a guardrail (subtask cap or token budget) stopped work early. */
   stoppedEarly: boolean
@@ -82,12 +86,22 @@ export interface SupervisorOptions {
    * for an LLM synthesis.
    */
   synthesize?: Synthesizer
-  /** Max subtasks dispatched at once. Default 4. */
+  /** Max subtasks dispatched at once. Positive integer; default 4. */
   concurrency?: number
-  /** Hard cap on subtasks; a longer plan is trimmed (and an event emitted). */
+  /**
+   * Optional hard cap on subtasks. A longer plan is trimmed to this many and a
+   * `plan-trimmed` event is emitted; omit for no cap. Positive integer.
+   */
   maxSubtasks?: number
-  /** Stop dispatching once aggregate token usage exceeds `maxTotalTokens`. */
+  /**
+   * Optional token guardrail. When `maxTotalTokens` is set, the supervisor stops
+   * dispatching new subtasks once aggregate dispatch usage crosses it (in-flight
+   * workers still finish, so usage can overshoot slightly). Omit for no limit.
+   */
   budget?: { maxTotalTokens?: number }
-  /** Observe progress. */
+  /**
+   * Observe progress events. The callback is isolated: if it throws, the error
+   * is logged and the run continues, so an observer bug cannot abort the run.
+   */
   onEvent?: (event: SupervisorEvent) => void
 }

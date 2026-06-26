@@ -5,6 +5,7 @@ import { defaultSynthesize } from './synthesizer.js'
 import type {
   PlannedSubtask,
   SubtaskResult,
+  SupervisorEvent,
   SupervisorOptions,
   SupervisorRun,
   WorkerRouter,
@@ -33,15 +34,35 @@ const ZERO_USAGE: TokenUsage = { promptTokens: 0, completionTokens: 0, totalToke
  * })
  * const { text } = await supervisor.run('Draft a launch brief for product X')
  * ```
+ *
+ * Options are validated at construction. An `onEvent` callback that throws is
+ * isolated (logged-and-swallowed) so an observer bug cannot abort a run.
  */
 export class Supervisor {
-  constructor(private readonly opts: SupervisorOptions) {}
+  constructor(private readonly opts: SupervisorOptions) {
+    if (typeof opts?.plan !== 'function') {
+      throw new TypeError('[ai-autopilot] Supervisor requires a `plan` function')
+    }
+    if (opts.workers == null) {
+      throw new TypeError('[ai-autopilot] Supervisor requires `workers` (an Agent, a Record<string, Agent>, or a WorkerRouter)')
+    }
+    if (opts.concurrency !== undefined && (!Number.isInteger(opts.concurrency) || opts.concurrency < 1)) {
+      throw new RangeError(`[ai-autopilot] concurrency must be a positive integer, got ${opts.concurrency}`)
+    }
+    if (opts.maxSubtasks !== undefined && (!Number.isInteger(opts.maxSubtasks) || opts.maxSubtasks < 1)) {
+      throw new RangeError(`[ai-autopilot] maxSubtasks must be a positive integer, got ${opts.maxSubtasks}`)
+    }
+  }
 
   async run(task: string): Promise<SupervisorRun> {
+    if (!task?.trim()) {
+      throw new Error('[ai-autopilot] run() requires a non-empty task')
+    }
+
     const concurrency = this.opts.concurrency ?? 4
     const route = resolveRouter(this.opts.workers)
     const synthesize = this.opts.synthesize ?? defaultSynthesize
-    const emit = this.opts.onEvent ?? (() => {})
+    const emit = makeEmitter(this.opts.onEvent)
 
     let usage: TokenUsage = ZERO_USAGE
     let stoppedEarly = false
@@ -88,6 +109,21 @@ export class Supervisor {
 }
 
 // ─── Internals ───────────────────────────────────────────────────
+
+/**
+ * Wrap the user's `onEvent` so a throwing callback can never abort a run.
+ * Observer errors are reported to the console but otherwise swallowed.
+ */
+function makeEmitter(onEvent: SupervisorOptions['onEvent']): (event: SupervisorEvent) => void {
+  if (!onEvent) return () => {}
+  return (event) => {
+    try {
+      onEvent(event)
+    } catch (err) {
+      console.error('[ai-autopilot] onEvent callback threw; ignoring:', err)
+    }
+  }
+}
 
 async function runSubtask(route: WorkerRouter, subtask: PlannedSubtask): Promise<SubtaskResult> {
   try {
