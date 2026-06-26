@@ -57,7 +57,20 @@ const handler = createMcpHttpHandler(new DemoServer())
 createServer((req, res) => { void handler(req, res) }).listen(3000)
 ```
 
-`createMcpHttpHandler` returns a plain `(req, res)` handler, so it also mounts on Express/Connect. For Hono, Vike, or any Fetch-style runtime, use `createWebRequestHandler` from `@gemstack/mcp/runtime` (`(request: Request) => Promise<Response>`). For a CLI/stdio server, use `startStdio` from the same subpath.
+`createMcpHttpHandler` returns a plain `(req, res)` handler, so it also mounts on Express/Connect. For Hono, Vike, or any Fetch-style runtime, use `createWebRequestHandler` from `@gemstack/mcp/runtime` (`(request: Request) => Promise<Response>`):
+
+```ts
+import { Hono } from 'hono'
+import { createWebRequestHandler } from '@gemstack/mcp/runtime'
+
+const handler = createWebRequestHandler(new DemoServer())
+const app = new Hono()
+app.all('/mcp', (c) => handler(c.req.raw))
+```
+
+For a CLI/stdio server, use `startStdio` from the same subpath.
+
+> **Runnable example:** [`examples/mcp-quickstart`](../../examples/mcp-quickstart) is a complete, framework-neutral server (tool + resource + prompt, `@Handle` DI, OAuth 2.1) served over both `node:http` and Hono, with a CI smoke test, and **zero `@rudderjs/*` packages**.
 
 ### Resources and prompts
 
@@ -103,7 +116,18 @@ const resolver = createResolver().register(Logger, new Logger())
 const server = new LogServer({ resolver })
 ```
 
-The resolver is **instance-scoped** — passed at construction, never read off a global. Wire it to any container (Awilix, tsyringe, InversifyJS, a framework binding) with a one-function adapter implementing `McpResolver = { resolve(token): unknown }`. If a `@Handle` method requests a dependency and no resolver is provided — or the resolver yields `undefined` — the call fails loudly, naming the member and token; it never injects `undefined`.
+The resolver is **instance-scoped** — passed at construction, never read off a global. Wire it to any container (Awilix, tsyringe, InversifyJS, a framework binding) with a one-function adapter implementing `McpResolver = { resolve(token): unknown }`:
+
+```ts
+import { createContainer, asValue } from 'awilix'
+import type { McpResolver } from '@gemstack/mcp'
+
+const container = createContainer().register({ logger: asValue(new Logger()) })
+const resolver: McpResolver = { resolve: (token) => container.resolve((token as { name: string }).name) }
+new LogServer({ resolver })
+```
+
+If a `@Handle` method requests a dependency and no resolver is provided — or the resolver yields `undefined` — the call fails loudly, naming the member and token; it never injects `undefined`.
 
 ## OAuth 2.1
 
