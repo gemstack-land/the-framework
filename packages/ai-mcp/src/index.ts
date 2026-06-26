@@ -3,7 +3,7 @@
  * Protocol servers. Two connectors:
  *
  * - {@link mcpClientTools} — consume a remote MCP server's tools as Agent tools
- * - {@link mcpServerFromAgent} — expose an Agent as an MCP server external
+ * - {@link mcpServerFromAgent} — expose an Agent as an MCP server that external
  *   clients (Claude Desktop, Cursor, etc.) can call
  *
  * Requires `@modelcontextprotocol/sdk` at runtime — declared as an optional
