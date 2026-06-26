@@ -27,7 +27,7 @@ export class ComputerUseProviderError extends Error {
 
   constructor(model: string) {
     super(
-      `[Rudder AI] computerUseTool is Anthropic-only in v1; got model "${model}". ` +
+      `[ai-sdk] computerUseTool is Anthropic-only in v1; got model "${model}". ` +
       `Use an "anthropic/*" or "bedrock/<region.>?anthropic.*" model, or remove the tool.`,
     )
     this.name = 'ComputerUseProviderError'
@@ -50,7 +50,7 @@ export class ComputerUseLimitError extends Error {
 
   constructor(maxActions: number) {
     super(
-      `[Rudder AI] computerUseTool exceeded maxActions cap of ${maxActions}. ` +
+      `[ai-sdk] computerUseTool exceeded maxActions cap of ${maxActions}. ` +
       `Bump the cap with computerUseTool({ page, maxActions: <n> }) if your agent legitimately needs more steps.`,
     )
     this.name = 'ComputerUseLimitError'

@@ -195,7 +195,7 @@ export class CachedSubAgentRunStore implements SubAgentRunStore {
     }
     const adapter = mod.CacheRegistry?.get?.()
     if (!adapter) {
-      throw new Error('[Rudder AI] CachedSubAgentRunStore needs a cache adapter. Install `@rudderjs/cache`, register a driver, or pass `{ cache }` explicitly.')
+      throw new Error('[ai-sdk] CachedSubAgentRunStore needs a cache adapter. Install `@rudderjs/cache`, register a driver, or pass `{ cache }` explicitly.')
     }
     this.resolvedCache = adapter
     return adapter

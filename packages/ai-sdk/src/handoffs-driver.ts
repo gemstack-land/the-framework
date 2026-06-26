@@ -59,7 +59,7 @@ export async function driveHandoffs(
 
   for (;;) {
     if (hopCount >= MAX_HANDOFFS) {
-      throw new Error(`[Rudder AI] Exceeded max handoffs (${MAX_HANDOFFS}). Likely a cycle between agents.`)
+      throw new Error(`[ai-sdk] Exceeded max handoffs (${MAX_HANDOFFS}). Likely a cycle between agents.`)
     }
     const ChildClass = currentPending.spec.AgentClass
     handoffPath.push(ChildClass.name)

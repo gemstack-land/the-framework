@@ -191,7 +191,7 @@ export class UnknownModelPricingError extends Error {
     const snapshotDate = sample ? (pricing[sample]?._snapshotDate ?? null) : null
     const sampleSuffix = snapshotDate ? ` (catalog snapshot ${snapshotDate})` : ''
     super(
-      `[Rudder AI] No pricing entry for model "${model}"${sampleSuffix}. ` +
+      `[ai-sdk] No pricing entry for model "${model}"${sampleSuffix}. ` +
       `Either the model id is misspelled, or the catalog is stale — ` +
       `add an override entry: \`pricing: { ...ModelPricing, "${model}": { inputPer1k, outputPer1k, _snapshotDate } }\`.`,
     )
@@ -215,7 +215,7 @@ export class BudgetExceededError extends Error {
 
   constructor(opts: { userId: string; period: 'daily' | 'monthly'; spent: number; cap: number }) {
     super(
-      `[Rudder AI] ${opts.period} budget of $${opts.cap.toFixed(2)} exceeded for user ${opts.userId} ` +
+      `[ai-sdk] ${opts.period} budget of $${opts.cap.toFixed(2)} exceeded for user ${opts.userId} ` +
       `(spent $${opts.spent.toFixed(4)}).`,
     )
     this.name = 'BudgetExceededError'

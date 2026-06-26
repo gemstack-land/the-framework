@@ -121,7 +121,7 @@ export function parseArgs(args: string[]): AiEvalOptions {
     if (VALUE_FLAGS.has(name)) {
       const value = inline ?? args[i + 1]
       if (!inline) i++   // consumed the next arg
-      if (!value) throw new Error(`[Rudder AI] ${name} requires a value`)
+      if (!value) throw new Error(`[ai-sdk] ${name} requires a value`)
       if (name === '--html') opts.html = value
       continue
     }
@@ -404,7 +404,7 @@ function parsePattern(pattern: string): { root: string; suffix: string } {
   }
   if (!postfix.startsWith('*')) {
     throw new Error(
-      `[Rudder AI] Unsupported eval pattern "${pattern}". ` +
+      `[ai-sdk] Unsupported eval pattern "${pattern}". ` +
       `Expected <dir>/**/*<suffix> or *<suffix>.`,
     )
   }

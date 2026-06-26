@@ -112,7 +112,7 @@ export class ElevenLabsProvider implements ProviderFactory {
   }
 
   create(_model: string): ProviderAdapter {
-    throw new Error('[Rudder AI] ElevenLabs does not support text generation. Use it for text-to-speech and speech-to-text.')
+    throw new Error('[ai-sdk] ElevenLabs does not support text generation. Use it for text-to-speech and speech-to-text.')
   }
 
   createTts(model: string): TextToSpeechAdapter {
@@ -164,7 +164,7 @@ class ElevenLabsTtsAdapter implements TextToSpeechAdapter {
 
     if (!response.ok) {
       const text = await safeText(response)
-      throw new Error(`[Rudder AI] ElevenLabs TTS failed (${response.status}): ${text}`)
+      throw new Error(`[ai-sdk] ElevenLabs TTS failed (${response.status}): ${text}`)
     }
 
     const arrayBuffer = await response.arrayBuffer()
@@ -207,7 +207,7 @@ class ElevenLabsSttAdapter implements SpeechToTextAdapter {
 
     if (!response.ok) {
       const text = await safeText(response)
-      throw new Error(`[Rudder AI] ElevenLabs STT failed (${response.status}): ${text}`)
+      throw new Error(`[ai-sdk] ElevenLabs STT failed (${response.status}): ${text}`)
     }
 
     const data = await response.json() as {
@@ -238,7 +238,7 @@ function elevenLabsOutputFormat(format: NonNullable<TextToSpeechOptions['format'
     case 'aac':
     case 'flac':
       throw new Error(
-        `[Rudder AI] ElevenLabs TTS does not support format '${format}'. ` +
+        `[ai-sdk] ElevenLabs TTS does not support format '${format}'. ` +
         `Supported: 'mp3' (default), 'opus'. ` +
         `Generate the source as mp3 and re-encode if you need ${format}, or use a provider with native ${format} support.`,
       )

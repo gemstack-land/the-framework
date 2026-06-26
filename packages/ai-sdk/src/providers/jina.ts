@@ -21,7 +21,7 @@ export class JinaProvider implements ProviderFactory {
   }
 
   create(_model: string): ProviderAdapter {
-    throw new Error('[Rudder AI] Jina does not support text generation. Use it for reranking and embeddings.')
+    throw new Error('[ai-sdk] Jina does not support text generation. Use it for reranking and embeddings.')
   }
 
   createEmbedding(model: string): EmbeddingAdapter {
@@ -58,7 +58,7 @@ class JinaRerankingAdapter implements RerankingAdapter {
 
     if (!response.ok) {
       const text = await response.text()
-      throw new Error(`[Rudder AI] Jina rerank failed (${response.status}): ${text}`)
+      throw new Error(`[ai-sdk] Jina rerank failed (${response.status}): ${text}`)
     }
 
     const data: any = await response.json()
@@ -99,7 +99,7 @@ class JinaEmbeddingAdapter implements EmbeddingAdapter {
 
     if (!response.ok) {
       const text = await response.text()
-      throw new Error(`[Rudder AI] Jina embed failed (${response.status}): ${text}`)
+      throw new Error(`[ai-sdk] Jina embed failed (${response.status}): ${text}`)
     }
 
     const data: any = await response.json()

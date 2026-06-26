@@ -50,7 +50,7 @@ class MistralEmbeddingAdapter implements EmbeddingAdapter {
       body: JSON.stringify({ model: this.model, input: inputs }),
     })
 
-    if (!res.ok) throw new Error(`[Rudder AI] Mistral embeddings error: ${res.status} ${await res.text()}`)
+    if (!res.ok) throw new Error(`[ai-sdk] Mistral embeddings error: ${res.status} ${await res.text()}`)
 
     const data = await res.json() as {
       data: { embedding: number[] }[]
