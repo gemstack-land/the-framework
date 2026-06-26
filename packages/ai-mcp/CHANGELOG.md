@@ -1,5 +1,17 @@
 # @gemstack/ai-mcp
 
+## 0.1.1
+
+### Patch Changes
+
+- Updated dependencies [e784b5d]
+- Updated dependencies [97ed299]
+- Updated dependencies [4fa5820]
+- Updated dependencies [cf28664]
+- Updated dependencies [035050e]
+- Updated dependencies [3cb13db]
+  - @gemstack/ai-sdk@0.4.0
+
 ## 0.1.0
 
 ### Minor Changes
