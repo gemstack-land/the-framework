@@ -1,5 +1,6 @@
 import { AiRegistry, tryWithFailover } from './registry.js'
 import { fromBase64 } from './base64.js'
+import type { StorageAdapter } from './storage-adapter.js'
 import type { ImageGenerationOptions, ImageGenerationResult } from './types.js'
 
 /**
@@ -7,7 +8,7 @@ import type { ImageGenerationOptions, ImageGenerationResult } from './types.js'
  *
  * @example
  * const result = await ImageGenerator.of('A sunset over mountains').size('landscape').generate()
- * const path = await ImageGenerator.of('A logo').model('openai/dall-e-3').store('images/logo.png')
+ * const path = await ImageGenerator.of('A logo').model('openai/dall-e-3').store('images/logo.png', storage)
  *
  * @example  Failover across providers
  * const result = await ImageGenerator.of('A donut')
@@ -89,29 +90,33 @@ export class ImageGenerator {
     })
   }
 
-  /** Generate and store the first image to storage. Requires @rudderjs/storage. */
-  async store(path: string): Promise<string> {
+  /**
+   * Generate the first image and persist it through a caller-supplied
+   * {@link StorageAdapter}. Returns the `path` it was stored at.
+   *
+   * ```ts
+   * import { writeFile } from 'node:fs/promises'
+   * await ImageGenerator.of('a logo')
+   *   .store('out/logo.png', { put: (p, bytes) => writeFile(p, bytes) })
+   * ```
+   */
+  async store(path: string, storage: StorageAdapter): Promise<string> {
+    if (!storage) {
+      throw new Error('[ai-sdk] ImageGenerator.store(path, storage) requires a StorageAdapter.')
+    }
     const result = await this.generate()
     const image = result.images[0]
     if (!image) throw new Error('[ai-sdk] No image generated.')
 
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const mod: any = await import(/* @vite-ignore */ '@rudderjs/storage' as string)
-      const Storage = mod.Storage
-
-      if (image.base64) {
-        const bytes = fromBase64(image.base64)
-        await Storage.put(path, bytes)
-      } else if (image.url) {
-        const response = await fetch(image.url)
-        const bytes = new Uint8Array(await response.arrayBuffer())
-        await Storage.put(path, bytes)
-      }
-
-      return path
-    } catch {
-      throw new Error('[ai-sdk] Image storage requires @rudderjs/storage to be installed.')
+    if (image.base64) {
+      await storage.put(path, fromBase64(image.base64))
+    } else if (image.url) {
+      const response = await fetch(image.url)
+      await storage.put(path, new Uint8Array(await response.arrayBuffer()))
+    } else {
+      throw new Error('[ai-sdk] Generated image has neither base64 data nor a url to store.')
     }
+
+    return path
   }
 }

@@ -1656,6 +1656,47 @@ describe('Media failover', () => {
     assert.equal(primaryCalls, 1)
     assert.equal(fallbackCalls, 0)
   })
+
+  it('ImageGenerator.store() writes base64 bytes through a StorageAdapter and returns the path', async () => {
+    AiRegistry.reset()
+    const img: import('./types.js').ImageGenerationAdapter = {
+      // 'OK' base64-decodes to bytes [0x39, 0x0a]
+      async generate(opts) { return { images: [{ base64: 'OK' }], model: opts.model ?? 'm' } },
+    }
+    AiRegistry.register({ name: 'img', create: (m) => mockFactory.create(m), createImage: () => img })
+
+    const writes: Array<{ path: string; bytes: Uint8Array }> = []
+    const storage = { put(path: string, bytes: Uint8Array) { writes.push({ path, bytes }) } }
+
+    const path = await ImageGenerator.of('x').model('img/v1').store('out/logo.png', storage)
+    assert.equal(path, 'out/logo.png')
+    assert.equal(writes.length, 1)
+    assert.equal(writes[0]!.path, 'out/logo.png')
+    assert.ok(writes[0]!.bytes instanceof Uint8Array)
+  })
+
+  it('AudioGenerator.store() writes the audio bytes through a StorageAdapter', async () => {
+    AiRegistry.reset()
+    const tts: import('./types.js').TextToSpeechAdapter = {
+      async generate(opts) { return { audio: Buffer.from('audio-bytes'), format: opts.format ?? 'mp3', model: opts.model ?? 'm' } },
+    }
+    AiRegistry.register({ name: 'tts', create: (m) => mockFactory.create(m), createTts: () => tts })
+
+    let stored: { path: string; bytes: Uint8Array } | undefined
+    const storage = { async put(path: string, bytes: Uint8Array) { stored = { path, bytes } } }
+
+    const path = await AudioGenerator.of('Hi').model('tts/v1').store('audio/hi.mp3', storage)
+    assert.equal(path, 'audio/hi.mp3')
+    assert.equal(Buffer.from(stored!.bytes).toString(), 'audio-bytes')
+  })
+
+  it('store() throws without a StorageAdapter', async () => {
+    AiRegistry.reset()
+    await assert.rejects(
+      () => (ImageGenerator.of('x') as unknown as { store(p: string): Promise<string> }).store('p'),
+      /requires a StorageAdapter/,
+    )
+  })
 })
 
 // ─── AiFake ───────────────────────────────────────────────

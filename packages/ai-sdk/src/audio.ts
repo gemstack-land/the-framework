@@ -1,4 +1,5 @@
 import { AiRegistry, tryWithFailover } from './registry.js'
+import type { StorageAdapter } from './storage-adapter.js'
 import type { TextToSpeechResult } from './types.js'
 
 type AudioFormat = 'mp3' | 'opus' | 'aac' | 'flac' | 'wav'
@@ -8,7 +9,7 @@ type AudioFormat = 'mp3' | 'opus' | 'aac' | 'flac' | 'wav'
  *
  * @example
  * const result = await AudioGenerator.of('Hello world').voice('alloy').generate()
- * await AudioGenerator.of('Hello').format('wav').store('audio/greeting.wav')
+ * await AudioGenerator.of('Hello').format('wav').store('audio/greeting.wav', storage)
  *
  * @example  Failover across providers
  * const result = await AudioGenerator.of('Hello')
@@ -88,21 +89,22 @@ export class AudioGenerator {
     })
   }
 
-  /** Generate audio and store it via @rudderjs/storage */
-  async store(path: string): Promise<string> {
-    const result = await this.generate()
-
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const mod = await import(/* @vite-ignore */ '@rudderjs/storage' as string)
-      const Storage = mod.Storage
-      await Storage.disk().put(path, result.audio)
-      return path
-    } catch {
-      throw new Error(
-        '[ai-sdk] @rudderjs/storage is required for AudioGenerator.store(). ' +
-        'Install it: pnpm add @rudderjs/storage',
-      )
+  /**
+   * Generate audio and persist it through a caller-supplied
+   * {@link StorageAdapter}. Returns the `path` it was stored at.
+   *
+   * ```ts
+   * import { writeFile } from 'node:fs/promises'
+   * await AudioGenerator.of('Hello')
+   *   .store('audio/greeting.wav', { put: (p, bytes) => writeFile(p, bytes) })
+   * ```
+   */
+  async store(path: string, storage: StorageAdapter): Promise<string> {
+    if (!storage) {
+      throw new Error('[ai-sdk] AudioGenerator.store(path, storage) requires a StorageAdapter.')
     }
+    const result = await this.generate()
+    await storage.put(path, result.audio)
+    return path
   }
 }

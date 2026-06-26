@@ -164,6 +164,9 @@ export type { MemoryExtractOptions } from './memory-extract.js'
 // Neutral cache contract for the cache-backed run stores (bring your own)
 export type { CacheAdapter } from './cache-adapter.js'
 
+// Neutral storage contract for ImageGenerator/AudioGenerator .store() (bring your own)
+export type { StorageAdapter } from './storage-adapter.js'
+
 // Sub-agent run store (asTool streaming + suspend)
 export {
   InMemorySubAgentRunStore,
