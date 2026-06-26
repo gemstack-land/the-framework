@@ -75,4 +75,32 @@ describe('SkillRegistry', () => {
     const skills = await registry.loadAll(['beta', 'alpha'])
     assert.deepEqual(skills.map(s => s.manifest.name), ['beta', 'alpha'])
   })
+
+  it('skips a malformed SKILL.md instead of failing the whole scan', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'ai-skills-bad-'))
+    try {
+      await writeSkill(join(dir, 'good'), 'good')
+      // a SKILL.md with no frontmatter fence — parsing it throws
+      await mkdir(join(dir, 'broken'), { recursive: true })
+      await writeFile(join(dir, 'broken', 'SKILL.md'), 'no frontmatter here')
+
+      const registry = new SkillRegistry()
+      const errors: string[] = []
+      const found = await registry.discover(dir, {
+        onError: (_err, path) => errors.push(path),
+      })
+
+      assert.deepEqual(found.map(e => e.manifest.name), ['good'])
+      assert.equal(errors.length, 1)
+      assert.ok(errors[0]!.endsWith(join('broken', 'SKILL.md')))
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('lists available skill names in the undiscovered-name error', async () => {
+    const registry = new SkillRegistry()
+    await registry.discover(root)
+    await assert.rejects(() => registry.load('ghost'), /available: .*alpha/)
+  })
 })

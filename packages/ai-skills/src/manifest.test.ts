@@ -50,6 +50,18 @@ describe('parseSkillManifest', () => {
     assert.throws(() => parseSkillManifest(md), SkillManifestError)
   })
 
+  it('rejects a name with characters that would be silently mangled at compose time', () => {
+    const md = `---\nname: foo.bar\ndescription: y\n---\nbody`
+    assert.throws(
+      () => parseSkillManifest(md),
+      (e: unknown) => e instanceof SkillManifestError && /letters, numbers, hyphens/.test((e as Error).message),
+    )
+  })
+
+  it('accepts kebab-case and underscored names', () => {
+    assert.equal(parseSkillManifest(`---\nname: foo-bar_baz\ndescription: y\n---\n`).manifest.name, 'foo-bar_baz')
+  })
+
   it('tolerates and drops unknown frontmatter keys', () => {
     const md = `---\nname: x\ndescription: y\nfutureField: ignored\n---\nbody`
     const { manifest } = parseSkillManifest(md)

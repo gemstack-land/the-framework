@@ -5,9 +5,15 @@ Portable capability bundles for [`@gemstack/ai-sdk`](https://github.com/gemstack
 ```
 my-skill/
   SKILL.md        # YAML frontmatter (name, description, trigger, ...) + markdown instructions
-  tools.ts        # optional: exports ai-sdk tool() objects
+  tools.ts        # optional: exports ai-sdk tool() objects (loaded compiled, see note below)
   resources/      # optional: reference files
 ```
+
+> The loader imports the skill's tools module at runtime, so it resolves the
+> *compiled* output (`tools.js` / `tools.mjs` / `tools.cjs`), not `tools.ts`.
+> Author in TypeScript and build the skill folder, or ship the compiled file
+> alongside `SKILL.md`. The `SKILL.md` instructions and `resources/` stay
+> portable as-is; only the typed tools module needs a build step.
 
 ## Installation
 
@@ -98,7 +104,20 @@ const registry = new SkillRegistry()
 await registry.discover('./skills')        // reads frontmatter only, runs no skill code
 registry.list()                             // [{ manifest, dir }, ...]
 
-const refunds = await registry.load('refunds')   // now imports tools.ts
+const refunds = await registry.load('refunds')   // now imports the compiled tools module
+```
+
+A malformed or unreadable `SKILL.md` is skipped rather than failing the whole scan; pass `discover(root, { onError })` to observe what was skipped.
+
+If you only need a skill's parts (not a full agent), `loadSkill` returns them directly:
+
+```ts
+import { loadSkill } from '@gemstack/ai-skills'
+
+const refunds = await loadSkill('./skills/refunds')
+refunds.instructions   // markdown body (string)
+refunds.tools          // ai-sdk tool() objects
+refunds.resources      // [{ name, path }, ...]
 ```
 
 ## Trust model

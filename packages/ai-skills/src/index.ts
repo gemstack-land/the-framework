@@ -12,7 +12,7 @@
  */
 export { parseSkillManifest, SkillManifestError } from './manifest.js'
 export { loadSkill, loadSkills, type LoadSkillOptions } from './loader.js'
-export { SkillRegistry, type SkillIndexEntry } from './registry.js'
+export { SkillRegistry, type SkillIndexEntry, type DiscoverOptions } from './registry.js'
 export {
   composeInstructions,
   composeTools,
