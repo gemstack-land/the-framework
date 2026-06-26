@@ -42,7 +42,7 @@ import { z } from 'zod'
 
 export { reportJson } from './json-reporter.js'
 export type { SuiteJson, SuiteJsonCase } from './json-reporter.js'
-export { stepsFromResponse } from './fixtures.js'
+export { stepsFromResponse, defaultFixturesDir, readFixture, writeFixture } from './fixtures.js'
 export type { EvalFixture } from './fixtures.js'
 export { reportHtml } from './html-reporter.js'
 export type { HtmlReportOptions } from './html-reporter.js'

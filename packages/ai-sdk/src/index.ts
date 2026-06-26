@@ -81,6 +81,12 @@ export { AiRegistry } from './registry.js'
 export { AnthropicProvider, type AnthropicConfig } from './providers/anthropic.js'
 export { OpenAIProvider, OpenAIAdapter, type OpenAIConfig } from './providers/openai.js'
 export { GoogleProvider, type GoogleConfig } from './providers/google.js'
+// Google context-cache registry — the runtime class that backs Gemini's
+// `cachedContent` resources. Exported so framework bindings can construct
+// it with their own `CacheAdapter` (`new GoogleCacheRegistry({ store })`)
+// and wire it into the Google provider.
+export { GoogleCacheRegistry } from './providers/google-cache-registry.js'
+export type { GoogleCacheRegistryOptions, CacheStoreLike } from './providers/google-cache-registry.js'
 export { OllamaProvider, type OllamaConfig } from './providers/ollama.js'
 export { DeepSeekProvider, type DeepSeekConfig } from './providers/deepseek.js'
 export { XaiProvider, type XaiConfig } from './providers/xai.js'
