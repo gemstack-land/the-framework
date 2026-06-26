@@ -274,6 +274,68 @@ describe('McpTool', () => {
   })
 })
 
+// ─── McpServer.introspect ─────────────────────────────────
+
+describe('McpServer.introspect', () => {
+  class EchoTool extends McpTool {
+    schema() { return z.object({ name: z.string() }) }
+    async handle() { return McpResponse.text('hi') }
+  }
+  class DocResource extends McpResource {
+    uri() { return 'doc://readme' }
+    async handle() { return '# readme' }
+  }
+  class GreetPrompt extends McpPrompt {
+    async handle() { return [{ role: 'user' as const, content: 'hi' }] }
+  }
+
+  it('returns the registered tool / resource / prompt classes', () => {
+    @Name('demo')
+    class DemoServer extends McpServer {
+      protected tools = [EchoTool]
+      protected resources = [DocResource]
+      protected prompts = [GreetPrompt]
+    }
+
+    const { tools, resources, prompts } = new DemoServer().introspect()
+    assert.deepEqual(tools, [EchoTool])
+    assert.deepEqual(resources, [DocResource])
+    assert.deepEqual(prompts, [GreetPrompt])
+  })
+
+  it('mirrors the @internal _tools()/_resources()/_prompts() accessors', () => {
+    @Name('demo')
+    class DemoServer extends McpServer {
+      protected tools = [EchoTool]
+    }
+
+    const server = new DemoServer()
+    const internal = server as unknown as { _tools(): unknown[]; _resources(): unknown[]; _prompts(): unknown[] }
+    const view = server.introspect()
+    assert.deepEqual(view.tools, internal._tools())
+    assert.deepEqual(view.resources, internal._resources())
+    assert.deepEqual(view.prompts, internal._prompts())
+  })
+
+  it('returns empty arrays for a server that declares nothing', () => {
+    @Name('empty')
+    class EmptyServer extends McpServer {}
+    const view = new EmptyServer().introspect()
+    assert.deepEqual(view, { tools: [], resources: [], prompts: [] })
+  })
+})
+
+// ─── public MCP-authoring helpers ─────────────────────────
+
+describe('public helper exports', () => {
+  it('re-exports zodToJsonSchema and matchUriTemplate from the package entry', async () => {
+    const entry = await import('./index.js')
+    assert.equal(typeof entry.zodToJsonSchema, 'function')
+    assert.equal(typeof entry.matchUriTemplate, 'function')
+    assert.deepEqual(entry.matchUriTemplate('doc://{id}', 'doc://42'), { id: '42' })
+  })
+})
+
 // ─── McpPrompt ────────────────────────────────────────────
 
 describe('McpPrompt', () => {

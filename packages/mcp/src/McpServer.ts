@@ -10,6 +10,18 @@ export interface McpServerMetadata {
   instructions?: string
 }
 
+/**
+ * The tool / resource / prompt classes a server declares, surfaced for
+ * inspectors and tooling that enumerate a server without starting a session.
+ * These are the class constructors (not instances) so a caller can resolve or
+ * construct them with its own DI. See {@link McpServer.introspect}.
+ */
+export interface McpServerIntrospection {
+  tools: (new () => McpTool)[]
+  resources: (new () => McpResource)[]
+  prompts: (new () => McpPrompt)[]
+}
+
 export interface McpServerOptions {
   /**
    * DI resolver used to construct tool / resource / prompt classes and to
@@ -87,6 +99,17 @@ export abstract class McpServer {
   /** @internal — runtime/inspector/testing only. Exposes the protected prompt classes array. */
   _prompts(): (new () => McpPrompt)[] {
     return this.prompts
+  }
+
+  /**
+   * Public introspection surface: the registered tool / resource / prompt
+   * classes, without starting a session. Returns the class constructors (not
+   * instances) so inspectors and tooling can resolve or construct them with
+   * their own DI. This is the supported alternative to the internal
+   * underscore-prefixed `_tools()` / `_resources()` / `_prompts()` accessors.
+   */
+  introspect(): McpServerIntrospection {
+    return { tools: this.tools, resources: this.resources, prompts: this.prompts }
   }
 
   /** @internal — exposed for tests; counts active notification targets. */

@@ -1,5 +1,5 @@
 export { McpServer } from './McpServer.js'
-export type { McpServerMetadata, McpServerOptions } from './McpServer.js'
+export type { McpServerMetadata, McpServerOptions, McpServerIntrospection } from './McpServer.js'
 export { McpTool } from './McpTool.js'
 export type { McpToolResult, McpToolProgress, McpToolReturn } from './McpTool.js'
 export { McpResource } from './McpResource.js'
@@ -31,3 +31,9 @@ export { createMcpHttpHandler } from './runtime/node-handler.js'
 export { McpTestClient } from './testing.js'
 export type { McpTestClientOptions } from './testing.js'
 export type { McpObserverEvent, McpObserver, McpObserverRegistry } from './observers.js'
+// MCP-authoring utilities, useful for custom inspectors / tooling built on the
+// core: convert a Zod schema to the JSON Schema MCP advertises, and match a URI
+// against a `resource://{template}` pattern. Both are pure and dependency-light.
+export { zodToJsonSchema } from './zod-to-json-schema.js'
+export type { ZodLikeObject } from './types.js'
+export { matchUriTemplate } from './uri-template.js'
