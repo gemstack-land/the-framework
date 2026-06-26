@@ -1,6 +1,6 @@
 {
   "name": "@gemstack/mcp",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "Agent-agnostic framework for authoring Model Context Protocol (MCP) servers: tools, resources, prompts, decorators, OAuth 2.1, a framework-neutral HTTP handler, and a test client. The graduation of @rudderjs/mcp.",
   "keywords": [
     "mcp",
