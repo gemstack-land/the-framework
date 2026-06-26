@@ -1,0 +1,71 @@
+{
+  "name": "@gemstack/mcp",
+  "version": "0.0.0",
+  "description": "Agent-agnostic framework for authoring Model Context Protocol (MCP) servers: tools, resources, prompts, decorators, OAuth 2.1, a framework-neutral HTTP handler, and a test client. The graduation of @rudderjs/mcp.",
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "server",
+    "tools",
+    "resources",
+    "prompts",
+    "ai",
+    "agents",
+    "oauth",
+    "gemstack"
+  ],
+  "license": "MIT",
+  "homepage": "https://github.com/gemstack-land/gemstack/tree/main/packages/mcp#readme",
+  "bugs": {
+    "url": "https://github.com/gemstack-land/gemstack/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/gemstack-land/gemstack",
+    "directory": "packages/mcp"
+  },
+  "type": "module",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "files": [
+    "dist"
+  ],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./observers": {
+      "import": "./dist/observers.js",
+      "types": "./dist/observers.d.ts"
+    },
+    "./runtime": {
+      "import": "./dist/runtime.js",
+      "types": "./dist/runtime.d.ts"
+    },
+    "./testing": {
+      "import": "./dist/testing.js",
+      "types": "./dist/testing.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "dev": "tsc -p tsconfig.build.json --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "tsc -p tsconfig.test.json && cd dist-test && node --test",
+    "clean": "rm -rf dist dist-test"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "reflect-metadata": "^0.2.0",
+    "zod": "^4.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.4.0"
+  },
+  "author": "Suleiman Shahbari"
+}
