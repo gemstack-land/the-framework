@@ -72,7 +72,7 @@ export class AudioGenerator {
 
       if (!factory.createTts) {
         throw new Error(
-          `[Rudder AI] Provider "${providerName}" does not support text-to-speech. ` +
+          `[ai-sdk] Provider "${providerName}" does not support text-to-speech. ` +
           `Use a provider that implements createTts() (e.g. openai).`,
         )
       }
@@ -100,7 +100,7 @@ export class AudioGenerator {
       return path
     } catch {
       throw new Error(
-        '[Rudder AI] @rudderjs/storage is required for AudioGenerator.store(). ' +
+        '[ai-sdk] @rudderjs/storage is required for AudioGenerator.store(). ' +
         'Install it: pnpm add @rudderjs/storage',
       )
     }

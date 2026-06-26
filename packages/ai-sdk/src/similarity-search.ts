@@ -200,18 +200,18 @@ export function similaritySearch<TInstance>(
 
   if (!embedWith || typeof embedWith !== 'string') {
     throw new Error(
-      '[Rudder AI] similaritySearch requires opts.embedWith (e.g. "openai/text-embedding-3-small"). ' +
+      '[ai-sdk] similaritySearch requires opts.embedWith (e.g. "openai/text-embedding-3-small"). ' +
       'No default — fail loud so embeddings never silently route through whichever provider happens to be the AI default.',
     )
   }
   if (!column || typeof column !== 'string') {
-    throw new Error('[Rudder AI] similaritySearch requires opts.column — the Model column declared with vector({ dimensions }).')
+    throw new Error('[ai-sdk] similaritySearch requires opts.column — the Model column declared with vector({ dimensions }).')
   }
   if (!model || typeof model.query !== 'function') {
-    throw new Error('[Rudder AI] similaritySearch requires opts.model — a Model class with a static query() method.')
+    throw new Error('[ai-sdk] similaritySearch requires opts.model — a Model class with a static query() method.')
   }
   if (limit <= 0 || !Number.isFinite(limit)) {
-    throw new Error(`[Rudder AI] similaritySearch limit must be a positive finite number; got ${String(limit)}.`)
+    throw new Error(`[ai-sdk] similaritySearch limit must be a positive finite number; got ${String(limit)}.`)
   }
 
   const toolName = name ?? `similarity_search_${model.name.toLowerCase()}`
@@ -229,7 +229,7 @@ export function similaritySearch<TInstance>(
       const vector = embedResult.embeddings[0]
       if (!vector || vector.length === 0) {
         throw new Error(
-          `[Rudder AI] similaritySearch: AI.embed("${query}", { model: "${embedWith}" }) returned no embedding.`,
+          `[ai-sdk] similaritySearch: AI.embed("${query}", { model: "${embedWith}" }) returned no embedding.`,
         )
       }
 
@@ -239,7 +239,7 @@ export function similaritySearch<TInstance>(
       const selectDist = scopedQb.selectVectorDistance
       if (typeof whereVec !== 'function' || typeof selectDist !== 'function') {
         throw new Error(
-          `[Rudder AI] similaritySearch: ${model.name}'s ORM adapter does not implement vector queries. ` +
+          `[ai-sdk] similaritySearch: ${model.name}'s ORM adapter does not implement vector queries. ` +
           'Use @rudderjs/orm-prisma against a Postgres + pgvector connection.',
         )
       }

@@ -70,7 +70,7 @@ const DRIVERS: Record<string, DriverBuilder> = {
   azure: async (name, cfg) => {
     const apiKey = requireKey(name, cfg); if (apiKey === null) return null
     if (!cfg.baseUrl) {
-      throw new Error(`[Rudder AI] config('ai').providers.${name} is missing baseUrl (driver "azure" requires it).`)
+      throw new Error(`[ai-sdk] config('ai').providers.${name} is missing baseUrl (driver "azure" requires it).`)
     }
     const { AzureOpenAIProvider } = await import('../providers/azure.js')
     return new AzureOpenAIProvider({ apiKey, baseUrl: cfg.baseUrl })

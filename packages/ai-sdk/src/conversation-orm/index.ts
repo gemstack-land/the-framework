@@ -217,7 +217,7 @@ model AiConversationMessage {
 // ─── Helpers ──────────────────────────────────────────────
 
 function notFound(conversationId: string): Error {
-  return new Error(`[Rudder AI] Conversation "${conversationId}" not found.`)
+  return new Error(`[ai-sdk] Conversation "${conversationId}" not found.`)
 }
 
 function messageToRow(conversationId: string, position: number, m: AiMessage): Record<string, unknown> {

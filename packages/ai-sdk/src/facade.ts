@@ -119,7 +119,7 @@ export class AI {
 
     if (!factory.createEmbedding) {
       throw new Error(
-        `[Rudder AI] Provider "${providerName}" does not support embeddings. ` +
+        `[ai-sdk] Provider "${providerName}" does not support embeddings. ` +
         `Use a provider that implements createEmbedding() (e.g. openai, google, mistral).`,
       )
     }

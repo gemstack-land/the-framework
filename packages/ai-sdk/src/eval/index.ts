@@ -191,12 +191,12 @@ export interface SuiteReport {
  * footgun.
  */
 export function evalSuite(name: string, spec: EvalSuiteSpec): EvalSuite {
-  if (!name) throw new Error('[Rudder AI] evalSuite() requires a name.')
+  if (!name) throw new Error('[ai-sdk] evalSuite() requires a name.')
   if (!spec || typeof spec.agent !== 'function') {
-    throw new Error('[Rudder AI] evalSuite() requires { agent: () => Agent, cases: [...] }.')
+    throw new Error('[ai-sdk] evalSuite() requires { agent: () => Agent, cases: [...] }.')
   }
   if (!Array.isArray(spec.cases) || spec.cases.length === 0) {
-    throw new Error('[Rudder AI] evalSuite() requires at least one case.')
+    throw new Error('[ai-sdk] evalSuite() requires at least one case.')
   }
   return Object.freeze({ name, spec })
 }

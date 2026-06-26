@@ -29,20 +29,20 @@ export class MemoryConversationStore implements ConversationStore {
 
   async load(conversationId: string): Promise<AiMessage[]> {
     const conv = this.conversations.get(conversationId)
-    if (!conv) throw new Error(`[Rudder AI] Conversation "${conversationId}" not found.`)
+    if (!conv) throw new Error(`[ai-sdk] Conversation "${conversationId}" not found.`)
     return [...conv.messages]
   }
 
   async append(conversationId: string, messages: AiMessage[]): Promise<void> {
     const conv = this.conversations.get(conversationId)
-    if (!conv) throw new Error(`[Rudder AI] Conversation "${conversationId}" not found.`)
+    if (!conv) throw new Error(`[ai-sdk] Conversation "${conversationId}" not found.`)
     conv.messages.push(...messages)
     conv.updatedAt = new Date()
   }
 
   async setTitle(conversationId: string, title: string): Promise<void> {
     const conv = this.conversations.get(conversationId)
-    if (!conv) throw new Error(`[Rudder AI] Conversation "${conversationId}" not found.`)
+    if (!conv) throw new Error(`[ai-sdk] Conversation "${conversationId}" not found.`)
     conv.title = title
   }
 

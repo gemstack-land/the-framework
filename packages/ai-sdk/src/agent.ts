@@ -465,7 +465,7 @@ export abstract class Agent {
     suspendable?: AsToolSuspendableOption
   }): ServerToolBuilder<unknown, AgentResponse> {
     if (options.suspendable && !options.streaming) {
-      throw new Error('[Rudder AI] asTool: `suspendable` requires `streaming: true` (or a projector). Silent suspend would leave the parent UI with no progress signal between sub-agent invocations.')
+      throw new Error('[ai-sdk] asTool: `suspendable` requires `streaming: true` (or a projector). Silent suspend would leave the parent UI with no progress signal between sub-agent invocations.')
     }
 
     const schema      = options.inputSchema ?? z.object({ prompt: z.string() })
@@ -621,7 +621,7 @@ export abstract class Agent {
   > {
     const snapshot = await options.runStore.consume(subRunId)
     if (!snapshot) {
-      throw new Error(`[Rudder AI] resumeAsTool: subRunId "${subRunId}" expired or never existed.`)
+      throw new Error(`[ai-sdk] resumeAsTool: subRunId "${subRunId}" expired or never existed.`)
     }
 
     const pauseKind: SubAgentPauseKind = snapshot.pauseKind ?? 'client_tool'
@@ -635,10 +635,10 @@ export abstract class Agent {
       const seen = new Set<string>()
       for (const r of clientToolResults) {
         if (!pending.has(r.toolCallId)) {
-          throw new Error(`[Rudder AI] resumeAsTool: toolCallId "${r.toolCallId}" was not in the pending set.`)
+          throw new Error(`[ai-sdk] resumeAsTool: toolCallId "${r.toolCallId}" was not in the pending set.`)
         }
         if (seen.has(r.toolCallId)) {
-          throw new Error(`[Rudder AI] resumeAsTool: duplicate result for toolCallId "${r.toolCallId}".`)
+          throw new Error(`[ai-sdk] resumeAsTool: duplicate result for toolCallId "${r.toolCallId}".`)
         }
         seen.add(r.toolCallId)
       }
@@ -656,22 +656,22 @@ export abstract class Agent {
       // Approval-pause resume — clientToolResults must be empty; either an
       // approval or a rejection must be supplied for the pending id.
       if (clientToolResults.length > 0) {
-        throw new Error('[Rudder AI] resumeAsTool: snapshot.pauseKind === "approval" but clientToolResults was non-empty. Pass `approvedToolCallIds` or `rejectedToolCallIds` instead.')
+        throw new Error('[ai-sdk] resumeAsTool: snapshot.pauseKind === "approval" but clientToolResults was non-empty. Pass `approvedToolCallIds` or `rejectedToolCallIds` instead.')
       }
       const approved = options.approvedToolCallIds ?? []
       const rejected = options.rejectedToolCallIds ?? []
       for (const id of approved) {
         if (!pending.has(id)) {
-          throw new Error(`[Rudder AI] resumeAsTool: approvedToolCallId "${id}" was not in the pending set.`)
+          throw new Error(`[ai-sdk] resumeAsTool: approvedToolCallId "${id}" was not in the pending set.`)
         }
       }
       for (const id of rejected) {
         if (!pending.has(id)) {
-          throw new Error(`[Rudder AI] resumeAsTool: rejectedToolCallId "${id}" was not in the pending set.`)
+          throw new Error(`[ai-sdk] resumeAsTool: rejectedToolCallId "${id}" was not in the pending set.`)
         }
       }
       if (approved.length === 0 && rejected.length === 0) {
-        throw new Error('[Rudder AI] resumeAsTool: snapshot.pauseKind === "approval" requires `approvedToolCallIds` or `rejectedToolCallIds`.')
+        throw new Error('[ai-sdk] resumeAsTool: snapshot.pauseKind === "approval" requires `approvedToolCallIds` or `rejectedToolCallIds`.')
       }
 
       messages = [...snapshot.messages]
@@ -1008,7 +1008,7 @@ export class ConversableAgent {
   private toSpec(): ConversationalSpec {
     if (this._conversationId) return { user: this._userId ?? '', id: this._conversationId }
     if (this._userId)         return { user: this._userId }
-    throw new Error('[Rudder AI] ConversableAgent requires forUser() or continue() to be called before prompt().')
+    throw new Error('[ai-sdk] ConversableAgent requires forUser() or continue() to be called before prompt().')
   }
 }
 
@@ -1774,7 +1774,7 @@ function runAgentLoopStreaming(a: Agent, input: string, options?: AgentPromptOpt
       }
 
       if (r._pendingHandoff) {
-        throw new Error(`[Rudder AI] Exceeded max handoffs (${MAX_HANDOFFS}). Likely a cycle between agents.`)
+        throw new Error(`[ai-sdk] Exceeded max handoffs (${MAX_HANDOFFS}). Likely a cycle between agents.`)
       }
 
       finalResponse = handoffPath.length === 0
@@ -1784,7 +1784,7 @@ function runAgentLoopStreaming(a: Agent, input: string, options?: AgentPromptOpt
     }
 
     if (!finalResponse) {
-      throw new Error(`[Rudder AI] Exceeded max handoffs (${MAX_HANDOFFS}). Likely a cycle between agents.`)
+      throw new Error(`[ai-sdk] Exceeded max handoffs (${MAX_HANDOFFS}). Likely a cycle between agents.`)
     }
     resolveResponse(finalResponse)
   }

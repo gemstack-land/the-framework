@@ -71,7 +71,7 @@ export class ImageGenerator {
       const factory = AiRegistry.getFactory(providerName)
 
       if (!factory.createImage) {
-        throw new Error(`[Rudder AI] Provider "${providerName}" does not support image generation.`)
+        throw new Error(`[ai-sdk] Provider "${providerName}" does not support image generation.`)
       }
 
       const adapter = factory.createImage(modelName)
@@ -93,7 +93,7 @@ export class ImageGenerator {
   async store(path: string): Promise<string> {
     const result = await this.generate()
     const image = result.images[0]
-    if (!image) throw new Error('[Rudder AI] No image generated.')
+    if (!image) throw new Error('[ai-sdk] No image generated.')
 
     try {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -111,7 +111,7 @@ export class ImageGenerator {
 
       return path
     } catch {
-      throw new Error('[Rudder AI] Image storage requires @rudderjs/storage to be installed.')
+      throw new Error('[ai-sdk] Image storage requires @rudderjs/storage to be installed.')
     }
   }
 }

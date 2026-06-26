@@ -126,14 +126,14 @@ export class GoogleCacheRegistry {
         if (isTooSmallError(err)) {
           await this.remember(storeKey, { tooSmall: true, expiresAt: this.now() + TOO_SMALL_TTL_MS })
           console.warn(
-            `[Rudder AI] Google cache for hash ${args.cacheKey} below model minimum — running uncached. ` +
+            `[ai-sdk] Google cache for hash ${args.cacheKey} below model minimum — running uncached. ` +
             `Future calls with the same prefix will skip cache attempts for 5m.`,
           )
           return null
         }
         // Any other error — let the caller fall back to uncached for THIS request,
         // but don't poison the registry with a "tooSmall" entry.
-        console.warn(`[Rudder AI] Google caches.create failed for hash ${args.cacheKey} — running uncached. ${(err as Error).message}`)
+        console.warn(`[ai-sdk] Google caches.create failed for hash ${args.cacheKey} — running uncached. ${(err as Error).message}`)
         return null
       } finally {
         this.inFlight.delete(storeKey)
@@ -167,7 +167,7 @@ export class GoogleCacheRegistry {
     if (!this.warnedNoStore) {
       this.warnedNoStore = true
       console.warn(
-        '[Rudder AI] Google prompt caching is using in-memory storage; ' +
+        '[ai-sdk] Google prompt caching is using in-memory storage; ' +
         'install @rudderjs/cache for cross-process/restart persistence.',
       )
     }

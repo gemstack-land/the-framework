@@ -40,7 +40,7 @@ export class FileManager {
   async retrieve(fileId: string): Promise<FileContent> {
     const adapter = AiRegistry.resolveFiles(this.providerName)
     if (!adapter.retrieve) {
-      throw new Error(`[Rudder AI] Provider "${this.providerName}" does not support file retrieval.`)
+      throw new Error(`[ai-sdk] Provider "${this.providerName}" does not support file retrieval.`)
     }
     return adapter.retrieve(fileId)
   }

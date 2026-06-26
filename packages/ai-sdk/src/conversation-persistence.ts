@@ -100,7 +100,7 @@ async function preparePersistence(
       convId = await store.create(undefined, { userId: spec.user, agent: agentKey })
     }
   } else {
-    throw new Error('[Rudder AI] ConversationalSpec must include either `user` or `id`.')
+    throw new Error('[ai-sdk] ConversationalSpec must include either `user` or `id`.')
   }
 
   // Snapshot the trusted baseline before any limit slice — the validation
@@ -169,7 +169,7 @@ export async function runWithPersistence(
   inner:          (effOptions: AgentPromptOptions | undefined) => Promise<AgentResponse>,
 ): Promise<AgentResponse> {
   const store = storeLookup()
-  if (!store) throw new Error('[Rudder AI] No ConversationStore registered. Bind one via `setConversationStore()` or the `ai.conversations` DI key.')
+  if (!store) throw new Error('[ai-sdk] No ConversationStore registered. Bind one via `setConversationStore()` or the `ai.conversations` DI key.')
 
   const ctx = await preparePersistence(spec, agentClassName, store, options?.history)
   await runValidation(ctx, options)
@@ -201,7 +201,7 @@ export function runWithPersistenceStreaming(
   async function* outer(): AsyncIterable<StreamChunk> {
     const store = storeLookup()
     if (!store) {
-      const err = new Error('[Rudder AI] No ConversationStore registered. Bind one via `setConversationStore()` or the `ai.conversations` DI key.')
+      const err = new Error('[ai-sdk] No ConversationStore registered. Bind one via `setConversationStore()` or the `ai.conversations` DI key.')
       rejectResponse!(err)
       throw err
     }

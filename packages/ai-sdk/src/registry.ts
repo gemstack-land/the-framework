@@ -32,7 +32,7 @@ export async function tryWithFailover<T>(
       lastError = err instanceof Error ? err : new Error(String(err))
     }
   }
-  throw lastError ?? new Error('[Rudder AI] No provider available for failover.')
+  throw lastError ?? new Error('[ai-sdk] No provider available for failover.')
 }
 
 /**
@@ -86,7 +86,7 @@ export class AiRegistry {
   /** Get a registered provider factory by name */
   static getFactory(name: string): ProviderFactory {
     const f = _store.factories.get(name)
-    if (!f) throw new Error(`[Rudder AI] Unknown AI provider "${name}". Register it first.`)
+    if (!f) throw new Error(`[ai-sdk] Unknown AI provider "${name}". Register it first.`)
     return f
   }
 
@@ -97,14 +97,14 @@ export class AiRegistry {
 
   /** Get the default provider/model string */
   static getDefault(): string {
-    if (!_store.default) throw new Error('[Rudder AI] No default model set. Add ai() to providers with a config.')
+    if (!_store.default) throw new Error('[ai-sdk] No default model set. Add ai() to providers with a config.')
     return _store.default
   }
 
   /** Parse 'provider/model' string into [providerName, modelId] */
   static parseModelString(modelString: string): [string, string] {
     const slash = modelString.indexOf('/')
-    if (slash === -1) throw new Error(`[Rudder AI] Invalid model string "${modelString}". Expected "provider/model" format.`)
+    if (slash === -1) throw new Error(`[ai-sdk] Invalid model string "${modelString}". Expected "provider/model" format.`)
     return [modelString.slice(0, slash), modelString.slice(slash + 1)]
   }
 
@@ -121,7 +121,7 @@ export class AiRegistry {
     const factory = this.getFactory(providerName)
     if (!factory.createReranking) {
       throw new Error(
-        `[Rudder AI] Provider "${providerName}" does not support reranking. ` +
+        `[ai-sdk] Provider "${providerName}" does not support reranking. ` +
         `Use a provider that implements createReranking() (e.g. cohere, jina).`,
       )
     }
@@ -133,7 +133,7 @@ export class AiRegistry {
     const factory = this.getFactory(providerName)
     if (!factory.createFiles) {
       throw new Error(
-        `[Rudder AI] Provider "${providerName}" does not support file management. ` +
+        `[ai-sdk] Provider "${providerName}" does not support file management. ` +
         `Use a provider that implements createFiles() (e.g. openai, anthropic, google).`,
       )
     }
@@ -145,7 +145,7 @@ export class AiRegistry {
     const factory = this.getFactory(providerName)
     if (!factory.createVectorStores) {
       throw new Error(
-        `[Rudder AI] Provider "${providerName}" does not support hosted vector stores. ` +
+        `[ai-sdk] Provider "${providerName}" does not support hosted vector stores. ` +
         `Use a provider that implements createVectorStores() (e.g. openai). ` +
         `For self-hosted RAG, use similaritySearch() against an @rudderjs/orm Model with a pgvector column.`,
       )

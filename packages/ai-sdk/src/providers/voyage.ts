@@ -103,7 +103,7 @@ export class VoyageProvider implements ProviderFactory {
   }
 
   create(_model: string): ProviderAdapter {
-    throw new Error('[Rudder AI] Voyage does not support text generation. Use it for embeddings and reranking.')
+    throw new Error('[ai-sdk] Voyage does not support text generation. Use it for embeddings and reranking.')
   }
 
   createEmbedding(model: string): EmbeddingAdapter {
@@ -143,7 +143,7 @@ class VoyageEmbeddingAdapter implements EmbeddingAdapter {
 
     if (!response.ok) {
       const text = await safeText(response)
-      throw new Error(`[Rudder AI] Voyage embed failed (${response.status}): ${text}`)
+      throw new Error(`[ai-sdk] Voyage embed failed (${response.status}): ${text}`)
     }
 
     const data = await response.json() as {
@@ -194,7 +194,7 @@ class VoyageRerankingAdapter implements RerankingAdapter {
 
     if (!response.ok) {
       const text = await safeText(response)
-      throw new Error(`[Rudder AI] Voyage rerank failed (${response.status}): ${text}`)
+      throw new Error(`[ai-sdk] Voyage rerank failed (${response.status}): ${text}`)
     }
 
     const data = await response.json() as {

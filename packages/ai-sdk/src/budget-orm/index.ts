@@ -85,10 +85,10 @@ export class BudgetUsageRecord extends Model {
 export class OrmBudgetStorage implements BudgetStorage {
   async checkAndDebit(opts: BudgetCheckOptions): Promise<BudgetCheckResult> {
     if (!Number.isFinite(opts.cap) || opts.cap < 0) {
-      throw new Error(`[Rudder AI] BudgetStorage: cap must be a non-negative finite number, got ${opts.cap}`)
+      throw new Error(`[ai-sdk] BudgetStorage: cap must be a non-negative finite number, got ${opts.cap}`)
     }
     if (!Number.isFinite(opts.costUsd) || opts.costUsd < 0) {
-      throw new Error(`[Rudder AI] BudgetStorage: costUsd must be a non-negative finite number, got ${opts.costUsd}`)
+      throw new Error(`[ai-sdk] BudgetStorage: costUsd must be a non-negative finite number, got ${opts.costUsd}`)
     }
 
     const now = opts.now ?? new Date()

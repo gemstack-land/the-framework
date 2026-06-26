@@ -228,7 +228,7 @@ export class AiFake {
     const fake = new AiFake()
 
     const strayError = (stepIndex: number): Error => new Error(
-      `[Rudder AI] Stray prompt: no scripted response at step ${stepIndex}. ` +
+      `[ai-sdk] Stray prompt: no scripted response at step ${stepIndex}. ` +
       `Add an entry via respondWithSequence([...]) or remove preventStrayPrompts().`,
     )
 
@@ -369,7 +369,7 @@ export class AiFake {
 
   /** Assert at least one prompt was sent, optionally matching a predicate */
   assertPrompted(predicate?: (input: string) => boolean): void {
-    if (this.calls.length === 0) throw new Error('[Rudder AI] Expected at least one prompt, but none were sent.')
+    if (this.calls.length === 0) throw new Error('[ai-sdk] Expected at least one prompt, but none were sent.')
     if (predicate) {
       const match = this.calls.some(c => {
         const userMsg = c.messages.find(m => m.role === 'user')
@@ -377,41 +377,41 @@ export class AiFake {
         const text = typeof userMsg.content === 'string' ? userMsg.content : userMsg.content.filter(p => p.type === 'text').map(p => (p as { text: string }).text).join('')
         return predicate(text)
       })
-      if (!match) throw new Error('[Rudder AI] No prompt matched the predicate.')
+      if (!match) throw new Error('[ai-sdk] No prompt matched the predicate.')
     }
   }
 
   /** Assert no prompts were sent */
   assertNothingPrompted(): void {
     if (this.calls.length > 0) {
-      throw new Error(`[Rudder AI] Expected no prompts, but ${this.calls.length} were sent.`)
+      throw new Error(`[ai-sdk] Expected no prompts, but ${this.calls.length} were sent.`)
     }
   }
 
   /** Assert at least one image generation was made */
   assertImageGenerated(predicate?: (prompt: string) => boolean): void {
-    if (this.imageCalls.length === 0) throw new Error('[Rudder AI] Expected at least one image generation, but none were made.')
+    if (this.imageCalls.length === 0) throw new Error('[ai-sdk] Expected at least one image generation, but none were made.')
     if (predicate) {
       const match = this.imageCalls.some(c => predicate(c.prompt))
-      if (!match) throw new Error('[Rudder AI] No image generation matched the predicate.')
+      if (!match) throw new Error('[ai-sdk] No image generation matched the predicate.')
     }
   }
 
   /** Assert at least one TTS generation was made */
   assertAudioGenerated(predicate?: (text: string) => boolean): void {
-    if (this.ttsCalls.length === 0) throw new Error('[Rudder AI] Expected at least one audio generation, but none were made.')
+    if (this.ttsCalls.length === 0) throw new Error('[ai-sdk] Expected at least one audio generation, but none were made.')
     if (predicate) {
       const match = this.ttsCalls.some(c => predicate(c.text))
-      if (!match) throw new Error('[Rudder AI] No audio generation matched the predicate.')
+      if (!match) throw new Error('[ai-sdk] No audio generation matched the predicate.')
     }
   }
 
   /** Assert at least one transcription was made */
   assertTranscribed(predicate?: (opts: SpeechToTextOptions) => boolean): void {
-    if (this.sttCalls.length === 0) throw new Error('[Rudder AI] Expected at least one transcription, but none were made.')
+    if (this.sttCalls.length === 0) throw new Error('[ai-sdk] Expected at least one transcription, but none were made.')
     if (predicate) {
       const match = this.sttCalls.some(c => predicate(c))
-      if (!match) throw new Error('[Rudder AI] No transcription matched the predicate.')
+      if (!match) throw new Error('[ai-sdk] No transcription matched the predicate.')
     }
   }
 
@@ -437,19 +437,19 @@ export class AiFake {
 
   /** Assert at least one embedding was made */
   assertEmbedded(predicate?: (input: string | string[]) => boolean): void {
-    if (this.embedCalls.length === 0) throw new Error('[Rudder AI] Expected at least one embedding, but none were made.')
+    if (this.embedCalls.length === 0) throw new Error('[ai-sdk] Expected at least one embedding, but none were made.')
     if (predicate) {
       const match = this.embedCalls.some(c => predicate(c.input))
-      if (!match) throw new Error('[Rudder AI] No embedding matched the predicate.')
+      if (!match) throw new Error('[ai-sdk] No embedding matched the predicate.')
     }
   }
 
   /** Assert at least one reranking was made */
   assertReranked(predicate?: (opts: RerankingOptions) => boolean): void {
-    if (this.rerankCalls.length === 0) throw new Error('[Rudder AI] Expected at least one reranking, but none were made.')
+    if (this.rerankCalls.length === 0) throw new Error('[ai-sdk] Expected at least one reranking, but none were made.')
     if (predicate) {
       const match = this.rerankCalls.some(c => predicate(c))
-      if (!match) throw new Error('[Rudder AI] No reranking matched the predicate.')
+      if (!match) throw new Error('[ai-sdk] No reranking matched the predicate.')
     }
   }
 
@@ -466,10 +466,10 @@ export class AiFake {
   /** Assert at least one file upload was made */
   assertFileUploaded(predicate?: (filePath: string) => boolean): void {
     const uploads = this.fileCalls.filter(c => c.method === 'upload')
-    if (uploads.length === 0) throw new Error('[Rudder AI] Expected at least one file upload, but none were made.')
+    if (uploads.length === 0) throw new Error('[ai-sdk] Expected at least one file upload, but none were made.')
     if (predicate) {
       const match = uploads.some(c => predicate((c.args as FileUploadOptions).filePath))
-      if (!match) throw new Error('[Rudder AI] No file upload matched the predicate.')
+      if (!match) throw new Error('[ai-sdk] No file upload matched the predicate.')
     }
   }
 

@@ -186,7 +186,7 @@ export class EmbeddingUserMemory implements UserMemory {
   private async embed(text: string): Promise<number[]> {
     const result = await AI.embed(text, this.model ? { model: this.model } : undefined)
     const vec = result.embeddings[0]
-    if (!vec) throw new Error('[Rudder AI] embed() returned no vectors')
+    if (!vec) throw new Error('[ai-sdk] embed() returned no vectors')
     return vec
   }
 }

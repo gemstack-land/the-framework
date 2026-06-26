@@ -106,7 +106,7 @@ export async function readFixture(
   const parsed = JSON.parse(raw) as EvalFixture
   if (parsed.version !== 1) {
     throw new Error(
-      `[Rudder AI] Fixture ${file} is version ${String(parsed.version)}; expected 1. ` +
+      `[ai-sdk] Fixture ${file} is version ${String(parsed.version)}; expected 1. ` +
       `Re-record with \`pnpm rudder ai:eval --record\`.`,
     )
   }

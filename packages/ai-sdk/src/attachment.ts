@@ -23,7 +23,7 @@ export class DocumentAttachment {
   /** Create from a URL (fetches the content) */
   static async fromUrl(url: string): Promise<DocumentAttachment> {
     const res = await fetch(url)
-    if (!res.ok) throw new Error(`[Rudder AI] Failed to fetch document: ${res.status} ${url}`)
+    if (!res.ok) throw new Error(`[ai-sdk] Failed to fetch document: ${res.status} ${url}`)
     const bytes = new Uint8Array(await res.arrayBuffer())
     const mimeType = res.headers.get('content-type')?.split(';')[0] ?? 'application/octet-stream'
     const name = url.split('/').pop()?.split('?')[0]
@@ -59,7 +59,7 @@ export class ImageAttachment {
   /** Create from a URL (fetches the image) */
   static async fromUrl(url: string): Promise<ImageAttachment> {
     const res = await fetch(url)
-    if (!res.ok) throw new Error(`[Rudder AI] Failed to fetch image: ${res.status} ${url}`)
+    if (!res.ok) throw new Error(`[ai-sdk] Failed to fetch image: ${res.status} ${url}`)
     const bytes = new Uint8Array(await res.arrayBuffer())
     const mimeType = res.headers.get('content-type')?.split(';')[0] ?? 'image/png'
     return new ImageAttachment(toBase64(bytes), mimeType)

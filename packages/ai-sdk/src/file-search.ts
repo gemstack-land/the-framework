@@ -160,7 +160,7 @@ export interface FileSearchTool extends Tool<{ query: string }, unknown> {
 export function fileSearch<TInstance = unknown>(opts: FileSearchOptions<TInstance>): FileSearchTool {
   if (!Array.isArray(opts.stores) || opts.stores.length === 0) {
     throw new Error(
-      '[Rudder AI] fileSearch({ stores }) requires at least one vector-store id. ' +
+      '[ai-sdk] fileSearch({ stores }) requires at least one vector-store id. ' +
       'Create a store via `VectorStores.create(...)` and pass its `id`.',
     )
   }
@@ -245,7 +245,7 @@ export function normalizeWhere(where: FileSearchWhereSugar | FileSearchFilter): 
 
   const entries = Object.entries(where)
   if (entries.length === 0) {
-    throw new Error('[Rudder AI] fileSearch({ where }) must contain at least one key.')
+    throw new Error('[ai-sdk] fileSearch({ where }) must contain at least one key.')
   }
   const eqs: FileSearchFilter[] = entries.map(([key, value]) => ({ type: 'eq', key, value }))
   return eqs.length === 1 ? eqs[0]! : { type: 'and', filters: eqs }

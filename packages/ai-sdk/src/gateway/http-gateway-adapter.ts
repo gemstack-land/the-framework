@@ -87,7 +87,7 @@ export abstract class HttpGatewayAdapter implements ProviderAdapter {
   async *stream(options: ProviderRequestOptions): AsyncIterable<StreamChunk> {
     const res = await this.send(options, { stream: true })
     if (!res.body) {
-      throw new Error('[Rudder AI] Gateway stream response had no body')
+      throw new Error('[ai-sdk] Gateway stream response had no body')
     }
     for await (const event of parseSseStream(res.body, options.signal)) {
       for (const chunk of this.parseStreamEvent(event)) yield chunk
@@ -129,7 +129,7 @@ export abstract class HttpGatewayAdapter implements ProviderAdapter {
   protected async onErrorResponse(res: Response): Promise<never> {
     const body = await res.text().catch(() => '')
     throw new Error(
-      `[Rudder AI] Gateway request failed: ${res.status} ${res.statusText}${body ? ` — ${body}` : ''}`,
+      `[ai-sdk] Gateway request failed: ${res.status} ${res.statusText}${body ? ` — ${body}` : ''}`,
     )
   }
 
