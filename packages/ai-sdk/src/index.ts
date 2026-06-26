@@ -161,6 +161,9 @@ export type { MemoryInjectOptions } from './memory-inject.js'
 export { withMemoryExtract } from './memory-extract.js'
 export type { MemoryExtractOptions } from './memory-extract.js'
 
+// Neutral cache contract for the cache-backed run stores (bring your own)
+export type { CacheAdapter } from './cache-adapter.js'
+
 // Sub-agent run store (asTool streaming + suspend)
 export {
   InMemorySubAgentRunStore,

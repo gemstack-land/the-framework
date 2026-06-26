@@ -1,24 +1,19 @@
 import { cyrb53Hex } from '../util/hash.js'
+import type { CacheAdapter } from '../cache-adapter.js'
 
 /**
- * Minimal structural shape of a cache store the registry can use. Matches
- * `@rudderjs/cache`'s `CacheAdapter` (see `packages/cache/src/index.ts`)
- * for the methods we touch. Defined locally so this file (which lives in
- * the runtime-agnostic main entry) doesn't take a cross-package dep — the
- * AiProvider hands in the real adapter at boot.
+ * The cache store the registry can use. This is the framework's neutral
+ * {@link CacheAdapter} — the AiProvider hands in a real adapter at boot, and
+ * the registry falls back to an in-process `Map` when none is supplied.
  */
-export interface CacheStoreLike {
-  get<T = unknown>(key: string): Promise<T | null>
-  set(key: string, value: unknown, ttlSeconds?: number): Promise<void>
-  forget(key: string): Promise<void>
-}
+export type CacheStoreLike = CacheAdapter
 
 interface CacheEntry { name: string; expiresAt: number }
 interface TooSmallEntry { tooSmall: true; expiresAt: number }
 type StoredEntry = CacheEntry | TooSmallEntry
 
 const TOO_SMALL_TTL_MS = 5 * 60 * 1000      // 5 minutes — Q4 in plan
-const KEY_PREFIX = 'rudderjs:ai:google-cache:'
+const KEY_PREFIX = 'gemstack:ai:google-cache:'
 
 export interface GoogleCacheRegistryOptions {
   /** Optional cache backend (cross-process / cross-restart). Falls back to in-process Map. */
@@ -68,11 +63,10 @@ export interface GoogleClientLike {
  * provider. Coordinates concurrent creates, memoizes "too-small" failures,
  * and drops stale entries on demand (so the adapter can recreate-on-404).
  *
- * Storage is pluggable: the AiProvider passes a `CacheStoreLike` (typically
- * `@rudderjs/cache`'s adapter) when available, otherwise the registry uses
- * an in-process `Map` and warns once. Either way, in-process locking keeps
- * concurrent same-key requests from racing on `caches.create` within one
- * worker.
+ * Storage is pluggable: the AiProvider passes a {@link CacheAdapter} when one
+ * is available, otherwise the registry uses an in-process `Map` and warns once.
+ * Either way, in-process locking keeps concurrent same-key requests from racing
+ * on `caches.create` within one worker.
  */
 export class GoogleCacheRegistry {
   private readonly store?:    CacheStoreLike
@@ -168,7 +162,7 @@ export class GoogleCacheRegistry {
       this.warnedNoStore = true
       console.warn(
         '[ai-sdk] Google prompt caching is using in-memory storage; ' +
-        'install @rudderjs/cache for cross-process/restart persistence.',
+        'pass a CacheAdapter (`{ store }`) for cross-process/restart persistence.',
       )
     }
     const entry = this.memory.get(storeKey)
