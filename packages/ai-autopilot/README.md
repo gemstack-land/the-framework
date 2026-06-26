@@ -28,7 +28,7 @@ const supervisor = new Supervisor({
 const run = await supervisor.run('Draft a launch brief for product X')
 console.log(run.text)          // synthesized answer
 console.log(run.results)       // per-subtask outcomes (ok / error / usage)
-console.log(run.usage)         // aggregate token usage
+console.log(run.usage)         // aggregate token usage across dispatched subtasks
 console.log(run.stoppedEarly)  // true if a guardrail trimmed or halted work
 ```
 
@@ -42,10 +42,13 @@ Each stage is a plain function, so you mix LLM and deterministic logic freely:
 
 ## Guardrails
 
-- **`concurrency`** (default 4) — max workers in flight.
-- **`maxSubtasks`** — hard cap; a longer plan is trimmed and `stoppedEarly` is set.
-- **`budget.maxTotalTokens`** — stop dispatching once aggregate usage crosses the limit (in-flight workers finish; remaining subtasks are skipped).
+- **`concurrency`** (optional, default 4) — max workers in flight; positive integer.
+- **`maxSubtasks`** (optional) — hard cap; a longer plan is trimmed and `stoppedEarly` is set. Omit for no cap.
+- **`budget.maxTotalTokens`** (optional) — stop dispatching once aggregate dispatch usage crosses the limit (in-flight workers finish; remaining subtasks are skipped). Omit for no limit.
 - **Error isolation** — a worker that throws becomes an `ok: false` result; siblings continue.
+- **Observer safety** — an `onEvent` callback that throws is logged and swallowed; it never aborts the run.
+
+`Supervisor` validates its options at construction (`plan`, `workers`, positive `concurrency` / `maxSubtasks`), and `run()` rejects an empty task, so misconfiguration fails fast with a clear message.
 
 ## Scope (what's deferred)
 

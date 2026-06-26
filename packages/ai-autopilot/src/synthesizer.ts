@@ -3,7 +3,16 @@ import type { Synthesizer, SubtaskResult } from './types.js'
 
 /**
  * The default synthesizer: concatenate the successful results, in plan order,
- * separated by blank lines. No LLM call — deterministic and free.
+ * separated by blank lines. No LLM call — deterministic and free. Failed
+ * subtasks are omitted; if every subtask failed, the result is an empty string.
+ *
+ * @example
+ * defaultSynthesize('task', [
+ *   { ok: true,  text: 'Alpha', ... },
+ *   { ok: false, text: '',      ... },
+ *   { ok: true,  text: 'Gamma', ... },
+ * ])
+ * // => "Alpha\n\nGamma"
  */
 export function defaultSynthesize(_task: string, results: SubtaskResult[]): string {
   return results

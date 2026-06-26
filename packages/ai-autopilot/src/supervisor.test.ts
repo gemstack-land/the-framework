@@ -128,4 +128,36 @@ describe('Supervisor — plan → dispatch → synthesize', () => {
       assert.ok(types.includes(expected), `missing event ${expected}`)
     }
   })
+
+  it('validates options at construction', () => {
+    const a = new StubAgent(() => ({ text: 'x', usage: usage(1) }))
+    assert.throws(() => new Supervisor({ workers: a } as never), /requires a `plan` function/)
+    assert.throws(() => new Supervisor({ plan: () => [] } as never), /requires `workers`/)
+    assert.throws(() => new Supervisor({ plan: () => [], workers: a, concurrency: 0 }), /concurrency must be a positive integer/)
+    assert.throws(() => new Supervisor({ plan: () => [], workers: a, maxSubtasks: -1 }), /maxSubtasks must be a positive integer/)
+  })
+
+  it('rejects an empty task', async () => {
+    const a = new StubAgent(() => ({ text: 'x', usage: usage(1) }))
+    const sup = new Supervisor({ plan: () => [{ description: 'a' }], workers: a })
+    await assert.rejects(() => sup.run('   '), /non-empty task/)
+  })
+
+  it('isolates a throwing onEvent callback — the run still completes', async () => {
+    const a = new StubAgent(() => ({ text: 'x', usage: usage(1) }))
+    const sup = new Supervisor({
+      plan: () => [{ description: 'a' }],
+      workers: a,
+      onEvent: () => { throw new Error('observer boom') },
+    })
+    const originalError = console.error
+    console.error = () => {}   // silence the expected logged warning
+    try {
+      const run = await sup.run('t')
+      assert.equal(run.text, 'x')
+      assert.equal(run.results[0]?.ok, true)
+    } finally {
+      console.error = originalError
+    }
+  })
 })
