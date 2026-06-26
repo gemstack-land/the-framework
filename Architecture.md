@@ -1,6 +1,6 @@
 # GemStack Architecture
 
-A shared reference for how GemStack packages are layered and named. This is the working document for design discussion; it will firm up as packages land.
+A shared reference for how GemStack packages are layered and named. The AI family (`ai-sdk`, `ai-skills`, `ai-autopilot`, `ai-mcp`) and the standalone `@gemstack/mcp` server framework have all shipped; the design rationale below is kept as the record of why the boundaries are drawn where they are.
 
 ## The naming rule
 
@@ -54,7 +54,7 @@ When a candidate does graduate, follow the `@gemstack/ai-sdk` playbook exactly: 
 @gemstack/ai-autopilot  orchestration / autonomy (the "director")     -> ai-sdk (+ skills)
 @gemstack/ai-mcp        agent <-> MCP bridge (the "adapter")           -> ai-sdk
 -----------------------------------------------------------------------------------
-@gemstack/mcp (later)   standalone MCP server framework               agent-agnostic, NOT ai-*
+@gemstack/mcp           standalone MCP server framework               agent-agnostic, NOT ai-*
 ```
 
 ### Dependency direction (the one rule that keeps four packages from becoming a tangle)
@@ -124,9 +124,12 @@ The most speculative of the family, so this records direction, not a committed A
 
 Stays parked as a design sketch: revisit once `ai-mcp` and `ai-skills` land and real orchestration use cases emerge. Gated on family alignment before code lands.
 
-## Suggested ship order
+## Ship order (all shipped)
 
-1. `@gemstack/ai-sdk` (now)
-2. `@gemstack/ai-mcp` (first carve-out; cheap, and forces the dependency seam to be proven early)
-3. `@gemstack/ai-skills`
-4. `@gemstack/ai-autopilot`
+The family shipped in the order that proved the dependency seam earliest:
+
+1. `@gemstack/ai-sdk` (shipped)
+2. `@gemstack/ai-mcp` (shipped - first carve-out; cheap, and forced the dependency seam to be proven early)
+3. `@gemstack/ai-skills` (shipped)
+4. `@gemstack/ai-autopilot` (shipped)
+5. `@gemstack/mcp` (shipped - the standalone server framework, a separate graduation off `@rudderjs/mcp`)
