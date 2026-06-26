@@ -8,7 +8,9 @@ import type { ParsedSkill, SkillManifest } from './types.js'
  * escape hatch for author-defined fields that should survive.
  */
 const manifestSchema = z.object({
-  name: z.string().min(1, 'skill name is required'),
+  name: z.string()
+    .min(1, 'skill name is required')
+    .regex(/^[a-zA-Z0-9_-]+$/, 'skill name may only contain letters, numbers, hyphens, and underscores'),
   description: z.string().min(1, 'skill description is required'),
   license: z.string().optional(),
   appliesTo: z.array(z.string()).optional(),

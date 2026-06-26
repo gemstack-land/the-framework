@@ -1,13 +1,24 @@
-import { readFile, readdir, stat } from 'node:fs/promises'
+import { readFile, readdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import { parseSkillManifest } from './manifest.js'
 import { loadSkill, type LoadSkillOptions } from './loader.js'
+import { fileExists } from './fs-utils.js'
 import type { LoadedSkill, SkillManifest } from './types.js'
 
 /** A discovered-but-not-yet-loaded skill: its manifest + where it lives. */
 export interface SkillIndexEntry {
   manifest: SkillManifest
   dir: string
+}
+
+/** Options for {@link SkillRegistry.discover}. */
+export interface DiscoverOptions {
+  /**
+   * Invoked when a candidate `SKILL.md` cannot be read or parsed. Discovery
+   * always skips the offending entry and continues scanning the rest; this hook
+   * lets you observe (log, collect) the skipped entries. Omit to skip silently.
+   */
+  onError?: (error: unknown, skillPath: string) => void
 }
 
 /**
@@ -30,8 +41,14 @@ export class SkillRegistry {
    * indexing each by manifest `name`. Returns the entries found in this scan.
    * A later scan with a duplicate name overrides the earlier entry (last wins),
    * mirroring how registered/allowlisted sources layer.
+   *
+   * A single unreadable or malformed `SKILL.md` is skipped (not fatal) so one
+   * bad bundle in a tree cannot break discovery of the rest; pass
+   * {@link DiscoverOptions.onError} to observe what was skipped. This preserves
+   * the "index hundreds of skills cheaply" contract: discovery only reads
+   * frontmatter and never executes skill code.
    */
-  async discover(root: string): Promise<SkillIndexEntry[]> {
+  async discover(root: string, opts: DiscoverOptions = {}): Promise<SkillIndexEntry[]> {
     const found: SkillIndexEntry[] = []
     let subdirs: string[]
     try {
@@ -44,7 +61,13 @@ export class SkillRegistry {
     for (const dir of subdirs) {
       const skillPath = join(dir, 'SKILL.md')
       if (!(await fileExists(skillPath))) continue
-      const { manifest } = parseSkillManifest(await readFile(skillPath, 'utf8'), skillPath)
+      let manifest: SkillManifest
+      try {
+        ;({ manifest } = parseSkillManifest(await readFile(skillPath, 'utf8'), skillPath))
+      } catch (err) {
+        opts.onError?.(err, skillPath)
+        continue
+      }
       const entry: SkillIndexEntry = { manifest, dir }
       this.entries.set(manifest.name, entry)
       found.push(entry)
@@ -72,7 +95,13 @@ export class SkillRegistry {
     if (cached && !opts.force) return cached
 
     const entry = this.entries.get(name)
-    if (!entry) throw new Error(`[ai-skills] no skill named "${name}" has been discovered`)
+    if (!entry) {
+      const available = [...this.entries.keys()]
+      const hint = available.length
+        ? `available: ${available.join(', ')}`
+        : 'no skills indexed yet — call discover() first'
+      throw new Error(`[ai-skills] no skill named "${name}" has been discovered (${hint})`)
+    }
 
     const skill = await loadSkill(entry.dir, opts)
     this.loaded.set(name, skill)
@@ -83,8 +112,4 @@ export class SkillRegistry {
   async loadAll(names: string[], opts: LoadSkillOptions = {}): Promise<LoadedSkill[]> {
     return Promise.all(names.map(name => this.load(name, opts)))
   }
-}
-
-async function fileExists(path: string): Promise<boolean> {
-  try { return (await stat(path)).isFile() } catch { return false }
 }

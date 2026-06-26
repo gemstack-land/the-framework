@@ -1,8 +1,9 @@
-import { readFile, readdir, stat } from 'node:fs/promises'
+import { readFile, readdir } from 'node:fs/promises'
 import { join, basename } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import type { AnyTool } from '@gemstack/ai-sdk'
 import { parseSkillManifest, SkillManifestError } from './manifest.js'
+import { fileExists, isDirectory } from './fs-utils.js'
 import type { LoadedSkill, SkillResource } from './types.js'
 
 /** Candidate filenames for a skill's co-located tools module, in priority order. */
@@ -33,8 +34,10 @@ export async function loadSkill(dir: string, opts: LoadSkillOptions = {}): Promi
   let markdown: string
   try {
     markdown = await readFile(skillPath, 'utf8')
-  } catch {
-    throw new SkillManifestError(`no SKILL.md found in ${dir}`, dir)
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code
+    const reason = code === 'ENOENT' ? `no SKILL.md found in ${dir}` : `could not read ${skillPath}: ${(err as Error).message}`
+    throw new SkillManifestError(reason, dir)
   }
 
   const { manifest, instructions } = parseSkillManifest(markdown, skillPath)
@@ -103,12 +106,4 @@ async function loadSkillResources(dir: string): Promise<SkillResource[]> {
     .filter(e => e.isFile())
     .map(e => ({ name: basename(e.name), path: join(resourceDir, e.name) }))
     .sort((a, b) => a.name.localeCompare(b.name))
-}
-
-async function fileExists(path: string): Promise<boolean> {
-  try { return (await stat(path)).isFile() } catch { return false }
-}
-
-async function isDirectory(path: string): Promise<boolean> {
-  try { return (await stat(path)).isDirectory() } catch { return false }
 }
