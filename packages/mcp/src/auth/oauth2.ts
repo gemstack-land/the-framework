@@ -1,12 +1,12 @@
 /**
  * OAuth 2.1 bearer-token protection for an MCP web endpoint, framework-agnostic.
  *
- * The core does NOT know how to verify a token — that is the binding's / app's
- * job. Supply a {@link VerifyToken} via {@link OAuth2McpOptions.verifyToken}: it
- * validates the JWT (signature, expiry, revocation — whatever your authorization
- * server requires) and returns the token's claims, or `null` / throws when the
- * token is invalid. The Rudder binding wires `@rudderjs/passport` here; a
- * non-Rudder app supplies its own verifier.
+ * The core does NOT know how to verify a token — that is the app's job. Supply
+ * a {@link VerifyToken} via {@link OAuth2McpOptions.verifyToken}: it validates
+ * the JWT (signature, expiry, revocation — whatever your authorization server
+ * requires) and returns the token's claims, or `null` / throws when the token
+ * is invalid. Back it with any JWT library (e.g. `jose`), a hosted introspection
+ * endpoint, or a framework's auth integration.
  *
  * On failure the middleware adds an RFC 9728 `WWW-Authenticate` header pointing
  * clients at the protected-resource metadata document (see
@@ -93,6 +93,11 @@ export function oauth2McpMiddleware(mcpPath: string, options: OAuth2McpOptions =
     }
 
     const jwt = authHeader.slice(7).trim()
+    if (!jwt) {
+      challenge(res, metadataUrl, 'invalid_token', 'Bearer token required.')
+      return
+    }
+
     let claims: VerifiedToken | null
     try {
       claims = await verifyToken(jwt)

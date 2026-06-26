@@ -63,6 +63,7 @@ export function resolveHandleDeps(
       const msg = err instanceof Error ? err.message : String(err)
       throw new Error(
         `[gemstack/mcp] failed to resolve dependency ${describeToken(token)} for ${member}: ${msg}`,
+        { cause: err },
       )
     }
     if (resolved === undefined) {
