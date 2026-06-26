@@ -93,10 +93,10 @@ describe('CachedSubAgentRunStore.load', () => {
     await store.store('k', clientToolSnapshot())
 
     assert.ok(await store.load('k'))
-    assert.ok(cache.map.has('rudderjs:ai:sub-agent-run:k')) // still there after load
+    assert.ok(cache.map.has('gemstack:ai:sub-agent-run:k')) // still there after load
 
     assert.ok(await store.consume('k'))
-    assert.equal(cache.map.has('rudderjs:ai:sub-agent-run:k'), false) // gone after consume
+    assert.equal(cache.map.has('gemstack:ai:sub-agent-run:k'), false) // gone after consume
   })
 
   it('returns null for an unknown id', async () => {
@@ -111,5 +111,9 @@ describe('CachedSubAgentRunStore.load', () => {
     await store.store('1', clientToolSnapshot())
     assert.ok(await store.load('1'))
     assert.ok(cache.map.has('app:sub:1'))
+  })
+
+  it('throws when constructed without a cache adapter', () => {
+    assert.throws(() => new CachedSubAgentRunStore({} as never), /requires a cache adapter/)
   })
 })

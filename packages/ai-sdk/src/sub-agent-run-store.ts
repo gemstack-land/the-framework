@@ -1,4 +1,5 @@
 import type { AiMessage, ToolCall } from './types.js'
+import type { CacheAdapter } from './cache-adapter.js'
 
 /**
  * Discriminator for the kind of pause a snapshot represents. Determines
@@ -69,8 +70,8 @@ export interface SubAgentRunSnapshot {
  * - {@link InMemorySubAgentRunStore} — a `Map`-backed store. Single-process
  *   only; fine for unit tests and small dev setups, lossy across worker
  *   processes and restarts.
- * - {@link CachedSubAgentRunStore} — lazy adapter on top of `@rudderjs/cache`.
- *   Cross-process / cross-restart when the cache is configured with redis
+ * - {@link CachedSubAgentRunStore} — adapter over any {@link CacheAdapter} you
+ *   supply. Cross-process / cross-restart when that cache is backed by redis
  *   or any non-memory driver.
  *
  * Hosts may implement their own (Redis directly, Prisma, etc.) by
@@ -130,93 +131,57 @@ export class InMemorySubAgentRunStore implements SubAgentRunStore {
   }
 }
 
-// ─── @rudderjs/cache adapter ───────────────────────────────
-
-/**
- * Minimal structural shape of a cache adapter (the methods this store
- * touches). Mirrors `@rudderjs/cache`'s `CacheAdapter` so the dep stays
- * structural — the framework's main entry stays runtime-agnostic.
- */
-interface CacheStoreLike {
-  get<T = unknown>(key: string): Promise<T | null>
-  set(key: string, value: unknown, ttlSeconds?: number): Promise<void>
-  forget(key: string): Promise<void>
-}
+// ─── Cache-backed store (bring your own CacheAdapter) ───────
 
 export interface CachedSubAgentRunStoreOptions {
   /**
-   * Cache adapter to use. When omitted, the registry tries to load
-   * `@rudderjs/cache` lazily and falls back to the registered global
-   * adapter (`CacheRegistry.get()`); throws if neither resolves.
+   * The cache to persist runs in. Supply any {@link CacheAdapter} (redis,
+   * Memcached, a `Map`, a framework's cache). Required — `@gemstack/ai-sdk`
+   * bundles no cache implementation.
    */
-  cache?:     CacheStoreLike
-  /** Key namespace prefix. Default `'rudderjs:ai:sub-agent-run:'`. */
+  cache:      CacheAdapter
+  /** Key namespace prefix. Default `'gemstack:ai:sub-agent-run:'`. */
   keyPrefix?: string
   /** Time-to-live in seconds. Default 5 minutes. */
   ttlSeconds?: number
 }
 
 /**
- * Sub-agent run store backed by `@rudderjs/cache`. Loads the cache
- * adapter lazily so `@gemstack/ai-sdk`'s main entry stays runtime-agnostic
- * (no static import on the cache package).
+ * Sub-agent run store backed by a caller-supplied {@link CacheAdapter}. The
+ * framework depends on no cache package; you bring the cache and pass it as
+ * `{ cache }`.
  *
  * Default TTL is 5 minutes — long enough for a browser to round-trip a
  * few client tool calls, short enough that abandoned runs garbage-collect
  * promptly and the storage bill stays bounded.
  */
 export class CachedSubAgentRunStore implements SubAgentRunStore {
-  private readonly explicitCache?: CacheStoreLike
-  private readonly keyPrefix:      string
-  private readonly ttlSeconds:     number
-  private resolvedCache?:          CacheStoreLike
+  private readonly cache:      CacheAdapter
+  private readonly keyPrefix:  string
+  private readonly ttlSeconds: number
 
-  constructor(opts: CachedSubAgentRunStoreOptions = {}) {
-    if (opts.cache) this.explicitCache = opts.cache
-    this.keyPrefix  = opts.keyPrefix  ?? 'rudderjs:ai:sub-agent-run:'
+  constructor(opts: CachedSubAgentRunStoreOptions) {
+    if (!opts?.cache) {
+      throw new Error('[ai-sdk] CachedSubAgentRunStore requires a cache adapter: new CachedSubAgentRunStore({ cache }).')
+    }
+    this.cache      = opts.cache
+    this.keyPrefix  = opts.keyPrefix  ?? 'gemstack:ai:sub-agent-run:'
     this.ttlSeconds = opts.ttlSeconds ?? 5 * 60
   }
 
-  private async getCache(): Promise<CacheStoreLike> {
-    if (this.resolvedCache) return this.resolvedCache
-    if (this.explicitCache) {
-      this.resolvedCache = this.explicitCache
-      return this.resolvedCache
-    }
-    // Lazy-import @rudderjs/cache and ask the registry for the active
-    // adapter. This keeps the static import surface zero — the import
-    // only fires when the host actually opts into suspendable sub-agents.
-    // We dodge static module-resolution by using an indirected specifier
-    // so `@rudderjs/cache` doesn't need to be a declared dep of
-    // `@gemstack/ai-sdk` (it stays an optional runtime peer).
-    const cacheSpecifier = '@rudderjs/cache'
-    const mod = await import(/* @vite-ignore */ cacheSpecifier) as {
-      CacheRegistry?: { get(): CacheStoreLike | null }
-    }
-    const adapter = mod.CacheRegistry?.get?.()
-    if (!adapter) {
-      throw new Error('[ai-sdk] CachedSubAgentRunStore needs a cache adapter. Install `@rudderjs/cache`, register a driver, or pass `{ cache }` explicitly.')
-    }
-    this.resolvedCache = adapter
-    return adapter
-  }
-
   async store(subRunId: string, snapshot: SubAgentRunSnapshot): Promise<void> {
-    const cache = await this.getCache()
-    await cache.set(this.keyPrefix + subRunId, snapshot, this.ttlSeconds)
+    await this.cache.set(this.keyPrefix + subRunId, snapshot, this.ttlSeconds)
   }
 
   async consume(subRunId: string): Promise<SubAgentRunSnapshot | null> {
-    const cache = await this.getCache()
     const key = this.keyPrefix + subRunId
-    const snapshot = await cache.get<SubAgentRunSnapshot>(key)
+    const snapshot = await this.cache.get<SubAgentRunSnapshot>(key)
     if (!snapshot) return null
-    await cache.forget(key)
+    await this.cache.forget(key)
     return snapshot
   }
 
   async load(subRunId: string): Promise<SubAgentRunSnapshot | null> {
-    const cache = await this.getCache()
-    return cache.get<SubAgentRunSnapshot>(this.keyPrefix + subRunId)
+    return this.cache.get<SubAgentRunSnapshot>(this.keyPrefix + subRunId)
   }
 }

@@ -160,8 +160,9 @@ export interface ProviderRequestOptions {
    *   `prompt_cache_key` from a stable hash of the cached regions for routing
    *   affinity (so repeat requests hit the same backend's cached prefix).
    * - **Google (Gemini)** — translates to `cachedContent` resources via a
-   *   pluggable registry that uses `@rudderjs/cache` when installed. TTL is
-   *   configurable via {@link CacheableConfig.ttl} (default `'1h'`).
+   *   pluggable registry that uses a supplied `CacheAdapter` when available
+   *   (else an in-process cache). TTL is configurable via
+   *   {@link CacheableConfig.ttl} (default `'1h'`).
    *
    * Adapters that don't support caching ignore this field — the request
    * still runs uncached.

@@ -154,8 +154,8 @@ describe('CachedAgentRunStore', () => {
     const store = new CachedAgentRunStore({ cache })
     await store.store('xyz', clientToolState())
 
-    assert.ok(cache.map.has('rudderjs:ai:agent-run:xyz'))
-    assert.equal(cache.ttls['rudderjs:ai:agent-run:xyz'], 5 * 60)
+    assert.ok(cache.map.has('gemstack:ai:agent-run:xyz'))
+    assert.equal(cache.ttls['gemstack:ai:agent-run:xyz'], 5 * 60)
   })
 
   it('honors a custom keyPrefix and ttlSeconds', async () => {
@@ -173,10 +173,10 @@ describe('CachedAgentRunStore', () => {
     await store.store('k', clientToolState())
 
     assert.ok(await store.load('k'))
-    assert.ok(cache.map.has('rudderjs:ai:agent-run:k')) // still there
+    assert.ok(cache.map.has('gemstack:ai:agent-run:k')) // still there
 
     assert.ok(await store.consume('k'))
-    assert.equal(cache.map.has('rudderjs:ai:agent-run:k'), false) // gone
+    assert.equal(cache.map.has('gemstack:ai:agent-run:k'), false) // gone
     assert.equal(await store.consume('k'), null)
   })
 
@@ -184,5 +184,9 @@ describe('CachedAgentRunStore', () => {
     const store = new CachedAgentRunStore({ cache: fakeCache() })
     assert.equal(await store.load('missing'), null)
     assert.equal(await store.consume('missing'), null)
+  })
+
+  it('throws when constructed without a cache adapter', () => {
+    assert.throws(() => new CachedAgentRunStore({} as never), /requires a cache adapter/)
   })
 })
