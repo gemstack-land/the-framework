@@ -80,13 +80,18 @@ export async function mcpClientTools(
 // Internals
 // ─────────────────────────────────────────────────────────────────
 
+/** Tool metadata as returned by a remote MCP server's `listTools()`. */
 interface RemoteTool {
   name:        string
   description?: string
   inputSchema:  Record<string, unknown>
-  outputSchema?: Record<string, unknown>
 }
 
+/**
+ * The minimal slice of the SDK's `Client` this bridge depends on. Declared
+ * structurally so the union in {@link McpClientTransport} never forces a hard
+ * dependency on `@modelcontextprotocol/sdk` at module load.
+ */
 interface MinimalClient {
   listTools(): Promise<{ tools: unknown[] }>
   callTool(
@@ -101,6 +106,9 @@ async function resolveClient(
   transport: McpClientTransport,
 ): Promise<{ client: MinimalClient; ownsClient: boolean }> {
   // Already a Client instance — duck-type check for `callTool` + `listTools`.
+  // The `unknown` double-cast is deliberate: `transport` is typed `object` (we
+  // can't name the SDK's Client type without a hard dependency on it), so we
+  // narrow structurally and assert to our MinimalClient shape.
   if (typeof transport === 'object' && transport !== null && 'callTool' in transport && 'listTools' in transport) {
     return { client: transport as unknown as MinimalClient, ownsClient: false }
   }
@@ -118,8 +126,6 @@ async function resolveClient(
   return { client, ownsClient: true }
 }
 
-async function buildTransport(transport: Exclude<McpClientTransport, object>): Promise<unknown>
-async function buildTransport(transport: McpClientTransport): Promise<unknown>
 async function buildTransport(transport: McpClientTransport): Promise<unknown> {
   if (typeof transport === 'string' || transport instanceof URL) {
     const url = transport instanceof URL ? transport : new URL(transport)

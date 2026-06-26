@@ -3,7 +3,7 @@
 The bridge between [`@gemstack/ai-sdk`](https://github.com/gemstack-land/gemstack/tree/main/packages/ai-sdk) Agents and [Model Context Protocol](https://modelcontextprotocol.io) servers. Two connectors:
 
 - **`mcpClientTools(transport, opts?)`** — consume a remote MCP server's tools as Agent tools.
-- **`mcpServerFromAgent(AgentClass, opts?)`** — expose an Agent as an MCP server external clients (Claude Desktop, Cursor, etc.) can call.
+- **`mcpServerFromAgent(AgentClass, opts?)`** — expose an Agent as an MCP server that external clients (Claude Desktop, Cursor, etc.) can call.
 
 This is the **agent bridge** axis of MCP. It depends on `@gemstack/ai-sdk` and is useless without an Agent. It was carved out of `@gemstack/ai-sdk`'s `/mcp` subpath so the optional MCP SDK dependency is declared only by the package that actually needs it.
 
@@ -37,8 +37,31 @@ const tools = await mcpClientTools({ command: 'npx', args: ['some-mcp-server'] }
 
 // (c) Already-connected SDK Client (caller owns lifecycle)
 const tools = await mcpClientTools(myClient)
+```
 
-// Spread into your Agent's tools(). Call tools.close() when done (cases a + b).
+Spread the result into your Agent's `tools()`. When this call owns the connection (cases a + b) the returned array carries a `close()` method; call it when the agent is done so the subprocess / HTTP session shuts down cleanly. When you pass your own `Client` (case c) there is no `close()` — you own that lifecycle.
+
+```ts
+class MyAgent extends Agent {
+  tools() { return [...tools, ...myOwnTools] }   // close() is non-enumerable, so it's not iterated
+}
+// ... later
+await tools.close?.()
+```
+
+**Options** (`mcpClientTools(transport, opts)`):
+
+| Option | Default | Effect |
+|---|---|---|
+| `filter` | all tools | `(toolName) => boolean` — drop remote tools you don't want to expose. |
+| `namePrefix` | `''` | Prefix every tool name, to avoid collisions when wiring several remote servers. |
+| `streaming` | `true` | Forward the remote server's `notifications/progress` as `tool-update` chunks during a run. |
+
+```ts
+const tools = await mcpClientTools('https://api.example.com/mcp', {
+  filter: (name) => !name.startsWith('internal_'),
+  namePrefix: 'remote_',
+})
 ```
 
 ### Expose an Agent as an MCP server
@@ -51,7 +74,13 @@ const server = await mcpServerFromAgent(MyAgent)
 await server.connect(new StdioServerTransport())
 ```
 
-Three exposure modes via `opts.expose`: `'tools'` (default, one MCP tool per `agent.tools()` entry), `'agent'` (one tool that runs the whole agent: `prompt(text) → text`), or `'both'`.
+**Exposure modes** via `opts.expose`:
+
+- `'tools'` (default) — one MCP tool per `agent.tools()` entry. Best for surfacing an agent's toolbox to other MCP clients.
+- `'agent'` — a single MCP tool that runs the whole agent (`prompt(text) -> text`). Best for shipping one agent that any MCP client can call.
+- `'both'` — the individual tools and the agent prompt-tool, side by side.
+
+Other options: `name` / `version` (server identity), `instructions` (advertised server instructions; defaults to the agent's `instructions()`), and `agentToolName` (the prompt-tool's name in `'agent'`/`'both'` mode).
 
 ## License
 

@@ -142,6 +142,13 @@ function stringifyResult(result: unknown): string {
   return String(result)
 }
 
+/**
+ * Read the agent's instructions for the server's advertised `instructions`.
+ * This is best-effort optional metadata: `instructions()` may legitimately
+ * depend on per-request state that isn't available here, so a throw is treated
+ * as "no instructions" rather than failing server creation. Pass
+ * `opts.instructions` explicitly to bypass this.
+ */
 function safeInstructions(agent: Agent): string | undefined {
   try {
     const out = agent.instructions()
