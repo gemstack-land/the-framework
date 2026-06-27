@@ -10,7 +10,7 @@ import {
 import type { ToolCall } from '../types.js'
 
 // The React hook (`useAgentRun`) is a thin wrapper over the pieces here —
-// same posture as `@rudderjs/sync`'s `seedShareTypeOnSync` vs `useCollabSeed`.
+// same posture as a runtime-agnostic seed helper vs its React hook wrapper.
 // The framework ships no React testing harness, so we exhaustively cover the
 // transcript reducer, the client-tool batch, and the run/resume driver here.
 
