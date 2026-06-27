@@ -33,7 +33,7 @@ mcp           standalone MCP server framework                agent-agnostic, not
 
 - **Framework-agnostic core.** Every package runs in any `fetch`-capable JS runtime - Node, the browser, Electron, React Native. The agent runtime has zero static `node:*` imports in its main entry, and its only required runtime dependency is `zod`.
 - **Neutral contracts, not bundled infrastructure.** Persistence (conversation history, user memory, budgets, suspended runs, generated-file storage) is defined as interfaces you implement against your own database, cache, or object store. In-memory defaults ship for getting started.
-- **One way to do a thing.** A single `tool()` shape, a single `Agent` base, a single provider config object - shared across the whole family.
+- **One way to do a thing.** A single `toolDefinition()` shape, a single `Agent` base, a single provider config object - shared across the whole family.
 - **Graduated, not dumped.** GemStack grows by promoting packages that earn framework-agnostic standing, with the API settling toward `1.0` in the open.
 
 ## Where these came from

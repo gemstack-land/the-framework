@@ -255,3 +255,9 @@ class AcmeGatewayAdapter extends HttpGatewayAdapter {
 ```
 
 The subpath also exports `GatewayAdapterConfig`, `GatewayRequestContext`, and `parseSseStream` (with its `SseEvent` type) for decoding a custom event stream. Wrap your adapter in a small `ProviderFactory` and register it like any other provider.
+
+## See also
+
+- [Installation](/guide/installation) - register providers and set the default model.
+- [Vector Stores & RAG](/packages/ai-sdk/rag) - embeddings and reranking capabilities by provider.
+- [Testing & Evals](/packages/ai-sdk/testing) - run agents against a fake instead of a real provider.

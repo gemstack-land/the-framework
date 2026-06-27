@@ -155,5 +155,5 @@ The same `signal` option works on `stream(...)`: aborting rejects the `response`
 ## See also
 
 - [Agents](/packages/ai-sdk/agents) for `prompt()`, tools, and multi-step loops.
-- [Structured Output & Attachments](/packages/ai-sdk/structured-output) for typed results and multi-modal input.
+- [Structured Output](/packages/ai-sdk/structured-output) for typed results and multi-modal input.
 - [Testing](/packages/ai-sdk/testing) for driving streams against the fake.

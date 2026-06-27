@@ -348,3 +348,9 @@ await agent({ instructions: 'You are helpful.', middleware: [logging] }).prompt(
 - **Streaming `response` not resolving.** `await response` only resolves after the `stream` iterator has been fully consumed. Always iterate the stream first, even if you only care about the final result.
 - **Bare model names.** `model: 'claude-sonnet-4-6'` throws; it must be `provider/model`.
 - **Suspend needs a run store and streaming.** `suspendable` requires `streaming` on `asTool`, and the cache-backed stores require a `CacheAdapter` you supply.
+
+## See also
+
+- [Tools](/packages/ai-sdk/tools) - define what the agent can call.
+- [Streaming](/packages/ai-sdk/streaming) - stream tokens and sub-agent progress to a UI.
+- [Build a Multi-Agent App](/guide/tutorial) - drive many agents under a supervisor.

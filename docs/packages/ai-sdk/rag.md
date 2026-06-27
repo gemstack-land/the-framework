@@ -179,3 +179,8 @@ await files.delete(uploaded.id)
 ## Provider support at a glance
 
 Hosted file search, embeddings, and reranking are each provider-specific capabilities. Rather than duplicate the matrix here, see [/packages/ai-sdk/providers](/packages/ai-sdk/providers) for which providers implement embeddings, reranking, and hosted vector stores. The portable pattern is: keep the agent's `tools()` and prompt identical, and switch capability by changing the registered provider and model string.
+
+## See also
+
+- [Providers](/packages/ai-sdk/providers) - which providers implement embeddings, reranking, and hosted stores.
+- [Memory & Persistence](/packages/ai-sdk/memory) - semantic user memory built on embeddings.

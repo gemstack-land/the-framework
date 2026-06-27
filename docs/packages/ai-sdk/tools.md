@@ -127,3 +127,9 @@ The generated schema is a single object: the discriminator (`sub_tool: 'web' | '
 - **Tool handlers throwing.** The agent gets the error message back as the tool result. Catch known errors inside the handler and return a structured failure shape instead of throwing.
 - **Non-idempotent parallel tools.** Handlers in one step run concurrently by default. Set `parallelTools: false` when they share mutable state.
 - **Client tools need a resume path.** A tool with no `.server()` pauses the loop; the run only completes once the caller returns its result. See [Running agents](/packages/ai-sdk/agents).
+
+## See also
+
+- [Agents](/packages/ai-sdk/agents) - the loop that decides when to call your tools.
+- [Structured Output](/packages/ai-sdk/structured-output) - typed results and attachments.
+- [ai-skills](/packages/ai-skills) - ship tools as composable capability bundles.

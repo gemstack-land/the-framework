@@ -78,10 +78,13 @@ The agent decides when to call the tool, validates the arguments against `inputS
 
 | You want to… | Read |
 |---|---|
+| Compose tools, skills, and a multi-agent supervisor into one app | [Build a Multi-Agent App](/guide/tutorial) |
 | Understand the agent loop, sub-agents, multi-step runs | [Agents](/packages/ai-sdk/agents) |
 | Go deeper on tools, scoped tools, client tools, approval gates | [Tools](/packages/ai-sdk/tools) |
+| Add more model providers | [Providers](/packages/ai-sdk/providers) |
 | Stream tokens and tool progress to a UI | [Streaming](/packages/ai-sdk/streaming) |
 | Get typed objects back instead of text | [Structured Output](/packages/ai-sdk/structured-output) |
 | Persist conversations and give the agent memory | [Memory & Persistence](/packages/ai-sdk/memory) |
 | Retrieval-augmented generation over your documents | [Vector Stores & RAG](/packages/ai-sdk/rag) |
 | Test agents without hitting a real model | [Testing & Evals](/packages/ai-sdk/testing) |
+| See the whole family and how the pieces fit | [Packages overview](/packages/) |
