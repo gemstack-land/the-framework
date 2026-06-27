@@ -8,12 +8,14 @@ GemStack is shared, community-governed infrastructure built with the [Vike](http
 
 All packages publish under the **`@gemstack/`** scope (e.g. `npm install @gemstack/ai-sdk`).
 
+<!-- Package-name cells use a non-breaking hyphen (U+2011) so names like `ai-autopilot` do not wrap mid-name in GitHub's table. The real install names (normal hyphens) are in the scope line above and each package's README. -->
+
 | Package | Description | Version |
 |---|---|---|
-| [`ai-sdk`](./packages/ai-sdk) | The agent runtime: providers, the agent loop, tools, streaming, middleware, structured output, memory, and evals. The engine the rest of the AI family builds on. | [![npm](https://img.shields.io/npm/v/@gemstack/ai-sdk)](https://www.npmjs.com/package/@gemstack/ai-sdk) |
-| [`ai-skills`](./packages/ai-skills) | Portable capability bundles: load `SKILL.md` skills (instructions + tools + resources) and compose them onto an agent on demand. | [![npm](https://img.shields.io/npm/v/@gemstack/ai-skills)](https://www.npmjs.com/package/@gemstack/ai-skills) |
-| [`ai-autopilot`](./packages/ai-autopilot) | Orchestration: a Supervisor that plans, dispatches subagents (bounded concurrency + budget guardrails), and synthesizes the result. | [![npm](https://img.shields.io/npm/v/@gemstack/ai-autopilot)](https://www.npmjs.com/package/@gemstack/ai-autopilot) |
-| [`ai-mcp`](./packages/ai-mcp) | The agent/MCP bridge: consume a remote MCP server's tools as agent tools, and expose an agent as an MCP server. | [![npm](https://img.shields.io/npm/v/@gemstack/ai-mcp)](https://www.npmjs.com/package/@gemstack/ai-mcp) |
+| [`ai‑sdk`](./packages/ai-sdk) | The agent runtime: providers, the agent loop, tools, streaming, middleware, structured output, memory, and evals. The engine the rest of the AI family builds on. | [![npm](https://img.shields.io/npm/v/@gemstack/ai-sdk)](https://www.npmjs.com/package/@gemstack/ai-sdk) |
+| [`ai‑skills`](./packages/ai-skills) | Portable capability bundles: load `SKILL.md` skills (instructions + tools + resources) and compose them onto an agent on demand. | [![npm](https://img.shields.io/npm/v/@gemstack/ai-skills)](https://www.npmjs.com/package/@gemstack/ai-skills) |
+| [`ai‑autopilot`](./packages/ai-autopilot) | Orchestration: a Supervisor that plans, dispatches subagents (bounded concurrency + budget guardrails), and synthesizes the result. | [![npm](https://img.shields.io/npm/v/@gemstack/ai-autopilot)](https://www.npmjs.com/package/@gemstack/ai-autopilot) |
+| [`ai‑mcp`](./packages/ai-mcp) | The agent/MCP bridge: consume a remote MCP server's tools as agent tools, and expose an agent as an MCP server. | [![npm](https://img.shields.io/npm/v/@gemstack/ai-mcp)](https://www.npmjs.com/package/@gemstack/ai-mcp) |
 | [`mcp`](./packages/mcp) | A standalone framework for *authoring* MCP servers: tools, resources, prompts, decorators, OAuth 2.1, a framework-neutral HTTP handler, and a test client. Agent-agnostic. | [![npm](https://img.shields.io/npm/v/@gemstack/mcp)](https://www.npmjs.com/package/@gemstack/mcp) |
 
 ### How they fit together
