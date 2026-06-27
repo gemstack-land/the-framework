@@ -1,4 +1,5 @@
 import type { AgentPromptOptions, AgentResponse, AgentStreamResponse, StreamChunk } from './types.js'
+import type { QueueDispatch, QueueBroadcast } from './queue-adapter.js'
 
 /**
  * Optional shape on the agent reference — when set, the queued job uses
@@ -85,17 +86,18 @@ export class QueuedPromptBuilder {
    * Stream the agent's progress to a broadcast channel as the job runs.
    *
    * When set, the queued job uses `agent.stream()` instead of `prompt()` and
-   * pushes each chunk to `channel` via `@rudderjs/broadcast`. Events:
+   * pushes each chunk to `channel` via the registered broadcast adapter
+   * (`configureAiQueue({ broadcast })`). Events:
    *
    *   - `chunk` (per `StreamChunk` from the agent)
    *   - `done`  (the final `AgentResponse`)
    *   - `error` (`{ message }` if the run fails)
    *
-   * Requires `@rudderjs/broadcast` installed and its WS server running in the
-   * worker process. In the typical Rudder dev setup (single process running
-   * both web + queue:work) this works out of the box. If your queue worker is
-   * a separate process from the broadcast WS server, you'll need a pub/sub
-   * bridge (Redis, Reverb, etc.) — outside the scope of v1.
+   * Requires a broadcast adapter registered via `configureAiQueue({ broadcast })`
+   * and reachable from the worker process. In the typical single-process dev
+   * setup (one process running both web + queue worker) this works out of the
+   * box. If your queue worker is a separate process from the broadcast server,
+   * you'll need a pub/sub bridge (Redis, Reverb, etc.) — outside the scope of v1.
    */
   broadcast(channel: string, opts: BroadcastOptions = {}): this {
     this._broadcastChannel = channel
@@ -142,11 +144,8 @@ export class QueuedPromptBuilder {
 
 // ─── Internals ────────────────────────────────────────────
 
-type DispatchFn = (
-  fn: () => void | Promise<void>,
-  options?: { queue?: string; delay?: number },
-) => Promise<void>
-type BroadcastFn = (channel: string, event: string, data: unknown) => void | Promise<void>
+type DispatchFn  = QueueDispatch
+type BroadcastFn = QueueBroadcast
 
 let _dispatchLoader:  () => Promise<DispatchFn>          = defaultLoadDispatch
 let _broadcastLoader: () => Promise<BroadcastFn | null>  = defaultLoadBroadcast
@@ -155,25 +154,39 @@ async function loadDispatch():  Promise<DispatchFn>          { return _dispatchL
 async function loadBroadcast(): Promise<BroadcastFn | null>  { return _broadcastLoader() }
 
 async function defaultLoadDispatch(): Promise<DispatchFn> {
-  try {
-    const specifier = '@rudderjs/queue'
-    const mod: Record<string, unknown> = await import(/* @vite-ignore */ specifier)
-    return mod['dispatch'] as DispatchFn
-  } catch {
-    throw new Error(
-      '[ai-sdk] @rudderjs/queue is required for agent.queue(). Install it: pnpm add @rudderjs/queue',
-    )
-  }
+  throw new Error(
+    '[ai-sdk] agent.queue() needs a queue adapter. Register one at startup with configureAiQueue({ dispatch }). Rudder apps get this automatically via their AI provider.',
+  )
 }
 
 async function defaultLoadBroadcast(): Promise<BroadcastFn | null> {
-  try {
-    const specifier = '@rudderjs/broadcast'
-    const mod: Record<string, unknown> = await import(/* @vite-ignore */ specifier)
-    const fn = mod['broadcast']
-    return typeof fn === 'function' ? fn as BroadcastFn : null
-  } catch {
-    return null
+  return null
+}
+
+/**
+ * Register the queue (and optional broadcast) adapter that backs
+ * `agent.queue('...').send()` and `.broadcast(channel)`.
+ *
+ * Call once at app startup. Returns a restore function that reinstates the
+ * previously-registered adapters (handy in tests).
+ *
+ * @example
+ * configureAiQueue({
+ *   dispatch:  (fn, opts) => myQueue.push(fn, opts),
+ *   broadcast: (channel, event, data) => myBus.emit(channel, event, data),
+ * })
+ */
+export function configureAiQueue(config: {
+  dispatch: QueueDispatch
+  broadcast?: QueueBroadcast | null
+}): () => void {
+  const prevDispatch  = _dispatchLoader
+  const prevBroadcast = _broadcastLoader
+  _dispatchLoader  = async () => config.dispatch
+  _broadcastLoader = async () => config.broadcast ?? null
+  return () => {
+    _dispatchLoader  = prevDispatch
+    _broadcastLoader = prevBroadcast
   }
 }
 
@@ -209,7 +222,7 @@ async function runStreamingAndBroadcast(
   const broadcastFn = await loadBroadcast()
   if (broadcastFn === null) {
     throw new Error(
-      '[ai-sdk] @rudderjs/broadcast is required for .broadcast(). Install it: pnpm add @rudderjs/broadcast',
+      '[ai-sdk] .broadcast() needs a broadcast adapter. Register one with configureAiQueue({ broadcast }).',
     )
   }
   if (typeof agentRef.stream !== 'function') {

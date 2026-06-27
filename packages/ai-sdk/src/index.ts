@@ -135,7 +135,8 @@ export type {
   AsToolStreamingOption,
   ChunkProjector,
 } from './agent.js'
-export { QueuedPromptBuilder } from './queue-job.js'
+export { QueuedPromptBuilder, configureAiQueue } from './queue-job.js'
+export type { BroadcastOptions } from './queue-job.js'
 
 // Middleware
 export { runOnConfig, runOnChunk, runOnBeforeToolCall, runOnAfterToolCall, runSequential, runOnUsage, runOnAbort, runOnError } from './middleware.js'
@@ -172,6 +173,9 @@ export type { CacheAdapter } from './cache-adapter.js'
 
 // Neutral storage contract for ImageGenerator/AudioGenerator .store() (bring your own)
 export type { StorageAdapter } from './storage-adapter.js'
+
+// Neutral queue/broadcast contract behind agent.queue() / .broadcast() (bring your own)
+export type { QueueDispatch, QueueBroadcast } from './queue-adapter.js'
 
 // Sub-agent run store (asTool streaming + suspend)
 export {

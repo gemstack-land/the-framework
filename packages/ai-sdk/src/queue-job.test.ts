@@ -1,6 +1,6 @@
 import { describe, it, beforeEach, afterEach } from 'node:test'
 import assert from 'node:assert/strict'
-import { QueuedPromptBuilder, _setQueueJobLoadersForTests } from './queue-job.js'
+import { QueuedPromptBuilder, _setQueueJobLoadersForTests, configureAiQueue } from './queue-job.js'
 import type { AgentResponse, AgentStreamResponse, StreamChunk } from './types.js'
 
 // ─── Test seam wiring ─────────────────────────────────────
@@ -195,7 +195,7 @@ describe('QueuedPromptBuilder — broadcast() path', () => {
     const { agent } = makeStreamingAgent([{ type: 'finish', finishReason: 'stop' }])
     await assert.rejects(
       () => new QueuedPromptBuilder(agent, 'x').broadcast('chan').send(),
-      /@rudderjs\/broadcast/,
+      /needs a broadcast adapter/,
     )
   })
 
@@ -216,5 +216,47 @@ describe('QueuedPromptBuilder — broadcast() path', () => {
       .then(r => { received = r })
       .send()
     assert.strictEqual(received, fakeResponse)
+  })
+})
+
+// ─── Public configureAiQueue() registration ───────────────
+
+describe('configureAiQueue', () => {
+  it('registers a dispatch + broadcast adapter that backs send()', async () => {
+    // Drop the per-test fakes so configureAiQueue captures the real defaults.
+    restoreLoaders()
+    const localDispatched: DispatchedJob[] = []
+    const localBroadcasts: BroadcastCall[] = []
+    const restore = configureAiQueue({
+      dispatch: async (fn, options) => {
+        localDispatched.push({ fn, queue: options?.queue, delay: options?.delay })
+        await fn()
+      },
+      broadcast: (channel, event, data) => {
+        localBroadcasts.push({ channel, event, data })
+      },
+    })
+    try {
+      const { agent, calls } = makePromptOnlyAgent()
+      await new QueuedPromptBuilder(agent, 'hi').onQueue('ai').send()
+      assert.strictEqual(localDispatched.length, 1)
+      assert.strictEqual(localDispatched[0]?.queue, 'ai')
+      assert.deepStrictEqual(calls, [{ input: 'hi' }], 'the agent prompt ran inside the dispatched job')
+      assert.strictEqual(localBroadcasts.length, 0)
+    } finally {
+      restore()
+    }
+  })
+
+  it('restore() reverts to the default adapter, which rejects with a clear error', async () => {
+    // Revert to the engine default, then register + immediately restore.
+    restoreLoaders()
+    const restore = configureAiQueue({ dispatch: async (fn) => { await fn() } })
+    restore()
+    const { agent } = makePromptOnlyAgent()
+    await assert.rejects(
+      () => new QueuedPromptBuilder(agent, 'x').send(),
+      /needs a queue adapter/,
+    )
   })
 })
