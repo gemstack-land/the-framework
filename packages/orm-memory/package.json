@@ -1,0 +1,30 @@
+{
+  "name": "@gemstack/orm-memory",
+  "version": "0.1.0",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "description": "In-process memory adapter for @gemstack/orm: executes the neutral repository calls against plain Maps. Zero database, zero ORM \u2014 for tests, demos, and the proof.",
+  "exports": {
+    ".": "./src/index.js"
+  },
+  "scripts": {
+    "test": "node --test"
+  },
+  "dependencies": {
+    "@gemstack/orm": "workspace:*"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/gemstack-land/gemstack",
+    "directory": "packages/orm-memory"
+  },
+  "bugs": {
+    "url": "https://github.com/gemstack-land/gemstack/issues"
+  },
+  "homepage": "https://github.com/gemstack-land/gemstack/tree/main/packages/orm-memory#readme",
+  "author": "Suleiman Shahbari",
+  "devDependencies": {
+    "@gemstack/schema": "workspace:*"
+  }
+}
