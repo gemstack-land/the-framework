@@ -28,17 +28,20 @@ Packages join GemStack by **graduating**, one at a time, when they prove framewo
 - A `vike-*` package moves here only if a genuinely agnostic *core* falls out of it that is useful beyond its framework. In that case the core graduates (e.g. `@gemstack/<core>`) while the framework binding stays `vike-*`.
 - Because both repos are co-governed and the `vike-*` set sits in the Vike orbit, any such move is decided with the Vike team, when there is brand traction, not unilaterally.
 
-### Graduation candidates already in `vike-data`
+### The data layer (graduated — Phase 0, pending brand confirmation)
 
-An audit of `vike-data` shows the agnostic engines are not in the `vike-*` packages (those are bindings) but in the `universal-*` packages, which already carry **zero Vike imports**. These are the real candidates, in priority order after `@gemstack/ai-sdk`:
+An audit of `vike-data` showed the agnostic engines are not in the `vike-*` packages (those are bindings) but in the `universal-*` packages, which carry **zero Vike imports**. The data layer is the second graduation after `@gemstack/ai-sdk`:
 
-| Candidate (today) | Would become | Notes |
+| Source (in `vike-data`) | Graduated to | Notes |
 |---|---|---|
-| `@universal-orm/core` (+ `@universal-orm/drizzle` / `/memory` / `/rudder`) | `@gemstack/orm` (+ adapters) | The ORM analog of `@gemstack/ai-sdk`. Mature, clearly agnostic. The strongest next candidate; move the core + its adapter family together. |
-| `@vike-data/universal-schema` | `@gemstack/schema` | "Usable standalone by any framework or ORM." Agnostic, but currently mis-scoped under `@vike-data`. |
-| `@vike-data/kit` | (stays) | Agnostic primitives (`createPort`), but it is the kit for *authoring bindings*, so it belongs with the binding ecosystem, not the engine umbrella, unless GemStack later wants a shared-primitives package. |
+| `@universal-orm/core` (+ `/drizzle` / `/memory`) | `@gemstack/orm` (+ `orm-drizzle` / `orm-memory`) | The ORM analog of `@gemstack/ai-sdk`. Mature, clearly agnostic. Core + its adapter family graduated together. |
+| `@vike-data/universal-schema` | `@gemstack/schema` | Agnostic, was mis-scoped under `@vike-data`. **Graduated with the ORM** (not later): the ORM test suite builds fixtures with `defineSchema`/`mergeSchemas`, so they cannot split. Still an early-experiment API. |
+| `@universal-orm/rudder` | (decision pending) | The one **framework-coupled** adapter (peer `@rudderjs/database`). Excluded from the agnostic move; it is the "living binding" question — graduate as `@gemstack/orm-rudder` or keep it in the Rudder orbit. |
+| `@vike-data/kit` | (stays) | Agnostic primitives (`createPort`), but it is the kit for *authoring bindings*, so it belongs with the binding ecosystem, not the engine umbrella. |
 
-Realized fully, GemStack is the unified home for agnostic engines: `@gemstack/ai-sdk` (AI), `@gemstack/orm` (data), `@gemstack/schema` (schema).
+**Status:** copied + renamed and green in the gemstack workspace (Phase 0 spike, #65, on `main` as `private` packages). The packages are **not yet published**, and the move is **gated on the brand-consolidation decision** below (#66): the `@gemstack/*` names are provisional until the Vike team confirms consolidation vs keeping `@universal-orm` as a parallel brand. Publishing, the re-export shims at the old names, and repointing dependents all wait on that confirmation.
+
+Now realized, GemStack is the unified home for agnostic engines: `@gemstack/ai-sdk` (AI), `@gemstack/orm` (data), `@gemstack/schema` (schema).
 
 ### The open brand-consolidation question (for the Vike team)
 

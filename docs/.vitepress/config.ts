@@ -53,6 +53,8 @@ export default defineConfig({
             { text: 'ai-autopilot', link: '/packages/ai-autopilot' },
             { text: 'ai-mcp', link: '/packages/ai-mcp' },
             { text: 'mcp', link: '/packages/mcp' },
+            { text: 'orm', link: '/packages/orm' },
+            { text: 'schema', link: '/packages/schema' },
           ],
         },
         {
@@ -83,12 +85,19 @@ export default defineConfig({
           ],
         },
         {
-          text: 'The family',
+          text: 'The AI family',
           items: [
             { text: 'ai-skills', link: '/packages/ai-skills' },
             { text: 'ai-autopilot', link: '/packages/ai-autopilot' },
             { text: 'ai-mcp', link: '/packages/ai-mcp' },
             { text: 'mcp', link: '/packages/mcp' },
+          ],
+        },
+        {
+          text: 'The data family',
+          items: [
+            { text: 'orm — the data engine', link: '/packages/orm' },
+            { text: 'schema — the shape engine', link: '/packages/schema' },
           ],
         },
       ],

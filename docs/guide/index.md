@@ -15,6 +15,9 @@ All packages publish under the **`@gemstack/`** scope.
 | [`ai-autopilot`](/packages/ai-autopilot) | Orchestration: a Supervisor that plans, dispatches subagents (bounded concurrency + budget guardrails), and synthesizes the result. |
 | [`ai-mcp`](/packages/ai-mcp) | The agent/MCP bridge: consume a remote MCP server's tools as agent tools, and expose an agent as an MCP server. |
 | [`mcp`](/packages/mcp) | A standalone framework for *authoring* MCP servers: tools, resources, prompts, decorators, OAuth 2.1, a framework-neutral HTTP handler, and a test client. Agent-agnostic. |
+| [`orm`](/packages/orm) | The data engine: a narrow, ORM-free repository (`db.users.upsert(...)`) over a composed schema, plus the adapter contract and a one-adapter registry. The data-layer twin of `ai-sdk`. |
+| [`schema`](/packages/schema) | The shape engine: declare tables once as plain data, merge contributions, derive migrations, compile to Prisma / Drizzle / Rudder. **Preview.** |
+| [`orm-memory`](/packages/orm#adapters) / [`orm-drizzle`](/packages/orm#adapters) | Adapters that bind the `orm` repository to a backend: in-process `Map`s (tests/demos) or Drizzle (real databases). |
 
 ## How they fit together
 
@@ -25,9 +28,14 @@ ai-autopilot  orchestration / autonomy (the "director")     -> ai-sdk (+ skills)
 ai-mcp        agent <-> MCP bridge (the "adapter")           -> ai-sdk
 -----------------------------------------------------------------------------------
 mcp           standalone MCP server framework                agent-agnostic, not ai-*
+-----------------------------------------------------------------------------------
+schema        data shape: define tables, merge, derive migrations   (preview)
+orm           runtime data access over a composed schema
+orm-memory    in-process Map adapter (tests/demos)           -> orm
+orm-drizzle   Drizzle adapter (real databases)               -> orm
 ```
 
-`ai-sdk` is the foundation: it owns the single-agent loop, tools, and streaming. `ai-skills` and `ai-autopilot` build on top of it. `ai-mcp` bridges an agent to the Model Context Protocol. `mcp` stands apart - it is for *authoring* MCP servers and knows nothing about agents.
+`ai-sdk` is the foundation of the **AI family**: it owns the single-agent loop, tools, and streaming; `ai-skills` and `ai-autopilot` build on top of it, and `ai-mcp` bridges an agent to the Model Context Protocol. `mcp` stands apart - it is for *authoring* MCP servers and knows nothing about agents. The **data family** is a second, independent set of engines: `orm` reads and writes without importing an ORM, `schema` declares tables once and compiles to any ORM, and the adapters bind the repository to a real backend.
 
 ## Design principles
 

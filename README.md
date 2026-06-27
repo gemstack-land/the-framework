@@ -19,6 +19,10 @@ Full documentation lives in [`docs/`](./docs/guide/index.md) (a hosted site is o
 | [`ai‑autopilot`](./packages/ai-autopilot) | Orchestration: a Supervisor that plans, dispatches subagents (bounded concurrency + budget guardrails), and synthesizes the result. | [Guide](./docs/packages/ai-autopilot.md) | [![npm](https://img.shields.io/npm/v/@gemstack/ai-autopilot)](https://www.npmjs.com/package/@gemstack/ai-autopilot) |
 | [`ai‑mcp`](./packages/ai-mcp) | The agent/MCP bridge: consume a remote MCP server's tools as agent tools, and expose an agent as an MCP server. | [Guide](./docs/packages/ai-mcp.md) | [![npm](https://img.shields.io/npm/v/@gemstack/ai-mcp)](https://www.npmjs.com/package/@gemstack/ai-mcp) |
 | [`mcp`](./packages/mcp) | A standalone framework for *authoring* MCP servers: tools, resources, prompts, decorators, OAuth 2.1, a framework-neutral HTTP handler, and a test client. Agent-agnostic. | [Guide](./docs/packages/mcp.md) | [![npm](https://img.shields.io/npm/v/@gemstack/mcp)](https://www.npmjs.com/package/@gemstack/mcp) |
+| [`orm`](./packages/orm) | The data engine: a narrow, ORM-free repository (`db.users.upsert(...)`) over a composed schema, plus the adapter contract and a one-adapter registry. The data-layer twin of `ai-sdk`. | [Guide](./docs/packages/orm.md) | [![npm](https://img.shields.io/npm/v/@gemstack/orm)](https://www.npmjs.com/package/@gemstack/orm) |
+| [`schema`](./packages/schema) | The shape engine: declare tables once as plain data, merge contributions, derive migrations, compile to Prisma / Drizzle / Rudder. **Preview.** | [Guide](./docs/packages/schema.md) | [![npm](https://img.shields.io/npm/v/@gemstack/schema)](https://www.npmjs.com/package/@gemstack/schema) |
+| [`orm‑memory`](./packages/orm-memory) | In-process `Map` adapter for `orm` — tests, demos, zero-config dev. | [Guide](./docs/packages/orm.md#adapters) | [![npm](https://img.shields.io/npm/v/@gemstack/orm-memory)](https://www.npmjs.com/package/@gemstack/orm-memory) |
+| [`orm‑drizzle`](./packages/orm-drizzle) | Drizzle adapter for `orm` — real databases. | [Guide](./docs/packages/orm.md#adapters) | [![npm](https://img.shields.io/npm/v/@gemstack/orm-drizzle)](https://www.npmjs.com/package/@gemstack/orm-drizzle) |
 
 ### How they fit together
 
@@ -29,9 +33,16 @@ Full documentation lives in [`docs/`](./docs/guide/index.md) (a hosted site is o
 @gemstack/ai-mcp        agent <-> MCP bridge (the "adapter")          -> ai-sdk
 -----------------------------------------------------------------------------------
 @gemstack/mcp           standalone MCP server framework               agent-agnostic, not ai-*
+-----------------------------------------------------------------------------------
+@gemstack/schema        data shape: define tables, merge, derive migrations   (preview)
+@gemstack/orm           runtime data access over a composed schema
+@gemstack/orm-memory    in-process Map adapter (tests/demos)          -> orm
+@gemstack/orm-drizzle   Drizzle adapter (real databases)              -> orm
 ```
 
 The `ai-` prefix means **"depends on the agent runtime."** `skills`, `autopilot`, and `ai-mcp` all depend on `ai-sdk`; `ai-sdk` depends on none of them, and nothing depends "up." A package about AI that is agent-agnostic (like `@gemstack/mcp`) is a peer of the family, not a member of it.
+
+The **data family** (`orm` + `schema` + adapters) is a second engine family — framework-agnostic data access, parallel to the AI family and independent of it. `orm` is the runtime (read/write without importing an ORM), `schema` is the shape (declare tables once, compile to any ORM), and `orm-memory` / `orm-drizzle` are adapters that bind the repository to a real backend.
 
 See [`Architecture.md`](./Architecture.md) for the full layering, naming rule, and graduation policy.
 
