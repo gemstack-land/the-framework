@@ -1,5 +1,12 @@
 # @gemstack/ai-sdk
 
+## 0.5.0
+
+### Minor Changes
+
+- dbc8b3a: Make `agent.queue()` / `.broadcast()` framework-agnostic. The engine no longer dynamically imports `@rudderjs/queue` or `@rudderjs/broadcast`; instead register a neutral adapter once at startup with the new `configureAiQueue({ dispatch, broadcast })`. New public exports: `configureAiQueue`, and the `QueueDispatch` / `QueueBroadcast` types. Rudder users get this wired automatically by `@rudderjs/ai`'s provider (no app change). This removes the last `@rudderjs/*` reference from the engine source.
+- 1b2ba93: Remove the relocated Rudder bindings from the engine: the `/server` provider, the `make:agent` scaffolder, and the `ai:eval` CLI command, plus the `@rudderjs/core` and `@rudderjs/console` optional peers. These now live in `@rudderjs/ai` (Rudder users pick them up there unchanged). The framework-agnostic engine no longer carries any `@rudderjs/*` peer dependency for these paths. Closes the ai-sdk/Rudder decouple epic.
+
 ## 0.4.0
 
 ### Minor Changes

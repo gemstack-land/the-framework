@@ -1,5 +1,13 @@
 # @gemstack/ai-skills
 
+## 0.2.1
+
+### Patch Changes
+
+- Updated dependencies [dbc8b3a]
+- Updated dependencies [1b2ba93]
+  - @gemstack/ai-sdk@0.5.0
+
 ## 0.2.0
 
 ### Minor Changes
