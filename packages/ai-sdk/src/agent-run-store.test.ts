@@ -128,7 +128,7 @@ describe('InMemoryAgentRunStore', () => {
 
 // ─── CachedAgentRunStore ───────────────────────────────────
 
-/** Minimal in-process fake of `@rudderjs/cache`'s adapter surface, with TTL capture. */
+/** Minimal in-process fake of the `CacheAdapter` surface, with TTL capture. */
 function fakeCache() {
   const map = new Map<string, unknown>()
   const ttls: Record<string, number | undefined> = {}

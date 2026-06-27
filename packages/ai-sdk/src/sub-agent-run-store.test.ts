@@ -69,7 +69,7 @@ describe('InMemorySubAgentRunStore.load', () => {
 
 // ─── CachedSubAgentRunStore ────────────────────────────────
 
-/** Minimal in-process fake of `@rudderjs/cache`'s adapter surface. */
+/** Minimal in-process fake of the `CacheAdapter` surface. */
 function fakeCache() {
   const map = new Map<string, unknown>()
   return {
