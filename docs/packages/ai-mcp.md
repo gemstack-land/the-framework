@@ -98,6 +98,7 @@ Via `opts.expose`:
 
 Other options: `name` / `version` (server identity; `name` defaults to `${AgentClass.name}Server`), `instructions` (advertised server instructions, defaulting to the agent's `instructions()`), and `agentToolName` (the prompt-tool's name in `'agent'` / `'both'` mode, defaulting to the agent class name).
 
-## License
+## See also
 
-MIT
+- [mcp](/packages/mcp) - author a standalone MCP server (the other MCP axis).
+- [Agents](/packages/ai-sdk/agents) - the agents this package bridges to MCP.

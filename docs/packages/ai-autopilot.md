@@ -2,7 +2,7 @@
 
 Orchestration for [`@gemstack/ai-sdk`](/packages/ai-sdk/) agents: the "director" layer that runs **many** agent runs under a control policy.
 
-`ai-sdk` owns the single-agent loop and the handoff / subagent primitives. `ai-autopilot` owns orchestrating multiple runs: which agents run, in what order, how their results combine, and when to stop. If a feature is just calling an `ai-sdk` primitive, it belongs in `ai-sdk`; autopilot earns its keep only as the topology and control-policy layer.
+`ai-sdk` owns the single-agent loop and the handoff / subagent primitives. `ai-autopilot` owns orchestrating multiple runs: which agents run, in what order, how their results combine, and when to stop. Anything that is just a call to an `ai-sdk` primitive belongs in `ai-sdk`; this package adds value as the topology and control-policy layer on top.
 
 ```bash
 pnpm add @gemstack/ai-autopilot @gemstack/ai-sdk
@@ -10,7 +10,7 @@ pnpm add @gemstack/ai-autopilot @gemstack/ai-sdk
 
 ## Supervisor (plan, dispatch, synthesize)
 
-The first slice is the supervisor/worker topology, the smallest thing clearly more than the primitives:
+The supervisor/worker topology is the first orchestration shape this package ships:
 
 1. **Plan** - a planner decomposes the task into subtasks.
 2. **Dispatch** - each subtask runs on a worker agent, with bounded concurrency, an optional token budget, and per-subtask error isolation.
@@ -77,8 +77,9 @@ Progress is reported through `onEvent` as typed `SupervisorEvent`s (`plan`, `pla
 
 ## Scope (what's deferred)
 
-The seed dispatches **autonomous** workers via `agent.prompt()`. A worker that pauses for a client-tool or approval round-trip is reported as a failed subtask. Durable pause/resume across a supervised run (building on `ai-sdk`'s `SubAgentRunStore` and resume primitives) is a deferred adapter, as are other topologies (pipelines, debate) and queue-backed long-running execution. Those land on demand, behind optional seams, not in the core.
+The supervisor dispatches **autonomous** workers via `agent.prompt()`. A worker that pauses for a client-tool or approval round-trip is reported as a failed subtask. Durable pause/resume across a supervised run (building on `ai-sdk`'s `SubAgentRunStore` and resume primitives) is a deferred adapter, as are other topologies (pipelines, debate) and queue-backed long-running execution. Those land on demand, behind optional seams, not in the core.
 
-## License
+## See also
 
-MIT
+- [Agents](/packages/ai-sdk/agents) - the single-agent loop the supervisor dispatches to.
+- [Build a Multi-Agent App](/guide/tutorial) - the Supervisor wired up end to end.

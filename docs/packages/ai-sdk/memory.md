@@ -269,3 +269,8 @@ The two middleware are also exported standalone - `withMemoryInject(spec, opts?)
 - **`remembers()` is a no-op without a store.** Auto-inject and auto-extract resolve the registered `UserMemory` - call `setUserMemory(...)` (or wire your own implementation) first, or nothing is recalled or written.
 - **In-memory defaults lose everything on restart.** `MemoryConversationStore` and `MemoryUserMemory` are in-process. Anything you need to survive a restart or share across web processes and workers needs a real backend behind the contract.
 - **External vector store cascade.** If a custom `UserMemory` writes vectors to an external store (Pinecone, Weaviate, pgvector), `forget()` / `forgetAll()` only delete the rows you delete - you must implement the cascade to the second store yourself.
+
+## See also
+
+- [Agents](/packages/ai-sdk/agents) - where conversation threads and memory plug in.
+- [Vector Stores & RAG](/packages/ai-sdk/rag) - embeddings and retrieval for semantic recall.

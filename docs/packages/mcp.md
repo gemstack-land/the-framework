@@ -6,7 +6,7 @@ Once you author an MCP server, an external AI agent (Claude Code, Cursor, Windsu
 
 It is standalone and dependency-light: its only runtime dependencies are `@modelcontextprotocol/sdk`, `zod`, and `reflect-metadata`. (It graduated from the mature `@rudderjs/mcp` server framework, re-versioned under the GemStack umbrella.)
 
-## Which MCP package do I want?
+## Which MCP package do I use?
 
 There are two MCP packages in GemStack, on opposite axes; don't conflate them:
 
@@ -327,6 +327,7 @@ const unsubscribe = mcpObservers.subscribe((event) => {
 
 For custom inspectors or tooling built on the core, the main entry also exports two pure helpers: `zodToJsonSchema(schema)` converts a Zod object to the JSON Schema MCP advertises, and `matchUriTemplate(template, uri)` matches a URI against a `resource://{template}` pattern.
 
-## License
+## See also
 
-MIT
+- [ai-mcp](/packages/ai-mcp) - bridge an agent to MCP (consume a server's tools, or expose an agent).
+- [Packages overview](/packages/) - the whole GemStack family.

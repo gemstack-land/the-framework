@@ -6,7 +6,7 @@ The agent runtime lives in [`@gemstack/ai-sdk`](/packages/ai-sdk/). Install it p
 pnpm add @gemstack/ai-sdk
 
 pnpm add @anthropic-ai/sdk               # Anthropic (Claude)
-pnpm add openai                          # OpenAI (also OpenRouter / Mistral / DeepSeek / Groq / xAI / Ollama)
+pnpm add openai                          # OpenAI (also Azure / OpenRouter / Mistral / DeepSeek / Groq / xAI / Ollama)
 pnpm add @google/genai                   # Google (Gemini)
 pnpm add cohere-ai                       # Cohere (reranking + embeddings)
 pnpm add @aws-sdk/client-bedrock-runtime # AWS Bedrock
@@ -24,7 +24,7 @@ import { AiRegistry, AnthropicProvider, OpenAIProvider, OllamaProvider } from '@
 
 AiRegistry.register(new AnthropicProvider({ apiKey: process.env.ANTHROPIC_API_KEY! }))
 AiRegistry.register(new OpenAIProvider({ apiKey: process.env.OPENAI_API_KEY! }))
-AiRegistry.register(new OllamaProvider({ baseUrl: 'http://localhost:11434' }))
+AiRegistry.register(new OllamaProvider({ baseUrl: 'http://localhost:11434/v1' }))
 
 AiRegistry.setDefault('anthropic/claude-sonnet-4-6')
 ```

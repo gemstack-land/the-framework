@@ -13,7 +13,7 @@ A skill is a directory with one required file and two optional pieces:
 ```
 my-skill/
   SKILL.md        # YAML frontmatter (name, description, trigger, ...) + markdown instructions
-  tools.ts        # optional: exports @gemstack/ai-sdk tool() objects (loaded compiled, see caveat)
+  tools.ts        # optional: exports @gemstack/ai-sdk toolDefinition() objects (loaded compiled, see caveat)
   resources/      # optional: reference files
 ```
 
@@ -21,7 +21,7 @@ The skill's instructions become extra system-prompt text, its tools become extra
 
 ## The skill manifest
 
-`SKILL.md` is markdown with a YAML frontmatter block, the same convention `@gemstack/ai-sdk` ships in `boost/skills`:
+`SKILL.md` is markdown with a YAML frontmatter block, the same shape as an Anthropic Agent Skill:
 
 ```markdown
 ---
@@ -54,7 +54,7 @@ The frontmatter is validated into a `SkillManifest`:
 
 ## Authoring `tools.ts`
 
-A co-located `tools.ts` exports the skill's tools as plain `@gemstack/ai-sdk` `tool()` objects, so there is one tool API across the framework (see [tools](/packages/ai-sdk/tools)):
+A co-located `tools.ts` exports the skill's tools as plain `@gemstack/ai-sdk` `toolDefinition()` objects, so there is one tool API across the family (see [Tools](/packages/ai-sdk/tools)):
 
 ```ts
 import { toolDefinition } from '@gemstack/ai-sdk'
@@ -129,7 +129,7 @@ import { loadSkill } from '@gemstack/ai-skills'
 
 const refunds = await loadSkill('./skills/refunds')
 refunds.instructions   // markdown body (string)
-refunds.tools          // ai-sdk tool() objects
+refunds.tools          // ai-sdk toolDefinition() objects
 refunds.resources      // [{ name, path }, ...]
 ```
 
@@ -161,6 +161,8 @@ A skill is code you install or author, like a Vite or ESLint plugin: **loading i
 
 If you need real isolation, run the app under OS or container isolation, and only load skills from sources you trust.
 
-## License
+## See also
 
-MIT
+- [Tools](/packages/ai-sdk/tools) - the `toolDefinition()` API a skill's `tools.ts` exports.
+- [Agents](/packages/ai-sdk/agents) - the `Agent` base that `SkillfulAgent` extends.
+- [Build a Multi-Agent App](/guide/tutorial) - skills composed with a supervisor, end to end.

@@ -33,8 +33,10 @@ export default defineConfig({
           text: 'Introduction',
           items: [
             { text: 'What is GemStack?', link: '/guide/' },
+            { text: 'When to Use GemStack', link: '/guide/when-to-use' },
             { text: 'Installation', link: '/guide/installation' },
             { text: 'Your First Agent', link: '/guide/first-agent' },
+            { text: 'Build a Multi-Agent App', link: '/guide/tutorial' },
           ],
         },
         {
@@ -46,6 +48,12 @@ export default defineConfig({
             { text: 'ai-autopilot', link: '/packages/ai-autopilot' },
             { text: 'ai-mcp', link: '/packages/ai-mcp' },
             { text: 'mcp', link: '/packages/mcp' },
+          ],
+        },
+        {
+          text: 'Project',
+          items: [
+            { text: 'Contributing & Graduation', link: '/guide/contributing' },
           ],
         },
       ],
