@@ -1,9 +1,0 @@
-# Local SQLite database (seeded on first boot)
-data/
-*.sqlite
-*.sqlite-journal
-*.sqlite-wal
-*.sqlite-shm
-
-# Vite / Vike build artifacts
-dist/

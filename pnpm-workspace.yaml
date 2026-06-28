@@ -10,11 +10,8 @@ confirmModulesPurge: false
 # pnpm 11 requires native build scripts to be explicitly approved.
 allowBuilds:
   esbuild: true
-  better-sqlite3: true
   '@google/genai': false
   protobufjs: false
-  sharp: false
 
 onlyBuiltDependencies:
   - esbuild
-  - better-sqlite3
