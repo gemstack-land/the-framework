@@ -13,6 +13,7 @@ allowBuilds:
   better-sqlite3: true
   '@google/genai': false
   protobufjs: false
+  sharp: false
 
 onlyBuiltDependencies:
   - esbuild
