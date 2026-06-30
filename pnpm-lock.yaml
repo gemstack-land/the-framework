@@ -194,6 +194,28 @@ importers:
         specifier: ^5.4.0
         version: 5.9.3
 
+  packages/connector-google-drive:
+    dependencies:
+      '@gemstack/connectors':
+        specifier: workspace:^
+        version: link:../connectors
+      '@gemstack/mcp':
+        specifier: workspace:^
+        version: link:../mcp
+      zod:
+        specifier: ^4.0.0
+        version: 4.4.3
+    devDependencies:
+      '@types/node':
+        specifier: ^20.0.0
+        version: 20.19.43
+      reflect-metadata:
+        specifier: ^0.2.0
+        version: 0.2.2
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+
   packages/connectors:
     dependencies:
       '@gemstack/mcp':
