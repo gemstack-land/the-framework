@@ -53,6 +53,7 @@ export default defineConfig({
             { text: 'ai-autopilot', link: '/packages/ai-autopilot' },
             { text: 'ai-mcp', link: '/packages/ai-mcp' },
             { text: 'mcp', link: '/packages/mcp' },
+            { text: 'connectors', link: '/packages/connectors' },
           ],
         },
         {
@@ -89,6 +90,15 @@ export default defineConfig({
             { text: 'ai-autopilot', link: '/packages/ai-autopilot' },
             { text: 'ai-mcp', link: '/packages/ai-mcp' },
             { text: 'mcp', link: '/packages/mcp' },
+          ],
+        },
+        {
+          text: 'Connectors',
+          items: [
+            { text: 'connectors — the contract', link: '/packages/connectors' },
+            { text: 'The connector registry', link: '/packages/connectors-registry' },
+            { text: 'connector-github', link: '/packages/connector-github' },
+            { text: 'connector-google-drive', link: '/packages/connector-google-drive' },
           ],
         },
       ],
