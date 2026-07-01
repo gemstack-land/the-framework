@@ -47,6 +47,7 @@
   },
   "dependencies": {
     "@gemstack/ai-sdk": "workspace:^",
+    "@gemstack/ai-skills": "workspace:^",
     "zod": "^4.0.0"
   },
   "devDependencies": {

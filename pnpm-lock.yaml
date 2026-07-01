@@ -88,6 +88,9 @@ importers:
       '@gemstack/ai-sdk':
         specifier: workspace:^
         version: link:../ai-sdk
+      '@gemstack/ai-skills':
+        specifier: workspace:^
+        version: link:../ai-skills
       zod:
         specifier: ^4.0.0
         version: 4.4.3
