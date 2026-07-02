@@ -26,6 +26,13 @@
  *
  * - {@link FakeRunner} — in-memory runner for tests
  * - {@link runnerTools} — expose a booted session to an agent as sandbox tools
+ *
+ * Surfaces run the same autopilot in the terminal, an in-page UI, or a
+ * background process — all over the Supervisor's `onEvent` stream.
+ *
+ * - {@link terminalSink} — print events inline (terminal surface)
+ * - {@link EventStream} — replayable multi-consumer event transport
+ * - {@link launchAutopilot} — a detached background run handle
  */
 export { Supervisor } from './supervisor.js'
 export { agentPlanner, type AgentPlannerOptions } from './planner.js'
@@ -65,6 +72,16 @@ export {
   type RecordedExec,
   type RunnerToolsOptions,
 } from './runner/index.js'
+export {
+  EventStream,
+  formatEvent,
+  terminalSink,
+  launchAutopilot,
+  type TerminalSinkOptions,
+  type AutopilotHandle,
+  type AutopilotStatus,
+  type LaunchOptions,
+} from './surface/index.js'
 export type {
   Subtask,
   PlannedSubtask,
