@@ -32,6 +32,7 @@ export {
   type AgentDeployOptions,
   type FakeDeployTargetOptions,
 } from './deploy.js'
+export { serveCheck, mergeChecklists, type ServeCheckOptions } from './serve-check.js'
 export type {
   BootstrapScope,
   BootstrapPhase,

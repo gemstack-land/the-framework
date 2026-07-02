@@ -54,5 +54,25 @@ checklist once on missing auth, then decided SSR → dockploy.
 
 Scoped for a first, bounded proof: the production-grade **loop** keeps the scripted
 verdict (so the run stays deterministic and cheap), and `deploy` uses `planOnlyTarget`
-— it decides + narrates but does not actually ship. Booting/serving the generated app
-and real deploy adapters remain (tracked by #109).
+— it decides + narrates but does not actually ship. Real deploy adapters remain (#109).
+
+### Giving the loop teeth: `serveCheck`
+
+The scripted checklist only *asks* whether the app is production-grade. To gate a pass
+on whether the app actually **boots and serves**, compose a `serveCheck` into the
+checklist — it runs install → start the dev server → `preview` → fetch a health path,
+turning failures into blockers the improve loop then fixes:
+
+```js
+import { serveCheck, mergeChecklists, loopChecklist } from '@gemstack/ai-autopilot'
+
+// A pass is production-grade only when the prompt says so AND the app really runs.
+checklist: mergeChecklists(
+  loopChecklist({ loop }),
+  serveCheck(session, { install: 'npm install', serve: 'npm run dev', port: 3000 }),
+),
+```
+
+It's left out of the default live run because a model-scaffolded app may not install or
+boot first try (that's the loop's job to fix) — enable it when you want the run to prove
+the app serves, not just that files were written.
