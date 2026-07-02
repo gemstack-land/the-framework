@@ -139,7 +139,7 @@ describe('Bootstrap end-to-end with the default steps (offline)', () => {
           }),
         },
         { text: 'scaffolded the catalog page and orders schema' },
-        { text: JSON.stringify({ render: 'ssr', target: 'dockploy', reason: 'per-request catalog + auth' }) },
+        { text: JSON.stringify({ render: 'ssr', target: 'dokploy', reason: 'per-request catalog + auth' }) },
       ])
 
       // The full-fledged loop: first checklist has a blocker, second is clean.
@@ -186,8 +186,8 @@ describe('Bootstrap end-to-end with the default steps (offline)', () => {
       assert.equal(result.productionGrade, true)
       assert.equal(improved, 1) // improved once, between the two checks
       assert.equal(ledger.size, 1) // architect choice recorded
-      // deploy ran last: decided SSR/dockploy and reached the (fake) target
-      assert.deepEqual(result.deploy?.plan, { render: 'ssr', target: 'dockploy', reason: 'per-request catalog + auth' })
+      // deploy ran last: decided SSR/dokploy and reached the (fake) target
+      assert.deepEqual(result.deploy?.plan, { render: 'ssr', target: 'dokploy', reason: 'per-request catalog + auth' })
       assert.equal(result.deploy?.result.url, 'https://bookstore.example')
       assert.equal(deployTarget.deployed.length, 1)
       // build events were forwarded into the narration

@@ -126,7 +126,7 @@ describe('Bootstrap — prototype scope', () => {
 
 describe('Bootstrap — deploy phase', () => {
   const deployStub = (): NonNullable<BootstrapSteps['deploy']> => () => ({
-    plan: { render: 'ssr', target: 'dockploy', reason: 'per-request data' },
+    plan: { render: 'ssr', target: 'dokploy', reason: 'per-request data' },
     result: { deployed: false, detail: 'plan only' },
   })
 
@@ -136,13 +136,13 @@ describe('Bootstrap — deploy phase', () => {
     const result = await boot.run()
 
     assert.equal(result.deploy?.plan.render, 'ssr')
-    assert.equal(result.deploy?.plan.target, 'dockploy')
+    assert.equal(result.deploy?.plan.target, 'dokploy')
     assert.equal(result.deploy?.result.deployed, false)
     // deploy narration + event land after the checklist, before done
     const types = events.map(e => e.type)
     assert.deepEqual(types.slice(-3), ['narrate', 'deploy', 'done'])
     const deployEvent = events.find(e => e.type === 'deploy')
-    assert.equal(deployEvent?.type === 'deploy' && deployEvent.plan.target, 'dockploy')
+    assert.equal(deployEvent?.type === 'deploy' && deployEvent.plan.target, 'dokploy')
   })
 
   it('is optional — no deploy step means no deploy on the result', async () => {

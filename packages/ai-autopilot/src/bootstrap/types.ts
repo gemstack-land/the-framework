@@ -49,7 +49,7 @@ export type RenderMode = 'ssr' | 'ssg' | 'spa'
 /** The deploy decision: how to render, where to ship, and why. */
 export interface DeployPlan {
   render: RenderMode
-  /** The deploy target's name (e.g. "dockploy", "cloudflare"). */
+  /** The deploy target's name (e.g. "dokploy", "cloudflare"). */
   target: string
   /** One-line rationale, to narrate. */
   reason: string
