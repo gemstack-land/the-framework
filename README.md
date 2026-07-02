@@ -19,6 +19,9 @@ Full documentation lives in [`docs/`](./docs/guide/index.md) (a hosted site is o
 | [`ai‑autopilot`](./packages/ai-autopilot) | The AI‑building framework: a Supervisor (plan → dispatch → synthesize) plus stack‑aware personas, a runner sandbox, surfaces, a decisions ledger, an event‑triggered review/QA loop with a built‑in prompt library, framework presets (Vike/Next), and a bootstrap flow that takes an app from nothing to production‑grade. | [Guide](./docs/packages/ai-autopilot.md) | [![npm](https://img.shields.io/npm/v/@gemstack/ai-autopilot)](https://www.npmjs.com/package/@gemstack/ai-autopilot) |
 | [`ai‑mcp`](./packages/ai-mcp) | The agent/MCP bridge: consume a remote MCP server's tools as agent tools, and expose an agent as an MCP server. | [Guide](./docs/packages/ai-mcp.md) | [![npm](https://img.shields.io/npm/v/@gemstack/ai-mcp)](https://www.npmjs.com/package/@gemstack/ai-mcp) |
 | [`mcp`](./packages/mcp) | A standalone framework for *authoring* MCP servers: tools, resources, prompts, decorators, OAuth 2.1, a framework-neutral HTTP handler, and a test client. Agent-agnostic. | [Guide](./docs/packages/mcp.md) | [![npm](https://img.shields.io/npm/v/@gemstack/mcp)](https://www.npmjs.com/package/@gemstack/mcp) |
+| [`connectors`](./packages/connectors) | The connector contract: define a tool connector to an external service once with `defineConnector`, and compose any number into a single MCP server with `mountConnectors`. Built on `@gemstack/mcp`; agent-agnostic. | [Guide](./docs/packages/connectors.md) | [![npm](https://img.shields.io/npm/v/@gemstack/connectors)](https://www.npmjs.com/package/@gemstack/connectors) |
+| [`connector‑github`](./packages/connector-github) | First-party connector: read and act on GitHub issues, pull requests, and repo files. | [Guide](./docs/packages/connector-github.md) | [![npm](https://img.shields.io/npm/v/@gemstack/connector-github)](https://www.npmjs.com/package/@gemstack/connector-github) |
+| [`connector‑google‑drive`](./packages/connector-google-drive) | First-party connector: browse, read, and share Google Drive files. | [Guide](./docs/packages/connector-google-drive.md) | [![npm](https://img.shields.io/npm/v/@gemstack/connector-google-drive)](https://www.npmjs.com/package/@gemstack/connector-google-drive) |
 
 ### How they fit together
 
@@ -29,9 +32,15 @@ Full documentation lives in [`docs/`](./docs/guide/index.md) (a hosted site is o
 @gemstack/ai-mcp        agent <-> MCP bridge (the "adapter")          -> ai-sdk
 -----------------------------------------------------------------------------------
 @gemstack/mcp           standalone MCP server framework               agent-agnostic, not ai-*
+@gemstack/connectors    connector contract (define once, mount many)  -> mcp
+@gemstack/connector-*   first-party connectors (github, drive, ...)   -> connectors
 ```
 
 The `ai-` prefix means **"depends on the agent runtime."** `skills`, `autopilot`, and `ai-mcp` all depend on `ai-sdk`; `ai-sdk` depends on none of them, and nothing depends "up." A package about AI that is agent-agnostic (like `@gemstack/mcp`) is a peer of the family, not a member of it.
+
+### Connectors
+
+`@gemstack/connectors` is the contract for wiring external services (GitHub, Google Drive, ...) into an agent as MCP tools. A connector declares its auth needs and its tools with `defineConnector`; the orchestrator supplies credentials and composes any number of them into one server with `mountConnectors`. First-party connectors ship as `@gemstack/connector-*`, and third parties publish their own `connector-*` against the same contract.
 
 See [`Architecture.md`](./Architecture.md) for the full layering, naming rule, and graduation policy.
 
