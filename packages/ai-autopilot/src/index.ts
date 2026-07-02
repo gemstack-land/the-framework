@@ -118,6 +118,9 @@ export {
   FakeRunnerSession,
   LocalRunner,
   LocalRunnerSession,
+  DockerRunner,
+  DockerRunnerSession,
+  dockerAvailable,
   RunnerError,
   runnerTools,
   type Runner,
@@ -135,6 +138,7 @@ export {
   type RecordedExec,
   type RecordedStart,
   type LocalRunnerOptions,
+  type DockerRunnerOptions,
   type RunnerToolsOptions,
 } from './runner/index.js'
 export {
