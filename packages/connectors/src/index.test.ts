@@ -116,3 +116,34 @@ test('mountConnectors rejects cross-connector name collisions without namespacin
   // 'a' and 'b' both expose 'x'; with namespace: 'none' the names collide.
   assert.throws(() => mountConnectors([a, b], { namespace: 'none' }))
 })
+
+function connectorWith(id: string, name: string, instructions: string) {
+  return defineConnector({
+    id,
+    name,
+    instructions,
+    tools: [{ name: 'ping', schema: z.object({}), handle: () => 'pong' }],
+  })
+}
+
+test('mountConnectors aggregates each connector\'s instructions under its name', () => {
+  const Server = mountConnectors([
+    connectorWith('gh', 'GitHub', 'Act on issues and PRs.'),
+    connectorWith('gd', 'Drive', 'Browse and share files.'),
+  ])
+  const { instructions } = new Server().metadata()
+  assert.equal(instructions, '## GitHub\nAct on issues and PRs.\n\n## Drive\nBrowse and share files.')
+})
+
+test('mountConnectors puts server-level instructions before per-connector ones', () => {
+  const Server = mountConnectors([connectorWith('gh', 'GitHub', 'Act on issues and PRs.')], {
+    instructions: 'You have external connectors.',
+  })
+  const { instructions } = new Server().metadata()
+  assert.equal(instructions, 'You have external connectors.\n\n## GitHub\nAct on issues and PRs.')
+})
+
+test('mountConnectors omits instructions when no connector or server sets any', () => {
+  const Server = mountConnectors([notesConnector()])
+  assert.equal(new Server().metadata().instructions, undefined)
+})

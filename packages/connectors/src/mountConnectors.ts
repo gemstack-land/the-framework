@@ -69,7 +69,7 @@ export function mountConnectors(connectors: Connector[], options: MountOptions =
 
   const name = options.name ?? 'connectors'
   const version = options.version ?? '1.0.0'
-  const instructions = options.instructions
+  const instructions = composeInstructions(connectors, options.instructions)
 
   return class ConnectorsServer extends McpServer {
     protected override tools = toolClasses
@@ -77,6 +77,22 @@ export function mountConnectors(connectors: Connector[], options: MountOptions =
       return { name, version, ...(instructions != null ? { instructions } : {}) }
     }
   }
+}
+
+/**
+ * Combine the server-level instructions with each connector's own
+ * {@link Connector.instructions} into the single string advertised to the agent.
+ * Server-level text comes first; each connector's text follows under a heading
+ * named after the connector, so the agent knows which tools it applies to.
+ */
+function composeInstructions(connectors: Connector[], serverLevel?: string): string | undefined {
+  const parts: string[] = []
+  if (serverLevel != null && serverLevel.trim() !== '') parts.push(serverLevel.trim())
+  for (const connector of connectors) {
+    const text = connector.instructions
+    if (text != null && text.trim() !== '') parts.push(`## ${connector.name}\n${text.trim()}`)
+  }
+  return parts.length > 0 ? parts.join('\n\n') : undefined
 }
 
 function makeToolClass(
