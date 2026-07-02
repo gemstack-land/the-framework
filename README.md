@@ -25,18 +25,21 @@ Full documentation lives in [`docs/`](./docs/guide/index.md) (a hosted site is o
 
 ### How they fit together
 
-```
-@gemstack/ai-sdk        agent runtime (the "verbs")
-@gemstack/ai-skills     capability bundles (the composable "nouns")   -> ai-sdk
-@gemstack/ai-autopilot  orchestration / autonomy (the "director")     -> ai-sdk (+ skills)
-@gemstack/ai-mcp        agent <-> MCP bridge (the "adapter")          -> ai-sdk
------------------------------------------------------------------------------------
-@gemstack/mcp           standalone MCP server framework               agent-agnostic, not ai-*
-@gemstack/connectors    connector contract (define once, mount many)  -> mcp
-@gemstack/connector-*   first-party connectors (github, drive, ...)   -> connectors
+Two independent stacks. Arrows point to what a package depends on; nothing points "up."
+
+```mermaid
+graph TD
+    subgraph fam["AI family · depends on the agent runtime"]
+        skills["<b>ai-skills</b><br/>capability bundles"] --> sdk["<b>ai-sdk</b><br/>agent runtime"]
+        autopilot["<b>ai-autopilot</b><br/>orchestration"] --> sdk
+        aimcp["<b>ai-mcp</b><br/>agent ↔ MCP bridge"] --> sdk
+    end
+    subgraph agn["Agent-agnostic · not ai-*"]
+        connstar["<b>connector-*</b><br/>first-party connectors"] --> connectors["<b>connectors</b><br/>connector contract"] --> mcp["<b>mcp</b><br/>MCP server framework"]
+    end
 ```
 
-The `ai-` prefix means **"depends on the agent runtime."** `skills`, `autopilot`, and `ai-mcp` all depend on `ai-sdk`; `ai-sdk` depends on none of them, and nothing depends "up." A package about AI that is agent-agnostic (like `@gemstack/mcp`) is a peer of the family, not a member of it.
+The `ai-` prefix means **"depends on the agent runtime."** `skills`, `autopilot`, and `ai-mcp` all depend on `ai-sdk`, which depends on none of them. A package about AI that is agent-agnostic (like `@gemstack/mcp`) is a peer of the family, not a member of it.
 
 ### Connectors
 
