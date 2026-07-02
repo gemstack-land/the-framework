@@ -1,6 +1,6 @@
 {
   "name": "@gemstack/example-autopilot-quickstart",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "private": true,
   "description": "Runnable end-to-end quickstart for @gemstack/ai-autopilot: personas + Supervisor + runner + surfaces composed into one build-a-feature flow, offline via AiFake.",
   "type": "module",
