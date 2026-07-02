@@ -25,6 +25,7 @@
  * `sandbox` so WebContainer / Docker / Flue drop in behind one interface.
  *
  * - {@link FakeRunner} — in-memory runner for tests
+ * - {@link LocalRunner} — real host workspace (fs + child processes); the first real adapter
  * - {@link runnerTools} — expose a booted session to an agent as sandbox tools
  *
  * Surfaces run the same autopilot in the terminal, an in-page UI, or a
@@ -56,6 +57,8 @@ export {
 export {
   FakeRunner,
   FakeRunnerSession,
+  LocalRunner,
+  LocalRunnerSession,
   RunnerError,
   runnerTools,
   type Runner,
@@ -70,6 +73,7 @@ export {
   type FakeRunnerOptions,
   type FakeExec,
   type RecordedExec,
+  type LocalRunnerOptions,
   type RunnerToolsOptions,
 } from './runner/index.js'
 export {

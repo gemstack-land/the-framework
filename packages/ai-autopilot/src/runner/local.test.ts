@@ -1,0 +1,149 @@
+import { describe, it } from 'node:test'
+import assert from 'node:assert/strict'
+import { existsSync } from 'node:fs'
+import { LocalRunner } from './local.js'
+import { RunnerError } from './types.js'
+
+describe('LocalRunner.boot', () => {
+  it('seeds a real workspace with files, including nested paths', async () => {
+    const s = await new LocalRunner().boot({ files: { './pages/+Page.jsx': 'PAGE', 'app.ts': 'APP' } })
+    try {
+      assert.equal(await s.fs.read('pages/+Page.jsx'), 'PAGE')
+      assert.equal(await s.fs.read('/app.ts'), 'APP') // leading slash normalized
+      assert.ok(existsSync(s.root))
+    } finally {
+      await s.dispose()
+    }
+  })
+
+  it('gives each session a distinct id and workspace', async () => {
+    const runner = new LocalRunner()
+    const a = await runner.boot()
+    const b = await runner.boot()
+    try {
+      assert.notEqual(a.id, b.id)
+      assert.notEqual(a.root, b.root)
+    } finally {
+      await a.dispose()
+      await b.dispose()
+    }
+  })
+})
+
+describe('LocalRunnerSession.fs', () => {
+  it('writes, reads, checks existence, lists recursively, and removes', async () => {
+    const s = await new LocalRunner().boot()
+    try {
+      assert.equal(await s.fs.exists('a.txt'), false)
+      await s.fs.write('src/a.txt', 'A')
+      await s.fs.write('src/b.txt', 'B')
+      await s.fs.write('root.txt', 'R')
+      assert.equal(await s.fs.exists('src/a.txt'), true)
+      assert.deepEqual(await s.fs.list('src'), ['src/a.txt', 'src/b.txt'])
+      assert.deepEqual(await s.fs.list(), ['root.txt', 'src/a.txt', 'src/b.txt'])
+      await s.fs.remove('src/a.txt')
+      assert.equal(await s.fs.exists('src/a.txt'), false)
+    } finally {
+      await s.dispose()
+    }
+  })
+
+  it('throws reading a missing file', async () => {
+    const s = await new LocalRunner().boot()
+    try {
+      await assert.rejects(() => s.fs.read('nope.txt'), RunnerError)
+    } finally {
+      await s.dispose()
+    }
+  })
+
+  it('refuses paths that escape the workspace', async () => {
+    const s = await new LocalRunner().boot()
+    try {
+      await assert.rejects(() => s.fs.read('../../etc/passwd'), RunnerError)
+      await assert.rejects(() => s.fs.write('../evil.txt', 'x'), RunnerError)
+    } finally {
+      await s.dispose()
+    }
+  })
+})
+
+describe('LocalRunnerSession.exec', () => {
+  it('runs a real command and captures stdout + exit code', async () => {
+    const s = await new LocalRunner().boot({ files: { 'app.js': "process.stdout.write('hi')" } })
+    try {
+      const r = await s.exec('node app.js')
+      assert.equal(r.stdout, 'hi')
+      assert.equal(r.exitCode, 0)
+    } finally {
+      await s.dispose()
+    }
+  })
+
+  it('reports a non-zero exit code', async () => {
+    const s = await new LocalRunner().boot()
+    try {
+      const r = await s.exec('node -e "process.exit(3)"')
+      assert.equal(r.exitCode, 3)
+    } finally {
+      await s.dispose()
+    }
+  })
+
+  it('honors cwd and env overrides', async () => {
+    const s = await new LocalRunner().boot({ files: { 'sub/probe.js': 'process.stdout.write(process.env.FOO || "")' } })
+    try {
+      const r = await s.exec('node probe.js', { cwd: 'sub', env: { FOO: 'bar' } })
+      assert.equal(r.stdout, 'bar')
+    } finally {
+      await s.dispose()
+    }
+  })
+
+  it('kills a command that exceeds its timeout', async () => {
+    const s = await new LocalRunner().boot()
+    try {
+      const r = await s.exec('node -e "setTimeout(()=>{}, 10000)"', { timeoutMs: 200 })
+      assert.equal(r.exitCode, 124)
+      assert.match(r.stderr, /timed out/)
+    } finally {
+      await s.dispose()
+    }
+  })
+})
+
+describe('LocalRunnerSession.preview', () => {
+  it('returns a localhost url on the requested port when supported', async () => {
+    const s = await new LocalRunner({ previewHost: 'http://127.0.0.1' }).boot()
+    try {
+      assert.equal(typeof s.preview, 'function')
+      assert.deepEqual(await s.preview!({ port: 5173 }), { url: 'http://127.0.0.1:5173', port: 5173 })
+      assert.equal((await s.preview!()).port, 3000) // default port
+    } finally {
+      await s.dispose()
+    }
+  })
+
+  it('omits the preview method when previews are disabled', async () => {
+    const s = await new LocalRunner({ preview: false }).boot()
+    try {
+      assert.equal(s.preview, undefined)
+    } finally {
+      await s.dispose()
+    }
+  })
+})
+
+describe('LocalRunnerSession.dispose', () => {
+  it('removes the workspace and blocks further exec/preview (idempotent)', async () => {
+    const s = await new LocalRunner().boot({ files: { 'a.txt': 'A' } })
+    const root = s.root
+    assert.ok(existsSync(root))
+    await s.dispose()
+    assert.equal(s.disposed, true)
+    assert.equal(existsSync(root), false)
+    await s.dispose() // idempotent
+    await assert.rejects(() => s.exec('ls'), RunnerError)
+    await assert.rejects(() => s.preview!(), RunnerError)
+  })
+})

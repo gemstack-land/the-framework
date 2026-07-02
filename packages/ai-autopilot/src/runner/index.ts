@@ -8,6 +8,7 @@
  * tests; real adapters land separately.
  *
  * - {@link FakeRunner} — in-memory runner for tests (the runner analog of `AiFake`)
+ * - {@link LocalRunner} — real host workspace (fs + child processes); the first real adapter
  * - {@link runnerTools} — expose a session to an agent as sandbox tools
  */
 export type {
@@ -29,4 +30,5 @@ export {
   type FakeExec,
   type RecordedExec,
 } from './fake.js'
+export { LocalRunner, LocalRunnerSession, type LocalRunnerOptions } from './local.js'
 export { runnerTools, type RunnerToolsOptions } from './tools.js'
