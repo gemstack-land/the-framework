@@ -106,6 +106,45 @@ a `prefix` to avoid name collisions.
 To implement a real runner, satisfy the `Runner` interface: `boot()` returns a
 `RunnerSession` with an `fs`, `exec()`, an optional `preview()`, and `dispose()`.
 
+## Surfaces — terminal, in-page, background
+
+The Supervisor already emits progress via `onEvent`. **Surfaces** run the same
+autopilot in three places by adapting that event stream:
+
+**Terminal** — print each event inline:
+
+```ts
+import { Supervisor, terminalSink } from '@gemstack/ai-autopilot'
+
+const supervisor = new Supervisor({ ...opts, onEvent: terminalSink() })
+await supervisor.run(task)
+// ▶ plan: 2 subtask(s) for "…"
+//   → s1: …
+//   ✓ s1
+//   ▶ synthesize: 2 result(s)
+```
+
+**Background** — launch detached and get a handle; nothing blocks:
+
+```ts
+import { launchAutopilot } from '@gemstack/ai-autopilot'
+
+const run = launchAutopilot(onEvent => new Supervisor({ ...opts, onEvent }).run(task))
+run.status()        // 'running' → 'done' | 'error'
+run.events(offset)  // replay history from an offset (Flue-style tail=N)
+const result = await run.result()
+```
+
+**In-page** — the same handle exposes a live async stream to push over SSE:
+
+```ts
+for await (const event of run.stream()) sendToClient(event)  // replays history, then live, then ends
+```
+
+`EventStream` is the underlying replayable, multi-consumer transport; a late
+subscriber still sees the full history. Use `formatEvent(event)` to render an
+event as a line yourself.
+
 ## Guardrails
 
 - **`concurrency`** (optional, default 4) — max workers in flight; positive integer.
