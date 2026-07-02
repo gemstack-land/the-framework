@@ -61,6 +61,15 @@
  * - {@link builtinLibrary} — load the shipped, stack-aware prompt bodies
  * - {@link loopPromptsFor} — materialize a library into loop prompts by id
  * - {@link promptInstructions} — compose a body with the decisions briefing
+ *
+ * Bootstrap mode is the spine that sequences all of the above into one flow:
+ * scope → architect → build → full-fledged loop, taking a user from nothing to a
+ * running, production-grade app. It narrates each phase and repeats the
+ * production-grade checklist until its `{ blockers }` verdict is empty.
+ *
+ * - {@link Bootstrap} — the orchestrator over four injectable steps
+ * - {@link agentArchitect} / {@link supervisorBuild} — the default step wirings
+ * - {@link loopChecklist} / {@link loopImprove} — the full-fledged loop steps
  */
 export { Supervisor } from './supervisor.js'
 export { agentPlanner, type AgentPlannerOptions } from './planner.js'
@@ -175,6 +184,32 @@ export {
   type MakePromptAgent,
   type PromptAgentContext,
 } from './prompts/index.js'
+export {
+  Bootstrap,
+  createBootstrap,
+  BootstrapAborted,
+  agentArchitect,
+  supervisorBuild,
+  loopChecklist,
+  loopImprove,
+  type ArchitectAgentOptions,
+  type SupervisorBuildOptions,
+  type LoopStepOptions,
+  type LoopChecklistOptions,
+  type LoopImproveOptions,
+  type BootstrapScope,
+  type BootstrapPhase,
+  type ScopeAnswer,
+  type ArchitectDecision,
+  type ArchitectPlan,
+  type BootstrapEvent,
+  type BootstrapResult,
+  type BootstrapSteps,
+  type BootstrapOptions,
+  type BuildContext,
+  type ArchitectContext,
+  type LoopPassContext,
+} from './bootstrap/index.js'
 export type {
   Subtask,
   PlannedSubtask,
