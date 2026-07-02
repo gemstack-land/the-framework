@@ -27,6 +27,28 @@ importers:
         specifier: ^3.5.29
         version: 3.5.39(typescript@5.9.3)
 
+  examples/autopilot-quickstart:
+    dependencies:
+      '@gemstack/ai-autopilot':
+        specifier: workspace:^
+        version: link:../../packages/ai-autopilot
+      '@gemstack/ai-sdk':
+        specifier: workspace:^
+        version: link:../../packages/ai-sdk
+      zod:
+        specifier: ^4.0.0
+        version: 4.4.3
+    devDependencies:
+      '@types/node':
+        specifier: ^20.0.0
+        version: 20.19.43
+      tsx:
+        specifier: ^4.19.0
+        version: 4.22.4
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+
   examples/connectors-quickstart:
     dependencies:
       '@gemstack/connectors':
