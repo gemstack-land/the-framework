@@ -1,0 +1,239 @@
+import { AiFake, agent, type ToolCall } from '@gemstack/ai-sdk'
+import {
+  Bootstrap,
+  agentArchitect,
+  supervisorBuild,
+  loopChecklist,
+  loopImprove,
+  agentDeploy,
+  FakeDeployTarget,
+  Loop,
+  definePrompt,
+  defineRule,
+  personaInstructions,
+  personaTools,
+  builtinPresetRegistry,
+  presetPersonas,
+  CodeOverviewMaintainer,
+  DecisionLedger,
+  FakeRunner,
+  runnerTools,
+  launchAutopilot,
+  type BootstrapEvent,
+  type BootstrapResult,
+  type CodeOverview,
+  type FrameworkDetection,
+  type Planner,
+  type RunnerSession,
+} from '@gemstack/ai-autopilot'
+
+/**
+ * The capstone: the whole AI-framework epic in one offline flow.
+ *
+ *   detect framework (preset)  →  Bootstrap
+ *     scope → architect → build → full-fledged loop → deploy
+ *   → scale mode (CODE-OVERVIEW.md)
+ *
+ * A **preset** is picked from the project's dependencies, so the build's workers
+ * are the right framework's personas. **Bootstrap** then sequences the flow: it
+ * asks one scoping question, has an **architect** choose the stack and record its
+ * choices to the **decisions ledger**, **builds** the app with the persona workers
+ * inside a **runner** sandbox, runs the **full-fledged loop** until the
+ * production-grade checklist's `{ blockers }` verdict is empty, and **decides a
+ * deploy** behind the `DeployTarget` seam. Every phase streams as narration over
+ * the generic **surface**. Finally **scale mode** generates `CODE-OVERVIEW.md`
+ * from the scaffold.
+ *
+ * It runs offline: `AiFake` scripts the model and `FakeRunner` is an in-memory
+ * sandbox, so there is no API key and the output is deterministic. Swapping the
+ * fakes for a real model + `LocalRunner` is the only change to run it for real —
+ * that live proof is the infra-gated half of this example (#124).
+ */
+
+/** What the user wants built (the one thing scope asks about). */
+export const INTENT = 'A paginated Orders page backed by an orders table, with sign-in.'
+
+/** The project we detect a framework from — Vike here, so the Vike preset wins. */
+const PROJECT_DEPS = { 'vike-react': '1.0.0', react: '18.0.0', '@universal-orm/core': '1.0.0' }
+
+/** Each build subtask, the persona that owns it, and the file it writes. */
+const WORK = [
+  {
+    worker: 'universal-orm-modeler',
+    description: 'Define the orders schema and a migration',
+    file: 'database/schema.ts',
+    contents: "export const orders = table('orders', { id: id(), total: integer(), createdAt: timestamp() })\n",
+  },
+  {
+    worker: 'vike-page-builder',
+    description: 'Build the /orders page that lists orders, paginated',
+    file: 'pages/orders/+Page.jsx',
+    contents: "export default function Page({ orders }) { return <OrderList orders={orders} /> }\n",
+  },
+  {
+    worker: 'ui-intent-designer',
+    description: 'Express the orders list as intent, not hardcoded markup',
+    file: 'pages/orders/+config.js',
+    contents: "export default { meta: { OrderList: { env: { server: true, client: true } } } }\n",
+  },
+] as const
+
+/** The architect's structured decision (what `agentArchitect` parses). */
+const ARCHITECT_PLAN = {
+  stack: 'Vike + universal-orm on Postgres, with vike-auth',
+  narration: 'Server-rendered orders app: Vike pages, a universal-orm data layer, sessions via vike-auth.',
+  decisions: [
+    { choice: 'universal-orm on Postgres', why: 'the orders catalog is relational and needs typed queries' },
+    { choice: 'SSR over SPA', why: 'orders need per-request data and auth on the server' },
+  ],
+}
+
+/** The deploy decision (what `agentDeploy` parses). */
+const DEPLOY_DECISION = { render: 'ssr', target: 'dockploy', reason: 'per-request orders data + server-side auth' }
+
+/**
+ * Script the fake provider. Order (concurrency 1) is: the architect's plan, then
+ * each build worker's (write-file tool call, final text) pair, then the deploy
+ * decision. The full-fledged loop uses scripted local prompts, not the model.
+ */
+function scriptModel(fake: AiFake): void {
+  const workerSteps = WORK.flatMap((w, i) => {
+    const toolCalls: ToolCall[] = [
+      { id: `write-${i}`, name: 'write_file', arguments: { path: w.file, contents: w.contents } },
+    ]
+    return [{ toolCalls }, { text: `Wrote ${w.file}` }]
+  })
+  fake.respondWithSequence([
+    { text: JSON.stringify(ARCHITECT_PLAN) },
+    ...workerSteps,
+    { text: JSON.stringify(DEPLOY_DECISION) },
+  ])
+}
+
+/** A static planner: the build subtasks, in the order the fake scripts them. */
+const staticPlanner: Planner = () => WORK.map(w => ({ description: w.description, worker: w.worker }))
+
+/** Build one worker agent per preset persona, each with hands inside the sandbox. */
+function presetWorkers(session: RunnerSession, personas: ReturnType<typeof presetPersonas>) {
+  const sandbox = runnerTools(session)
+  return Object.fromEntries(
+    personas.map(p => [
+      p.name,
+      agent({ instructions: personaInstructions(p), tools: [...personaTools(p), ...sandbox] }),
+    ]),
+  )
+}
+
+/** The full-fledged loop: the checklist blocks once, then clears after the fix. */
+function buildLoop(): Loop {
+  const verdicts = [
+    '```json\n{ "blockers": ["No authentication on the orders page yet"] }\n```',
+    '```json\n{ "blockers": [] }\n```',
+  ]
+  let pass = 0
+  return new Loop({
+    rules: [
+      defineRule({ on: 'production-check', run: ['production-grade'] }),
+      defineRule({ on: 'major-change', run: ['address-blockers'] }),
+    ],
+    prompts: [
+      definePrompt({ id: 'production-grade', run: () => verdicts[Math.min(pass++, verdicts.length - 1)]! }),
+      definePrompt({ id: 'address-blockers', run: () => 'Added a +guard to the orders page (vike-auth).' }),
+    ],
+  })
+}
+
+/** Everything the capstone exposes, for the runnable demo and the smoke test. */
+export interface CapstoneResult {
+  detection: FrameworkDetection
+  result: BootstrapResult
+  events: BootstrapEvent[]
+  files: Record<string, string>
+  overview: CodeOverview | undefined
+}
+
+/** Render a bootstrap event as one human-readable narration line. */
+export function formatBootstrapEvent(event: BootstrapEvent): string {
+  switch (event.type) {
+    case 'scope':
+      return `▶ scope: ${event.scope} — "${event.intent}"`
+    case 'architect':
+      return `▶ architect: ${event.stack}\n${event.decisions.map(d => `    · ${d.choice} — ${d.why}`).join('\n')}`
+    case 'narrate':
+      return `  ${event.message}`
+    case 'build':
+      return `    build/${event.event.type}`
+    case 'checklist':
+      return event.passing
+        ? `  ✓ checklist pass ${event.pass}: production-grade`
+        : `  ✗ checklist pass ${event.pass}: ${event.blockers.join('; ')}`
+    case 'improve':
+      return `  → improving: ${event.blockers.join('; ')}`
+    case 'deploy':
+      return `▶ deploy: ${event.plan.render.toUpperCase()} → ${event.plan.target} (${event.plan.reason})`
+    case 'done':
+      return `✓ done: ${event.result.productionGrade ? 'production-grade' : 'prototype'} in ${event.result.passes} pass(es)`
+  }
+}
+
+/**
+ * Run the whole capstone once and return everything the surfaces exposed.
+ *
+ * @param write where narration lines go (default: no-op; `main.ts` prints).
+ */
+export async function runCapstone(write: (line: string) => void = () => {}): Promise<CapstoneResult> {
+  const fake = AiFake.fake()
+  scriptModel(fake)
+  try {
+    // 0. Preset: detect the framework from the project's deps, pick its personas.
+    const { preset, detection } = builtinPresetRegistry().select({ dependencies: PROJECT_DEPS })
+    const personas = presetPersonas(preset)
+
+    // Runner: an in-memory sandbox seeded with a minimal project.
+    const runner = new FakeRunner({
+      onExec: cmd => (cmd.includes('build') ? { stdout: 'built', stderr: '', exitCode: 0 } : { stdout: '', stderr: '', exitCode: 0 }),
+    })
+    const session = await runner.boot({ files: { 'package.json': JSON.stringify({ name: 'orders-app' }) + '\n' } })
+
+    const loop = buildLoop()
+    const ledger = new DecisionLedger()
+    const deployTarget = new FakeDeployTarget({ result: { deployed: true, url: 'https://orders.example.app' } })
+
+    // Surfaces: run bootstrap detached; the terminal prints as events stream.
+    const handle = launchAutopilot<BootstrapEvent, BootstrapResult>(onEvent =>
+      new Bootstrap({
+        ledger,
+        onEvent: e => {
+          write(formatBootstrapEvent(e))
+          onEvent(e)
+        },
+        steps: {
+          scope: () => ({ scope: 'full', intent: INTENT }),
+          architect: agentArchitect(agent({ instructions: 'architect' })),
+          build: supervisorBuild({ plan: staticPlanner, workers: presetWorkers(session, personas), concurrency: 1 }),
+          checklist: loopChecklist({ loop }),
+          improve: loopImprove({ loop }),
+          deploy: agentDeploy(agent({ instructions: 'deployer' }), { target: deployTarget }),
+        },
+      }).run(),
+    )
+    const result = await handle.result()
+    const files = session.snapshot()
+
+    // Scale mode: generate CODE-OVERVIEW.md from the scaffold (a material change).
+    const maintainer = new CodeOverviewMaintainer({
+      regenerate: () => ({
+        summary: 'A server-rendered orders app on Vike + universal-orm.',
+        sections: [
+          { title: 'Structure', body: '- `pages/orders/` — the paginated orders page\n- `database/` — the orders schema + migrations' },
+          { title: 'Conventions', body: 'Data goes through the universal-orm model builder; pages stay thin.' },
+        ],
+      }),
+    })
+    await maintainer.handle({ kind: 'major-change', summary: 'scaffolded the app', paths: [...Object.keys(files), 'package.json'] })
+
+    return { detection, result, events: handle.events(), files, overview: maintainer.get() }
+  } finally {
+    fake.restore()
+  }
+}

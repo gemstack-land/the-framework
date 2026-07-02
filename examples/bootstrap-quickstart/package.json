@@ -1,0 +1,23 @@
+{
+  "name": "@gemstack/example-bootstrap-quickstart",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Runnable capstone for @gemstack/ai-autopilot: preset detection + Bootstrap (scope → architect → build → full-fledged loop → deploy) + scale mode, streamed over surfaces, offline via AiFake + FakeRunner.",
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "tsc -p tsconfig.test.json && cd dist-test && node --test",
+    "clean": "rm -rf dist-test",
+    "start": "tsx src/main.ts"
+  },
+  "dependencies": {
+    "@gemstack/ai-autopilot": "workspace:^",
+    "@gemstack/ai-sdk": "workspace:^",
+    "zod": "^4.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.4.0"
+  }
+}
