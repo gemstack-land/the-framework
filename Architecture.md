@@ -13,11 +13,9 @@ GemStack hosts **framework-agnostic engines** that work in any Node app. It does
 - **Engines (belong here):** `@gemstack/ai-sdk` and its family. They have no hard dependency on any framework.
 - **Bindings (do not belong here):** framework extensions like the `vike-*` packages (in the `vike-data` repo). Their whole value is the framework integration, so they are the opposite of agnostic. They live with their framework and **consume** GemStack engines, e.g. `vike-ai` is a thin Vike binding over `@gemstack/ai-sdk`:
 
-```
-@gemstack/ai-sdk      (agnostic engine, here)
-       ^
-       | thin binding
-vike-ai               (Vike extension, in vike-data) -- consumes the engine
+```mermaid
+graph TD
+    vikeai["<b>vike-ai</b><br/>Vike extension · in vike-data"] -->|"thin binding, consumes"| sdk["<b>@gemstack/ai-sdk</b><br/>agnostic engine · here"]
 ```
 
 ### Graduation, not bulk relocation
@@ -48,13 +46,16 @@ When a candidate does graduate, follow the `@gemstack/ai-sdk` playbook exactly: 
 
 ## The AI family
 
-```
-@gemstack/ai-sdk        agent runtime (the "verbs")
-@gemstack/ai-skills     capability bundles (the composable "nouns")   -> ai-sdk
-@gemstack/ai-autopilot  orchestration / autonomy (the "director")     -> ai-sdk (+ skills)
-@gemstack/ai-mcp        agent <-> MCP bridge (the "adapter")           -> ai-sdk
------------------------------------------------------------------------------------
-@gemstack/mcp           standalone MCP server framework               agent-agnostic, NOT ai-*
+```mermaid
+graph TD
+    subgraph fam["AI family · depends on the agent runtime"]
+        skills["<b>ai-skills</b><br/>capability bundles"] --> sdk["<b>ai-sdk</b><br/>agent runtime"]
+        autopilot["<b>ai-autopilot</b><br/>orchestration"] --> sdk
+        aimcp["<b>ai-mcp</b><br/>agent ↔ MCP bridge"] --> sdk
+    end
+    subgraph agn["Agent-agnostic · not ai-*"]
+        connstar["<b>connector-*</b><br/>first-party connectors"] --> connectors["<b>connectors</b><br/>connector contract"] --> mcp["<b>mcp</b><br/>MCP server framework"]
+    end
 ```
 
 ### Dependency direction (the one rule that keeps four packages from becoming a tangle)
