@@ -19,6 +19,15 @@ export interface McpResolver {
    * runtime — a resolver must never silently inject `undefined`.
    */
   resolve(token: unknown): unknown
+  /**
+   * Optional: report whether this resolver owns a binding for `token`. When
+   * present, the runtime only routes owned tokens through {@link resolve} when
+   * constructing a primitive class, and lets a genuine construction failure
+   * propagate instead of silently falling back to `new Token()`. A resolver
+   * without this hook keeps the legacy behavior (a `resolve` miss — throw or
+   * `undefined` — falls back to a plain constructor).
+   */
+  has?(token: unknown): boolean
 }
 
 /** A {@link McpResolver} with imperative registration, returned by {@link createResolver}. */
@@ -54,6 +63,11 @@ export function createResolver(): MutableResolver {
         `[gemstack/mcp] no binding registered for token ${describeToken(token)}. ` +
         `Register it with createResolver().register(token, instance).`,
       )
+    },
+    // A token is "owned" if it is registered or is a class this resolver can
+    // construct; string/symbol tokens with no registration are not.
+    has(token) {
+      return registry.has(token) || typeof token === 'function'
     },
   }
   return resolver

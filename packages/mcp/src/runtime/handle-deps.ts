@@ -6,12 +6,24 @@ export type Ctor<T = unknown> = new (...args: any[]) => T
 /**
  * Construct a tool / resource / prompt class. When a {@link McpResolver} is
  * supplied (off the owning server), it gets first refusal so a container can
- * auto-wire constructor dependencies; on a miss (resolver throws, or returns
- * `undefined`) we fall back to a plain `new Ctor()` so primitives with no DI
- * needs always instantiate.
+ * auto-wire constructor dependencies; a primitive with no DI needs still
+ * instantiates via a plain `new Ctor()` fallback.
+ *
+ * If the resolver implements {@link McpResolver.has}, only tokens it owns go
+ * through `resolve()`, and a genuine construction failure propagates loudly
+ * rather than being masked by an un-wired `new Ctor()`. A resolver without
+ * `has` keeps the legacy behavior: a `resolve` miss (throw or `undefined`)
+ * falls back to a plain constructor.
  */
 export function resolveOrConstruct<T>(Ctor: Ctor<T>, resolver?: McpResolver): T {
   if (resolver) {
+    if (resolver.has) {
+      // Precise path: don't swallow a real failure building an owned token.
+      if (!resolver.has(Ctor)) return new Ctor()
+      const resolved = resolver.resolve(Ctor)
+      return (resolved !== undefined ? resolved : new Ctor()) as T
+    }
+    // Legacy path: no `has` hook — a resolver miss falls back.
     try {
       const resolved = resolver.resolve(Ctor)
       if (resolved !== undefined) return resolved as T
