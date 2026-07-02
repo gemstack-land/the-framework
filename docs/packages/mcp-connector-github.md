@@ -1,19 +1,19 @@
-# @gemstack/connector-github
+# @gemstack/mcp-connector-github
 
-A GitHub connector for GemStack AI orchestration. Read and act on issues, pull requests, and repository files over the GitHub REST API. Built with [`@gemstack/connectors`](/packages/connectors); the result is a standard [`@gemstack/mcp`](/packages/mcp) server.
+A GitHub connector for GemStack AI orchestration. Read and act on issues, pull requests, and repository files over the GitHub REST API. Built with [`@gemstack/mcp-connectors`](/packages/mcp-connectors); the result is a standard [`@gemstack/mcp`](/packages/mcp) server.
 
 ## Installation
 
 ```bash
-npm i @gemstack/connector-github @gemstack/connectors @gemstack/mcp
+npm i @gemstack/mcp-connector-github @gemstack/mcp-connectors @gemstack/mcp
 ```
 
 ## Use
 
 ```ts
-import { mountConnectors } from '@gemstack/connectors'
+import { mountConnectors } from '@gemstack/mcp-connectors'
 import { Mcp } from '@gemstack/mcp'
-import github from '@gemstack/connector-github'
+import github from '@gemstack/mcp-connector-github'
 
 const Server = mountConnectors([github], {
   // A token with `repo` scope. A PAT or an OAuth bearer both work.
@@ -47,5 +47,5 @@ Read tools are annotated `readOnly` so an agent can auto-approve them; write too
 
 ## See also
 
-- [`@gemstack/connectors`](/packages/connectors) — the contract this is built on, and how to write your own.
-- [The connector registry](/packages/connectors-registry) — the other published connectors.
+- [`@gemstack/mcp-connectors`](/packages/mcp-connectors) — the contract this is built on, and how to write your own.
+- [The connector registry](/packages/mcp-connectors-registry) — the other published connectors.

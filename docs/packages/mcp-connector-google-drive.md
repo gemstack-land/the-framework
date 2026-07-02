@@ -1,19 +1,19 @@
-# @gemstack/connector-google-drive
+# @gemstack/mcp-connector-google-drive
 
-A Google Drive connector for GemStack AI orchestration. Browse, read, and share Drive files over the Drive REST API (v3). Built with [`@gemstack/connectors`](../connectors); the result is a standard `@gemstack/mcp` server.
+A Google Drive connector for GemStack AI orchestration. Browse, read, and share Drive files over the Drive REST API (v3). Built with [`@gemstack/mcp-connectors`](/packages/mcp-connectors); the result is a standard [`@gemstack/mcp`](/packages/mcp) server.
 
-## Install
+## Installation
 
 ```bash
-npm i @gemstack/connector-google-drive @gemstack/connectors @gemstack/mcp
+npm i @gemstack/mcp-connector-google-drive @gemstack/mcp-connectors @gemstack/mcp
 ```
 
 ## Use
 
 ```ts
-import { mountConnectors } from '@gemstack/connectors'
+import { mountConnectors } from '@gemstack/mcp-connectors'
 import { Mcp } from '@gemstack/mcp'
-import drive from '@gemstack/connector-google-drive'
+import drive from '@gemstack/mcp-connector-google-drive'
 
 const Server = mountConnectors([drive], {
   // A Google OAuth 2.0 access token with a Drive scope.
@@ -43,6 +43,9 @@ Drive has no static API key — it is OAuth 2.0 only. The connector declares `au
 | `share-file` | write | Grant access (create a permission) |
 | `trash-file` | write (destructive) | Move a file to the trash (reversible) |
 
-Read tools are annotated `readOnly` so an agent can auto-approve them; write tools are not, and `trash-file` is marked `destructive`.
+`get-file-content` exports Google Docs/Sheets/Slides to text/CSV and downloads everything else via `alt=media`. Read tools are annotated `readOnly` so an agent can auto-approve them; `trash-file` is marked `destructive`. Responses are slimmed to the fields an agent needs (no raw API envelopes) to keep token usage down.
 
-Responses are slimmed to the fields an agent needs (no raw API envelopes) to keep token usage down.
+## See also
+
+- [`@gemstack/mcp-connectors`](/packages/mcp-connectors) — the contract this is built on, and how to write your own.
+- [The connector registry](/packages/mcp-connectors-registry) — the other published connectors.

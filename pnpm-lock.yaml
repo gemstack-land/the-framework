@@ -73,12 +73,12 @@ importers:
 
   examples/connectors-quickstart:
     dependencies:
-      '@gemstack/connectors':
-        specifier: workspace:^
-        version: link:../../packages/connectors
       '@gemstack/mcp':
         specifier: workspace:^
         version: link:../../packages/mcp
+      '@gemstack/mcp-connectors':
+        specifier: workspace:^
+        version: link:../../packages/mcp-connectors
       reflect-metadata:
         specifier: ^0.2.0
         version: 0.2.2
@@ -219,69 +219,6 @@ importers:
         specifier: ^5.4.0
         version: 5.9.3
 
-  packages/connector-github:
-    dependencies:
-      '@gemstack/connectors':
-        specifier: workspace:^
-        version: link:../connectors
-      '@gemstack/mcp':
-        specifier: workspace:^
-        version: link:../mcp
-      zod:
-        specifier: ^4.0.0
-        version: 4.4.3
-    devDependencies:
-      '@types/node':
-        specifier: ^20.0.0
-        version: 20.19.43
-      reflect-metadata:
-        specifier: ^0.2.0
-        version: 0.2.2
-      typescript:
-        specifier: ^5.4.0
-        version: 5.9.3
-
-  packages/connector-google-drive:
-    dependencies:
-      '@gemstack/connectors':
-        specifier: workspace:^
-        version: link:../connectors
-      '@gemstack/mcp':
-        specifier: workspace:^
-        version: link:../mcp
-      zod:
-        specifier: ^4.0.0
-        version: 4.4.3
-    devDependencies:
-      '@types/node':
-        specifier: ^20.0.0
-        version: 20.19.43
-      reflect-metadata:
-        specifier: ^0.2.0
-        version: 0.2.2
-      typescript:
-        specifier: ^5.4.0
-        version: 5.9.3
-
-  packages/connectors:
-    dependencies:
-      '@gemstack/mcp':
-        specifier: workspace:^
-        version: link:../mcp
-      reflect-metadata:
-        specifier: ^0.2.0
-        version: 0.2.2
-    devDependencies:
-      '@types/node':
-        specifier: ^20.0.0
-        version: 20.19.43
-      typescript:
-        specifier: ^5.4.0
-        version: 5.9.3
-      zod:
-        specifier: ^4.0.0
-        version: 4.4.3
-
   packages/mcp:
     dependencies:
       '@modelcontextprotocol/sdk':
@@ -300,6 +237,69 @@ importers:
       typescript:
         specifier: ^5.4.0
         version: 5.9.3
+
+  packages/mcp-connector-github:
+    dependencies:
+      '@gemstack/mcp':
+        specifier: workspace:^
+        version: link:../mcp
+      '@gemstack/mcp-connectors':
+        specifier: workspace:^
+        version: link:../mcp-connectors
+      zod:
+        specifier: ^4.0.0
+        version: 4.4.3
+    devDependencies:
+      '@types/node':
+        specifier: ^20.0.0
+        version: 20.19.43
+      reflect-metadata:
+        specifier: ^0.2.0
+        version: 0.2.2
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+
+  packages/mcp-connector-google-drive:
+    dependencies:
+      '@gemstack/mcp':
+        specifier: workspace:^
+        version: link:../mcp
+      '@gemstack/mcp-connectors':
+        specifier: workspace:^
+        version: link:../mcp-connectors
+      zod:
+        specifier: ^4.0.0
+        version: 4.4.3
+    devDependencies:
+      '@types/node':
+        specifier: ^20.0.0
+        version: 20.19.43
+      reflect-metadata:
+        specifier: ^0.2.0
+        version: 0.2.2
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+
+  packages/mcp-connectors:
+    dependencies:
+      '@gemstack/mcp':
+        specifier: workspace:^
+        version: link:../mcp
+      reflect-metadata:
+        specifier: ^0.2.0
+        version: 0.2.2
+    devDependencies:
+      '@types/node':
+        specifier: ^20.0.0
+        version: 20.19.43
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+      zod:
+        specifier: ^4.0.0
+        version: 4.4.3
 
 packages:
 

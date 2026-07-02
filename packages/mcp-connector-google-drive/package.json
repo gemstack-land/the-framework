@@ -1,25 +1,25 @@
 {
-  "name": "@gemstack/connector-github",
+  "name": "@gemstack/mcp-connector-google-drive",
   "version": "0.1.0",
-  "description": "GitHub connector for GemStack AI orchestration: read and act on issues, pull requests, and repo files over the GitHub REST API. Built with @gemstack/connectors.",
+  "description": "Google Drive connector for GemStack AI orchestration: browse, read, and share Drive files over the Drive REST API. Built with @gemstack/mcp-connectors.",
   "keywords": [
     "mcp",
     "connector",
-    "github",
+    "google-drive",
     "ai",
     "agents",
     "orchestration",
     "gemstack"
   ],
   "license": "MIT",
-  "homepage": "https://github.com/gemstack-land/gemstack/tree/main/packages/connector-github#readme",
+  "homepage": "https://github.com/gemstack-land/gemstack/tree/main/packages/mcp-connector-google-drive#readme",
   "bugs": {
     "url": "https://github.com/gemstack-land/gemstack/issues"
   },
   "repository": {
     "type": "git",
     "url": "https://github.com/gemstack-land/gemstack",
-    "directory": "packages/connector-github"
+    "directory": "packages/mcp-connector-google-drive"
   },
   "type": "module",
   "engines": {
@@ -44,7 +44,7 @@
     "clean": "rm -rf dist dist-test"
   },
   "dependencies": {
-    "@gemstack/connectors": "workspace:^",
+    "@gemstack/mcp-connectors": "workspace:^",
     "@gemstack/mcp": "workspace:^",
     "zod": "^4.0.0"
   },

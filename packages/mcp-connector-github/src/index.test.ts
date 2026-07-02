@@ -3,7 +3,7 @@ import { test, beforeEach, afterEach } from 'node:test'
 import assert from 'node:assert/strict'
 import { McpTestClient } from '@gemstack/mcp/testing'
 import type { McpToolResult } from '@gemstack/mcp'
-import { mountConnectors } from '@gemstack/connectors'
+import { mountConnectors } from '@gemstack/mcp-connectors'
 import github, { GitHubError } from './index.js'
 
 const realFetch = globalThis.fetch

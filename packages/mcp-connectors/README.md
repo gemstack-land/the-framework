@@ -1,4 +1,4 @@
-# @gemstack/connectors
+# @gemstack/mcp-connectors
 
 The connector contract for GemStack AI orchestration. Define a tool connector to an external service (GitHub, Google Drive, ...) once with `defineConnector`, then compose any number of connectors into a single MCP server with `mountConnectors`.
 
@@ -9,13 +9,13 @@ Built on [`@gemstack/mcp`](../mcp). Framework-agnostic: the server it produces p
 ## Install
 
 ```bash
-npm i @gemstack/connectors @gemstack/mcp zod
+npm i @gemstack/mcp-connectors @gemstack/mcp zod
 ```
 
 ## Define a connector
 
 ```ts
-import { defineConnector } from '@gemstack/connectors'
+import { defineConnector } from '@gemstack/mcp-connectors'
 import { z } from 'zod'
 
 export default defineConnector({
@@ -49,10 +49,10 @@ A tool's `handle` may return a `string` (wrapped as text), any JSON-serializable
 ## Mount connectors into a server
 
 ```ts
-import { mountConnectors } from '@gemstack/connectors'
+import { mountConnectors } from '@gemstack/mcp-connectors'
 import { Mcp } from '@gemstack/mcp'
 import notes from './notes.js'
-import github from '@gemstack/connector-github'
+import github from '@gemstack/mcp-connector-github'
 
 const Server = mountConnectors([notes, github], {
   name: 'my-orchestrator',
@@ -83,7 +83,7 @@ For `oauth`, protect the mounted endpoint with `@gemstack/mcp`'s `oauth2McpMiddl
 
 ```ts
 import { McpTestClient } from '@gemstack/mcp/testing'
-import { mountConnectors } from '@gemstack/connectors'
+import { mountConnectors } from '@gemstack/mcp-connectors'
 
 const client = new McpTestClient(mountConnectors([notes]))
 await client.listTools() // [{ name: 'notes_list', ... }, { name: 'notes_get', ... }]

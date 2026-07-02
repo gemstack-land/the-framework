@@ -1,4 +1,4 @@
-import type { ConnectorContext } from '@gemstack/connectors'
+import type { ConnectorContext } from '@gemstack/mcp-connectors'
 
 const API = 'https://www.googleapis.com/drive/v3'
 

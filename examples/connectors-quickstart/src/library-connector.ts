@@ -1,6 +1,6 @@
 // A reference connector. Copy this file to start a real one: swap the in-memory
 // data for calls to your external service, and change `auth` to `pat` / `oauth`.
-import { defineConnector } from '@gemstack/connectors'
+import { defineConnector } from '@gemstack/mcp-connectors'
 import { z } from 'zod'
 
 interface Book {

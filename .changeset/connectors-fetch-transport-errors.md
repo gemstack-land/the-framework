@@ -1,6 +1,6 @@
 ---
-'@gemstack/connector-github': patch
-'@gemstack/connector-google-drive': patch
+'@gemstack/mcp-connector-github': patch
+'@gemstack/mcp-connector-google-drive': patch
 ---
 
 Wrap transport failures in the connector's typed error class.

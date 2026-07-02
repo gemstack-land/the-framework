@@ -1,7 +1,7 @@
 ---
-'@gemstack/connectors': minor
-'@gemstack/connector-github': patch
-'@gemstack/connector-google-drive': patch
+'@gemstack/mcp-connectors': minor
+'@gemstack/mcp-connector-github': patch
+'@gemstack/mcp-connector-google-drive': patch
 ---
 
 Return validation failures as MCP errors instead of success results.

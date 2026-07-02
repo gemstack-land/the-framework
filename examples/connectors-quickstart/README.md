@@ -1,6 +1,6 @@
 # connectors-quickstart
 
-A runnable reference connector built with [`@gemstack/connectors`](../../packages/connectors). Copy `src/library-connector.ts` to start a real connector: swap the in-memory data for calls to your external service, and change `auth` from `none` to `pat` / `oauth`.
+A runnable reference connector built with [`@gemstack/mcp-connectors`](../../packages/mcp-connectors). Copy `src/library-connector.ts` to start a real connector: swap the in-memory data for calls to your external service, and change `auth` from `none` to `pat` / `oauth`.
 
 ```bash
 pnpm --filter @gemstack/example-connectors-quickstart start   # run the demo
