@@ -67,9 +67,12 @@
  * running, production-grade app. It narrates each phase and repeats the
  * production-grade checklist until its `{ blockers }` verdict is empty.
  *
- * - {@link Bootstrap} — the orchestrator over four injectable steps
+ * - {@link Bootstrap} — the orchestrator over the injectable steps
  * - {@link agentArchitect} / {@link supervisorBuild} — the default step wirings
  * - {@link loopChecklist} / {@link loopImprove} — the full-fledged loop steps
+ * - {@link agentDeploy} + the {@link DeployTarget} seam ({@link planOnlyTarget},
+ *   {@link FakeDeployTarget}) — the final phase: decide SSR/SSG/SPA + target and
+ *   narrate; real adapters are infra-gated
  */
 export { Supervisor } from './supervisor.js'
 export { agentPlanner, type AgentPlannerOptions } from './planner.js'
@@ -192,22 +195,35 @@ export {
   supervisorBuild,
   loopChecklist,
   loopImprove,
+  agentDeploy,
+  planOnlyTarget,
+  FakeDeployTarget,
+  DEFAULT_DEPLOY_TARGETS,
   type ArchitectAgentOptions,
   type SupervisorBuildOptions,
   type LoopStepOptions,
   type LoopChecklistOptions,
   type LoopImproveOptions,
+  type AgentDeployOptions,
+  type FakeDeployTargetOptions,
   type BootstrapScope,
   type BootstrapPhase,
   type ScopeAnswer,
   type ArchitectDecision,
   type ArchitectPlan,
+  type RenderMode,
+  type DeployPlan,
+  type DeployResult,
+  type DeployOutcome,
+  type DeployTarget,
+  type DeployTargetContext,
   type BootstrapEvent,
   type BootstrapResult,
   type BootstrapSteps,
   type BootstrapOptions,
   type BuildContext,
   type ArchitectContext,
+  type DeployContext,
   type LoopPassContext,
 } from './bootstrap/index.js'
 export type {

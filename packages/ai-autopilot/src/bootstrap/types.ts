@@ -28,7 +28,7 @@ import type { Verdict } from '../loop/verdict.js'
 export type BootstrapScope = 'prototype' | 'full'
 
 /** The phase a narration line belongs to. */
-export type BootstrapPhase = 'scope' | 'architect' | 'build' | 'loop'
+export type BootstrapPhase = 'scope' | 'architect' | 'build' | 'loop' | 'deploy'
 
 /** The answer to the one upfront question. */
 export interface ScopeAnswer {
@@ -41,6 +41,55 @@ export interface ScopeAnswer {
 export interface ArchitectDecision {
   choice: string
   why: string
+}
+
+/** How the app is rendered/served, which drives the deploy shape. */
+export type RenderMode = 'ssr' | 'ssg' | 'spa'
+
+/** The deploy decision: how to render, where to ship, and why. */
+export interface DeployPlan {
+  render: RenderMode
+  /** The deploy target's name (e.g. "dockploy", "cloudflare"). */
+  target: string
+  /** One-line rationale, to narrate. */
+  reason: string
+}
+
+/** What a {@link DeployTarget} reports back. */
+export interface DeployResult {
+  /** True when a real deploy ran; false for a plan-only (v1 default) target. */
+  deployed: boolean
+  /** The live URL, when a real adapter produced one. */
+  url?: string
+  /** Human-readable detail (what happened, or why nothing did). */
+  detail?: string
+}
+
+/** The result of the deploy phase: the decided plan and, if a target ran, its result. */
+export interface DeployOutcome {
+  plan: DeployPlan
+  result: DeployResult
+}
+
+/** Context handed to a {@link DeployTarget}. */
+export interface DeployTargetContext {
+  plan: DeployPlan
+  intent: string
+  signal?: AbortSignal
+}
+
+/**
+ * The deploy adapter seam — the same pattern as the runner seam (#109). v1 ships
+ * only plan-only targets ({@link planOnlyTarget}) and a fake for tests; real
+ * Dockploy / Cloudflare adapters implement this behind the same interface and
+ * are infra-gated follow-ups. A target *executes* a {@link DeployPlan}; deciding
+ * the plan is the deploy step's job.
+ */
+export interface DeployTarget {
+  /** Stable name, matched against {@link DeployPlan.target}. */
+  readonly name: string
+  /** Execute the plan (or, for a plan-only target, report that it did not). */
+  deploy(ctx: DeployTargetContext): DeployResult | Promise<DeployResult>
 }
 
 /** The architect's output: the stack it chose, a narration, and the key choices. */
@@ -64,6 +113,7 @@ export type BootstrapEvent =
   | { type: 'build'; event: SupervisorEvent }
   | { type: 'checklist'; pass: number; blockers: readonly string[]; passing: boolean }
   | { type: 'improve'; pass: number; blockers: readonly string[] }
+  | { type: 'deploy'; plan: DeployPlan; result: DeployResult }
   | { type: 'done'; result: BootstrapResult }
 
 /** The outcome of a bootstrap run. */
@@ -82,6 +132,8 @@ export interface BootstrapResult {
   productionGrade: boolean
   /** True when the loop hit `maxPasses` with blockers still open. */
   stoppedEarly: boolean
+  /** The deploy phase's outcome, when a `deploy` step ran. */
+  deploy?: DeployOutcome
 }
 
 /** Context handed to the build step. */
@@ -100,6 +152,16 @@ export interface ArchitectContext {
   scope: BootstrapScope
   /** The ledger to consult (choices are recorded by the orchestrator, not here). */
   ledger: DecisionLedger
+  signal?: AbortSignal
+}
+
+/** Context handed to the deploy step (the final phase). */
+export interface DeployContext {
+  plan: ArchitectPlan
+  scope: BootstrapScope
+  intent: string
+  /** Whether the full-fledged loop ended clean, so the step can factor readiness in. */
+  productionGrade: boolean
   signal?: AbortSignal
 }
 
@@ -130,6 +192,8 @@ export interface BootstrapSteps {
   checklist?: (ctx: LoopPassContext) => Verdict | Promise<Verdict>
   /** Address the current blockers with fresh context, before the next checklist. */
   improve?: (ctx: LoopPassContext) => unknown | Promise<unknown>
+  /** Decide SSR/SSG/SPA + target, narrate, and (via a target) deploy. The final phase. */
+  deploy?: (ctx: DeployContext) => DeployOutcome | Promise<DeployOutcome>
 }
 
 /** Options for {@link Bootstrap}. */

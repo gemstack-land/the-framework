@@ -2,6 +2,7 @@ import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import { AiFake, agent } from '@gemstack/ai-sdk'
 import { agentArchitect, supervisorBuild, loopChecklist, loopImprove } from './steps.js'
+import { agentDeploy, FakeDeployTarget } from './deploy.js'
 import { Bootstrap } from './bootstrap.js'
 import { DecisionLedger } from '../decisions/ledger.js'
 import { Loop } from '../loop/loop.js'
@@ -128,7 +129,7 @@ describe('Bootstrap end-to-end with the default steps (offline)', () => {
   it('runs scope → architect → build → full-fledged loop against real primitives', async () => {
     const fake = AiFake.fake()
     try {
-      // Two model calls, in order: the architect plan, then the one build worker.
+      // Three model calls, in order: the architect plan, the build worker, the deploy decision.
       fake.respondWithSequence([
         {
           text: JSON.stringify({
@@ -138,6 +139,7 @@ describe('Bootstrap end-to-end with the default steps (offline)', () => {
           }),
         },
         { text: 'scaffolded the catalog page and orders schema' },
+        { text: JSON.stringify({ render: 'ssr', target: 'dockploy', reason: 'per-request catalog + auth' }) },
       ])
 
       // The full-fledged loop: first checklist has a blocker, second is clean.
@@ -156,6 +158,7 @@ describe('Bootstrap end-to-end with the default steps (offline)', () => {
       })
 
       const ledger = new DecisionLedger()
+      const deployTarget = new FakeDeployTarget({ result: { deployed: true, url: 'https://bookstore.example' } })
       const events: BootstrapEvent[] = []
       const boot = new Bootstrap({
         ledger,
@@ -170,6 +173,7 @@ describe('Bootstrap end-to-end with the default steps (offline)', () => {
           }),
           checklist: loopChecklist({ loop }),
           improve: loopImprove({ loop }),
+          deploy: agentDeploy(agent({ instructions: 'deployer' }), { target: deployTarget }),
         },
       })
 
@@ -182,9 +186,14 @@ describe('Bootstrap end-to-end with the default steps (offline)', () => {
       assert.equal(result.productionGrade, true)
       assert.equal(improved, 1) // improved once, between the two checks
       assert.equal(ledger.size, 1) // architect choice recorded
+      // deploy ran last: decided SSR/dockploy and reached the (fake) target
+      assert.deepEqual(result.deploy?.plan, { render: 'ssr', target: 'dockploy', reason: 'per-request catalog + auth' })
+      assert.equal(result.deploy?.result.url, 'https://bookstore.example')
+      assert.equal(deployTarget.deployed.length, 1)
       // build events were forwarded into the narration
       assert.ok(events.some(e => e.type === 'build' && e.event.type === 'plan'))
       assert.ok(events.some(e => e.type === 'checklist' && e.passing))
+      assert.ok(events.some(e => e.type === 'deploy'))
     } finally {
       fake.restore()
     }

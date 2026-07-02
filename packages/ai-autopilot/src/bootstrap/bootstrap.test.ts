@@ -124,6 +124,65 @@ describe('Bootstrap — prototype scope', () => {
   })
 })
 
+describe('Bootstrap — deploy phase', () => {
+  const deployStub = (): NonNullable<BootstrapSteps['deploy']> => () => ({
+    plan: { render: 'ssr', target: 'dockploy', reason: 'per-request data' },
+    result: { deployed: false, detail: 'plan only' },
+  })
+
+  it('runs the deploy step last and carries its outcome on the result', async () => {
+    const events: BootstrapEvent[] = []
+    const boot = new Bootstrap({ steps: stubSteps({ deploy: deployStub() }), onEvent: e => events.push(e) })
+    const result = await boot.run()
+
+    assert.equal(result.deploy?.plan.render, 'ssr')
+    assert.equal(result.deploy?.plan.target, 'dockploy')
+    assert.equal(result.deploy?.result.deployed, false)
+    // deploy narration + event land after the checklist, before done
+    const types = events.map(e => e.type)
+    assert.deepEqual(types.slice(-3), ['narrate', 'deploy', 'done'])
+    const deployEvent = events.find(e => e.type === 'deploy')
+    assert.equal(deployEvent?.type === 'deploy' && deployEvent.plan.target, 'dockploy')
+  })
+
+  it('is optional — no deploy step means no deploy on the result', async () => {
+    const boot = new Bootstrap({ steps: stubSteps() })
+    const result = await boot.run()
+    assert.equal(result.deploy, undefined)
+  })
+
+  it('passes productionGrade into the deploy context', async () => {
+    let seenProductionGrade: boolean | undefined
+    const boot = new Bootstrap({
+      steps: stubSteps({
+        deploy: ctx => {
+          seenProductionGrade = ctx.productionGrade
+          return { plan: { render: 'ssg', target: 'cloudflare', reason: 'static' }, result: { deployed: false } }
+        },
+      }),
+    })
+    await boot.run()
+    assert.equal(seenProductionGrade, true) // full scope, passed the checklist
+  })
+
+  it('runs deploy for a prototype too (not loop-gated)', async () => {
+    let deployRan = false
+    const boot = new Bootstrap({
+      steps: stubSteps({
+        scope: () => ({ scope: 'prototype', intent: 'quick demo' }),
+        deploy: ctx => {
+          deployRan = true
+          assert.equal(ctx.productionGrade, false) // prototype never runs the loop
+          return { plan: { render: 'spa', target: 'cloudflare', reason: 'client demo' }, result: { deployed: false } }
+        },
+      }),
+    })
+    const result = await boot.run()
+    assert.equal(deployRan, true)
+    assert.equal(result.deploy?.plan.render, 'spa')
+  })
+})
+
 describe('Bootstrap — interrupt + isolation', () => {
   it('aborts between phases when the signal fires', async () => {
     const controller = new AbortController()

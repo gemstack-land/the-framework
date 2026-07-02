@@ -5,6 +5,7 @@ import type {
   BootstrapOptions,
   BootstrapResult,
   BootstrapSteps,
+  DeployOutcome,
 } from './types.js'
 
 /** Thrown when a run is aborted via the `AbortSignal`. */
@@ -132,6 +133,24 @@ export class Bootstrap {
       }
     }
 
+    const productionGrade = passes > 0 && blockers.length === 0
+
+    // 5. Deploy — the final phase: decide SSR/SSG/SPA + target, narrate, and hand
+    //    the plan to a DeployTarget. v1 targets are plan-only (they do not ship).
+    let deploy: DeployOutcome | undefined
+    if (this.steps.deploy) {
+      this.throwIfAborted()
+      this.emit({ type: 'narrate', phase: 'deploy', message: 'Deciding how and where to deploy' })
+      deploy = await this.steps.deploy({
+        plan,
+        scope,
+        intent,
+        productionGrade,
+        ...(this.signal ? { signal: this.signal } : {}),
+      })
+      this.emit({ type: 'deploy', plan: deploy.plan, result: deploy.result })
+    }
+
     const result: BootstrapResult = {
       scope,
       intent,
@@ -139,8 +158,9 @@ export class Bootstrap {
       run,
       passes,
       blockers,
-      productionGrade: passes > 0 && blockers.length === 0,
+      productionGrade,
       stoppedEarly,
+      ...(deploy ? { deploy } : {}),
     }
     this.emit({ type: 'done', result })
     return result

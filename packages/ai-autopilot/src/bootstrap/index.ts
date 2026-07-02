@@ -24,17 +24,32 @@ export {
   type LoopChecklistOptions,
   type LoopImproveOptions,
 } from './steps.js'
+export {
+  agentDeploy,
+  planOnlyTarget,
+  FakeDeployTarget,
+  DEFAULT_DEPLOY_TARGETS,
+  type AgentDeployOptions,
+  type FakeDeployTargetOptions,
+} from './deploy.js'
 export type {
   BootstrapScope,
   BootstrapPhase,
   ScopeAnswer,
   ArchitectDecision,
   ArchitectPlan,
+  RenderMode,
+  DeployPlan,
+  DeployResult,
+  DeployOutcome,
+  DeployTarget,
+  DeployTargetContext,
   BootstrapEvent,
   BootstrapResult,
   BootstrapSteps,
   BootstrapOptions,
   BuildContext,
   ArchitectContext,
+  DeployContext,
   LoopPassContext,
 } from './types.js'
