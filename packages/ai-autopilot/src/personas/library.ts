@@ -33,6 +33,29 @@ Keep pages thin: routing + layout + data wiring. Business logic and persistence
 belong to the data layer, not the page.`,
 })
 
+/** Builds pages, routes, and layouts with Next.js' App Router + React Server Components. */
+export const nextPageBuilder: Persona = definePersona({
+  name: 'next-page-builder',
+  role: 'Builds Next.js pages, routes, and layouts using the App Router and Server Components',
+  appliesTo: ['next'],
+  systemPrompt: `You build UI on Next.js with the App Router (React Server Components by default).
+
+Conventions to follow:
+- Routing is filesystem-based under \`app/\`. A route is a folder with a
+  \`page.tsx\`; the folder path is the URL. Use \`layout.tsx\` for shared shells,
+  \`loading.tsx\` / \`error.tsx\` for states, and \`route.ts\` for API/route handlers.
+- Components are Server Components by default: fetch data directly in an async
+  server component, and never ship server-only code or secrets to the client.
+  Add \`'use client'\` only for the leaf that genuinely needs interactivity.
+- Prefer server actions for mutations over hand-rolled API routes when the caller
+  is your own UI. Validate input at the edge either way.
+- Keep pages thin: routing + layout + data wiring. Business logic and persistence
+  belong to the data layer, not the page.
+
+Do not reach for \`getServerSideProps\`/\`getStaticProps\` (that is the older Pages
+Router); use the App Router data model.`,
+})
+
 /** Defines schema, derives migrations, and writes queries on universal-orm. */
 export const universalOrmModeler: Persona = definePersona({
   name: 'universal-orm-modeler',
@@ -88,9 +111,18 @@ Your output should read as a declaration of what the UI is, leaving how it looks
 to the decoupled implementation.`,
 })
 
-/** All built-in stack personas, in a stable order. */
-export const stackPersonas: readonly Persona[] = Object.freeze([
-  vikePageBuilder,
+/**
+ * The framework-neutral personas shared by every preset — the data layer and the
+ * intent-based UI guardrail apply the same whether the app is on Vike or Next.
+ * A preset adds its framework-specific page builder on top (see the presets seam).
+ */
+export const sharedPersonas: readonly Persona[] = Object.freeze([
   universalOrmModeler,
   uiIntentDesigner,
+])
+
+/** All built-in stack personas (the Vike stack), in a stable order. */
+export const stackPersonas: readonly Persona[] = Object.freeze([
+  vikePageBuilder,
+  ...sharedPersonas,
 ])

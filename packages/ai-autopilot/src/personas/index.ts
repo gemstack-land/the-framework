@@ -18,8 +18,10 @@ export {
 } from './compose.js'
 export {
   vikePageBuilder,
+  nextPageBuilder,
   universalOrmModeler,
   uiIntentDesigner,
+  sharedPersonas,
   stackPersonas,
 } from './library.js'
 export type { Persona, PersonaSpec } from './types.js'

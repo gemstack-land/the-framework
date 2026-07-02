@@ -13,12 +13,13 @@
  * - {@link agentSynthesizer} / {@link defaultSynthesize} — combine results
  *
  * Personas add the stack-aware knowledge layer: reusable roles that know the
- * GemStack stack (Vike + universal-orm), materialized into worker agents.
+ * GemStack stack (Vike/Next + universal-orm), materialized into worker agents.
  *
  * - {@link definePersona} — define a stack-aware role
  * - {@link personaAgent} / {@link personaWorkers} — materialize personas for a run
  * - {@link personaRoster} — describe personas to a planner
  * - {@link stackPersonas} — the built-in Vike + universal-orm personas
+ * - {@link sharedPersonas} — the framework-neutral core (data layer + intent UI)
  *
  * The runner is the pluggable execution seam: a workspace (filesystem + shell +
  * optional preview) where autopilot builds and runs an app. Shaped after Flue's
@@ -82,6 +83,14 @@
  * - {@link detectMaterialChange} — the deterministic refresh trigger
  * - {@link agentOverview} / {@link overviewLoopPrompt} — regenerate with an agent,
  *   and wire the maintainer into the loop
+ *
+ * Presets are the web-app layer: framework-specific personas selected by detecting
+ * the app's framework (Vike flagship, Next.js second), on top of the agnostic core.
+ *
+ * - {@link PresetRegistry} — register presets, {@link PresetRegistry.select} one
+ * - {@link detectFramework} — score a project's deps/files against presets
+ * - {@link vikePreset} / {@link nextPreset} — the built-ins
+ * - {@link presetPersonas} — a preset's personas + the shared neutral ones
  */
 export { Supervisor } from './supervisor.js'
 export { agentPlanner, type AgentPlannerOptions } from './planner.js'
@@ -95,8 +104,10 @@ export {
   personaWorkers,
   personaRoster,
   vikePageBuilder,
+  nextPageBuilder,
   universalOrmModeler,
   uiIntentDesigner,
+  sharedPersonas,
   stackPersonas,
   type Persona,
   type PersonaSpec,
@@ -260,6 +271,23 @@ export {
   type OverviewRefresh,
   type OverviewEvent,
 } from './overview/index.js'
+export {
+  definePreset,
+  PresetError,
+  detectFramework,
+  vikePreset,
+  nextPreset,
+  builtinPresets,
+  presetPersonas,
+  PresetRegistry,
+  builtinPresetRegistry,
+  type Preset,
+  type PresetSpec,
+  type PresetSignals,
+  type FrameworkSignals,
+  type PresetScore,
+  type FrameworkDetection,
+} from './presets/index.js'
 export type {
   Subtask,
   PlannedSubtask,
