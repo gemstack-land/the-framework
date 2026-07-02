@@ -42,6 +42,14 @@
  * - {@link DecisionLedger} — record decisions, consult before proposing
  * - {@link loadLedger} / {@link saveLedger} — persist to `DECISIONS.md`
  * - {@link decisionTools} / {@link decisionBriefing} — expose it to an agent
+ *
+ * The loop is the event-to-prompt-chain policy: the agent declares a semantic
+ * change (a {@link LoopEvent}) and the right follow-up prompts fire — a major
+ * change runs review + code-quality + security, a new UI flow runs QA + UX.
+ *
+ * - {@link Loop} — match an event to a prompt chain and run it (N fresh passes)
+ * - {@link definePrompt} / {@link defineRule} — author prompts and policy rules
+ * - {@link defaultLoopRules} — the built-in web-app policy
  */
 export { Supervisor } from './supervisor.js'
 export { agentPlanner, type AgentPlannerOptions } from './planner.js'
@@ -116,6 +124,27 @@ export {
   type DecisionStatus,
   type DecisionMatch,
 } from './decisions/index.js'
+export {
+  definePrompt,
+  defineRule,
+  LoopError,
+  Loop,
+  createLoop,
+  defaultLoopRules,
+  LOOP_EVENTS,
+  LOOP_PROMPTS,
+  type LoopOptions,
+  type LoopEvent,
+  type LoopContext,
+  type LoopPrompt,
+  type LoopPromptSpec,
+  type LoopRule,
+  type LoopRuleSpec,
+  type PassResult,
+  type PromptOutcome,
+  type LoopRunResult,
+  type LoopProgress,
+} from './loop/index.js'
 export type {
   Subtask,
   PlannedSubtask,

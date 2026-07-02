@@ -203,6 +203,50 @@ behind the same contract later. The `LedgerFs` seam is a subset of the runner's
 `RunnerFs`, so the ledger persists inside a sandbox the same way it does on the
 host. This is the foundation "the loop" (#113) consults on major changes.
 
+## The loop — event-triggered prompt chains
+
+The web-app-specific orchestration policy that generic harnesses do not have.
+The agent declares a **semantic change** and the right follow-up prompts fire on
+their own: a major change runs review + code-quality + security; a new UI flow
+runs QA + UX. Semantic (a *kind* of change picks a *set* of prompts), not
+command-driven and not run-on-every-PR.
+
+```ts
+import { Loop, definePrompt, defaultLoopRules } from '@gemstack/ai-autopilot'
+
+const loop = new Loop({
+  rules: defaultLoopRules(),                 // major-change → [review, code-quality, security]; ui-flow → [qa, ux]
+  prompts: [
+    definePrompt({ id: 'review', passes: 2, run: ctx => runReview(ctx.event) }),
+    definePrompt({ id: 'code-quality', run: ctx => runQuality(ctx.event) }),
+    // ...register a prompt per id the rules reference
+  ],
+  ledger,                                    // optional: exposed to each prompt via ctx.ledger (#112)
+  onEvent: e => log(e),                      // observe match / pass / done (observer-isolated)
+})
+
+await loop.handle({ kind: 'major-change', summary: 'reworked auth session handling', paths: ['src/auth/*'] })
+```
+
+Design choices for the two open questions:
+
+- **What is a "major change"?** The agent **declares** it — the trigger is a
+  `LoopEvent { kind }` the worker emits, not a heuristic the loop guesses. It is
+  deterministic and it is the agent that knows intent. A heuristic classifier
+  (supervisor-event → `LoopEvent`) can sit in front of `handle` later.
+- **Sync or async?** Both. `handle()` awaits the whole chain (the sync story);
+  `continueOnError: false` turns it into a **blocking gate** (a failing prompt
+  stops the chain). For fire-and-report over a stream, feed events through
+  `loop.watch(stream)`, or run `handle` inside `launchAutopilot` for a detached
+  background run.
+
+Each prompt runs for its `passes` with **fresh context every pass** (Rom's
+finding: re-running the same prompt with a reset context improves the result), so
+`run` is expected to build a new agent per call. `defaultLoopRules()` is the
+built-in policy as data; extend it by concatenating your own `defineRule` results.
+The prompt bodies themselves are the prompts library (#111), registered under the
+ids the rules reference.
+
 ## Guardrails
 
 - **`concurrency`** (optional, default 4) — max workers in flight; positive integer.
