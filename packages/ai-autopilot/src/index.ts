@@ -27,6 +27,7 @@
  *
  * - {@link FakeRunner} — in-memory runner for tests
  * - {@link LocalRunner} — real host workspace (fs + child processes); the first real adapter
+ * - {@link DockerRunner} — sandboxed workspace in a container (via the `docker` CLI)
  * - {@link runnerTools} — expose a booted session to an agent as sandbox tools
  *
  * Surfaces run the same autopilot in the terminal, an in-page UI, or a
