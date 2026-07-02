@@ -8,7 +8,8 @@
     "typecheck": "tsc --noEmit",
     "test": "tsc -p tsconfig.test.json && cd dist-test && node --test",
     "clean": "rm -rf dist-test",
-    "start": "tsx src/main.ts"
+    "start": "tsx src/main.ts",
+    "start:live": "tsx src/main-live.ts"
   },
   "dependencies": {
     "@gemstack/ai-autopilot": "workspace:^",

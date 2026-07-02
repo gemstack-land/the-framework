@@ -45,9 +45,9 @@ import {
  * from the scaffold.
  *
  * It runs offline: `AiFake` scripts the model and `FakeRunner` is an in-memory
- * sandbox, so there is no API key and the output is deterministic. Swapping the
- * fakes for a real model + `LocalRunner` is the only change to run it for real —
- * that live proof is the infra-gated half of this example (#124).
+ * sandbox, so there is no API key and the output is deterministic. `live.ts` runs
+ * the same flow for real (a real model + `LocalRunner` writing files to disk) — the
+ * live proof for #124.
  */
 
 /** What the user wants built (the one thing scope asks about). */
