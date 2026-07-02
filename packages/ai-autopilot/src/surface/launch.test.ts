@@ -69,6 +69,36 @@ describe('launchAutopilot', () => {
     assert.deepEqual(seen, [])
   })
 
+  it('carries a custom event and result type (bootstrap-shaped surface)', async () => {
+    interface BootEvent {
+      type: string
+      message: string
+    }
+    interface BootResult {
+      app: string
+      blockers: string[]
+    }
+
+    let emit!: (e: BootEvent) => void
+    let finish!: (r: BootResult) => void
+    const handle = launchAutopilot<BootEvent, BootResult>(onEvent => {
+      emit = onEvent
+      return new Promise<BootResult>(resolve => {
+        finish = resolve
+      })
+    })
+
+    emit({ type: 'narrate', message: 'scaffolding' })
+    assert.deepEqual(
+      handle.events().map(e => e.message),
+      ['scaffolding'],
+    )
+    finish({ app: 'shop', blockers: [] })
+    const result = await handle.result()
+    assert.equal(result.app, 'shop')
+    assert.deepEqual(result.blockers, [])
+  })
+
   it('honors an explicit id and generates unique ids otherwise', async () => {
     const a = launchAutopilot(async () => fakeRun(), { id: 'my-run' })
     const b = launchAutopilot(async () => fakeRun())

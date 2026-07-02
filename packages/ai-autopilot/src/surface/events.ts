@@ -1,31 +1,35 @@
 import type { SupervisorEvent } from '../types.js'
 
 /**
- * A replayable, multi-consumer stream of {@link SupervisorEvent}s. It is the
- * transport shared by the in-page and background surfaces: buffer every event,
- * hand out live async iterators, and replay history from an offset (borrowing
- * Flue's Durable-Streams `tail=N`). The terminal surface uses {@link terminalSink}
- * directly and does not need this.
+ * A replayable, multi-consumer stream of events. It is the transport shared by
+ * the in-page and background surfaces: buffer every event, hand out live async
+ * iterators, and replay history from an offset (borrowing Flue's Durable-Streams
+ * `tail=N`). The terminal surface uses {@link terminalSink} directly and does not
+ * need this.
+ *
+ * The element type `E` defaults to {@link SupervisorEvent} so existing supervisor
+ * surfaces are unchanged; bootstrap and any future surface pass their own event
+ * type (`new EventStream<BootstrapEvent>()`).
  */
-export class EventStream {
-  private readonly buffer: SupervisorEvent[] = []
+export class EventStream<E = SupervisorEvent> {
+  private readonly buffer: E[] = []
   private readonly waiters: Array<() => void> = []
   private closed = false
 
-  /** Append an event. Wire this in as a Supervisor `onEvent`. Ignored once closed. */
-  readonly push = (event: SupervisorEvent): void => {
+  /** Append an event. Wire this in as an `onEvent` sink. Ignored once closed. */
+  readonly push = (event: E): void => {
     if (this.closed) return
     this.buffer.push(event)
     for (const wake of this.waiters.splice(0)) wake()
   }
 
   /** Alias for {@link push}, reads well at the `onEvent:` call site. */
-  get sink(): (event: SupervisorEvent) => void {
+  get sink(): (event: E) => void {
     return this.push
   }
 
   /** Events buffered so far, from `fromOffset` (default 0) — Flue-style tail replay. */
-  history(fromOffset = 0): SupervisorEvent[] {
+  history(fromOffset = 0): E[] {
     return this.buffer.slice(fromOffset)
   }
 
@@ -52,14 +56,14 @@ export class EventStream {
    * Independent iterators each keep their own cursor, so late consumers still
    * see the full history.
    */
-  [Symbol.asyncIterator](): AsyncIterableIterator<SupervisorEvent> {
+  [Symbol.asyncIterator](): AsyncIterableIterator<E> {
     let index = 0
     const stream = this
     return {
       [Symbol.asyncIterator]() {
         return this
       },
-      next(): Promise<IteratorResult<SupervisorEvent>> {
+      next(): Promise<IteratorResult<E>> {
         if (index < stream.buffer.length) {
           return Promise.resolve({ value: stream.buffer[index++]!, done: false })
         }

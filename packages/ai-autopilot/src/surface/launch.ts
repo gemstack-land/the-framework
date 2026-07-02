@@ -11,18 +11,22 @@ export type AutopilotStatus = 'running' | 'done' | 'error'
  * {@link result}. The same handle backs an in-page surface (iterate `stream()`
  * and push each event over SSE) and a background process (persist the handle,
  * let a client poll `status()` + `events(offset)`).
+ *
+ * The type params default to the supervisor's `E`/`R` so supervisor surfaces are
+ * unchanged; bootstrap emits its own narration events and returns its own result,
+ * so it launches with `AutopilotHandle<BootstrapEvent, BootstrapResult>`.
  */
-export interface AutopilotHandle {
+export interface AutopilotHandle<E = SupervisorEvent, R = SupervisorRun> {
   /** Stable id for this run. */
   readonly id: string
   /** Current lifecycle state. */
   status(): AutopilotStatus
   /** Events emitted so far, from `fromOffset` (default 0). */
-  events(fromOffset?: number): SupervisorEvent[]
+  events(fromOffset?: number): E[]
   /** A fresh async iterator over events: replays history, then live, then ends. */
-  stream(): AsyncIterableIterator<SupervisorEvent>
+  stream(): AsyncIterableIterator<E>
   /** Resolves with the run's result, or rejects if the run threw. */
-  result(): Promise<SupervisorRun>
+  result(): Promise<R>
 }
 
 /** Options for {@link launchAutopilot}. */
@@ -40,11 +44,11 @@ let counter = 0
  * Keeping `start` caller-provided means this surface knows nothing about how the
  * Supervisor is built; it only owns the event stream and lifecycle.
  */
-export function launchAutopilot(
-  start: (onEvent: (event: SupervisorEvent) => void) => Promise<SupervisorRun>,
+export function launchAutopilot<E = SupervisorEvent, R = SupervisorRun>(
+  start: (onEvent: (event: E) => void) => Promise<R>,
   opts: LaunchOptions = {},
-): AutopilotHandle {
-  const stream = new EventStream()
+): AutopilotHandle<E, R> {
+  const stream = new EventStream<E>()
   const id = opts.id ?? `autopilot-${++counter}`
   let state: AutopilotStatus = 'running'
 

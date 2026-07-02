@@ -83,6 +83,28 @@ describe('formatEvent', () => {
   }
 })
 
+describe('EventStream generic element type', () => {
+  interface BootEvent {
+    type: 'narrate' | 'decision'
+    message: string
+  }
+
+  it('carries a custom event type through push, history, and iteration', async () => {
+    const s = new EventStream<BootEvent>()
+    s.push({ type: 'narrate', message: 'picking the stack' })
+    s.push({ type: 'decision', message: 'Vike + universal-orm' })
+    s.close()
+
+    assert.deepEqual(
+      s.history().map(e => e.message),
+      ['picking the stack', 'Vike + universal-orm'],
+    )
+    const seen: BootEvent[] = []
+    for await (const e of s) seen.push(e)
+    assert.deepEqual(seen.map(e => e.type), ['narrate', 'decision'])
+  })
+})
+
 describe('terminalSink', () => {
   it('writes a formatted line per event to the provided writer', () => {
     const lines: string[] = []
