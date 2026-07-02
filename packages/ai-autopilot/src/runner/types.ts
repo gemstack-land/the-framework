@@ -42,6 +42,21 @@ export interface ExecResult {
   exitCode: number
 }
 
+/**
+ * A handle to a long-running process started with {@link RunnerSession.start} —
+ * a dev server, a watcher, anything that does not exit on its own. Unlike `exec`
+ * (which resolves when the command finishes), `start` returns immediately with
+ * this handle so the caller can serve a {@link RunnerSession.preview} against it.
+ */
+export interface RunnerProcess {
+  /** The command that was started. */
+  readonly command: string
+  /** Resolves when the process exits — on its own, or after {@link stop}. */
+  readonly exit: Promise<ExecResult>
+  /** Stop the process. Idempotent; resolves once it has exited. */
+  stop(): Promise<void>
+}
+
 /** A virtual filesystem scoped to a single session's workspace. */
 export interface RunnerFs {
   read(path: string): Promise<string>
@@ -56,6 +71,12 @@ export interface RunnerFs {
 export interface PreviewOptions {
   /** Port the server listens on inside the sandbox. */
   port?: number
+  /**
+   * Wait up to this many milliseconds for the port to accept connections before
+   * returning, so the URL is reachable the moment `preview` resolves. Default `0`
+   * (return immediately — a runner that can't probe readiness ignores it).
+   */
+  waitMs?: number
 }
 
 /** A reachable URL for the running app. */
@@ -76,6 +97,12 @@ export interface RunnerSession {
   readonly id: string
   readonly fs: RunnerFs
   exec(command: string, opts?: ExecOptions): Promise<ExecResult>
+  /**
+   * Start a long-running command (a dev server) in the background and return a
+   * handle to it, without waiting for it to exit. Absent when the runner only
+   * supports one-shot `exec` — presence is the capability signal, like `preview`.
+   */
+  start?(command: string, opts?: ExecOptions): Promise<RunnerProcess>
   /** Expose a running dev server and return its URL. Absent when unsupported. */
   preview?(opts?: PreviewOptions): Promise<Preview>
   /** Tear down the workspace and release its resources. Idempotent. */

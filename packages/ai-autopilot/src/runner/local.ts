@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process'
+import { connect } from 'node:net'
 import { mkdtemp, mkdir, readFile, writeFile, rm, readdir, access } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, dirname, resolve, relative, sep } from 'node:path'
@@ -6,6 +7,7 @@ import type {
   Runner,
   RunnerSession,
   RunnerFs,
+  RunnerProcess,
   BootOptions,
   ExecOptions,
   ExecResult,
@@ -13,6 +15,27 @@ import type {
   PreviewOptions,
 } from './types.js'
 import { RunnerError } from './types.js'
+
+const delay = (ms: number): Promise<void> => new Promise(res => setTimeout(res, ms))
+
+/** Resolve once something is accepting TCP connections on `host:port`, or after `timeoutMs`. */
+async function waitForPort(host: string, port: number, timeoutMs: number): Promise<void> {
+  const deadline = Date.now() + timeoutMs
+  for (;;) {
+    const ok = await new Promise<boolean>(res => {
+      const socket = connect({ host, port }, () => {
+        socket.destroy()
+        res(true)
+      })
+      socket.on('error', () => {
+        socket.destroy()
+        res(false)
+      })
+    })
+    if (ok || Date.now() >= deadline) return
+    await delay(100)
+  }
+}
 
 export interface LocalRunnerOptions {
   /** Base directory to create workspaces under. Default: the OS temp dir. */
@@ -105,6 +128,8 @@ export class LocalRunnerSession implements RunnerSession {
 
   private readonly cwd: string
   private readonly env: Record<string, string>
+  /** Long-running processes started with {@link start}, so `dispose` can stop them. */
+  private readonly procs = new Set<RunnerProcess>()
 
   constructor(
     id: string,
@@ -121,9 +146,64 @@ export class LocalRunnerSession implements RunnerSession {
       this.preview = async (previewOpts: PreviewOptions = {}): Promise<Preview> => {
         if (this.disposed) throw new RunnerError('preview on a disposed session')
         const port = previewOpts.port ?? 3000
+        // Wait for the started server to accept connections, so the URL is live on return.
+        if (previewOpts.waitMs && previewOpts.waitMs > 0) await waitForPort('127.0.0.1', port, previewOpts.waitMs)
         return { url: `${opts.previewHost}:${port}`, port }
       }
     }
+  }
+
+  /**
+   * Start a long-running command in the background. Spawns it in its own process
+   * group (`detached`) so `stop` can kill the whole tree (the shell AND the server
+   * it launched), and returns immediately with a handle — it does NOT await exit.
+   */
+  async start(command: string, opts: ExecOptions = {}): Promise<RunnerProcess> {
+    if (this.disposed) throw new RunnerError('start on a disposed session')
+    const cwd = within(this.root, opts.cwd ?? (this.cwd || '.'))
+    const env = { ...process.env, ...this.env, ...(opts.env ?? {}) }
+    const child = spawn(command, { cwd, env, shell: true, detached: true })
+    let stdout = ''
+    let stderr = ''
+    child.stdout?.on('data', d => (stdout += d))
+    child.stderr?.on('data', d => (stderr += d))
+
+    let resolveExit!: (r: ExecResult) => void
+    const exit = new Promise<ExecResult>(res => (resolveExit = res))
+    let settled = false
+    const settle = (r: ExecResult): void => {
+      if (settled) return
+      settled = true
+      resolveExit(r)
+    }
+    child.on('close', (code, signal) => settle({ stdout, stderr, exitCode: code ?? (signal ? 137 : 0) }))
+    child.on('error', err => settle({ stdout, stderr: stderr + `\n[ai-autopilot] failed to spawn: ${(err as Error).message}`, exitCode: 1 }))
+
+    // Kill the whole process group (negative pid), escalating SIGTERM → SIGKILL.
+    const signal = (sig: NodeJS.Signals): void => {
+      if (settled || child.pid == null) return
+      try {
+        process.kill(-child.pid, sig)
+      } catch {
+        // group gone already
+      }
+    }
+    const proc: RunnerProcess = {
+      command,
+      exit,
+      stop: async () => {
+        if (!settled) {
+          signal('SIGTERM')
+          const raced = await Promise.race([exit, delay(2000).then(() => 'timeout' as const)])
+          if (raced === 'timeout') signal('SIGKILL')
+          await exit
+        }
+        this.procs.delete(proc)
+      },
+    }
+    exit.then(() => this.procs.delete(proc))
+    this.procs.add(proc)
+    return proc
   }
 
   async exec(command: string, opts: ExecOptions = {}): Promise<ExecResult> {
@@ -166,6 +246,8 @@ export class LocalRunnerSession implements RunnerSession {
   async dispose(): Promise<void> {
     if (this.disposed) return
     this.disposed = true
+    // Stop any still-running background processes before removing the workspace.
+    await Promise.all([...this.procs].map(p => p.stop().catch(() => {})))
     await rm(this.root, { recursive: true, force: true })
   }
 }
@@ -183,8 +265,12 @@ export class LocalRunnerSession implements RunnerSession {
  * ```ts
  * const runner = new LocalRunner()
  * const s = await runner.boot({ files: { 'app.js': "console.log('hi')" } })
- * await s.exec('node app.js') // → { stdout: 'hi\n', stderr: '', exitCode: 0 }
- * await s.dispose()           // removes the temp workspace
+ * await s.exec('node app.js')            // one-shot → { stdout: 'hi\n', … }
+ *
+ * const dev = await s.start('npm run dev')          // long-running, returns at once
+ * const { url } = await s.preview({ port: 3000, waitMs: 5000 }) // waits until reachable
+ * await dev.stop()                                   // kills the server (process group)
+ * await s.dispose()                                  // stops leftovers + removes the workspace
  * ```
  */
 export class LocalRunner implements Runner {

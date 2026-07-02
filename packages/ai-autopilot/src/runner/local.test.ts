@@ -1,8 +1,25 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import { existsSync } from 'node:fs'
+import { createServer } from 'node:net'
 import { LocalRunner } from './local.js'
 import { RunnerError } from './types.js'
+
+/** Grab an ephemeral free port so the boot-and-serve tests don't collide in CI. */
+function freePort(): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const srv = createServer()
+    srv.on('error', reject)
+    srv.listen(0, '127.0.0.1', () => {
+      const addr = srv.address()
+      const port = typeof addr === 'object' && addr ? addr.port : 0
+      srv.close(() => resolve(port))
+    })
+  })
+}
+
+const httpServer = (port: number, body: string): string =>
+  `const http=require('http');http.createServer((_,res)=>{res.writeHead(200);res.end(${JSON.stringify(body)})}).listen(${port},'127.0.0.1')`
 
 describe('LocalRunner.boot', () => {
   it('seeds a real workspace with files, including nested paths', async () => {
@@ -145,5 +162,52 @@ describe('LocalRunnerSession.dispose', () => {
     await s.dispose() // idempotent
     await assert.rejects(() => s.exec('ls'), RunnerError)
     await assert.rejects(() => s.preview!(), RunnerError)
+  })
+})
+
+describe('LocalRunnerSession.start (boot and serve)', () => {
+  it('runs a real background server that preview can reach, then stop kills it', async () => {
+    const port = await freePort()
+    const s = await new LocalRunner().boot({ files: { 'server.js': httpServer(port, 'hello from runner') } })
+    try {
+      const proc = await s.start('node server.js')
+      assert.equal(proc.command, 'node server.js')
+
+      const preview = await s.preview!({ port, waitMs: 5000 })
+      assert.equal(preview.port, port)
+
+      const res = await fetch(preview.url)
+      assert.equal(await res.text(), 'hello from runner') // the app is actually serving
+
+      await proc.stop()
+      await assert.rejects(fetch(preview.url)) // port no longer listening
+    } finally {
+      await s.dispose()
+    }
+  })
+
+  it('start does not block on a long-running process', async () => {
+    const port = await freePort()
+    const s = await new LocalRunner().boot({ files: { 'server.js': httpServer(port, 'x') } })
+    try {
+      // Would hang forever with exec(); start() must resolve immediately.
+      const proc = await s.start('node server.js')
+      let exited = false
+      void proc.exit.then(() => (exited = true))
+      assert.equal(exited, false) // still running right after start
+      await proc.stop()
+    } finally {
+      await s.dispose()
+    }
+  })
+
+  it('dispose stops a still-running process', async () => {
+    const port = await freePort()
+    const s = await new LocalRunner().boot({ files: { 'server.js': httpServer(port, 'x') } })
+    const proc = await s.start('node server.js')
+    await s.preview!({ port, waitMs: 5000 })
+    await s.dispose()
+    const result = await proc.exit // resolves because dispose stopped it
+    assert.notEqual(result.exitCode, 0) // killed, not a clean exit
   })
 })

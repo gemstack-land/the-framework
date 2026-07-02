@@ -76,6 +76,40 @@ describe('FakeRunnerSession.preview', () => {
   })
 })
 
+describe('FakeRunnerSession.start', () => {
+  it('records start calls and returns a controllable process handle', async () => {
+    const s = await new FakeRunner().boot()
+    const proc = await s.start!('npm run dev', { cwd: 'app' })
+    assert.deepEqual(s.startCalls, [{ command: 'npm run dev', opts: { cwd: 'app' } }])
+    assert.equal(s.processes.length, 1)
+    assert.equal(proc.command, 'npm run dev')
+
+    let exited = false
+    void proc.exit.then(() => (exited = true))
+    assert.equal(exited, false) // still "running" until stopped
+    await proc.stop()
+    assert.equal((await proc.exit).exitCode, 0)
+  })
+
+  it('omits start when background is disabled (capability signal)', async () => {
+    const s = await new FakeRunner({ background: false }).boot()
+    assert.equal(s.start, undefined)
+  })
+
+  it('dispose stops still-running processes', async () => {
+    const s = await new FakeRunner().boot()
+    const proc = await s.start!('node server.js')
+    await s.dispose()
+    assert.equal((await proc.exit).exitCode, 0) // resolved by dispose
+  })
+
+  it('rejects start on a disposed session', async () => {
+    const s = await new FakeRunner().boot()
+    await s.dispose()
+    await assert.rejects(() => s.start!('node server.js'), RunnerError)
+  })
+})
+
 describe('FakeRunnerSession.dispose', () => {
   it('marks disposed and blocks further exec/preview', async () => {
     const s = await new FakeRunner().boot()

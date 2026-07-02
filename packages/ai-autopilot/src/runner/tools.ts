@@ -92,6 +92,25 @@ export function runnerTools(session: RunnerSession, opts: RunnerToolsOptions = {
     )
   }
 
+  if (opts.exec !== false && session.start) {
+    const start = session.start.bind(session)
+    tools.push(
+      toolDefinition({
+        name: name('start_server'),
+        description: 'Start a long-running command (e.g. a dev server) in the background. Returns immediately; use preview to get its URL.',
+        inputSchema: z.object({
+          command: z.string().describe('The shell command to start (e.g. "npm run dev").'),
+          cwd: z.string().optional().describe('Working directory, relative to the workspace root.'),
+        }),
+      })
+        .server(async ({ command, cwd }) => {
+          await start(command, cwd ? { cwd } : {})
+          return { started: command }
+        })
+        .modelOutput(r => `started ${r.started}`) as unknown as AnyTool,
+    )
+  }
+
   if (session.preview) {
     const preview = session.preview.bind(session)
     tools.push(

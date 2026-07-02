@@ -15,6 +15,7 @@ export type {
   Runner,
   RunnerSession,
   RunnerFs,
+  RunnerProcess,
   FileTree,
   BootOptions,
   ExecOptions,
@@ -29,6 +30,7 @@ export {
   type FakeRunnerOptions,
   type FakeExec,
   type RecordedExec,
+  type RecordedStart,
 } from './fake.js'
 export { LocalRunner, LocalRunnerSession, type LocalRunnerOptions } from './local.js'
 export { runnerTools, type RunnerToolsOptions } from './tools.js'

@@ -2,6 +2,7 @@ import type {
   Runner,
   RunnerSession,
   RunnerFs,
+  RunnerProcess,
   BootOptions,
   ExecOptions,
   ExecResult,
@@ -20,6 +21,8 @@ export interface FakeRunnerOptions {
   preview?: boolean
   /** Base URL returned by `preview()`. Default `https://preview.fake.local`. */
   previewUrl?: string
+  /** Whether booted sessions can `start` background processes. Default `true`. */
+  background?: boolean
 }
 
 /** Normalize a workspace path to a canonical relative form. */
@@ -60,6 +63,12 @@ export interface RecordedExec {
   opts: ExecOptions
 }
 
+/** A recorded `start` invocation, for test assertions. */
+export interface RecordedStart {
+  command: string
+  opts: ExecOptions
+}
+
 /** The session a {@link FakeRunner} boots — exposes its state for assertions. */
 export class FakeRunnerSession implements RunnerSession {
   readonly id: string
@@ -76,12 +85,19 @@ export class FakeRunnerSession implements RunnerSession {
    */
   readonly preview?: (opts?: PreviewOptions) => Promise<Preview>
 
+  /** Present only when the runner supports background processes (capability signal). */
+  readonly start?: (command: string, opts?: ExecOptions) => Promise<RunnerProcess>
+  /** Every `start` call in order, so tests can assert what autopilot launched. */
+  readonly startCalls: RecordedStart[] = []
+  /** The background processes started this session, in order. */
+  readonly processes: RunnerProcess[] = []
+
   private readonly files = new Map<string, string>()
 
   constructor(
     id: string,
     boot: BootOptions,
-    private readonly opts: Required<Pick<FakeRunnerOptions, 'onExec' | 'preview' | 'previewUrl'>>,
+    private readonly opts: Required<Pick<FakeRunnerOptions, 'onExec' | 'preview' | 'previewUrl' | 'background'>>,
   ) {
     this.id = id
     for (const [path, contents] of Object.entries(boot.files ?? {})) {
@@ -93,6 +109,26 @@ export class FakeRunnerSession implements RunnerSession {
         if (this.disposed) throw new RunnerError('preview on a disposed session')
         const port = previewOpts.port ?? 3000
         return { url: `${this.opts.previewUrl}:${port}`, port }
+      }
+    }
+    if (opts.background) {
+      this.start = async (command: string, startOpts: ExecOptions = {}): Promise<RunnerProcess> => {
+        if (this.disposed) throw new RunnerError('start on a disposed session')
+        this.startCalls.push({ command, opts: startOpts })
+        let resolveExit!: (r: ExecResult) => void
+        const exit = new Promise<ExecResult>(res => (resolveExit = res))
+        let settled = false
+        const proc: RunnerProcess = {
+          command,
+          exit,
+          stop: async () => {
+            if (settled) return
+            settled = true
+            resolveExit({ stdout: '', stderr: '', exitCode: 0 })
+          },
+        }
+        this.processes.push(proc)
+        return proc
       }
     }
   }
@@ -110,6 +146,7 @@ export class FakeRunnerSession implements RunnerSession {
 
   async dispose(): Promise<void> {
     this.disposed = true
+    await Promise.all(this.processes.map(p => p.stop().catch(() => {})))
   }
 }
 
@@ -132,7 +169,7 @@ export class FakeRunner implements Runner {
   /** Every session this runner has booted. */
   readonly sessions: FakeRunnerSession[] = []
 
-  private readonly opts: Required<Pick<FakeRunnerOptions, 'onExec' | 'preview' | 'previewUrl'>>
+  private readonly opts: Required<Pick<FakeRunnerOptions, 'onExec' | 'preview' | 'previewUrl' | 'background'>>
   private counter = 0
 
   constructor(options: FakeRunnerOptions = {}) {
@@ -140,6 +177,7 @@ export class FakeRunner implements Runner {
       onExec: options.onExec ?? (async () => ({ stdout: '', stderr: '', exitCode: 0 })),
       preview: options.preview ?? true,
       previewUrl: options.previewUrl ?? 'https://preview.fake.local',
+      background: options.background ?? true,
     }
   }
 

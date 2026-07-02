@@ -40,6 +40,18 @@ describe('runnerTools', () => {
     assert.ok(!without.includes('preview'))
   })
 
+  it('includes start_server only when the session supports background processes', async () => {
+    const withStart = runnerTools(await new FakeRunner().boot()).map(t => t.definition.name)
+    assert.ok(withStart.includes('start_server'))
+    const without = runnerTools(await new FakeRunner({ background: false }).boot()).map(t => t.definition.name)
+    assert.ok(!without.includes('start_server'))
+  })
+
+  it('start_server rides the exec toggle (dropped from a read-only surface)', async () => {
+    const names = runnerTools(await new FakeRunner().boot(), { exec: false }).map(t => t.definition.name)
+    assert.ok(!names.includes('start_server'))
+  })
+
   it('honors the write/exec toggles and the name prefix', async () => {
     const s = await new FakeRunner().boot()
     const names = runnerTools(s, { write: false, exec: false, prefix: 'sandbox' }).map(

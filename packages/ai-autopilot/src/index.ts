@@ -127,11 +127,13 @@ export {
   type BootOptions,
   type ExecOptions,
   type ExecResult,
+  type RunnerProcess,
   type Preview,
   type PreviewOptions,
   type FakeRunnerOptions,
   type FakeExec,
   type RecordedExec,
+  type RecordedStart,
   type LocalRunnerOptions,
   type RunnerToolsOptions,
 } from './runner/index.js'
