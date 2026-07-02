@@ -247,6 +247,39 @@ built-in policy as data; extend it by concatenating your own `defineRule` result
 The prompt bodies themselves are the prompts library (#111), registered under the
 ids the rules reference.
 
+## Built-in prompts — the loop's bodies, shipped as data
+
+The loop dispatches prompts by id; the **prompts library** supplies the bodies.
+They ship ready to use and already know the stack (Vike + universal-orm): review
+(TLDR + thorough), code-quality, security, refactor, UX, QA, and a knowledge-base
+template. Each is a markdown file under `prompts/`, so a contributor improves the
+prompt by editing prose, not code.
+
+`loopPromptsFor` materializes a library into loop prompts, so `defaultLoopRules()`
+ids resolve to real bodies — this is the turnkey wire:
+
+```ts
+import { agent } from '@gemstack/ai-sdk'
+import { Loop, defaultLoopRules, builtinLibrary, loopPromptsFor, runnerTools } from '@gemstack/ai-autopilot'
+
+const library = await builtinLibrary()          // the shipped bodies
+const loop = new Loop({
+  rules: defaultLoopRules(),                     // review / code-quality / security / qa / ux ids
+  prompts: loopPromptsFor(library, ctx =>        // a FRESH agent per pass
+    agent({ instructions: ctx.instructions, tools: runnerTools(session) })),
+  ledger,                                         // ctx.instructions already includes the decisions briefing
+})
+
+await loop.handle({ kind: 'major-change', summary: 'reworked auth', paths: ['src/auth/*'] })
+```
+
+`ctx.instructions` is the prompt body composed with the decisions briefing (#112),
+ready to set on the agent; the agent carries whatever tools the prompt needs
+(`runnerTools(session)` for file/exec, browser tools for the QA prompt). Load your
+own bodies from a directory with `loadPromptsFrom(dir)`, or add one to a library
+with `library.add(...)`. The bodies are the main open-source contribution surface;
+PRs that sharpen them are welcome.
+
 ## Guardrails
 
 - **`concurrency`** (optional, default 4) — max workers in flight; positive integer.
