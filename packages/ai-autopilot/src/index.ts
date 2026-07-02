@@ -50,6 +50,13 @@
  * - {@link Loop} — match an event to a prompt chain and run it (N fresh passes)
  * - {@link definePrompt} / {@link defineRule} — author prompts and policy rules
  * - {@link defaultLoopRules} — the built-in web-app policy
+ *
+ * The prompts library supplies the loop's prompt *bodies* as data (stack-aware
+ * markdown): review, code-quality, security, refactor, UX, QA, knowledge-base.
+ *
+ * - {@link builtinLibrary} — load the shipped, stack-aware prompt bodies
+ * - {@link loopPromptsFor} — materialize a library into loop prompts by id
+ * - {@link promptInstructions} — compose a body with the decisions briefing
  */
 export { Supervisor } from './supervisor.js'
 export { agentPlanner, type AgentPlannerOptions } from './planner.js'
@@ -145,6 +152,22 @@ export {
   type LoopRunResult,
   type LoopProgress,
 } from './loop/index.js'
+export {
+  parsePrompt,
+  PromptError,
+  PromptLibrary,
+  builtinPrompts,
+  builtinLibrary,
+  builtinPromptsDir,
+  loadPromptsFrom,
+  promptInstructions,
+  renderTask,
+  toLoopPrompt,
+  loopPromptsFor,
+  type Prompt,
+  type MakePromptAgent,
+  type PromptAgentContext,
+} from './prompts/index.js'
 export type {
   Subtask,
   PlannedSubtask,
