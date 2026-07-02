@@ -40,6 +40,12 @@ function json(result: McpToolResult): any {
   return first && first.type === 'text' ? JSON.parse(first.text) : undefined
 }
 
+/** The plain error text of an `isError` result. */
+function errText(result: McpToolResult): string {
+  const first = result.content[0]
+  return first && first.type === 'text' ? first.text : ''
+}
+
 /** Decode a captured request URL, restoring `+`-encoded spaces for readable matching. */
 function urlOf(i: number): string {
   return decodeURIComponent(calls[i]!.url).replace(/\+/g, ' ')
@@ -132,8 +138,9 @@ test('get-file-content downloads a regular file via alt=media', async () => {
 
 test('get-file-content refuses a folder', async () => {
   mockFetch(() => ({ body: { id: 'x', name: 'Stuff', mimeType: 'application/vnd.google-apps.folder' } }))
-  const res = json(await client().callTool('google-drive_get-file-content', { fileId: 'x' }))
-  assert.match(res.error, /folder/)
+  const res = await client().callTool('google-drive_get-file-content', { fileId: 'x' })
+  assert.equal(res.isError, true)
+  assert.match(errText(res), /folder/)
   assert.equal(calls.length, 1)
 })
 
@@ -162,8 +169,9 @@ test('share-file posts a permission and validates the email requirement', async 
   assert.deepEqual(calls[0]!.body, { role: 'writer', type: 'user', emailAddress: 'b@x.com' })
 
   calls = []
-  const bad = json(await client().callTool('google-drive_share-file', { fileId: 'F' }))
-  assert.match(bad.error, /requires an emailAddress/)
+  const bad = await client().callTool('google-drive_share-file', { fileId: 'F' })
+  assert.equal(bad.isError, true)
+  assert.match(errText(bad), /requires an emailAddress/)
   assert.equal(calls.length, 0)
 })
 

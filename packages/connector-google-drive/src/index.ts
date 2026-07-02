@@ -1,4 +1,4 @@
-import { defineConnector } from '@gemstack/connectors'
+import { defineConnector, McpResponse } from '@gemstack/connectors'
 import { z } from 'zod'
 import { gd, gdText } from './client.js'
 
@@ -148,11 +148,11 @@ export default defineConnector({
         const id = enc(input.fileId)
         const meta = await gd<Record<string, any>>(ctx, 'GET', `/files/${id}?fields=id,name,mimeType`)
         const mime: string = meta.mimeType ?? ''
-        if (mime === FOLDER_MIME) return { error: `"${meta.name}" is a folder, not a file` }
+        if (mime === FOLDER_MIME) return McpResponse.error(`"${meta.name}" is a folder, not a file`)
         let content: string
         if (mime.startsWith('application/vnd.google-apps.')) {
           const exportMime = exportMimeFor(mime)
-          if (!exportMime) return { error: `cannot export ${mime} as text` }
+          if (!exportMime) return McpResponse.error(`cannot export ${mime} as text`)
           content = await gdText(ctx, `/files/${id}/export?mimeType=${enc(exportMime)}`)
         } else {
           content = await gdText(ctx, `/files/${id}?alt=media`)
@@ -209,9 +209,9 @@ export default defineConnector({
       ) => {
         const type = input.type ?? 'user'
         if ((type === 'user' || type === 'group') && !input.emailAddress) {
-          return { error: `type "${type}" requires an emailAddress` }
+          return McpResponse.error(`type "${type}" requires an emailAddress`)
         }
-        if (type === 'domain' && !input.domain) return { error: 'type "domain" requires a domain' }
+        if (type === 'domain' && !input.domain) return McpResponse.error('type "domain" requires a domain')
         const payload: Record<string, unknown> = { role: input.role ?? 'reader', type }
         if (input.emailAddress) payload.emailAddress = input.emailAddress
         if (input.domain) payload.domain = input.domain

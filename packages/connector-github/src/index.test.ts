@@ -90,6 +90,15 @@ test('get-file base64-decodes content', async () => {
   assert.equal(res.path, 'README.md')
 })
 
+test('get-file on a directory returns an MCP error, not a success result', async () => {
+  // The contents API returns an array for a directory path.
+  mockFetch(() => ({ body: [{ path: 'src/a.ts' }, { path: 'src/b.ts' }] }))
+  const res = await client().callTool('github_get-file', { owner: 'o', repo: 'r', path: 'src' })
+  assert.equal(res.isError, true)
+  const first = res.content[0]
+  assert.match(first && first.type === 'text' ? first.text : '', /is a directory/)
+})
+
 test('comment-on-issue POSTs the body and returns the comment ref', async () => {
   mockFetch(() => ({ body: { id: 99, html_url: 'comment-url' } }))
   const res = json(await client().callTool('github_comment-on-issue', { owner: 'o', repo: 'r', number: 7, body: 'hi' }))
