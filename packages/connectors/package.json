@@ -1,6 +1,6 @@
 {
   "name": "@gemstack/connectors",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "The connector contract for GemStack AI orchestration: define a tool connector to an external service (GitHub, Google Drive, ...) once with `defineConnector`, compose any number into a single MCP server with `mountConnectors`. Built on @gemstack/mcp; framework-agnostic.",
   "keywords": [
     "mcp",

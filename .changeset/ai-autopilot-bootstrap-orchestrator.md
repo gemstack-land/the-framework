@@ -1,5 +1,0 @@
----
-"@gemstack/ai-autopilot": minor
----
-
-Add bootstrap mode's orchestrator core: the spine that sequences autopilot's primitives into scope → architect → build → full-fledged loop, taking a user from nothing to a running, production-grade app. `Bootstrap` owns the control flow (the loop, the gate, the interrupt) over four injectable steps, narrating each phase over the generic surface stream and recording the architect's choices to the decisions ledger — no permission asked. The full-fledged loop repeats the production-grade checklist with fresh context, improving against its `{ blockers }` verdict until it is empty or a `maxPasses` budget stops it; prototype scope skips it. Default step builders wire the steps onto the real primitives — `agentArchitect` (an `ai-sdk` agent + the decisions briefing), `supervisorBuild` (the `Supervisor` over personas + runner), and `loopChecklist` / `loopImprove` (the Loop) — so the same orchestrator runs against real agents in production or stubs + `FakeRunner` in a test. Verified end-to-end offline. Closes #122.
