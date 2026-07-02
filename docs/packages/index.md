@@ -1,15 +1,8 @@
 # The GemStack family
 
-All packages publish under the **`@gemstack/`** scope (e.g. `npm install @gemstack/ai-sdk`). Each is standalone and framework-agnostic; they compose, but you adopt only what you need.
+All packages publish under the **`@gemstack/`** scope (e.g. `npm install @gemstack/ai-sdk`). Each is standalone and framework-agnostic; they compose, but you adopt only what you need. The grid below lists the packages an app author installs directly, grouped by what they do.
 
-| Package | Description |
-|---|---|
-| [`ai-sdk`](/packages/ai-sdk/) | The agent runtime: providers, the agent loop, tools, streaming, middleware, structured output, memory, and evals. The engine the rest of the AI family builds on. |
-| [`ai-skills`](/packages/ai-skills) | Portable capability bundles: load `SKILL.md` skills (instructions + tools + resources) and compose them onto an agent on demand. |
-| [`ai-autopilot`](/packages/ai-autopilot) | Orchestration: a Supervisor that plans, dispatches subagents (bounded concurrency + budget guardrails), and synthesizes the result. |
-| [`ai-mcp`](/packages/ai-mcp) | The agent/MCP bridge: consume a remote MCP server's tools as agent tools, and expose an agent as an MCP server. |
-| [`mcp`](/packages/mcp) | A standalone framework for *authoring* MCP servers: tools, resources, prompts, decorators, OAuth 2.1, a framework-neutral HTTP handler, and a test client. Agent-agnostic. |
-| [`connectors`](/packages/connectors) | The connector contract: `defineConnector` declares a tool connector to an external service; `mountConnectors` composes any number into one `@gemstack/mcp` server. First-party connectors: [GitHub](/packages/connector-github), [Google Drive](/packages/connector-google-drive). |
+<PackageGrid />
 
 ## How they fit together
 
