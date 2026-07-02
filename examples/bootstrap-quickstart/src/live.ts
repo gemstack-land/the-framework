@@ -6,6 +6,7 @@ import {
   loopChecklist,
   loopImprove,
   agentDeploy,
+  cloudflareTarget,
   Loop,
   definePrompt,
   defineRule,
@@ -95,6 +96,23 @@ function buildLoop(): Loop {
   })
 }
 
+/**
+ * The deploy step. With `CLOUDFLARE_API_TOKEN` set, it ships for real: the model
+ * decides SSR/SSG/SPA and `cloudflareTarget` installs → builds → deploys the app
+ * to Cloudflare (Workers for SSR, Pages for SSG/SPA) and reports the live URL.
+ * Without a token it falls back to `planOnlyTarget` (decide + narrate, no ship),
+ * so the run works with only a model key.
+ */
+function deployStep(session: RunnerSession, deployer: ReturnType<typeof agent>) {
+  if (process.env['CLOUDFLARE_API_TOKEN']) {
+    return agentDeploy(deployer, {
+      targets: ['cloudflare'],
+      target: cloudflareTarget({ session, projectName: process.env['CLOUDFLARE_PROJECT'] ?? 'gemstack-orders-demo' }),
+    })
+  }
+  return agentDeploy(deployer)
+}
+
 /** Snapshot the real workspace into a { path: contents } map. */
 async function snapshot(session: RunnerSession): Promise<Record<string, string>> {
   const files: Record<string, string> = {}
@@ -136,9 +154,8 @@ export async function runLiveCapstone(write: (line: string) => void = () => {}):
           build: supervisorBuild({ plan: livePlanner, workers: presetWorkers(session, personas), concurrency: 1 }),
           checklist: loopChecklist({ loop }),
           improve: loopImprove({ loop }),
-          // planOnlyTarget default: the model DECIDES render + target and narrates; actually
-          // shipping to Dockploy/Cloudflare stays behind the real DeployTarget adapters (#109).
-          deploy: agentDeploy(agent({ model: MODEL, instructions: 'deployer' })),
+          // Real Cloudflare deploy when CLOUDFLARE_API_TOKEN is set, else plan-only.
+          deploy: deployStep(session, agent({ model: MODEL, instructions: 'deployer' })),
         },
       }).run(),
     )

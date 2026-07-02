@@ -6,7 +6,7 @@ import {
   loopChecklist,
   loopImprove,
   agentDeploy,
-  FakeDeployTarget,
+  cloudflareTarget,
   Loop,
   definePrompt,
   defineRule,
@@ -88,8 +88,11 @@ const ARCHITECT_PLAN = {
   ],
 }
 
-/** The deploy decision (what `agentDeploy` parses). */
-const DEPLOY_DECISION = { render: 'ssr', target: 'dockploy', reason: 'per-request orders data + server-side auth' }
+/** The deploy decision (what `agentDeploy` parses). SSR → Cloudflare Workers. */
+const DEPLOY_DECISION = { render: 'ssr', target: 'cloudflare', reason: 'per-request orders data + server-side auth' }
+
+/** The URL the simulated `wrangler` prints, so the offline demo ends at a live-looking URL. */
+const DEPLOY_URL = 'https://orders-app.gemstack.workers.dev'
 
 /**
  * Script the fake provider. Order (concurrency 1) is: the architect's plan, then
@@ -189,15 +192,26 @@ export async function runCapstone(write: (line: string) => void = () => {}): Pro
     const { preset, detection } = builtinPresetRegistry().select({ dependencies: PROJECT_DEPS })
     const personas = presetPersonas(preset)
 
-    // Runner: an in-memory sandbox seeded with a minimal project.
+    // Runner: an in-memory sandbox seeded with a minimal project. `wrangler` is
+    // simulated (prints a live-looking URL) so the real cloudflareTarget adapter
+    // runs its full path — install → build → deploy → parse URL — offline.
     const runner = new FakeRunner({
-      onExec: cmd => (cmd.includes('build') ? { stdout: 'built', stderr: '', exitCode: 0 } : { stdout: '', stderr: '', exitCode: 0 }),
+      onExec: cmd => {
+        if (cmd.includes('wrangler')) return { stdout: `Published orders-app\n${DEPLOY_URL}`, stderr: '', exitCode: 0 }
+        return { stdout: cmd.includes('build') ? 'built' : '', stderr: '', exitCode: 0 }
+      },
     })
     const session = await runner.boot({ files: { 'package.json': JSON.stringify({ name: 'orders-app' }) + '\n' } })
 
     const loop = buildLoop()
     const ledger = new DecisionLedger()
-    const deployTarget = new FakeDeployTarget({ result: { deployed: true, url: 'https://orders.example.app' } })
+    // The real Cloudflare adapter, run over the simulated wrangler above. A fake
+    // token lets it proceed offline; the live capstone passes a real one.
+    const deployTarget = cloudflareTarget({
+      session,
+      apiToken: process.env['CLOUDFLARE_API_TOKEN'] ?? 'demo-token',
+      projectName: 'orders-app',
+    })
 
     // Surfaces: run bootstrap detached; the terminal prints as events stream.
     const handle = launchAutopilot<BootstrapEvent, BootstrapResult>(onEvent =>
