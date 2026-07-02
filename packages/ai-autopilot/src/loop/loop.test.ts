@@ -111,6 +111,53 @@ describe('Loop — failure policy', () => {
   })
 })
 
+describe('Loop — verdict gating', () => {
+  const rules = [defineRule({ on: 'check', run: ['production-grade', 'after'] })]
+  const after = definePrompt({ id: 'after', run: () => 'ran' })
+
+  it('parses a verdict onto the outcome and marks blockers not-passing', async () => {
+    const gate = definePrompt({ id: 'production-grade', run: () => '```json\n{ "blockers": ["no auth"] }\n```' })
+    const loop = new Loop({ rules, prompts: [gate, after] })
+    const result = await loop.handle({ kind: 'check' })
+    const outcome = result.outcomes[0]!
+    assert.equal(outcome.ok, true) // it executed
+    assert.equal(outcome.passing, false) // but it reported blockers
+    assert.deepEqual(outcome.verdict?.blockers, ['no auth'])
+  })
+
+  it('an empty blockers verdict is passing', async () => {
+    const gate = definePrompt({ id: 'production-grade', run: () => '```json\n{ "blockers": [] }\n```' })
+    const loop = new Loop({ rules, prompts: [gate, after] })
+    const result = await loop.handle({ kind: 'check' })
+    assert.equal(result.outcomes[0]?.passing, true)
+  })
+
+  it('gates the chain on blockers when continueOnError is false', async () => {
+    const events: LoopProgress[] = []
+    const gate = definePrompt({ id: 'production-grade', run: () => '```json\n{ "blockers": ["no tests"] }\n```' })
+    const loop = new Loop({ rules, prompts: [gate, after], continueOnError: false, onEvent: e => events.push(e) })
+    const result = await loop.handle({ kind: 'check' })
+    assert.equal(result.outcomes.length, 1) // `after` was gated out on the verdict, not an error
+    assert.ok(events.some(e => e.type === 'gate-stop' && e.promptId === 'production-grade'))
+  })
+
+  it('a prompt with no verdict still passes when it executes (backward compatible)', async () => {
+    const gate = definePrompt({ id: 'production-grade', run: () => 'no json here' })
+    const loop = new Loop({ rules, prompts: [gate, after] })
+    const result = await loop.handle({ kind: 'check' })
+    assert.equal(result.outcomes[0]?.passing, true)
+    assert.equal(result.outcomes[0]?.verdict, undefined)
+  })
+
+  it('verdict: null disables parsing (execution-only gate)', async () => {
+    const gate = definePrompt({ id: 'production-grade', run: () => '```json\n{ "blockers": ["x"] }\n```' })
+    const loop = new Loop({ rules, prompts: [gate, after], verdict: null })
+    const result = await loop.handle({ kind: 'check' })
+    assert.equal(result.outcomes[0]?.passing, true) // blockers ignored
+    assert.equal(result.outcomes[0]?.verdict, undefined)
+  })
+})
+
 describe('Loop — decisions + watch', () => {
   it('exposes the ledger to prompts via context', async () => {
     const ledger = new DecisionLedger()

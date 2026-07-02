@@ -9,6 +9,7 @@
 export { definePrompt, defineRule, LoopError } from './define.js'
 export { Loop, createLoop, type LoopOptions } from './loop.js'
 export { defaultLoopRules, LOOP_EVENTS, LOOP_PROMPTS } from './policy.js'
+export { parseVerdict, isPassing, type Verdict } from './verdict.js'
 export type {
   LoopEvent,
   LoopContext,

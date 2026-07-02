@@ -23,6 +23,8 @@ export const LOOP_PROMPTS = {
   security: 'security',
   qa: 'qa',
   ux: 'ux',
+  /** The checklist bootstrap's full-fledged loop repeats against; returns a `{ blockers }` verdict. */
+  productionGrade: 'production-grade',
 } as const
 
 /**

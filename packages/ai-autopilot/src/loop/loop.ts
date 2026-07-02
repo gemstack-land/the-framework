@@ -8,6 +8,8 @@ import type {
   PassResult,
   PromptOutcome,
 } from './types.js'
+import type { Verdict } from './verdict.js'
+import { parseVerdict } from './verdict.js'
 
 /** Options for {@link Loop}. */
 export interface LoopOptions {
@@ -21,12 +23,20 @@ export interface LoopOptions {
    * Failure policy, the sync-vs-async knob:
    * - `true` (default) — fire-and-report: every matched prompt runs regardless
    *   of a prior one failing.
-   * - `false` — blocking gate: if a prompt's final pass fails, stop the chain
-   *   (a `gate-stop` event); the remaining prompts do not run. The v1
-   *   approximation of "block until the review passes" (gates on execution
-   *   failure; gating on a review's *verdict* waits for prompts to return one).
+   * - `false` — blocking gate: if a prompt does not *pass*, stop the chain (a
+   *   `gate-stop` event); the remaining prompts do not run. "Pass" means the
+   *   final pass executed and, when a {@link LoopOptions.verdict} parser is set,
+   *   returned no blockers.
    */
   continueOnError?: boolean
+  /**
+   * Parse a prompt's final-pass text into a {@link Verdict}. When set, the loop
+   * gates on the *outcome* a prompt reports (`{ blockers }`), not just whether it
+   * executed — a prompt that runs but returns blockers is not passing. Defaults
+   * to {@link parseVerdict} (reads a fenced ```json `{ "blockers": [...] }`).
+   * Pass `null` to disable verdict gating entirely (execution-only gate).
+   */
+  verdict?: ((text: string) => Verdict | undefined) | null
   /**
    * Observe progress. Isolated: a throwing callback is logged and swallowed, so
    * an observer bug cannot abort a run.
@@ -54,6 +64,7 @@ export class Loop {
   private readonly prompts: Map<string, LoopPrompt>
   private readonly ledger?: DecisionLedger
   private readonly continueOnError: boolean
+  private readonly parseVerdict: ((text: string) => Verdict | undefined) | null
   private readonly emit: (event: LoopProgress) => void
 
   constructor(opts: LoopOptions) {
@@ -64,6 +75,7 @@ export class Loop {
     this.prompts = indexPrompts(opts.prompts)
     if (opts.ledger !== undefined) this.ledger = opts.ledger
     this.continueOnError = opts.continueOnError ?? true
+    this.parseVerdict = opts.verdict === undefined ? parseVerdict : opts.verdict
     this.emit = makeEmitter(opts.onEvent)
   }
 
@@ -99,14 +111,14 @@ export class Loop {
       const prompt = this.prompts.get(id)
       if (!prompt) {
         this.emit({ type: 'unknown-prompt', promptId: id })
-        outcomes.push({ promptId: id, passes: [], ok: false })
+        outcomes.push({ promptId: id, passes: [], ok: false, passing: false })
         continue
       }
 
       const outcome = await this.runPrompt(prompt, event)
       outcomes.push(outcome)
 
-      if (!outcome.ok && !this.continueOnError) {
+      if (!outcome.passing && !this.continueOnError) {
         this.emit({ type: 'gate-stop', promptId: id })
         break
       }
@@ -147,9 +159,14 @@ export class Loop {
       this.emit({ type: 'pass', promptId: prompt.id, result, passes: prompt.passes })
     }
 
-    const ok = passes[passes.length - 1]?.ok ?? false
-    this.emit({ type: 'prompt-done', promptId: prompt.id, ok })
-    return { promptId: prompt.id, passes, ok }
+    const last = passes[passes.length - 1]
+    const ok = last?.ok ?? false
+    // A verdict only means something when the pass that produced it executed.
+    const verdict = ok && this.parseVerdict ? this.parseVerdict(last!.text) : undefined
+    const passing = ok && (verdict ? verdict.blockers.length === 0 : true)
+
+    this.emit({ type: 'prompt-done', promptId: prompt.id, ok, passing, ...(verdict ? { verdict } : {}) })
+    return { promptId: prompt.id, passes, ok, passing, ...(verdict ? { verdict } : {}) }
   }
 }
 

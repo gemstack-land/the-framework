@@ -1,4 +1,5 @@
 import type { DecisionLedger } from '../decisions/ledger.js'
+import type { Verdict } from './verdict.js'
 
 /**
  * "The loop" — the event-to-prompt-chain policy. When the agent does something
@@ -95,8 +96,19 @@ export interface PassResult {
 export interface PromptOutcome {
   promptId: string
   passes: PassResult[]
-  /** True when the final pass succeeded — the result that matters. */
+  /** True when the final pass succeeded (executed without throwing). */
   ok: boolean
+  /**
+   * The structured verdict parsed from the final pass, when the loop has a
+   * `verdict` parser and the prompt returned one. Absent otherwise.
+   */
+  verdict?: Verdict
+  /**
+   * The gating result: executed cleanly *and*, when a verdict was parsed, has no
+   * blockers. Equals {@link ok} when no verdict parser is configured, so the gate
+   * is backward-compatible. This is what `continueOnError: false` stops on.
+   */
+  passing: boolean
 }
 
 /** The full result of handling one {@link LoopEvent}. */
@@ -115,6 +127,6 @@ export type LoopProgress =
   | { type: 'unknown-prompt'; promptId: string }
   | { type: 'prompt-start'; promptId: string; passes: number }
   | { type: 'pass'; promptId: string; result: PassResult; passes: number }
-  | { type: 'prompt-done'; promptId: string; ok: boolean }
+  | { type: 'prompt-done'; promptId: string; ok: boolean; passing: boolean; verdict?: Verdict }
   | { type: 'gate-stop'; promptId: string }
   | { type: 'done'; event: LoopEvent; outcomes: PromptOutcome[] }

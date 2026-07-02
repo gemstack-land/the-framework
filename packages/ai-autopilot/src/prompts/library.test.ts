@@ -32,6 +32,13 @@ describe('builtin prompts', () => {
       assert.ok(ids.includes(id), `ships "${id}"`)
     }
   })
+
+  it('ships the production-grade checklist and instructs the { blockers } verdict', async () => {
+    const gate = (await builtinLibrary()).get(LOOP_PROMPTS.productionGrade)
+    assert.ok(gate, 'production-grade prompt exists')
+    assert.match(gate!.instructions, /blockers/)
+    assert.match(gate!.instructions, /```json/)
+  })
 })
 
 describe('PromptLibrary', () => {

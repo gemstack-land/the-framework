@@ -50,9 +50,13 @@
  * - {@link Loop} — match an event to a prompt chain and run it (N fresh passes)
  * - {@link definePrompt} / {@link defineRule} — author prompts and policy rules
  * - {@link defaultLoopRules} — the built-in web-app policy
+ * - {@link parseVerdict} / {@link isPassing} — the `{ blockers }` verdict the loop
+ *   gates on, so it stops on a review's *outcome*, not just execution
  *
  * The prompts library supplies the loop's prompt *bodies* as data (stack-aware
- * markdown): review, code-quality, security, refactor, UX, QA, knowledge-base.
+ * markdown): review, code-quality, security, refactor, UX, QA, knowledge-base,
+ * and the `production-grade` checklist bootstrap's full-fledged loop repeats
+ * against.
  *
  * - {@link builtinLibrary} — load the shipped, stack-aware prompt bodies
  * - {@link loopPromptsFor} — materialize a library into loop prompts by id
@@ -140,6 +144,9 @@ export {
   defaultLoopRules,
   LOOP_EVENTS,
   LOOP_PROMPTS,
+  parseVerdict,
+  isPassing,
+  type Verdict,
   type LoopOptions,
   type LoopEvent,
   type LoopContext,
