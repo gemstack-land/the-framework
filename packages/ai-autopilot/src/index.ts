@@ -34,6 +34,14 @@
  * - {@link terminalSink} — print events inline (terminal surface)
  * - {@link EventStream} — replayable multi-consumer event transport
  * - {@link launchAutopilot} — a detached background run handle
+ *
+ * Decisions are the durable memory layer: a ledger of the project's rejected
+ * ideas and settled choices, so a run stops re-pitching what was already turned
+ * down. It round-trips a human-editable `DECISIONS.md`.
+ *
+ * - {@link DecisionLedger} — record decisions, consult before proposing
+ * - {@link loadLedger} / {@link saveLedger} — persist to `DECISIONS.md`
+ * - {@link decisionTools} / {@link decisionBriefing} — expose it to an agent
  */
 export { Supervisor } from './supervisor.js'
 export { agentPlanner, type AgentPlannerOptions } from './planner.js'
@@ -86,6 +94,28 @@ export {
   type AutopilotStatus,
   type LaunchOptions,
 } from './surface/index.js'
+export {
+  defineDecision,
+  DecisionError,
+  slugify,
+  DecisionLedger,
+  createLedger,
+  parseDecisions,
+  serializeDecisions,
+  loadLedger,
+  saveLedger,
+  nodeLedgerFs,
+  DECISIONS_FILE,
+  decisionTools,
+  decisionBriefing,
+  type ConsultOptions,
+  type LedgerFs,
+  type DecisionToolsOptions,
+  type Decision,
+  type DecisionSpec,
+  type DecisionStatus,
+  type DecisionMatch,
+} from './decisions/index.js'
 export type {
   Subtask,
   PlannedSubtask,

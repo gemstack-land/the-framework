@@ -160,6 +160,49 @@ for await (const event of run.stream()) sendToClient(event)  // replays history,
 subscriber still sees the full history. Use `formatEvent(event)` to render an
 event as a line yourself.
 
+## Decisions — durable memory (stop re-pitching rejected ideas)
+
+The most felt failure mode of an AI dev tool is re-suggesting the same thing it
+already proposed and got turned down. The **decisions ledger** records the
+project's rejected ideas and settled choices so a run remembers. It is *data*: it
+round-trips a human-editable `DECISIONS.md` you can read and edit yourself.
+
+Two operations: **record** a decision, **consult** before proposing.
+
+```ts
+import { DecisionLedger, loadLedger, saveLedger, nodeLedgerFs } from '@gemstack/ai-autopilot'
+
+const fs = nodeLedgerFs()
+const ledger = await loadLedger(fs)            // reads DECISIONS.md (empty if absent)
+
+ledger.reject('Use Redux for state', 'Too much boilerplate; Zustand covers it', ['state'])
+ledger.accept('Use Vike for SSR', 'Fits the stack')
+await saveLedger(fs, ledger)                   // writes DECISIONS.md
+
+ledger.wasRejected('add redux for state')      // true — do not re-propose
+ledger.consult('add a redux store')            // [{ decision, score, overlap }]
+```
+
+Expose it to an agent so the policy runs itself: `consult_decisions` before it
+proposes, `record_decision` after a choice is made, plus a system-prompt briefing
+of the rejected set.
+
+```ts
+import { agent } from '@gemstack/ai-sdk'
+import { decisionTools, decisionBriefing } from '@gemstack/ai-autopilot'
+
+const worker = agent({
+  instructions: [decisionBriefing(ledger), basePrompt].filter(Boolean).join('\n\n'),
+  tools: decisionTools(ledger, { onRecord: l => saveLedger(fs, l) }),
+})
+```
+
+`consult` matching is lexical and deterministic (token overlap over title +
+tags), cheap enough to run before every proposal; a semantic upgrade can sit
+behind the same contract later. The `LedgerFs` seam is a subset of the runner's
+`RunnerFs`, so the ledger persists inside a sandbox the same way it does on the
+host. This is the foundation "the loop" (#113) consults on major changes.
+
 ## Guardrails
 
 - **`concurrency`** (optional, default 4) — max workers in flight; positive integer.
