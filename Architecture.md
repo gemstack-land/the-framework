@@ -114,15 +114,27 @@ Largely greenfield: it builds the registry + loader + runtime around the existin
 
 Follow-up authoring options (low priority, revisit on demand): TS-first `defineSkill` (#11), a skill-scoped `skillTool()` wrapper (#12), and imperative `agent.use(skill)` runtime composition (#13). Still gated on family alignment before code lands.
 
-## `ai-autopilot` design (direction set, parked - see [issue #9](https://github.com/gemstack-land/gemstack/issues/9))
+## `ai-autopilot` design (shipped - see [issue #9](https://github.com/gemstack-land/gemstack/issues/9))
 
-The most speculative of the family, so this records direction, not a committed API. It sits above the real `ai-sdk` primitives (`asTool`, `resumeAsTool`, `resumeManyAsTool`, `SubAgentRunStore`, stop conditions).
+Began as the most speculative of the family (a Supervisor seed) and grew into the AI-building framework. It sits above the real `ai-sdk` primitives (`asTool`, `resumeAsTool`, `resumeManyAsTool`, `SubAgentRunStore`, stop conditions).
+
+The enduring design rule:
 
 - **Scope = policy, not mechanism.** The primitives are mechanism (transfer control, run a subagent, resume a paused run); autopilot is the reusable control loop deciding which agents run, in what order, how results combine, when to stop, under a budget/guardrail. Enforced rule: if a feature is just calling a primitive, it stays in `ai-sdk`; `ai-autopilot` only earns its keep as the topology / control-policy / run-lifecycle layer.
-- **Seed slice = Supervisor:** plan -> dispatch subagents (fan-out via `asTool` / `resumeManyAsTool`) -> synthesize. The smallest thing clearly more than the primitives; a universally useful topology. Other topologies (pipelines, etc.) come later, on demand.
-- **Durability = in-process first.** Reuse the existing `SubAgentRunStore` + resume primitives for pause/resume; no new peer dep in v1. A durable / queue-backed runner is deferred to a concrete long-running use case and should arrive as an optional adapter/peer, not core.
 
-Stays parked as a design sketch: revisit once `ai-mcp` and `ai-skills` land and real orchestration use cases emerge. Gated on family alignment before code lands.
+What shipped, built up from that seed (the state layer + the loop are the moat, not the prompts):
+
+- **Supervisor** — the seed topology: plan -> dispatch subagents (bounded concurrency + token budget + per-subtask isolation) -> synthesize.
+- **Personas** — reusable, stack-aware roles materialized into worker agents; **presets** (Vike flagship, Next.js) select the framework-specific ones by detecting the project's framework, on top of a framework-neutral core.
+- **Runner** — a pluggable sandbox seam (`FakeRunner` + a real `LocalRunner`; Docker/WebContainer/Flue are infra-gated adapters) where agents build and run an app.
+- **Surfaces** — the same run in a terminal, an in-page UI, or a detached background handle, over one replayable event stream.
+- **Decisions ledger** — durable memory of rejected ideas + settled choices (round-trips `DECISIONS.md`) so a run stops re-pitching what was turned down.
+- **The loop** — an event-to-prompt-chain policy (a major change fires review + code-quality + security; a new UI flow fires QA + UX), gating on a `{ blockers }` verdict, with a data-driven **prompt library**.
+- **Bootstrap** — the spine that sequences the above into scope -> architect -> build -> full-fledged loop -> deploy, taking an app from nothing to production-grade.
+- **Scale mode** — a self-maintaining `CODE-OVERVIEW.md`, refreshed only on material change.
+- **Durability = in-process first.** Reuses `SubAgentRunStore` + resume primitives for pause/resume; a durable/queue-backed runner arrives as an optional adapter, not core.
+
+The whole flow is demonstrated offline (no API key) in [`examples/bootstrap-quickstart`](./examples/bootstrap-quickstart); live end-to-end verification against a real model + `LocalRunner` is the infra-gated remainder.
 
 ## Ship order (all shipped)
 

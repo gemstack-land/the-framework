@@ -8,6 +8,20 @@ Orchestration for [`@gemstack/ai-sdk`](/packages/ai-sdk/) agents: the "director"
 pnpm add @gemstack/ai-autopilot @gemstack/ai-sdk
 ```
 
+## The framework layers
+
+The Supervisor (below) is the seed topology. Built up from it, the package is a full framework for building software with agents — the state layer and the loop are the moat, not the prompts:
+
+- **Personas + presets** — reusable, stack-aware roles materialized into worker agents; `presetPersonas` selects the framework-specific ones (Vike flagship, Next.js) by detecting the project's framework, on top of a framework-neutral core.
+- **Runner** — a pluggable sandbox seam (`FakeRunner` + a real `LocalRunner`) where agents build and run an app; expose it to an agent with `runnerTools`.
+- **Surfaces** — the same run in a terminal, an in-page UI, or a detached background handle, over one replayable event stream (`launchAutopilot`).
+- **Decisions ledger** — durable memory of rejected ideas + settled choices (round-trips `DECISIONS.md`) so a run stops re-pitching what was turned down.
+- **The loop** — an event-to-prompt-chain policy (a major change fires review + code-quality + security; a new UI flow fires QA + UX), gating on a `{ blockers }` verdict, with a data-driven built-in **prompt library**.
+- **Bootstrap** — the spine that sequences all of the above into scope → architect → build → full-fledged loop → deploy, taking an app from nothing to production-grade.
+- **Scale mode** — a self-maintaining `CODE-OVERVIEW.md`, refreshed only on material change.
+
+See [`examples/bootstrap-quickstart`](https://github.com/gemstack-land/gemstack/tree/main/examples/bootstrap-quickstart) for all of it wired together offline.
+
 ## Supervisor (plan, dispatch, synthesize)
 
 The supervisor/worker topology is the first orchestration shape this package ships:
@@ -77,7 +91,7 @@ Progress is reported through `onEvent` as typed `SupervisorEvent`s (`plan`, `pla
 
 ## Scope (what's deferred)
 
-The supervisor dispatches **autonomous** workers via `agent.prompt()`. A worker that pauses for a client-tool or approval round-trip is reported as a failed subtask. Durable pause/resume across a supervised run (building on `ai-sdk`'s `SubAgentRunStore` and resume primitives) is a deferred adapter, as are other topologies (pipelines, debate) and queue-backed long-running execution. Those land on demand, behind optional seams, not in the core.
+The supervisor dispatches **autonomous** workers via `agent.prompt()`. A worker that pauses for a client-tool or approval round-trip is reported as a failed subtask. Durable pause/resume across a supervised run (building on `ai-sdk`'s `SubAgentRunStore` and resume primitives) is a deferred adapter, as are other topologies (pipelines, debate). Real sandboxed runner adapters (Docker / WebContainer / Flue) and live end-to-end bootstrap verification are infra-gated — the framework verifies offline against `FakeRunner` + a scripted model. Those land behind optional seams, not in the core.
 
 ## See also
 
