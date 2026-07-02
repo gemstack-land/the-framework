@@ -79,9 +79,24 @@ interface: **WebContainer** (instant in-browser Vike preview), a **Docker**
 sandbox on our servers, or a **Flue** sandbox (in-memory / edge / container). We
 sit on those harnesses rather than competing with them.
 
-This package ships the interface plus a **`FakeRunner`** (the runner analog of
-`ai-sdk`'s `AiFake`) so autopilot can be driven and tested without any sandbox
-infra. Real adapters land as separate packages.
+This package ships the interface, a **`FakeRunner`** (the runner analog of
+`ai-sdk`'s `AiFake`) so autopilot can be driven and tested without any infra,
+and a **`LocalRunner`** — the first real adapter: each workspace is a real temp
+directory on the host, with real files and real child processes. The sandboxed
+adapters (WebContainer, Docker, Flue) land as separate packages and mirror it.
+
+`LocalRunner` runs commands **unsandboxed on the host**, so reach for it only
+where execution is already trusted (local dev, or a CI job that is itself the
+sandbox) — not to run untrusted, agent-authored code.
+
+```ts
+import { LocalRunner } from '@gemstack/ai-autopilot'
+
+const runner = new LocalRunner()
+const session = await runner.boot({ files: { 'app.js': "console.log('hi')" } })
+await session.exec('node app.js') // → { stdout: 'hi\n', stderr: '', exitCode: 0 }
+await session.dispose()           // removes the temp workspace
+```
 
 ```ts
 import { FakeRunner, runnerTools } from '@gemstack/ai-autopilot'
