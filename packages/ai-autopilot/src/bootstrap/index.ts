@@ -33,6 +33,12 @@ export {
   type FakeDeployTargetOptions,
 } from './deploy.js'
 export { serveCheck, mergeChecklists, type ServeCheckOptions } from './serve-check.js'
+export {
+  cloudflareTarget,
+  type CloudflareTargetOptions,
+  type CloudflareProduct,
+  type DeployExecutor,
+} from './cloudflare.js'
 export type {
   BootstrapScope,
   BootstrapPhase,

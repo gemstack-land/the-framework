@@ -73,8 +73,8 @@
  * - {@link agentArchitect} / {@link supervisorBuild} — the default step wirings
  * - {@link loopChecklist} / {@link loopImprove} — the full-fledged loop steps
  * - {@link agentDeploy} + the {@link DeployTarget} seam ({@link planOnlyTarget},
- *   {@link FakeDeployTarget}) — the final phase: decide SSR/SSG/SPA + target and
- *   narrate; real adapters are infra-gated
+ *   {@link FakeDeployTarget}, {@link cloudflareTarget}) — the final phase: decide
+ *   SSR/SSG/SPA + target and narrate, then ship via a real adapter
  *
  * Scale mode keeps a compact `CODE-OVERVIEW.md` the agent reads first in a large
  * repo, refreshed only on *material* change (build tooling, test framework, a
@@ -228,7 +228,11 @@ export {
   DEFAULT_DEPLOY_TARGETS,
   serveCheck,
   mergeChecklists,
+  cloudflareTarget,
   type ServeCheckOptions,
+  type CloudflareTargetOptions,
+  type CloudflareProduct,
+  type DeployExecutor,
   type ArchitectAgentOptions,
   type SupervisorBuildOptions,
   type LoopStepOptions,
