@@ -73,6 +73,15 @@
  * - {@link agentDeploy} + the {@link DeployTarget} seam ({@link planOnlyTarget},
  *   {@link FakeDeployTarget}) — the final phase: decide SSR/SSG/SPA + target and
  *   narrate; real adapters are infra-gated
+ *
+ * Scale mode keeps a compact `CODE-OVERVIEW.md` the agent reads first in a large
+ * repo, refreshed only on *material* change (build tooling, test framework, a
+ * directory restructure) so the map never rots or churns.
+ *
+ * - {@link CodeOverviewMaintainer} — holds the map, refreshes on material change
+ * - {@link detectMaterialChange} — the deterministic refresh trigger
+ * - {@link agentOverview} / {@link overviewLoopPrompt} — regenerate with an agent,
+ *   and wire the maintainer into the loop
  */
 export { Supervisor } from './supervisor.js'
 export { agentPlanner, type AgentPlannerOptions } from './planner.js'
@@ -226,6 +235,31 @@ export {
   type DeployContext,
   type LoopPassContext,
 } from './bootstrap/index.js'
+export {
+  CodeOverviewMaintainer,
+  createOverviewMaintainer,
+  detectMaterialChange,
+  agentOverview,
+  overviewLoopPrompt,
+  parseOverview,
+  serializeOverview,
+  loadOverview,
+  saveOverview,
+  nodeOverviewFs,
+  OVERVIEW_FILE,
+  type MaintainerOptions,
+  type DetectOptions,
+  type AgentOverviewOptions,
+  type OverviewLoopPromptOptions,
+  type CodeOverview,
+  type OverviewSection,
+  type MaterialChange,
+  type OverviewFs,
+  type RegenerateContext,
+  type Regenerate,
+  type OverviewRefresh,
+  type OverviewEvent,
+} from './overview/index.js'
 export type {
   Subtask,
   PlannedSubtask,

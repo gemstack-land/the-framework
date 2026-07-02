@@ -1,0 +1,5 @@
+---
+"@gemstack/ai-autopilot": minor
+---
+
+Add scale mode: an always-current `CODE-OVERVIEW.md` the agent reads first in a large repo so it stays oriented without re-scanning the tree. The hard part is keeping it fresh — a stale overview is worse than none — so refreshes are gated by a deterministic **material-change detector** (`detectMaterialChange`): a build/config change, a test-framework migration, a directory restructure, or a large change across many areas, not every routine edit. `CodeOverviewMaintainer` owns the policy (refresh on material change, skip otherwise, persist over an `OverviewFs`); `agentOverview` regenerates the map with an `ai-sdk` agent (seeding the previous overview so it revises rather than rewrites); and `overviewLoopPrompt` drops the maintainer into the loop (#113) so it self-maintains on `major-change`. The `CODE-OVERVIEW.md` markdown round-trips via `parseOverview` / `serializeOverview`. Regeneration is injected, so the whole policy is tested offline against a stub. Closes #114.
