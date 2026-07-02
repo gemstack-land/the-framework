@@ -3,7 +3,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { z } from 'zod'
 import { McpTestClient } from '@gemstack/mcp/testing'
-import { defineConnector, mountConnectors } from './index.js'
+import { defineConnector, mountConnectors, McpResponse } from './index.js'
 import type { ConnectorContext } from './index.js'
 import type { McpToolResult } from '@gemstack/mcp'
 
@@ -108,6 +108,22 @@ test('annotations are advertised to clients', async () => {
   const client = new McpTestClient(mountConnectors([notesConnector()]))
   const list = (await client.listTools()).find((t) => t.name === 'notes_list')
   assert.equal(list?.annotations?.readOnlyHint, true)
+})
+
+test('a handler returning McpResponse.error surfaces as an MCP error result', async () => {
+  const c = defineConnector({
+    id: 'guard',
+    tools: [
+      {
+        name: 'check',
+        schema: z.object({}),
+        handle: () => McpResponse.error('not allowed'),
+      },
+    ],
+  })
+  const res = await new McpTestClient(mountConnectors([c])).callTool('guard_check')
+  assert.equal(res.isError, true)
+  assert.equal(txt(res), 'Error: not allowed')
 })
 
 test('mountConnectors rejects cross-connector name collisions without namespacing', () => {

@@ -44,7 +44,7 @@ export default defineConnector({
 })
 ```
 
-A tool's `handle` may return a `string` (wrapped as text), any JSON-serializable value (wrapped as pretty JSON), or a full `McpToolResult` (use `McpResponse` from `@gemstack/mcp` for errors / images).
+A tool's `handle` may return a `string` (wrapped as text), any JSON-serializable value (wrapped as pretty JSON), or a full `McpToolResult`. For an expected, user-facing failure (validation, not-found), return `McpResponse.error(...)` (re-exported from this package) so the client sees a failed tool call (`isError: true`) it can detect, rather than a success result that merely contains an `error` field. Reserve throwing for unexpected faults.
 
 ## Mount connectors into a server
 

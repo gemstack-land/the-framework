@@ -1,4 +1,4 @@
-import { defineConnector } from '@gemstack/connectors'
+import { defineConnector, McpResponse } from '@gemstack/connectors'
 import { z } from 'zod'
 import { gh } from './client.js'
 
@@ -145,7 +145,7 @@ export default defineConnector({
           'GET',
           `/repos/${enc(input.owner)}/${enc(input.repo)}/contents/${input.path.split('/').map(enc).join('/')}${q}`,
         )
-        if (Array.isArray(f)) return { error: `path "${input.path}" is a directory, not a file` }
+        if (Array.isArray(f)) return McpResponse.error(`path "${input.path}" is a directory, not a file`)
         const content =
           f.encoding === 'base64' && typeof f.content === 'string'
             ? Buffer.from(f.content, 'base64').toString('utf8')
