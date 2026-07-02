@@ -15,7 +15,7 @@ const ctx = (over: Partial<DeployContext> = {}): DeployContext => ({
 describe('planOnlyTarget (v1 default seam)', () => {
   it('decides + narrates only — never reports a deploy', async () => {
     const target = planOnlyTarget()
-    const result = await target.deploy({ plan: { render: 'ssr', target: 'dockploy', reason: 'x' }, intent: 'a shop' })
+    const result = await target.deploy({ plan: { render: 'ssr', target: 'dokploy', reason: 'x' }, intent: 'a shop' })
     assert.equal(result.deployed, false)
     assert.match(result.detail ?? '', /infra-gated/)
   })
@@ -36,13 +36,13 @@ describe('agentDeploy (default step over an ai-sdk agent)', () => {
     const fake = AiFake.fake()
     try {
       fake.respondWithSequence([
-        { text: JSON.stringify({ render: 'ssr', target: 'dockploy', reason: 'auth + per-request data' }) },
+        { text: JSON.stringify({ render: 'ssr', target: 'dokploy', reason: 'auth + per-request data' }) },
       ])
       const target = new FakeDeployTarget()
       const step = agentDeploy(agent({ instructions: 'deployer' }), { target })
       const outcome = await step(ctx())
 
-      assert.deepEqual(outcome.plan, { render: 'ssr', target: 'dockploy', reason: 'auth + per-request data' })
+      assert.deepEqual(outcome.plan, { render: 'ssr', target: 'dokploy', reason: 'auth + per-request data' })
       assert.equal(outcome.result.deployed, true)
       assert.equal(target.deployed.length, 1) // the plan reached the target
     } finally {
@@ -67,7 +67,7 @@ describe('agentDeploy (default step over an ai-sdk agent)', () => {
     try {
       fake.respondWithSequence([{ text: JSON.stringify({ render: 'ssr', target: 'heroku', reason: 'habit' }) }])
       const outcome = await agentDeploy(agent({ instructions: 'deployer' }))(ctx())
-      assert.equal(outcome.plan.target, DEFAULT_DEPLOY_TARGETS[0]) // 'heroku' is not allowed → 'dockploy'
+      assert.equal(outcome.plan.target, DEFAULT_DEPLOY_TARGETS[0]) // 'heroku' is not allowed → 'dokploy'
     } finally {
       fake.restore()
     }

@@ -39,6 +39,7 @@ export {
   type CloudflareProduct,
   type DeployExecutor,
 } from './cloudflare.js'
+export { dokployTarget, type DokployTargetOptions, type FetchLike } from './dokploy.js'
 export type {
   BootstrapScope,
   BootstrapPhase,

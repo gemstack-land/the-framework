@@ -22,7 +22,7 @@ import type {
  */
 
 /** The target names the deploy step steers toward by default. */
-export const DEFAULT_DEPLOY_TARGETS = ['dockploy', 'cloudflare'] as const
+export const DEFAULT_DEPLOY_TARGETS = ['dokploy', 'cloudflare'] as const
 
 const RENDER_MODES: readonly RenderMode[] = ['ssr', 'ssg', 'spa']
 
