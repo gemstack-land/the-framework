@@ -28,10 +28,12 @@ describe('bootstrap capstone: the whole epic composes end-to-end (offline)', () 
     assert.deepEqual(result.blockers, [])
     assert.equal(result.productionGrade, true)
 
-    // Deploy: decided SSR + a target and reported the (fake) shipped URL.
+    // Deploy: decided SSR → Cloudflare and shipped via the real cloudflareTarget
+    // adapter (over a simulated wrangler), reporting the live URL it printed.
     assert.equal(result.deploy?.plan.render, 'ssr')
-    assert.equal(result.deploy?.plan.target, 'dockploy')
-    assert.equal(result.deploy?.result.url, 'https://orders.example.app')
+    assert.equal(result.deploy?.plan.target, 'cloudflare')
+    assert.equal(result.deploy?.result.deployed, true)
+    assert.equal(result.deploy?.result.url, 'https://orders-app.gemstack.workers.dev')
 
     // Surface: the stream ran scope-first, done-last, and the terminal printed it.
     assert.equal(events[0]?.type, 'scope')

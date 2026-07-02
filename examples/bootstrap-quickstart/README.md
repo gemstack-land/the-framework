@@ -17,8 +17,10 @@ pnpm --filter @gemstack/example-bootstrap-quickstart start
 
 No API key: `AiFake` scripts the model and `FakeRunner` is an in-memory sandbox,
 so the run is deterministic. You'll see the narration stream live, the files the
-persona workers wrote, the checklist blocking once and then clearing, the deploy
-decision, and the generated `CODE-OVERVIEW.md`.
+persona workers wrote, the checklist blocking once and then clearing, the app
+shipped to a Cloudflare URL, and the generated `CODE-OVERVIEW.md`. The deploy runs
+the real `cloudflareTarget` adapter over a simulated `wrangler`, so the whole flow
+ends at a live-looking URL with no credentials.
 
 ## What it shows
 
@@ -28,7 +30,8 @@ decision, and the generated `CODE-OVERVIEW.md`.
   and records its choices to the **decisions ledger**, a **build** scaffolds the app
   with the persona workers inside a **runner**, the **full-fledged loop** repeats the
   production-grade checklist until its `{ blockers }` verdict is empty, and a
-  **deploy** is decided behind the `DeployTarget` seam.
+  **deploy** is decided and shipped through the `DeployTarget` seam — here the real
+  `cloudflareTarget` (SSR → Workers), run over a simulated `wrangler` offline.
 - **Surfaces (#100/#120)** — every phase streams as narration over the generic
   `launchAutopilot<BootstrapEvent, BootstrapResult>` handle.
 - **Scale mode (#114)** — `CODE-OVERVIEW.md` is generated from the scaffold.
@@ -50,11 +53,29 @@ Swapping the fakes (`AiFake` + `FakeRunner`) for a real model + `LocalRunner` is
 only difference from `main.ts`; the orchestration is identical. A sample live run
 scaffolded a 9-file Vike + universal-orm orders app (schema + migration, `pages/orders/`
 with `+Page`/`+data`/`+config`, a UI-intent renderer) from the intent, blocked the
-checklist once on missing auth, then decided SSR → dockploy.
+checklist once on missing auth, then decided SSR → Cloudflare.
 
-Scoped for a first, bounded proof: the production-grade **loop** keeps the scripted
-verdict (so the run stays deterministic and cheap), and `deploy` uses `planOnlyTarget`
-— it decides + narrates but does not actually ship. Real deploy adapters remain (#109).
+### Real deploy to Cloudflare
+
+Add a Cloudflare token and the live run ships for real — `cloudflareTarget`
+installs, builds, and deploys the scaffold (Workers for SSR, Pages for SSG/SPA)
+and reports the live URL:
+
+```bash
+ANTHROPIC_API_KEY=sk-... \
+CLOUDFLARE_API_TOKEN=... CLOUDFLARE_ACCOUNT_ID=... CLOUDFLARE_PROJECT=my-app \
+pnpm --filter @gemstack/example-bootstrap-quickstart start:live
+```
+
+Without `CLOUDFLARE_API_TOKEN` the deploy falls back to `planOnlyTarget` (decide +
+narrate, no ship), so the live run works with only a model key. Note the deploy
+runs `npm install && npm run build` against the scaffold, so a real ship needs the
+generated app to actually build — that is what the full-fledged loop (and an
+opt-in `serveCheck`, below) are for.
+
+Scoped for a bounded proof, the production-grade **loop** keeps the scripted verdict
+so the run stays deterministic and cheap; making the checklist a real reviewer agent
+is the natural follow-up.
 
 ### Giving the loop teeth: `serveCheck`
 
