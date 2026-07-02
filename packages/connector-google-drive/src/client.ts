@@ -36,7 +36,7 @@ export async function gd<T = unknown>(
   body?: unknown,
 ): Promise<T> {
   const token = bearer(ctx)
-  const res = await fetch(`${API}${path}`, {
+  const res = await gdFetch(`${API}${path}`, {
     method,
     headers: {
       Authorization: `Bearer ${token}`,
@@ -44,7 +44,7 @@ export async function gd<T = unknown>(
       ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
     },
     ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
-  })
+  }, `${method} ${path}`)
   if (!res.ok) {
     const detail = await res.text().catch(() => '')
     throw new GoogleDriveError(
@@ -59,10 +59,19 @@ export async function gd<T = unknown>(
 /** GET a file's raw bytes as text (for `alt=media` downloads and Docs exports). */
 export async function gdText(ctx: ConnectorContext, path: string): Promise<string> {
   const token = bearer(ctx)
-  const res = await fetch(`${API}${path}`, { method: 'GET', headers: { Authorization: `Bearer ${token}` } })
+  const res = await gdFetch(`${API}${path}`, { method: 'GET', headers: { Authorization: `Bearer ${token}` } }, `GET ${path}`)
   if (!res.ok) {
     const detail = await res.text().catch(() => '')
     throw new GoogleDriveError(res.status, `GET ${path} -> ${res.status} ${res.statusText}${detail ? `: ${detail}` : ''}`)
   }
   return await res.text()
+}
+
+/** `fetch`, but a transport failure (DNS, timeout, offline) is rethrown as a `GoogleDriveError` (`status: 0`) instead of a raw `TypeError`. */
+async function gdFetch(url: string, init: RequestInit, label: string): Promise<Response> {
+  try {
+    return await fetch(url, init)
+  } catch (cause) {
+    throw new GoogleDriveError(0, `${label} -> network error: ${cause instanceof Error ? cause.message : String(cause)}`)
+  }
 }

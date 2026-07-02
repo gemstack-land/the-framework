@@ -4,7 +4,7 @@ import assert from 'node:assert/strict'
 import { McpTestClient } from '@gemstack/mcp/testing'
 import type { McpToolResult } from '@gemstack/mcp'
 import { mountConnectors } from '@gemstack/connectors'
-import github from './index.js'
+import github, { GitHubError } from './index.js'
 
 const realFetch = globalThis.fetch
 
@@ -117,5 +117,15 @@ test('a non-2xx response surfaces status and detail', async () => {
   await assert.rejects(
     () => client().callTool('github_get-issue', { owner: 'o', repo: 'r', number: 1 }),
     /404/,
+  )
+})
+
+test('a transport failure surfaces as a GitHubError with status 0', async () => {
+  globalThis.fetch = (async () => {
+    throw new TypeError('fetch failed')
+  }) as unknown as typeof fetch
+  await assert.rejects(
+    () => client().callTool('github_get-repo', { owner: 'o', repo: 'r' }),
+    (err: unknown) => err instanceof GitHubError && err.status === 0 && /network error/.test(err.message),
   )
 })
