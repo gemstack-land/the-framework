@@ -32,7 +32,7 @@ export async function gh<T = unknown>(
       'no GitHub token available — set GITHUB_TOKEN or provide one via the mount `credentials` option',
     )
   }
-  const res = await fetch(`${API}${path}`, {
+  const res = await ghFetch(`${API}${path}`, {
     method,
     headers: {
       Authorization: `Bearer ${token}`,
@@ -42,11 +42,20 @@ export async function gh<T = unknown>(
       ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
     },
     ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
-  })
+  }, `${method} ${path}`)
   if (!res.ok) {
     const detail = await res.text().catch(() => '')
     throw new GitHubError(res.status, `${method} ${path} -> ${res.status} ${res.statusText}${detail ? `: ${detail}` : ''}`)
   }
   if (res.status === 204) return undefined as T
   return (await res.json()) as T
+}
+
+/** `fetch`, but a transport failure (DNS, timeout, offline) is rethrown as a `GitHubError` (`status: 0`) instead of a raw `TypeError`. */
+async function ghFetch(url: string, init: RequestInit, label: string): Promise<Response> {
+  try {
+    return await fetch(url, init)
+  } catch (cause) {
+    throw new GitHubError(0, `${label} -> network error: ${cause instanceof Error ? cause.message : String(cause)}`)
+  }
 }
