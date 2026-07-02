@@ -1,5 +1,5 @@
 ---
-'@gemstack/connectors': patch
+'@gemstack/mcp-connectors': patch
 ---
 
 Aggregate each connector's `instructions` into the mounted server's metadata.

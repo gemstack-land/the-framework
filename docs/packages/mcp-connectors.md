@@ -1,15 +1,15 @@
-# @gemstack/connectors
+# @gemstack/mcp-connectors
 
 The **connector contract** for GemStack AI orchestration. Define a tool connector to an external service (GitHub, Google Drive, ...) once with `defineConnector`, then compose any number of connectors into a single [`@gemstack/mcp`](/packages/mcp) server with `mountConnectors`.
 
 A connector only **declares** what it needs (its auth requirement) and **what it does** (its tools). It never reaches for env vars, OAuth, or a transport itself. The orchestrator that mounts it supplies credentials and chooses how to serve it. That split is what lets first-party and third-party connectors compose interchangeably.
 
-> Already looking for a specific service? See the [connector registry](/packages/connectors-registry) for the published connectors (GitHub, Google Drive) and the `connector-*` naming convention.
+> Already looking for a specific service? See the [connector registry](/packages/mcp-connectors-registry) for the published connectors (GitHub, Google Drive) and the `mcp-connector-*` naming convention.
 
 ## Installation
 
 ```bash
-npm i @gemstack/connectors @gemstack/mcp zod
+npm i @gemstack/mcp-connectors @gemstack/mcp zod
 ```
 
 The server it produces plugs into the same surface as any other `@gemstack/mcp` server (`Mcp.web` / `Mcp.local`, `McpTestClient`, the neutral HTTP handler).
@@ -19,7 +19,7 @@ The server it produces plugs into the same surface as any other `@gemstack/mcp` 
 A connector is one object passed to `defineConnector`: an `id` (used to namespace its tools), an `auth` requirement, and a list of `tools`. Here is the reference connector shipped in `examples/connectors-quickstart` — a read-only `library` over an in-memory list. Copy it to start a real one: swap the in-memory data for calls to your API, and change `auth` from `none` to `pat` / `oauth`.
 
 ```ts
-import { defineConnector } from '@gemstack/connectors'
+import { defineConnector } from '@gemstack/mcp-connectors'
 import { z } from 'zod'
 
 const BOOKS = [
@@ -75,7 +75,7 @@ The second `handle` argument is the `ConnectorContext`:
 - `ctx.connectorId` — the id of the connector this tool belongs to.
 - `ctx.auth` — the `Credential` the orchestrator resolved for this connector (`{}` when none was provided). `ctx.auth.token` is the common case (a PAT or OAuth bearer).
 
-A connector never reads `process.env` or runs an OAuth handshake itself — it reads `ctx.auth.token` and lets the orchestrator decide where that came from. See the [GitHub](/packages/connector-github) and [Google Drive](/packages/connector-google-drive) connectors for the same pattern over a real REST client.
+A connector never reads `process.env` or runs an OAuth handshake itself — it reads `ctx.auth.token` and lets the orchestrator decide where that came from. See the [GitHub](/packages/mcp-connector-github) and [Google Drive](/packages/mcp-connector-google-drive) connectors for the same pattern over a real REST client.
 
 ## Auth requirements
 
@@ -94,10 +94,10 @@ For `oauth`, protect the mounted endpoint with `@gemstack/mcp`'s `oauth2McpMiddl
 `mountConnectors` composes any number of connectors into one standard `@gemstack/mcp` server class.
 
 ```ts
-import { mountConnectors } from '@gemstack/connectors'
+import { mountConnectors } from '@gemstack/mcp-connectors'
 import { Mcp } from '@gemstack/mcp'
 import library from './library-connector.js'
-import github from '@gemstack/connector-github'
+import github from '@gemstack/mcp-connector-github'
 
 const Server = mountConnectors([library, github], {
   name: 'my-orchestrator',
@@ -117,7 +117,7 @@ A mounted connector is a normal `@gemstack/mcp` server, so drive it with `McpTes
 
 ```ts
 import { McpTestClient } from '@gemstack/mcp/testing'
-import { mountConnectors } from '@gemstack/connectors'
+import { mountConnectors } from '@gemstack/mcp-connectors'
 import library from './library-connector.js'
 
 const client = new McpTestClient(mountConnectors([library]))
@@ -126,7 +126,7 @@ await client.listTools() // [{ name: 'library_list-books', ... }, ...]
 await client.callTool('library_get-book', { id: 'b1' })
 ```
 
-To test a connector that calls a real API, stub global `fetch` and assert on the requests it makes — that is exactly how the [GitHub](https://github.com/gemstack-land/gemstack/blob/main/packages/connector-github/src/index.test.ts) and [Google Drive](https://github.com/gemstack-land/gemstack/blob/main/packages/connector-google-drive/src/index.test.ts) connectors are tested.
+To test a connector that calls a real API, stub global `fetch` and assert on the requests it makes — that is exactly how the [GitHub](https://github.com/gemstack-land/gemstack/blob/main/packages/mcp-connector-github/src/index.test.ts) and [Google Drive](https://github.com/gemstack-land/gemstack/blob/main/packages/mcp-connector-google-drive/src/index.test.ts) connectors are tested.
 
 ## API
 
@@ -135,6 +135,6 @@ To test a connector that calls a real API, stub global `fetch` and assert on the
 
 ## See also
 
-- [The connector registry](/packages/connectors-registry) — published connectors + the `connector-*` convention for shipping your own.
+- [The connector registry](/packages/mcp-connectors-registry) — published connectors + the `mcp-connector-*` convention for shipping your own.
 - [`mcp`](/packages/mcp) — the server framework a mounted connector becomes.
 - [`ai-mcp`](/packages/ai-mcp) — feed a mounted connector's tools into an agent.

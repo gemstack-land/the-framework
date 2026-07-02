@@ -1,7 +1,7 @@
 import 'reflect-metadata'
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { mountConnectors } from '@gemstack/connectors'
+import { mountConnectors } from '@gemstack/mcp-connectors'
 import { McpTestClient } from '@gemstack/mcp/testing'
 import type { McpToolResult } from '@gemstack/mcp'
 import library from './library-connector.js'

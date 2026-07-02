@@ -1,4 +1,4 @@
-import { defineConnector, McpResponse } from '@gemstack/connectors'
+import { defineConnector, McpResponse } from '@gemstack/mcp-connectors'
 import { z } from 'zod'
 import { gh } from './client.js'
 

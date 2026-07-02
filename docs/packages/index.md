@@ -18,7 +18,7 @@ connectors    tool connectors to external services           -> mcp (composes in
 
 ### Connectors
 
-`connectors` builds *on* `mcp`: a connector declares an external service's auth requirement and tools, and `mountConnectors` composes any number of them into a single `mcp` server. It is the open, copyable layer — third parties ship their own `connector-*` packages that mount alongside the first-party [GitHub](/packages/connector-github) and [Google Drive](/packages/connector-google-drive) connectors. See [the connector registry](/packages/connectors-registry).
+`connectors` builds *on* `mcp`: a connector declares an external service's auth requirement and tools, and `mountConnectors` composes any number of them into a single `mcp` server. It is the open, copyable layer — third parties ship their own `mcp-connector-*` packages that mount alongside the first-party [GitHub](/packages/mcp-connector-github) and [Google Drive](/packages/mcp-connector-google-drive) connectors. See [the connector registry](/packages/mcp-connectors-registry).
 
 ### Two MCP packages, two jobs
 

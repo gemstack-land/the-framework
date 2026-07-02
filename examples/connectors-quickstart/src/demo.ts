@@ -2,7 +2,7 @@
 // Mounts the reference connector and drives it through McpTestClient (no server
 // or transport needed to see it working).
 import 'reflect-metadata'
-import { mountConnectors } from '@gemstack/connectors'
+import { mountConnectors } from '@gemstack/mcp-connectors'
 import { McpTestClient } from '@gemstack/mcp/testing'
 import library from './library-connector.js'
 
