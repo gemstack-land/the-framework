@@ -19,6 +19,13 @@ test('parseArgs flags unknown options and bad values', () => {
   assert.match(parseArgs(['--nope']).error!, /unknown option/)
   assert.match(parseArgs(['--scope', 'huge']).error!, /invalid --scope/)
   assert.match(parseArgs(['--max-passes', '0']).error!, /max-passes/)
+  assert.match(parseArgs(['--permission-mode', 'wat']).error!, /permission-mode/)
+})
+
+test('parseArgs reads permission-mode and skip-permissions', () => {
+  const opts = parseArgs(['--permission-mode', 'bypassPermissions', '--dangerously-skip-permissions', 'x'])
+  assert.equal(opts.permissionMode, 'bypassPermissions')
+  assert.equal(opts.skipPermissions, true)
 })
 
 test('runCli --help prints usage and exits 0', async () => {

@@ -1,6 +1,6 @@
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { ClaudeCodeDriver, type Driver } from './driver/index.js'
+import { ClaudeCodeDriver, type ClaudeCodeDriverOptions, type Driver, type PermissionMode } from './driver/index.js'
 import { startDashboard, type Dashboard } from './dashboard/index.js'
 import { formatFrameworkEvent, type FrameworkEvent } from './events.js'
 import { runFramework, type DeployDecision, type RunFrameworkOptions } from './run.js'
@@ -31,6 +31,9 @@ Options:
   --model <id>           Model to pass through to the wrapped agent.
   --scope <prototype|full>   How much app to build (default: full).
   --max-passes <n>       Full-fledged loop pass budget (default: 3).
+  --permission-mode <mode>   Claude Code permission mode: default | acceptEdits |
+                             bypassPermissions | plan (default: acceptEdits).
+  --dangerously-skip-permissions   Bypass all agent permission checks (sandboxes only).
   --deploy <target>      Narrate a deploy decision to this target (e.g. cloudflare, dokploy).
   --port <n>             Dashboard port (default: 4477).
   --no-dashboard         Do not start the localhost dashboard.
@@ -57,12 +60,23 @@ export interface CliOptions {
   port?: number
   dashboard: boolean
   sessionLink?: string | undefined
+  permissionMode?: PermissionMode | undefined
+  skipPermissions: boolean
   error?: string
 }
 
 /** Parse argv (without the node/script prefix). Pure and testable. */
 export function parseArgs(argv: string[]): CliOptions {
-  const opts: CliOptions = { help: false, version: false, fake: false, intent: '', scope: 'full', dashboard: true }
+  const opts: CliOptions = {
+    help: false,
+    version: false,
+    fake: false,
+    intent: '',
+    scope: 'full',
+    dashboard: true,
+    skipPermissions: false,
+  }
+  const PERMISSION_MODES: PermissionMode[] = ['default', 'acceptEdits', 'bypassPermissions', 'plan']
   const words: string[] = []
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i]!
@@ -81,6 +95,18 @@ export function parseArgs(argv: string[]): CliOptions {
       case '--no-dashboard':
         opts.dashboard = false
         break
+      case '--dangerously-skip-permissions':
+        opts.skipPermissions = true
+        break
+      case '--permission-mode': {
+        const value = argv[++i] as PermissionMode | undefined
+        if (value === undefined || !PERMISSION_MODES.includes(value)) {
+          opts.error = `invalid --permission-mode: ${value ?? '(missing)'}`
+        } else {
+          opts.permissionMode = value
+        }
+        break
+      }
       case '--cwd':
         opts.cwd = argv[++i]
         break
@@ -148,7 +174,11 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
     return 2
   }
 
-  const driver: Driver = fake ? fakeDriver() : new ClaudeCodeDriver()
+  const claudeOpts: ClaudeCodeDriverOptions = {
+    ...(opts.permissionMode ? { permissionMode: opts.permissionMode } : {}),
+    ...(opts.skipPermissions ? { dangerouslySkipPermissions: true } : {}),
+  }
+  const driver: Driver = fake ? fakeDriver() : new ClaudeCodeDriver(claudeOpts)
   const cwd = opts.cwd ?? (fake ? join(tmpdir(), 'framework-fake-workspace') : process.cwd())
   // The fake demo defaults to a Cloudflare deploy decision so the flow ends with
   // a deploy phase; a live run only narrates deploy when asked.
