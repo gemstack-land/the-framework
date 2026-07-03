@@ -24,8 +24,15 @@ describe('vike extension personas', () => {
     assert.match(text, /defineSchema/)
     assert.match(text, /createRepository/)
     assert.match(text, /getAdapter\(\)/)
-    // The whole point: do NOT reach for Prisma/Drizzle/SQLite/migrations.
+    // The dev default: do NOT reach for Prisma/Drizzle/SQLite/migrations.
     assert.match(text, /Do NOT add Prisma, Drizzle,\s*\n?\s*SQLite/i)
+    // But it must also teach the opt-in real-persistence path (drizzle + pglite),
+    // so a composed app can survive a restart without changing schema/queries.
+    assert.match(text, /Make it real/)
+    assert.match(text, /registerDrizzle/)
+    assert.match(text, /pglite/)
+    assert.match(text, /vikeSchema\(\)/)
+    assert.match(text, /drizzle-kit generate/)
   })
 
   it('vikeExtensionPersonas composes the data layer + auth (no Prisma, no hand-rolled auth)', () => {

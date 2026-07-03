@@ -163,6 +163,10 @@ Install and wire it (React + Vike):
     setAdapter(createMemoryAdapter())
   }
   \`\`\`
+  Memory resets on restart, so accounts vanish on reboot. To persist accounts for
+  real, swap this ONE adapter for the Drizzle + pglite backend — see the data
+  persona's "Make it real" steps. Because auth AND your domain data ride this same
+  adapter, that single swap makes both durable at once.
 
 Use it:
 - Read the user server-side from \`pageContext.user\`; in a React component use
@@ -220,8 +224,35 @@ Read and write through the narrow repository:
 Column types: \`uuid\` / \`string\` / \`text\` / \`integer\` / \`boolean\` / \`timestamp\`,
 each chainable with \`.nullable()\` / \`.unique()\` / \`.primary()\` /
 \`.references('table.col', { onDelete })\`. Read data in Vike \`+data\` hooks on the
-server. Swapping the dev memory adapter for a real database is a one-line adapter
-change at startup; your schema and queries do not change.`,
+server.
+
+Make it real (opt-in persistence). The memory adapter resets on every restart. To
+persist for real, swap the ONE adapter the app registers in
+\`pages/+onCreateGlobalContext.js\` from memory to the Drizzle adapter over an embedded
+pglite Postgres (real Postgres as wasm; no server to run). Your \`defineSchema\` tables
+and every \`db().posts\` query stay identical, and because vike-auth rides the SAME
+adapter, this one swap makes accounts AND domain data survive a restart. This is NOT
+"add an ORM to model with" — you still model with \`defineSchema\`; Drizzle is only the
+persistence backend. The steps:
+1. Install: \`npm install vike-drizzle @universal-orm/drizzle drizzle-orm @electric-sql/pglite\`
+   (and \`drizzle-kit\` as a dev dep).
+2. In \`vite.config.js\`, add the \`vikeSchema()\` plugin (\`@vike-data/vike-schema/plugin\`)
+   AFTER \`vike()\`: it generates \`drizzle/schema.generated.ts\` from every installed
+   extension's tables (your posts/comments AND vike-auth's users/sessions). Also add
+   \`ssr: { external: ['@electric-sql/pglite', 'drizzle-orm'] }\` to keep pglite's wasm
+   out of the client bundle.
+3. Add \`drizzle.config.js\` (\`{ schema: './drizzle/schema.generated.ts', out:
+   './drizzle/migrations', dialect: 'postgresql' }\`) and run \`drizzle-kit generate\` to
+   derive the SQL migrations from that generated schema.
+4. In \`pages/+onCreateGlobalContext.js\`, guard the DB setup with
+   \`if (!import.meta.env.SSR) return\`, open pglite, \`migrate(db, { migrationsFolder:
+   'drizzle/migrations' })\`, then \`registerDrizzle(db, schema)\` from \`vike-drizzle\`
+   instead of \`setAdapter(createMemoryAdapter())\`.
+Reference: the proven \`examples/drizzle-pglite\` twin in the vike-data monorepo. Note:
+\`integer('id').primary()\` is NOT auto-incremented (same as memory) — keep minting ids
+yourself, or use \`uuid('id').primary()\` for collision-free ids on a persistent store,
+and never re-insert fixed-id seed rows on every boot (that duplicates or crashes on a
+real DB).`,
 })
 
 /**
