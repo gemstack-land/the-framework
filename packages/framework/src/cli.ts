@@ -7,6 +7,7 @@ import { startDashboard, type Dashboard } from './dashboard/index.js'
 import { formatFrameworkEvent, type FrameworkEvent } from './events.js'
 import { runFramework, type DeployDecision, type RunFrameworkOptions, type ServeConfig } from './run.js'
 import { FAKE_DEPLOY, FAKE_INTENT, FAKE_SIGNALS, fakeDriver } from './fake-script.js'
+import { preflight } from './preflight.js'
 
 /** Where the CLI writes. Injectable so tests capture output. */
 export interface CliIO {
@@ -26,6 +27,7 @@ const HELP = `The Framework — turnkey AI orchestration that wraps a coding age
 Usage:
   framework [intent...]           Build what you describe, from scratch.
   framework --fake                Run the offline demo (no CLI, no model, deterministic).
+  framework doctor                Check prerequisites (Claude Code installed, etc.).
 
 Options:
   --fake                 Use the fake driver + scripted run (offline / CI).
@@ -47,6 +49,7 @@ Options:
   --dokploy-app <id>     Dokploy application id (required for --deploy dokploy).
   --port <n>             Dashboard port (default: 4477).
   --no-dashboard         Do not start the localhost dashboard.
+  --skip-preflight       Skip the prerequisite checks before a live run.
   --session-link <url>   Link to the live agent session (shown on the dashboard).
   -h, --help             Show this help.
   -v, --version          Print the version.
@@ -61,6 +64,8 @@ export interface CliOptions {
   help: boolean
   version: boolean
   fake: boolean
+  doctor: boolean
+  skipPreflight: boolean
   intent: string
   cwd?: string | undefined
   model?: string | undefined
@@ -89,6 +94,8 @@ export function parseArgs(argv: string[]): CliOptions {
     help: false,
     version: false,
     fake: false,
+    doctor: false,
+    skipPreflight: false,
     intent: '',
     scope: 'full',
     dashboard: true,
@@ -112,6 +119,9 @@ export function parseArgs(argv: string[]): CliOptions {
         break
       case '--no-dashboard':
         opts.dashboard = false
+        break
+      case '--skip-preflight':
+        opts.skipPreflight = true
         break
       case '--dangerously-skip-permissions':
         opts.skipPermissions = true
@@ -187,6 +197,11 @@ export function parseArgs(argv: string[]): CliOptions {
         else words.push(arg)
     }
   }
+  // `framework doctor` is a subcommand, not an intent.
+  if (words[0] === 'doctor') {
+    opts.doctor = true
+    words.shift()
+  }
   opts.intent = words.join(' ').trim()
   return opts
 }
@@ -211,12 +226,28 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
     io.out(VERSION)
     return 0
   }
+  if (opts.doctor) {
+    const result = await preflight()
+    for (const check of result.checks) io.out(`${check.ok ? '✓' : '✗'} ${check.name}: ${check.detail}`)
+    io.out(result.ok ? '\nAll good. You are ready to build.' : '\nSome checks failed. Fix them, then try again.')
+    return result.ok ? 0 : 1
+  }
 
   const fake = opts.fake
   const intent = opts.intent || (fake ? FAKE_INTENT : '')
   if (!intent) {
     io.err('Describe what to build, e.g. `framework "a blog with comments"` (or try `framework --fake`).')
     return 2
+  }
+
+  // Fail early and clearly if a live run's prerequisites are missing.
+  if (!fake && !opts.skipPreflight) {
+    const pre = await preflight()
+    if (!pre.ok) {
+      for (const check of pre.checks.filter(c => !c.ok)) io.err(`✗ ${check.name}: ${check.detail}`)
+      io.err('Preflight failed. Fix the above, or pass --skip-preflight, or try `framework --fake`.')
+      return 2
+    }
   }
 
   const claudeOpts: ClaudeCodeDriverOptions = {

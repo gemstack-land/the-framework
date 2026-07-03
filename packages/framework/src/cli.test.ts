@@ -59,6 +59,28 @@ test('runCli errors when --deploy dokploy lacks its config', async () => {
   assert.equal(code, 2)
 })
 
+test('parseArgs reads the doctor subcommand, not as intent', () => {
+  const opts = parseArgs(['doctor'])
+  assert.equal(opts.doctor, true)
+  assert.equal(opts.intent, '')
+})
+
+test('runCli doctor reports checks and exits by their outcome', async () => {
+  const { io, out } = capture()
+  const code = await runCli(['doctor'], io)
+  const text = out.join('\n')
+  assert.match(text, /node:/)
+  assert.match(text, /claude-code:/)
+  assert.ok(code === 0 || code === 1) // depends on whether claude is installed here
+})
+
+test('runCli --fake skips preflight (offline never needs the agent CLI)', async () => {
+  const { io } = capture()
+  // No claude probe is invoked for --fake; this must succeed regardless of env.
+  const code = await runCli(['--fake', '--no-dashboard'], io)
+  assert.equal(code, 0)
+})
+
 test('runCli --fake --no-dashboard runs the whole flow offline to production-grade', async () => {
   const { io, out } = capture()
   const code = await runCli(['--fake', '--no-dashboard'], io)
