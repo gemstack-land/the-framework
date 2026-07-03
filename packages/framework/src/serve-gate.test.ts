@@ -35,7 +35,7 @@ test('serve gate: production-grade only when the agent review AND the real serve
     // The "app the agent built": a tiny server that boots on `port`.
     await writeFile(join(dir, 'server.js'), `require('http').createServer((_,res)=>res.end('ok')).listen(${port})\n`)
     const events: FrameworkEvent[] = []
-    const { result } = await runFramework({
+    const { result, preview } = await runFramework({
       intent: 'a tiny http service',
       driver: new FakeDriver({ turns: CLEAN_REVIEW }),
       cwd: dir,
@@ -46,6 +46,42 @@ test('serve gate: production-grade only when the agent review AND the real serve
     assert.equal(result.productionGrade, true)
     assert.equal(result.passes, 1)
     assert.ok(events.some(e => e.kind === 'log' && e.message.startsWith('serve:')))
+    // Without keepAlive the app is torn down after the check: no lingering handle.
+    assert.equal(preview, undefined)
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
+test('serve gate: the app is left running with a preview link after a successful run', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'fw-serve-'))
+  const port = await freePort()
+  try {
+    await writeFile(join(dir, 'server.js'), `require('http').createServer((_,res)=>res.end('hi from app')).listen(${port})\n`)
+    const events: FrameworkEvent[] = []
+    const { result, preview } = await runFramework({
+      intent: 'a tiny http service',
+      driver: new FakeDriver({ turns: CLEAN_REVIEW }),
+      cwd: dir,
+      signals: FAKE_SIGNALS,
+      serve: { command: 'node server.js', port, waitMs: 5000, keepAlive: true },
+      onEvent: e => events.push(e),
+    })
+    assert.equal(result.productionGrade, true)
+
+    // The app is handed back running, with a preview event on the stream.
+    assert.ok(preview, 'expected a live preview')
+    assert.equal(preview!.url, `http://localhost:${port}`)
+    assert.ok(events.some(e => e.kind === 'preview' && e.url === preview!.url))
+
+    // It actually serves right now.
+    const res = await fetch(preview!.url)
+    assert.equal(res.status, 200)
+    assert.equal(await res.text(), 'hi from app')
+
+    // stop() tears it down; the port stops answering.
+    await preview!.stop()
+    await assert.rejects(fetch(preview!.url))
   } finally {
     await rm(dir, { recursive: true, force: true })
   }

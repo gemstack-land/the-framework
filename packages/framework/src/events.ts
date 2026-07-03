@@ -22,6 +22,12 @@ export type FrameworkEvent =
   | { kind: 'bootstrap'; event: BootstrapEvent }
   /** The wrapped agent's own progress, forwarded verbatim (never gated on). */
   | { kind: 'driver'; event: DriverEvent }
+  /**
+   * The generated app is booted and serving. Emitted after a successful run when
+   * a serve config is set: the app is kept running so the user can open it, and
+   * the dashboard shows a live preview link (torn down on Ctrl+C).
+   */
+  | { kind: 'preview'; url: string; command: string }
   /** A framework-level log line. */
   | { kind: 'log'; message: string }
   /** The run finished. `ok` is false when it threw. */
@@ -36,6 +42,8 @@ export function formatFrameworkEvent(event: FrameworkEvent): string {
       }`
     case 'session-update':
       return `  session ${event.sessionId}${event.sessionLink ? ` — ${event.sessionLink}` : ''}`
+    case 'preview':
+      return `▶ your app is running at ${event.url}`
     case 'log':
       return `  ${event.message}`
     case 'driver':

@@ -27,3 +27,10 @@ test('formatFrameworkEvent renders a session-update line', () => {
     '  session abc123 — https://x.dev/s/abc123',
   )
 })
+
+test('formatFrameworkEvent renders a preview line', () => {
+  assert.equal(
+    formatFrameworkEvent({ kind: 'preview', url: 'http://localhost:3000', command: 'npm run dev' }),
+    '▶ your app is running at http://localhost:3000',
+  )
+})

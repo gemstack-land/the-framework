@@ -45,6 +45,13 @@ export interface ServeConfig {
   waitMs?: number
   /** Path to fetch once it is up. Default `/`. */
   healthPath?: string
+  /**
+   * Keep the app serving after a successful run and hand back an
+   * {@link AppPreview} the caller must {@link AppPreview.stop}. Default `false`:
+   * the serve gate boots the app only to check it, then tears it down. The CLI
+   * sets this so the dashboard can show a live preview link until Ctrl+C.
+   */
+  keepAlive?: boolean
 }
 
 /** Options for {@link runFramework}. */
@@ -88,12 +95,32 @@ export interface RunFrameworkOptions {
   onEvent?: (event: FrameworkEvent) => void
 }
 
+/**
+ * A running instance of the generated app, handed back so the caller can show a
+ * live preview link and keep it up until the user is done (then {@link stop}).
+ */
+export interface AppPreview {
+  /** The localhost URL the app is served at. */
+  url: string
+  /** The command that started it (e.g. `npm run dev`). */
+  command: string
+  /** Stop the app and free its runner. Idempotent. */
+  stop(): Promise<void>
+}
+
 /** What a run returns. */
 export interface RunFrameworkResult {
   result: BootstrapResult
   detection: FrameworkDetection
   events: FrameworkEvent[]
   ledger: DecisionLedger
+  /**
+   * The generated app, left running when a {@link ServeConfig} was supplied and
+   * the run finished. The caller owns its lifecycle: show {@link AppPreview.url},
+   * then call {@link AppPreview.stop} (e.g. on Ctrl+C). Absent when no serve
+   * config was set or the app could not be booted.
+   */
+  preview?: AppPreview
 }
 
 /**
@@ -186,6 +213,7 @@ export async function runFramework(opts: RunFrameworkOptions): Promise<RunFramew
       : driverChecklist(session)
 
   const ledger = new DecisionLedger()
+  let preview: AppPreview | undefined
   try {
     const bootstrap = new Bootstrap({
       ledger,
@@ -206,13 +234,63 @@ export async function runFramework(opts: RunFrameworkOptions): Promise<RunFramew
       },
     })
     const result = await bootstrap.run()
+    // The serve gate boots the app only to check it, then stops it. When the
+    // caller opts in (keepAlive), boot it once more after success and leave it up
+    // so the user can open it; the caller owns tearing it down (Ctrl+C). Failure
+    // to boot is non-fatal. Default off, so a programmatic run never leaks a
+    // process a caller that ignores `preview` would never stop.
+    if (runner && s?.keepAlive) preview = await startAppPreview(runner, s, emit)
     emit({ kind: 'end', ok: true })
-    return { result, detection, events, ledger }
+    return { result, detection, events, ledger, ...(preview ? { preview } : {}) }
   } catch (err) {
     emit({ kind: 'end', ok: false, detail: err instanceof Error ? err.message : String(err) })
     throw err
   } finally {
     await session.dispose()
-    if (runner) await runner.dispose()
+    // Keep the runner alive only when it owns a live preview handed to the caller.
+    if (runner && !preview) await runner.dispose()
+  }
+}
+
+/**
+ * Boot the generated app in the adopted runner and keep it serving. Reuses the
+ * same {@link ServeConfig} the serve gate used (deps are already installed from
+ * the gate), so this only `start`s the server and `preview`s the port. Returns a
+ * handle that stops the app and frees the runner; on any failure it narrates and
+ * returns `undefined` so a run never fails just because the demo preview didn't
+ * come up.
+ */
+async function startAppPreview(
+  runner: LocalRunnerSession,
+  serve: ServeConfig,
+  emit: (event: FrameworkEvent) => void,
+): Promise<AppPreview | undefined> {
+  if (!runner.start || !runner.preview) return undefined
+  let proc: Awaited<ReturnType<NonNullable<LocalRunnerSession['start']>>> | undefined
+  try {
+    proc = await runner.start(serve.command)
+    const { url } = await runner.preview({
+      port: serve.port ?? 3000,
+      waitMs: serve.waitMs ?? 15_000,
+    })
+    emit({ kind: 'preview', url, command: serve.command })
+    let stopped = false
+    return {
+      url,
+      command: serve.command,
+      stop: async () => {
+        if (stopped) return
+        stopped = true
+        try {
+          await proc?.stop()
+        } finally {
+          await runner.dispose()
+        }
+      },
+    }
+  } catch (err) {
+    emit({ kind: 'log', message: `preview: could not boot the app (${err instanceof Error ? err.message : String(err)})` })
+    // Leave cleanup to the caller's finally (runner.dispose stops leftovers).
+    return undefined
   }
 }

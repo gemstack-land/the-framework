@@ -38,7 +38,8 @@ Options:
   --permission-mode <mode>   Claude Code permission mode: default | acceptEdits |
                              bypassPermissions | plan (default: acceptEdits).
   --dangerously-skip-permissions   Bypass all agent permission checks (sandboxes only).
-  --serve <cmd>          Gate the loop on the app actually running (e.g. "npm run dev").
+  --serve <cmd>          Gate the loop on the app actually running (e.g. "npm run dev"),
+                         then keep it serving with a preview link on the dashboard.
   --serve-install <cmd>  Install command before serving (e.g. "npm install").
   --serve-build <cmd>    Build command before serving (e.g. "npm run build").
   --serve-port <n>       Port the app listens on (default: 3000).
@@ -283,6 +284,9 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
   const serve: ServeConfig | undefined = opts.serve
     ? {
         command: opts.serve,
+        // The CLI keeps the dashboard (and app) up until Ctrl+C, so leave the app
+        // serving with a preview link once the run succeeds.
+        keepAlive: true,
         ...(opts.serveInstall ? { install: opts.serveInstall } : {}),
         ...(opts.serveBuild ? { build: opts.serveBuild } : {}),
         ...(opts.servePort !== undefined ? { port: opts.servePort } : {}),
@@ -321,16 +325,20 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
   }
 
   try {
-    const { result } = await runFramework(runOpts)
+    const { result, preview } = await runFramework(runOpts)
     io.out(
       result.productionGrade
         ? `\n✓ production-grade in ${result.passes} pass(es).`
         : `\n• prototype ready${result.stoppedEarly ? ` (stopped with ${result.blockers.length} blocker(s))` : ''}.`,
     )
-    if (dashboard) {
-      io.out(`\nDashboard still live at ${dashboard.url}. Press Ctrl+C to exit.`)
+    if (preview) io.out(`\n▶ Your app is running at ${preview.url} — open it in a browser.`)
+    // Stay up while the dashboard and/or the app are live, then tear both down.
+    if (dashboard || preview) {
+      if (dashboard) io.out(`\nDashboard still live at ${dashboard.url}. Press Ctrl+C to exit.`)
+      else io.out(`\nPress Ctrl+C to stop the app.`)
       await waitForInterrupt()
-      await dashboard.close()
+      if (preview) await preview.stop()
+      await dashboard?.close()
     }
     return 0
   } catch (err) {

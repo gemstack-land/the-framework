@@ -26,6 +26,11 @@ export function dashboardHtml(title: string): string {
   #session-link { margin-left: auto; font-size: 12px; color: #7b8496; }
   #session-link code { color: #b7c0d0; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
   #status { font-size: 12px; color: #7b8496; }
+  #app-banner { display: flex; align-items: center; gap: 8px; padding: 10px 20px;
+    background: #0f2417; border-bottom: 1px solid #1c3a28; font-size: 13px; }
+  #app-banner .dot { color: #67d98f; }
+  #app-banner a { color: #67d98f; font-weight: 600; }
+  #app-banner .run { color: #6f8a79; font-size: 12px; }
   main { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; padding: 18px 20px; max-width: 1100px; }
   section { background: #10141d; border: 1px solid #1c2230; border-radius: 10px; padding: 14px 16px; }
   section h2 { margin: 0 0 10px; font-size: 12px; text-transform: uppercase;
@@ -56,6 +61,11 @@ export function dashboardHtml(title: string): string {
   <span id="session-link"></span>
   <span id="status">●</span>
 </header>
+<div id="app-banner" hidden>
+  <span class="dot">▶</span>
+  <span>Your app is running at <a id="app-link" href="#" target="_blank" rel="noopener">…</a></span>
+  <span class="run">live until you stop the run</span>
+</div>
 <main>
   <section id="stack-panel">
     <h2>Stack &amp; rationale</h2>
@@ -166,6 +176,12 @@ function onEvent(fe) {
     $('session').textContent = s;
     if (fe.sessionLink) setSessionLink(undefined, fe.sessionLink);
   } else if (fe.kind === 'session-update') setSessionLink(fe.sessionId, fe.sessionLink);
+  else if (fe.kind === 'preview') {
+    const a = $('app-link');
+    a.href = fe.url; a.textContent = fe.url;
+    $('app-banner').hidden = false;
+    log('\\u25b6 your app is running at ' + fe.url);
+  }
   else if (fe.kind === 'bootstrap') bootstrap(fe.event);
   else if (fe.kind === 'driver') driver(fe.event);
   else if (fe.kind === 'log') log(fe.message);

@@ -53,6 +53,7 @@ export {
   type RunFrameworkResult,
   type DeployDecision,
   type ServeConfig,
+  type AppPreview,
 } from './run.js'
 export { hostExecutor, type HostExecutorOptions } from './host-exec.js'
 export {
