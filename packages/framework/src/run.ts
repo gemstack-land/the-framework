@@ -7,6 +7,7 @@ import {
   personaInstructions,
   presetPersonas,
   serveCheck,
+  vikeExtensionPersonas,
   type BootstrapEvent,
   type BootstrapResult,
   type BootstrapScope,
@@ -75,6 +76,13 @@ export interface RunFrameworkOptions {
   model?: string
   /** Signals for preset detection (deps/files). Default: none, so the flagship preset wins. */
   signals?: FrameworkSignals
+  /**
+   * Compose the vike-* extensions (currently: vike-auth for authentication)
+   * instead of hand-rolling them. Frames the agent with the extension personas.
+   * Opt-in and Vike-only: the extensions resolve inside the vike-data workspace,
+   * so the default (hand-rolled + Prisma) path stays publish-safe.
+   */
+  composeExtensions?: boolean
   /** Max full-fledged passes. Default {@link DEFAULT_MAX_PASSES} (5). */
   maxPasses?: number
   /** A deploy decision to narrate at the end. Omit to skip the deploy phase. */
@@ -152,8 +160,12 @@ export async function runFramework(opts: RunFrameworkOptions): Promise<RunFramew
   }
 
   // 1. Preset: detect the framework and turn its personas into prompt-framing.
+  // With --compose-extensions, swap the shared personas for the vike-extension
+  // set (compose vike-auth instead of hand-rolling auth); default keeps Prisma.
   const { preset, detection } = builtinPresetRegistry().select(opts.signals ?? {})
-  const personas = presetPersonas(preset)
+  const personas = opts.composeExtensions
+    ? presetPersonas(preset, vikeExtensionPersonas)
+    : presetPersonas(preset)
   const system = personas.map(personaInstructions).join('\n\n')
 
   // The session id is not known until the first driver turn returns, so a

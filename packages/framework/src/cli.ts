@@ -34,6 +34,9 @@ Options:
   --cwd <dir>            Workspace the agent builds in (default: current directory).
   --model <id>           Model to pass through to the wrapped agent.
   --scope <prototype|full>   How much app to build (default: full).
+  --compose-extensions   Compose the vike-* extensions (vike-auth for auth) instead
+                         of hand-rolling them. Vike-only; extensions resolve in the
+                         vike-data workspace (default: off, hand-rolled + Prisma).
   --max-passes <n>       Full-fledged loop pass budget (default: 5).
   --permission-mode <mode>   Claude Code permission mode: default | acceptEdits |
                              bypassPermissions | plan (default: acceptEdits).
@@ -85,6 +88,7 @@ export interface CliOptions {
   servePath?: string | undefined
   port?: number
   dashboard: boolean
+  composeExtensions: boolean
   sessionLink?: string | undefined
   permissionMode?: PermissionMode | undefined
   skipPermissions: boolean
@@ -102,6 +106,7 @@ export function parseArgs(argv: string[]): CliOptions {
     intent: '',
     scope: 'full',
     dashboard: true,
+    composeExtensions: false,
     skipPermissions: false,
   }
   const PERMISSION_MODES: PermissionMode[] = ['default', 'acceptEdits', 'bypassPermissions', 'plan']
@@ -122,6 +127,9 @@ export function parseArgs(argv: string[]): CliOptions {
         break
       case '--no-dashboard':
         opts.dashboard = false
+        break
+      case '--compose-extensions':
+        opts.composeExtensions = true
         break
       case '--skip-preflight':
         opts.skipPreflight = true
@@ -321,6 +329,7 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
     ...(deployTarget ? { deployTarget } : {}),
     ...(serve ? { serve } : {}),
     ...(fake ? { signals: FAKE_SIGNALS } : {}),
+    ...(opts.composeExtensions ? { composeExtensions: true } : {}),
     ...(opts.sessionLink ? { sessionLink: opts.sessionLink } : {}),
   }
 

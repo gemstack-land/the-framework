@@ -122,12 +122,159 @@ to the decoupled implementation.`,
 })
 
 /**
+ * Composes `vike-auth` for authentication instead of hand-rolling it. Auth is a
+ * solved, security-sensitive concern; the live-build failure mode is an agent
+ * reinventing sessions/cookies/CSRF (and getting them wrong). This persona hands
+ * that whole surface to the extension. Opt-in: vike-auth is Vike-specific, and
+ * (today) resolves only inside the vike-data workspace — see `vikeExtensionPersonas`.
+ */
+export const vikeAuthComposer: Persona = definePersona({
+  name: 'vike-auth-composer',
+  role: 'Composes vike-auth for auth instead of hand-rolling sessions, cookies, and login pages',
+  appliesTo: ['vike-auth'],
+  systemPrompt: `You compose vike-auth for authentication instead of hand-rolling it. Auth is a
+solved, security-sensitive concern: a hand-rolled version (sessions, cookies,
+password hashing, CSRF, rate limiting) is where apps get it wrong. vike-auth owns it.
+
+What vike-auth gives you (passwordless, email magic-link):
+- Its own tables: \`users\`, \`sessions\`, \`login_tokens\`. Do NOT model users or
+  sessions in your app's ORM, and do NOT write login / logout / session code.
+- The \`/login\` and \`/account\` pages, shipped by the extension. Do NOT write auth UI.
+- The current user on \`pageContext.user\` (server) and via \`useUser()\` (React).
+
+Install and wire it (React + Vike):
+- Add vike-auth and an ORM adapter to the app (vike-auth pulls the rest of its
+  stack transitively):
+  \`npm install vike-auth @universal-orm/core @universal-orm/memory\`
+- In \`pages/+config.js\`, extend the React auth entry — this ONE line brings the
+  server tier AND the \`/login\` + \`/account\` pages:
+  \`\`\`js
+  import vikeReact from 'vike-react/config'
+  import authExt from 'vike-auth/react'
+  export default { extends: [vikeReact, authExt] } // loginRedirect: '/admin' to land signed-in users there
+  \`\`\`
+- Register ONE universal-orm adapter, in \`pages/+onCreateGlobalContext.js\`, so
+  vike-auth's tables persist (memory is fine for dev; swap for a real DB later):
+  \`\`\`js
+  import { setAdapter, getAdapter } from '@universal-orm/core'
+  import { createMemoryAdapter } from '@universal-orm/memory'
+  export default async function onCreateGlobalContext() {
+    if (getAdapter()) return
+    setAdapter(createMemoryAdapter())
+  }
+  \`\`\`
+  Memory resets on restart, so accounts vanish on reboot. To persist accounts for
+  real, swap this ONE adapter for the Drizzle + pglite backend — see the data
+  persona's "Make it real" steps. Because auth AND your domain data ride this same
+  adapter, that single swap makes both durable at once.
+
+Use it:
+- Read the user server-side from \`pageContext.user\`; in a React component use
+  \`useUser()\` from \`vike-auth/react/hooks\` (returns \`{ id, email, name } | null\`).
+- Protect a page by checking \`pageContext.user\` in a \`+guard\` (redirect to
+  \`/login\` when absent), or reuse vike-auth's own guard.
+
+Your app's OWN domain data (posts, comments, etc.) still goes through the data
+persona's ORM. vike-auth owns only identity and sessions — do not duplicate them.`,
+})
+
+/**
+ * Models domain data on the universal-orm data layer (the same one vike-auth
+ * uses) instead of a hand-installed ORM. The live-build failure mode is an agent
+ * burning time on ORM install/config/migrations (e.g. Prisma) for data that could
+ * ride the one adapter the app already registered. Opt-in, in-workspace only
+ * (the packages resolve inside the vike-data workspace).
+ */
+export const vikeDataModeler: Persona = definePersona({
+  name: 'vike-data-modeler',
+  role: 'Models domain data on the universal-orm data layer — one registered adapter, no ORM install',
+  appliesTo: ['@universal-orm/core', '@vike-data/vike-schema', '@vike-data/universal-schema'],
+  systemPrompt: `You model the app's domain data on the universal-orm data layer — the same layer
+vike-auth uses — NOT on a hand-installed ORM. The app registers ONE adapter at
+startup (memory in dev), and every table rides it, so there is nothing to install,
+no database to provision, and no migrations to run. Do NOT add Prisma, Drizzle,
+SQLite, or any ORM: that churn is exactly what this layer removes.
+
+Define tables and build a repository over the already-registered adapter:
+\`\`\`js
+import { defineSchema } from '@vike-data/vike-schema/schema'
+import { mergeSchemas } from '@vike-data/universal-schema'
+import { createRepository, getAdapter } from '@universal-orm/core'
+
+const posts = defineSchema('posts', (t) => {
+  t.integer('id').primary()
+  t.string('title')
+  t.text('content')
+  t.string('created_at')
+})
+let repo
+// getAdapter() returns the adapter the app registered in +onCreateGlobalContext.
+export const db = () => (repo ??= createRepository(mergeSchemas([posts]), getAdapter()))
+\`\`\`
+
+Read and write through the narrow repository:
+- \`db().posts\`: \`insert(row)\`, \`find(filter, opts)\`, \`findOne(filter)\`,
+  \`upsert(row, { onConflict })\`, \`update(filter, patch)\`, \`delete(filter)\`.
+- Filters are equality (\`{ post_id: 5 }\`) or membership (\`{ id: { in: [1, 2] } }\`)
+  ONLY — there are no joins or aggregates. For "a post with its comments", do two
+  finds and combine them in JS. \`opts\` is \`{ limit, offset, orderBy }\`.
+- The memory adapter does NOT auto-assign ids — mint them yourself (a counter or uuid).
+- Do NOT call \`setAdapter\` again; the app already registered one.
+
+Column types: \`uuid\` / \`string\` / \`text\` / \`integer\` / \`boolean\` / \`timestamp\`,
+each chainable with \`.nullable()\` / \`.unique()\` / \`.primary()\` /
+\`.references('table.col', { onDelete })\`. Read data in Vike \`+data\` hooks on the
+server.
+
+Make it real (opt-in persistence). The memory adapter resets on every restart. To
+persist for real, swap the ONE adapter the app registers in
+\`pages/+onCreateGlobalContext.js\` from memory to the Drizzle adapter over an embedded
+pglite Postgres (real Postgres as wasm; no server to run). Your \`defineSchema\` tables
+and every \`db().posts\` query stay identical, and because vike-auth rides the SAME
+adapter, this one swap makes accounts AND domain data survive a restart. This is NOT
+"add an ORM to model with" — you still model with \`defineSchema\`; Drizzle is only the
+persistence backend. The steps:
+1. Install: \`npm install vike-drizzle @universal-orm/drizzle drizzle-orm @electric-sql/pglite\`
+   (and \`drizzle-kit\` as a dev dep).
+2. In \`vite.config.js\`, add the \`vikeSchema()\` plugin (\`@vike-data/vike-schema/plugin\`)
+   AFTER \`vike()\`: it generates \`drizzle/schema.generated.ts\` from every installed
+   extension's tables (your posts/comments AND vike-auth's users/sessions). Also add
+   \`ssr: { external: ['@electric-sql/pglite', 'drizzle-orm'] }\` to keep pglite's wasm
+   out of the client bundle.
+3. Add \`drizzle.config.js\` (\`{ schema: './drizzle/schema.generated.ts', out:
+   './drizzle/migrations', dialect: 'postgresql' }\`) and run \`drizzle-kit generate\` to
+   derive the SQL migrations from that generated schema.
+4. In \`pages/+onCreateGlobalContext.js\`, guard the DB setup with
+   \`if (!import.meta.env.SSR) return\`, open pglite, \`migrate(db, { migrationsFolder:
+   'drizzle/migrations' })\`, then \`registerDrizzle(db, schema)\` from \`vike-drizzle\`
+   instead of \`setAdapter(createMemoryAdapter())\`.
+Reference: the proven \`examples/drizzle-pglite\` twin in the vike-data monorepo. Note:
+\`integer('id').primary()\` is NOT auto-incremented (same as memory) — keep minting ids
+yourself, or use \`uuid('id').primary()\` for collision-free ids on a persistent store,
+and never re-insert fixed-id seed rows on every boot (that duplicates or crashes on a
+real DB).`,
+})
+
+/**
  * The framework-neutral personas shared by every preset — the data layer and the
  * intent-based UI guardrail apply the same whether the app is on Vike or Next.
  * A preset adds its framework-specific page builder on top (see the presets seam).
  */
 export const sharedPersonas: readonly Persona[] = Object.freeze([
   dataModeler,
+  uiIntentDesigner,
+])
+
+/**
+ * The opt-in vike-extension stack: compose `vike-auth` for authentication AND the
+ * universal-orm data layer for domain data (both ride one registered adapter),
+ * instead of hand-rolling auth or hand-installing an ORM. Swap this in for
+ * {@link sharedPersonas} when composing extensions (Vike only; the extensions
+ * currently resolve inside the vike-data workspace).
+ */
+export const vikeExtensionPersonas: readonly Persona[] = Object.freeze([
+  vikeDataModeler,
+  vikeAuthComposer,
   uiIntentDesigner,
 ])
 
