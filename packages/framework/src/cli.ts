@@ -1,0 +1,220 @@
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { ClaudeCodeDriver, type Driver } from './driver/index.js'
+import { startDashboard, type Dashboard } from './dashboard/index.js'
+import { formatFrameworkEvent, type FrameworkEvent } from './events.js'
+import { runFramework, type DeployDecision, type RunFrameworkOptions } from './run.js'
+import { FAKE_DEPLOY, FAKE_INTENT, FAKE_SIGNALS, fakeDriver } from './fake-script.js'
+
+/** Where the CLI writes. Injectable so tests capture output. */
+export interface CliIO {
+  out: (line: string) => void
+  err: (line: string) => void
+}
+
+const defaultIO: CliIO = {
+  out: line => process.stdout.write(line + '\n'),
+  err: line => process.stderr.write(line + '\n'),
+}
+
+const VERSION = '0.0.0'
+
+const HELP = `The Framework — turnkey AI orchestration that wraps a coding agent (Claude Code).
+
+Usage:
+  framework [intent...]           Build what you describe, from scratch.
+  framework --fake                Run the offline demo (no CLI, no model, deterministic).
+
+Options:
+  --fake                 Use the fake driver + scripted run (offline / CI).
+  --cwd <dir>            Workspace the agent builds in (default: current directory).
+  --model <id>           Model to pass through to the wrapped agent.
+  --scope <prototype|full>   How much app to build (default: full).
+  --max-passes <n>       Full-fledged loop pass budget (default: 3).
+  --deploy <target>      Narrate a deploy decision to this target (e.g. cloudflare, dokploy).
+  --port <n>             Dashboard port (default: 4477).
+  --no-dashboard         Do not start the localhost dashboard.
+  --session-link <url>   Link to the live agent session (shown on the dashboard).
+  -h, --help             Show this help.
+  -v, --version          Print the version.
+
+The Framework drives the wrapped agent as a black box: it prompts, reads the code,
+and gates on the outcome (builds / serves / review-passes), then re-prompts. The
+localhost dashboard foregrounds the stack rationale, the loop status, and the
+decisions ledger beside the agent's own session.`
+
+/** Parsed CLI options. */
+export interface CliOptions {
+  help: boolean
+  version: boolean
+  fake: boolean
+  intent: string
+  cwd?: string | undefined
+  model?: string | undefined
+  scope: 'prototype' | 'full'
+  maxPasses?: number
+  deploy?: string | undefined
+  port?: number
+  dashboard: boolean
+  sessionLink?: string | undefined
+  error?: string
+}
+
+/** Parse argv (without the node/script prefix). Pure and testable. */
+export function parseArgs(argv: string[]): CliOptions {
+  const opts: CliOptions = { help: false, version: false, fake: false, intent: '', scope: 'full', dashboard: true }
+  const words: string[] = []
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i]!
+    switch (arg) {
+      case '-h':
+      case '--help':
+        opts.help = true
+        break
+      case '-v':
+      case '--version':
+        opts.version = true
+        break
+      case '--fake':
+        opts.fake = true
+        break
+      case '--no-dashboard':
+        opts.dashboard = false
+        break
+      case '--cwd':
+        opts.cwd = argv[++i]
+        break
+      case '--model':
+        opts.model = argv[++i]
+        break
+      case '--deploy':
+        opts.deploy = argv[++i]
+        break
+      case '--session-link':
+        opts.sessionLink = argv[++i]
+        break
+      case '--scope': {
+        const value = argv[++i]
+        if (value !== 'prototype' && value !== 'full') opts.error = `invalid --scope: ${value ?? '(missing)'}`
+        else opts.scope = value
+        break
+      }
+      case '--max-passes': {
+        const n = Number(argv[++i])
+        if (!Number.isInteger(n) || n < 1) opts.error = `invalid --max-passes: must be a positive integer`
+        else opts.maxPasses = n
+        break
+      }
+      case '--port': {
+        const n = Number(argv[++i])
+        if (!Number.isInteger(n) || n < 0) opts.error = `invalid --port: must be a non-negative integer`
+        else opts.port = n
+        break
+      }
+      default:
+        if (arg.startsWith('-')) opts.error = `unknown option: ${arg}`
+        else words.push(arg)
+    }
+  }
+  opts.intent = words.join(' ').trim()
+  return opts
+}
+
+/**
+ * The `framework` command. Wires the parsed options into {@link runFramework}
+ * over a live dashboard + terminal narration, and resolves with an exit code.
+ * Returns 0 on success, 1 on a run error, 2 on a usage error.
+ */
+export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<number> {
+  const opts = parseArgs(argv)
+  if (opts.error) {
+    io.err(opts.error)
+    io.err('Run `framework --help` for usage.')
+    return 2
+  }
+  if (opts.help) {
+    io.out(HELP)
+    return 0
+  }
+  if (opts.version) {
+    io.out(VERSION)
+    return 0
+  }
+
+  const fake = opts.fake
+  const intent = opts.intent || (fake ? FAKE_INTENT : '')
+  if (!intent) {
+    io.err('Describe what to build, e.g. `framework "a blog with comments"` (or try `framework --fake`).')
+    return 2
+  }
+
+  const driver: Driver = fake ? fakeDriver() : new ClaudeCodeDriver()
+  const cwd = opts.cwd ?? (fake ? join(tmpdir(), 'framework-fake-workspace') : process.cwd())
+  // The fake demo defaults to a Cloudflare deploy decision so the flow ends with
+  // a deploy phase; a live run only narrates deploy when asked.
+  const deploy: DeployDecision | undefined = opts.deploy
+    ? { render: 'ssr', target: opts.deploy, reason: `deploy to ${opts.deploy}` }
+    : fake
+      ? FAKE_DEPLOY
+      : undefined
+
+  let dashboard: Dashboard | undefined
+  if (opts.dashboard) {
+    try {
+      dashboard = await startDashboard(opts.port !== undefined ? { port: opts.port } : {})
+      io.out(`◆ dashboard: ${dashboard.url}`)
+    } catch (err) {
+      io.err(`could not start dashboard (${err instanceof Error ? err.message : String(err)}); continuing headless`)
+    }
+  }
+
+  const onEvent = (event: FrameworkEvent) => {
+    io.out(formatFrameworkEvent(event))
+    dashboard?.push(event)
+  }
+
+  const runOpts: RunFrameworkOptions = {
+    intent,
+    scope: opts.scope,
+    driver,
+    cwd,
+    onEvent,
+    ...(opts.model ? { model: opts.model } : {}),
+    ...(opts.maxPasses ? { maxPasses: opts.maxPasses } : {}),
+    ...(deploy ? { deploy } : {}),
+    ...(fake ? { signals: FAKE_SIGNALS } : {}),
+    ...(opts.sessionLink ? { sessionLink: opts.sessionLink } : {}),
+  }
+
+  try {
+    const { result } = await runFramework(runOpts)
+    io.out(
+      result.productionGrade
+        ? `\n✓ production-grade in ${result.passes} pass(es).`
+        : `\n• prototype ready${result.stoppedEarly ? ` (stopped with ${result.blockers.length} blocker(s))` : ''}.`,
+    )
+    if (dashboard) {
+      io.out(`\nDashboard still live at ${dashboard.url}. Press Ctrl+C to exit.`)
+      await waitForInterrupt()
+      await dashboard.close()
+    }
+    return 0
+  } catch (err) {
+    io.err(`\n✗ run failed: ${err instanceof Error ? err.message : String(err)}`)
+    await dashboard?.close()
+    return 1
+  }
+}
+
+/** Resolve when the process is interrupted (Ctrl+C), so the dashboard stays up. */
+function waitForInterrupt(): Promise<void> {
+  return new Promise(resolvePromise => {
+    const done = () => {
+      process.off('SIGINT', done)
+      process.off('SIGTERM', done)
+      resolvePromise()
+    }
+    process.once('SIGINT', done)
+    process.once('SIGTERM', done)
+  })
+}

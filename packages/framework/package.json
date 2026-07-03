@@ -1,0 +1,59 @@
+{
+  "name": "@gemstack/framework",
+  "version": "0.0.0",
+  "description": "The (AI) Framework: turnkey, zero-config AI orchestration that wraps a coding-agent CLI (Claude Code) as a black box and takes you from an idea to a running app. Vite for AI.",
+  "keywords": [
+    "ai",
+    "agent",
+    "claude-code",
+    "orchestration",
+    "framework",
+    "codegen",
+    "cli",
+    "turnkey",
+    "gemstack"
+  ],
+  "license": "MIT",
+  "homepage": "https://github.com/gemstack-land/gemstack/tree/main/packages/framework#readme",
+  "bugs": {
+    "url": "https://github.com/gemstack-land/gemstack/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/gemstack-land/gemstack",
+    "directory": "packages/framework"
+  },
+  "type": "module",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "files": [
+    "dist"
+  ],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "framework": "./dist/bin.js"
+  },
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "dev": "tsc -p tsconfig.build.json --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "tsc -p tsconfig.test.json && cd dist-test && node --test",
+    "clean": "rm -rf dist dist-test"
+  },
+  "dependencies": {
+    "@gemstack/ai-autopilot": "workspace:^"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.4.0"
+  },
+  "author": "Suleiman Shahbari"
+}

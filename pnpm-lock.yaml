@@ -219,6 +219,19 @@ importers:
         specifier: ^5.4.0
         version: 5.9.3
 
+  packages/framework:
+    dependencies:
+      '@gemstack/ai-autopilot':
+        specifier: workspace:^
+        version: link:../ai-autopilot
+    devDependencies:
+      '@types/node':
+        specifier: ^20.0.0
+        version: 20.19.43
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+
   packages/mcp:
     dependencies:
       '@modelcontextprotocol/sdk':
