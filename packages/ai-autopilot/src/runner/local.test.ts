@@ -1,6 +1,9 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import { existsSync } from 'node:fs'
+import { mkdtemp, writeFile, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { createServer } from 'node:net'
 import { LocalRunner } from './local.js'
 import { RunnerError } from './types.js'
@@ -209,5 +212,34 @@ describe('LocalRunnerSession.start (boot and serve)', () => {
     await s.dispose()
     const result = await proc.exit // resolves because dispose stopped it
     assert.notEqual(result.exitCode, 0) // killed, not a clean exit
+  })
+})
+
+describe('LocalRunner.adopt', () => {
+  it('runs inside an existing directory and does NOT delete it on dispose', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'adopt-'))
+    try {
+      await writeFile(join(dir, 'greeting.txt'), 'hello from an existing dir')
+      const s = await new LocalRunner().adopt(dir)
+      assert.equal(await s.fs.read('greeting.txt'), 'hello from an existing dir')
+      const { stdout } = await s.exec('node -e "process.stdout.write(String(1+1))"')
+      assert.equal(stdout, '2')
+      await s.dispose()
+      assert.equal(existsSync(dir), true) // the caller's directory survives dispose
+      assert.equal(existsSync(join(dir, 'greeting.txt')), true)
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('writes seed files into the adopted directory', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'adopt-'))
+    try {
+      const s = await new LocalRunner().adopt(dir, { files: { 'pkg/config.json': '{"ok":true}' } })
+      assert.equal(await s.fs.read('pkg/config.json'), '{"ok":true}')
+      await s.dispose()
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
   })
 })

@@ -1,15 +1,19 @@
 import {
   Bootstrap,
   DecisionLedger,
+  LocalRunner,
   builtinPresetRegistry,
+  mergeChecklists,
   personaInstructions,
   presetPersonas,
+  serveCheck,
   type BootstrapEvent,
   type BootstrapResult,
   type BootstrapScope,
   type DeployTarget,
   type FrameworkDetection,
   type FrameworkSignals,
+  type LocalRunnerSession,
 } from '@gemstack/ai-autopilot'
 import type { Driver, DriverSession } from './driver/index.js'
 import { decideDeploy, deployWith, driverArchitect, driverBuild, driverChecklist, driverImprove } from './steps.js'
@@ -20,6 +24,27 @@ export interface DeployDecision {
   render: 'ssr' | 'ssg' | 'spa'
   target: string
   reason: string
+}
+
+/**
+ * How to actually boot and serve the generated app so the loop can gate on it
+ * *running*, not just on an agent's review. When set, the production-grade
+ * checklist also installs, (builds,) starts the app, and fetches it; a failure
+ * becomes a blocker the loop hands back to the agent to fix.
+ */
+export interface ServeConfig {
+  /** The command that starts the app (e.g. `npm run dev`). */
+  command: string
+  /** Install command run first (e.g. `npm install`). */
+  install?: string
+  /** Build command run after install (e.g. `npm run build`). */
+  build?: string
+  /** Port the app listens on. Default 3000. */
+  port?: number
+  /** How long to wait for it to accept connections. Default 15000ms. */
+  waitMs?: number
+  /** Path to fetch once it is up. Default `/`. */
+  healthPath?: string
 }
 
 /** Options for {@link runFramework}. */
@@ -46,6 +71,11 @@ export interface RunFrameworkOptions {
    * narrate a plan-only decision.
    */
   deployTarget?: DeployTarget
+  /**
+   * Boot-and-serve verification for the full-fledged loop: when set, the
+   * checklist gates on the app actually running, not just an agent review.
+   */
+  serve?: ServeConfig
   /** A claude.ai/code (or other) link to the live agent session, for the dashboard. */
   sessionLink?: string
   /** Interrupt the run between phases. */
@@ -109,6 +139,28 @@ export async function runFramework(opts: RunFrameworkOptions): Promise<RunFramew
     onEvent: event => emit({ kind: 'driver', event }),
   })
 
+  // Boot-and-serve gate: adopt the agent's workspace so the checklist can gate
+  // on the app actually running (mergeChecklists unions the agent review with a
+  // real serveCheck). The runner adopts, never deletes, the driver's cwd.
+  let runner: LocalRunnerSession | undefined
+  if (opts.serve) runner = await new LocalRunner().adopt(opts.cwd)
+  const s = opts.serve
+  const checklist =
+    runner && s
+      ? mergeChecklists(
+          driverChecklist(session),
+          serveCheck(runner, {
+            serve: s.command,
+            ...(s.install ? { install: s.install } : {}),
+            ...(s.build ? { build: s.build } : {}),
+            ...(s.port !== undefined ? { port: s.port } : {}),
+            ...(s.waitMs !== undefined ? { waitMs: s.waitMs } : {}),
+            ...(s.healthPath ? { healthPath: s.healthPath } : {}),
+            onProgress: message => emit({ kind: 'log', message: `serve: ${message}` }),
+          }),
+        )
+      : driverChecklist(session)
+
   const ledger = new DecisionLedger()
   try {
     const bootstrap = new Bootstrap({
@@ -120,7 +172,7 @@ export async function runFramework(opts: RunFrameworkOptions): Promise<RunFramew
         scope: () => ({ scope: opts.scope ?? 'full', intent: opts.intent }),
         architect: driverArchitect(session),
         build: driverBuild(session),
-        checklist: driverChecklist(session),
+        checklist,
         improve: driverImprove(session),
         ...(opts.deploy && opts.deployTarget
           ? { deploy: deployWith(opts.deploy, opts.deployTarget) }
@@ -137,5 +189,6 @@ export async function runFramework(opts: RunFrameworkOptions): Promise<RunFramew
     throw err
   } finally {
     await session.dispose()
+    if (runner) await runner.dispose()
   }
 }

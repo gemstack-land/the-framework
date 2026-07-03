@@ -47,7 +47,13 @@ export {
   PRODUCTION_GRADE_PROMPT,
   type DriverStepOptions,
 } from './steps.js'
-export { runFramework, type RunFrameworkOptions, type RunFrameworkResult, type DeployDecision } from './run.js'
+export {
+  runFramework,
+  type RunFrameworkOptions,
+  type RunFrameworkResult,
+  type DeployDecision,
+  type ServeConfig,
+} from './run.js'
 export { hostExecutor, type HostExecutorOptions } from './host-exec.js'
 export { type FrameworkEvent, formatFrameworkEvent } from './events.js'
 export { startDashboard, dashboardHtml, type Dashboard, type DashboardOptions } from './dashboard/index.js'

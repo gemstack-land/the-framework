@@ -131,14 +131,19 @@ export class LocalRunnerSession implements RunnerSession {
   /** Long-running processes started with {@link start}, so `dispose` can stop them. */
   private readonly procs = new Set<RunnerProcess>()
 
+  /** When true, `dispose` leaves the workspace on disk (an adopted directory). */
+  private readonly keep: boolean
+
   constructor(
     id: string,
     root: string,
     boot: BootOptions,
     opts: Required<Pick<LocalRunnerOptions, 'preview' | 'previewHost'>>,
+    keep = false,
   ) {
     this.id = id
     this.root = root
+    this.keep = keep
     this.fs = new LocalFs(root)
     this.cwd = boot.cwd ? norm(boot.cwd) : ''
     this.env = { ...(boot.env ?? {}) }
@@ -248,7 +253,8 @@ export class LocalRunnerSession implements RunnerSession {
     this.disposed = true
     // Stop any still-running background processes before removing the workspace.
     await Promise.all([...this.procs].map(p => p.stop().catch(() => {})))
-    await rm(this.root, { recursive: true, force: true })
+    // An adopted workspace is not ours to delete; only remove one we created.
+    if (!this.keep) await rm(this.root, { recursive: true, force: true })
   }
 }
 
@@ -296,5 +302,23 @@ export class LocalRunner implements Runner {
       await writeFile(abs, contents)
     }
     return new LocalRunnerSession(root.split(sep).pop()!, root, opts, this.opts)
+  }
+
+  /**
+   * Adopt an **existing** directory as the workspace instead of creating a fresh
+   * temp one. The returned session reads, runs, starts, and previews inside
+   * `dir` exactly like a booted one, but `dispose` does NOT delete it, since the
+   * directory belongs to the caller. Use this to run or verify code that already
+   * lives on disk, e.g. an app another tool (a wrapped coding agent) just wrote.
+   */
+  async adopt(dir: string, opts: BootOptions = {}): Promise<LocalRunnerSession> {
+    const root = resolve(dir)
+    await mkdir(root, { recursive: true })
+    for (const [path, contents] of Object.entries(opts.files ?? {})) {
+      const abs = within(root, path)
+      await mkdir(dirname(abs), { recursive: true })
+      await writeFile(abs, contents)
+    }
+    return new LocalRunnerSession(root.split(sep).pop() || root, root, opts, this.opts, true)
   }
 }

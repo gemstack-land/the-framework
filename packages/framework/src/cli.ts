@@ -5,7 +5,7 @@ import { ClaudeCodeDriver, type ClaudeCodeDriverOptions, type Driver, type Permi
 import { hostExecutor } from './host-exec.js'
 import { startDashboard, type Dashboard } from './dashboard/index.js'
 import { formatFrameworkEvent, type FrameworkEvent } from './events.js'
-import { runFramework, type DeployDecision, type RunFrameworkOptions } from './run.js'
+import { runFramework, type DeployDecision, type RunFrameworkOptions, type ServeConfig } from './run.js'
 import { FAKE_DEPLOY, FAKE_INTENT, FAKE_SIGNALS, fakeDriver } from './fake-script.js'
 
 /** Where the CLI writes. Injectable so tests capture output. */
@@ -36,6 +36,11 @@ Options:
   --permission-mode <mode>   Claude Code permission mode: default | acceptEdits |
                              bypassPermissions | plan (default: acceptEdits).
   --dangerously-skip-permissions   Bypass all agent permission checks (sandboxes only).
+  --serve <cmd>          Gate the loop on the app actually running (e.g. "npm run dev").
+  --serve-install <cmd>  Install command before serving (e.g. "npm install").
+  --serve-build <cmd>    Build command before serving (e.g. "npm run build").
+  --serve-port <n>       Port the app listens on (default: 3000).
+  --serve-path <path>    Path to health-check once it is up (default: /).
   --deploy <target>      Deploy to this target (cloudflare, dokploy) or narrate any other.
   --cf-project <name>    Cloudflare Pages project name (for a Pages deploy).
   --dokploy-url <url>    Dokploy instance URL (required for --deploy dokploy).
@@ -65,6 +70,11 @@ export interface CliOptions {
   cfProject?: string | undefined
   dokployUrl?: string | undefined
   dokployApp?: string | undefined
+  serve?: string | undefined
+  serveInstall?: string | undefined
+  serveBuild?: string | undefined
+  servePort?: number
+  servePath?: string | undefined
   port?: number
   dashboard: boolean
   sessionLink?: string | undefined
@@ -133,6 +143,24 @@ export function parseArgs(argv: string[]): CliOptions {
       case '--dokploy-app':
         opts.dokployApp = argv[++i]
         break
+      case '--serve':
+        opts.serve = argv[++i]
+        break
+      case '--serve-install':
+        opts.serveInstall = argv[++i]
+        break
+      case '--serve-build':
+        opts.serveBuild = argv[++i]
+        break
+      case '--serve-path':
+        opts.servePath = argv[++i]
+        break
+      case '--serve-port': {
+        const n = Number(argv[++i])
+        if (!Number.isInteger(n) || n < 1) opts.error = `invalid --serve-port: must be a positive integer`
+        else opts.servePort = n
+        break
+      }
       case '--session-link':
         opts.sessionLink = argv[++i]
         break
@@ -219,6 +247,16 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
     deployTarget = built.target
   }
 
+  const serve: ServeConfig | undefined = opts.serve
+    ? {
+        command: opts.serve,
+        ...(opts.serveInstall ? { install: opts.serveInstall } : {}),
+        ...(opts.serveBuild ? { build: opts.serveBuild } : {}),
+        ...(opts.servePort !== undefined ? { port: opts.servePort } : {}),
+        ...(opts.servePath ? { healthPath: opts.servePath } : {}),
+      }
+    : undefined
+
   let dashboard: Dashboard | undefined
   if (opts.dashboard) {
     try {
@@ -244,6 +282,7 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
     ...(opts.maxPasses ? { maxPasses: opts.maxPasses } : {}),
     ...(deploy ? { deploy } : {}),
     ...(deployTarget ? { deployTarget } : {}),
+    ...(serve ? { serve } : {}),
     ...(fake ? { signals: FAKE_SIGNALS } : {}),
     ...(opts.sessionLink ? { sessionLink: opts.sessionLink } : {}),
   }
