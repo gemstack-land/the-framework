@@ -51,6 +51,8 @@ Options:
   --no-dashboard         Do not start the localhost dashboard.
   --skip-preflight       Skip the prerequisite checks before a live run.
   --session-link <url>   Link to the live agent session (shown on the dashboard).
+                         Use {sessionId} as a placeholder to template in the real
+                         id, e.g. "https://example.com/s/{sessionId}".
   -h, --help             Show this help.
   -v, --version          Print the version.
 

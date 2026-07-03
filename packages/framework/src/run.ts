@@ -15,9 +15,9 @@ import {
   type FrameworkSignals,
   type LocalRunnerSession,
 } from '@gemstack/ai-autopilot'
-import type { Driver, DriverSession } from './driver/index.js'
+import type { Driver, DriverEvent, DriverSession } from './driver/index.js'
 import { decideDeploy, deployWith, driverArchitect, driverBuild, driverChecklist, driverImprove } from './steps.js'
-import type { FrameworkEvent } from './events.js'
+import { hasSessionIdPlaceholder, resolveSessionLink, type FrameworkEvent } from './events.js'
 
 /** The deploy decision to narrate at the end (plan-only in v1: it does not ship). */
 export interface DeployDecision {
@@ -76,7 +76,11 @@ export interface RunFrameworkOptions {
    * checklist gates on the app actually running, not just an agent review.
    */
   serve?: ServeConfig
-  /** A claude.ai/code (or other) link to the live agent session, for the dashboard. */
+  /**
+   * A link to the live agent session, shown on the dashboard. Either a literal
+   * URL, or a template with `{sessionId}` (see {@link SESSION_ID_PLACEHOLDER})
+   * that resolves once the wrapped agent reports its real id via `session-update`.
+   */
   sessionLink?: string
   /** Interrupt the run between phases. */
   signal?: AbortSignal
@@ -118,17 +122,37 @@ export async function runFramework(opts: RunFrameworkOptions): Promise<RunFramew
   const personas = presetPersonas(preset)
   const system = personas.map(personaInstructions).join('\n\n')
 
+  // The session id is not known until the first driver turn returns, so a
+  // templated link (`.../{sessionId}`) can only resolve later. A literal link is
+  // shown right away; a template waits for `session-update`.
+  const linkTemplate = opts.sessionLink
+  const literalLink = linkTemplate && !hasSessionIdPlaceholder(linkTemplate) ? linkTemplate : undefined
+
   emit({
     kind: 'session',
     driver: opts.driver.name,
     workspace: opts.cwd,
     fake: opts.driver.name === 'fake',
-    ...(opts.sessionLink ? { sessionLink: opts.sessionLink } : {}),
+    ...(literalLink ? { sessionLink: literalLink } : {}),
   })
   emit({
     kind: 'log',
     message: `Detected ${detection.framework ?? preset.framework} (confidence ${detection.confidence}); framing with ${personas.length} persona(s)`,
   })
+
+  // Watch the black box for its real session id (the {type:'result'} event) and
+  // surface it as `session-update` once known — that is the honest handle a UI
+  // links to. Re-emit when it changes, since each Claude Code prompt is a fresh
+  // session; the dashboard just updates the link in place.
+  let lastSessionId: string | undefined
+  const onDriverEvent = (event: DriverEvent) => {
+    emit({ kind: 'driver', event })
+    if (event.type === 'result' && event.sessionId && event.sessionId !== lastSessionId) {
+      lastSessionId = event.sessionId
+      const link = linkTemplate ? resolveSessionLink(linkTemplate, event.sessionId) : undefined
+      emit({ kind: 'session-update', sessionId: event.sessionId, ...(link ? { sessionLink: link } : {}) })
+    }
+  }
 
   // 2. One driver session for the whole run; each prompt is a fresh invocation.
   const session: DriverSession = await opts.driver.start({
@@ -136,7 +160,7 @@ export async function runFramework(opts: RunFrameworkOptions): Promise<RunFramew
     system,
     ...(opts.model ? { model: opts.model } : {}),
     ...(opts.signal ? { signal: opts.signal } : {}),
-    onEvent: event => emit({ kind: 'driver', event }),
+    onEvent: onDriverEvent,
   })
 
   // Boot-and-serve gate: adopt the agent's workspace so the checklist can gate

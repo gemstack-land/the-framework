@@ -36,6 +36,67 @@ test('runFramework drives the whole flow through the driver, offline, to product
   assert.equal(events.at(-1)!.kind, 'end')
 })
 
+test('runFramework surfaces the wrapped agent real session id via session-update', async () => {
+  const events: FrameworkEvent[] = []
+  await runFramework({
+    intent: FAKE_INTENT,
+    driver: fakeDriver(), // reports sessionId "fake-orders-app"
+    cwd: '/tmp/ws',
+    signals: FAKE_SIGNALS,
+    onEvent: e => events.push(e),
+  })
+
+  const updates = events.filter(e => e.kind === 'session-update')
+  // The fake reports one stable id across all prompts, so it fires exactly once.
+  assert.equal(updates.length, 1)
+  assert.equal(updates[0]!.kind === 'session-update' && updates[0]!.sessionId, 'fake-orders-app')
+  // No link template was given, so the update carries no link.
+  assert.equal(updates[0]!.kind === 'session-update' && updates[0]!.sessionLink, undefined)
+  // It arrives after the initial session event (id is not known at start).
+  const sessionIdx = events.findIndex(e => e.kind === 'session')
+  const updateIdx = events.findIndex(e => e.kind === 'session-update')
+  assert.ok(sessionIdx >= 0 && updateIdx > sessionIdx)
+})
+
+test('runFramework resolves a {sessionId} link template once the id is known', async () => {
+  const events: FrameworkEvent[] = []
+  await runFramework({
+    intent: FAKE_INTENT,
+    driver: fakeDriver(),
+    cwd: '/tmp/ws',
+    signals: FAKE_SIGNALS,
+    sessionLink: 'https://code.example.com/s/{sessionId}',
+    onEvent: e => events.push(e),
+  })
+
+  // The template cannot resolve at start, so the initial session event omits it.
+  const session = events.find(e => e.kind === 'session')
+  assert.ok(session && session.kind === 'session')
+  assert.equal(session.sessionLink, undefined)
+
+  // Once the id is known, the resolved URL is surfaced.
+  const update = events.find(e => e.kind === 'session-update')
+  assert.ok(update && update.kind === 'session-update')
+  assert.equal(update.sessionLink, 'https://code.example.com/s/fake-orders-app')
+})
+
+test('runFramework shows a literal session link immediately (no template)', async () => {
+  const events: FrameworkEvent[] = []
+  await runFramework({
+    intent: FAKE_INTENT,
+    driver: fakeDriver(),
+    cwd: '/tmp/ws',
+    signals: FAKE_SIGNALS,
+    sessionLink: 'https://code.example.com/live',
+    onEvent: e => events.push(e),
+  })
+
+  // A literal URL (no placeholder) is shown right away on the session event.
+  const session = events.find(e => e.kind === 'session')
+  assert.ok(session && session.kind === 'session')
+  assert.equal(session.sessionLink, 'https://code.example.com/live')
+})
+
 test('runFramework prototype scope skips the full-fledged loop', async () => {
   const { result } = await runFramework({
     intent: 'a quick landing page',

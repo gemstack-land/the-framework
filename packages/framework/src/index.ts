@@ -55,7 +55,13 @@ export {
   type ServeConfig,
 } from './run.js'
 export { hostExecutor, type HostExecutorOptions } from './host-exec.js'
-export { type FrameworkEvent, formatFrameworkEvent } from './events.js'
+export {
+  type FrameworkEvent,
+  formatFrameworkEvent,
+  resolveSessionLink,
+  hasSessionIdPlaceholder,
+  SESSION_ID_PLACEHOLDER,
+} from './events.js'
 export { startDashboard, dashboardHtml, type Dashboard, type DashboardOptions } from './dashboard/index.js'
 export { runCli, parseArgs, buildDeployTarget, type CliIO, type CliOptions } from './cli.js'
 export {

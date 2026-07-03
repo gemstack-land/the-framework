@@ -22,7 +22,10 @@ export function dashboardHtml(title: string): string {
   header h1 { margin: 0; font-size: 16px; font-weight: 600; letter-spacing: .2px; }
   header .sub { color: #7b8496; font-size: 12px; }
   header a { color: #6ea8fe; text-decoration: none; }
-  #status { margin-left: auto; font-size: 12px; color: #7b8496; }
+  header a:hover { text-decoration: underline; }
+  #session-link { margin-left: auto; font-size: 12px; color: #7b8496; }
+  #session-link code { color: #b7c0d0; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  #status { font-size: 12px; color: #7b8496; }
   main { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; padding: 18px 20px; max-width: 1100px; }
   section { background: #10141d; border: 1px solid #1c2230; border-radius: 10px; padding: 14px 16px; }
   section h2 { margin: 0 0 10px; font-size: 12px; text-transform: uppercase;
@@ -50,6 +53,7 @@ export function dashboardHtml(title: string): string {
 <header>
   <h1>${escapeHtml(title)}</h1>
   <span class="sub" id="session">connecting…</span>
+  <span id="session-link"></span>
   <span id="status">●</span>
 </header>
 <main>
@@ -146,12 +150,23 @@ function driver(e) {
   else if (e.type === 'error') log('  ! ' + e.message);
   else if (e.type === 'start') log('\\u203a prompt sent');
 }
+function setSessionLink(sessionId, sessionLink) {
+  const el = $('session-link');
+  if (sessionLink) {
+    el.innerHTML = '\\u25b6 <a href="' + esc(sessionLink) + '" target="_blank" rel="noopener">live session</a>';
+    if (sessionId) el.title = sessionId;
+  } else if (sessionId) {
+    el.innerHTML = 'session <code>' + esc(sessionId) + '</code>';
+  }
+}
 function onEvent(fe) {
   if (fe.kind === 'session') {
     let s = fe.fake ? 'fake driver' : fe.driver;
     s += '  in  ' + fe.workspace;
-    $('session').innerHTML = esc(s) + (fe.sessionLink ? '  ·  <a href="' + esc(fe.sessionLink) + '" target="_blank">live session</a>' : '');
-  } else if (fe.kind === 'bootstrap') bootstrap(fe.event);
+    $('session').textContent = s;
+    if (fe.sessionLink) setSessionLink(undefined, fe.sessionLink);
+  } else if (fe.kind === 'session-update') setSessionLink(fe.sessionId, fe.sessionLink);
+  else if (fe.kind === 'bootstrap') bootstrap(fe.event);
   else if (fe.kind === 'driver') driver(fe.event);
   else if (fe.kind === 'log') log(fe.message);
   else if (fe.kind === 'end') { $('status').textContent = fe.ok ? '\\u25cf done' : '\\u25cf failed'; }
