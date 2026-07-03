@@ -1,7 +1,7 @@
 import { strict as assert } from 'node:assert'
 import { describe, it } from 'node:test'
 import { personaInstructions } from './compose.js'
-import { dataModeler, uiIntentDesigner, vikeAuthComposer, vikeExtensionPersonas } from './library.js'
+import { uiIntentDesigner, vikeAuthComposer, vikeDataModeler, vikeExtensionPersonas } from './library.js'
 
 describe('vike extension personas', () => {
   it('vikeAuthComposer teaches composing vike-auth instead of hand-rolling auth', () => {
@@ -17,10 +17,20 @@ describe('vike extension personas', () => {
     assert.match(text, /do NOT model users or\s*\n?\s*sessions/i)
   })
 
-  it('vikeExtensionPersonas keeps the ORM data persona + adds auth', () => {
+  it('vikeDataModeler teaches the universal-orm data layer, not a hand-installed ORM', () => {
+    assert.equal(vikeDataModeler.name, 'vike-data-modeler')
+    const text = personaInstructions(vikeDataModeler)
+    assert.match(text, /@universal-orm\/core/)
+    assert.match(text, /defineSchema/)
+    assert.match(text, /createRepository/)
+    assert.match(text, /getAdapter\(\)/)
+    // The whole point: do NOT reach for Prisma/Drizzle/SQLite/migrations.
+    assert.match(text, /Do NOT add Prisma, Drizzle,\s*\n?\s*SQLite/i)
+  })
+
+  it('vikeExtensionPersonas composes the data layer + auth (no Prisma, no hand-rolled auth)', () => {
     const names = vikeExtensionPersonas.map(p => p.name)
-    assert.deepEqual(names, ['data-modeler', 'vike-auth-composer', 'ui-intent-designer'])
-    assert.ok(vikeExtensionPersonas.includes(dataModeler))
+    assert.deepEqual(names, ['vike-data-modeler', 'vike-auth-composer', 'ui-intent-designer'])
     assert.ok(vikeExtensionPersonas.includes(uiIntentDesigner))
   })
 })

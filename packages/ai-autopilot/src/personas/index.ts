@@ -22,6 +22,7 @@ export {
   dataModeler,
   uiIntentDesigner,
   vikeAuthComposer,
+  vikeDataModeler,
   sharedPersonas,
   vikeExtensionPersonas,
   stackPersonas,

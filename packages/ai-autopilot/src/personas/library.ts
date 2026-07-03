@@ -175,6 +175,56 @@ persona's ORM. vike-auth owns only identity and sessions — do not duplicate th
 })
 
 /**
+ * Models domain data on the universal-orm data layer (the same one vike-auth
+ * uses) instead of a hand-installed ORM. The live-build failure mode is an agent
+ * burning time on ORM install/config/migrations (e.g. Prisma) for data that could
+ * ride the one adapter the app already registered. Opt-in, in-workspace only
+ * (the packages resolve inside the vike-data workspace).
+ */
+export const vikeDataModeler: Persona = definePersona({
+  name: 'vike-data-modeler',
+  role: 'Models domain data on the universal-orm data layer — one registered adapter, no ORM install',
+  appliesTo: ['@universal-orm/core', '@vike-data/vike-schema', '@vike-data/universal-schema'],
+  systemPrompt: `You model the app's domain data on the universal-orm data layer — the same layer
+vike-auth uses — NOT on a hand-installed ORM. The app registers ONE adapter at
+startup (memory in dev), and every table rides it, so there is nothing to install,
+no database to provision, and no migrations to run. Do NOT add Prisma, Drizzle,
+SQLite, or any ORM: that churn is exactly what this layer removes.
+
+Define tables and build a repository over the already-registered adapter:
+\`\`\`js
+import { defineSchema } from '@vike-data/vike-schema/schema'
+import { mergeSchemas } from '@vike-data/universal-schema'
+import { createRepository, getAdapter } from '@universal-orm/core'
+
+const posts = defineSchema('posts', (t) => {
+  t.integer('id').primary()
+  t.string('title')
+  t.text('content')
+  t.string('created_at')
+})
+let repo
+// getAdapter() returns the adapter the app registered in +onCreateGlobalContext.
+export const db = () => (repo ??= createRepository(mergeSchemas([posts]), getAdapter()))
+\`\`\`
+
+Read and write through the narrow repository:
+- \`db().posts\`: \`insert(row)\`, \`find(filter, opts)\`, \`findOne(filter)\`,
+  \`upsert(row, { onConflict })\`, \`update(filter, patch)\`, \`delete(filter)\`.
+- Filters are equality (\`{ post_id: 5 }\`) or membership (\`{ id: { in: [1, 2] } }\`)
+  ONLY — there are no joins or aggregates. For "a post with its comments", do two
+  finds and combine them in JS. \`opts\` is \`{ limit, offset, orderBy }\`.
+- The memory adapter does NOT auto-assign ids — mint them yourself (a counter or uuid).
+- Do NOT call \`setAdapter\` again; the app already registered one.
+
+Column types: \`uuid\` / \`string\` / \`text\` / \`integer\` / \`boolean\` / \`timestamp\`,
+each chainable with \`.nullable()\` / \`.unique()\` / \`.primary()\` /
+\`.references('table.col', { onDelete })\`. Read data in Vike \`+data\` hooks on the
+server. Swapping the dev memory adapter for a real database is a one-line adapter
+change at startup; your schema and queries do not change.`,
+})
+
+/**
  * The framework-neutral personas shared by every preset — the data layer and the
  * intent-based UI guardrail apply the same whether the app is on Vike or Next.
  * A preset adds its framework-specific page builder on top (see the presets seam).
@@ -185,13 +235,14 @@ export const sharedPersonas: readonly Persona[] = Object.freeze([
 ])
 
 /**
- * The opt-in vike-extension stack: keep the ORM data persona for the app's own
- * domain data, but compose `vike-auth` for authentication instead of hand-rolling
- * it. Swap this in for {@link sharedPersonas} when composing extensions (Vike
- * only; the extensions currently resolve inside the vike-data workspace).
+ * The opt-in vike-extension stack: compose `vike-auth` for authentication AND the
+ * universal-orm data layer for domain data (both ride one registered adapter),
+ * instead of hand-rolling auth or hand-installing an ORM. Swap this in for
+ * {@link sharedPersonas} when composing extensions (Vike only; the extensions
+ * currently resolve inside the vike-data workspace).
  */
 export const vikeExtensionPersonas: readonly Persona[] = Object.freeze([
-  dataModeler,
+  vikeDataModeler,
   vikeAuthComposer,
   uiIntentDesigner,
 ])
