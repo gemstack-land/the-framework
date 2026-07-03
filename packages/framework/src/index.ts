@@ -39,6 +39,7 @@ export {
   driverChecklist,
   driverImprove,
   decideDeploy,
+  deployWith,
   parseArchitectPlan,
   architectPrompt,
   buildPrompt,
@@ -47,9 +48,10 @@ export {
   type DriverStepOptions,
 } from './steps.js'
 export { runFramework, type RunFrameworkOptions, type RunFrameworkResult, type DeployDecision } from './run.js'
+export { hostExecutor, type HostExecutorOptions } from './host-exec.js'
 export { type FrameworkEvent, formatFrameworkEvent } from './events.js'
 export { startDashboard, dashboardHtml, type Dashboard, type DashboardOptions } from './dashboard/index.js'
-export { runCli, parseArgs, type CliIO, type CliOptions } from './cli.js'
+export { runCli, parseArgs, buildDeployTarget, type CliIO, type CliOptions } from './cli.js'
 export {
   fakeDriver,
   FAKE_INTENT,

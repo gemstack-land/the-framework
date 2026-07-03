@@ -1,6 +1,6 @@
 import { strict as assert } from 'node:assert'
 import { test } from 'node:test'
-import { parseArgs, runCli, type CliIO } from './cli.js'
+import { buildDeployTarget, parseArgs, runCli, type CliIO } from './cli.js'
 
 function capture(): { io: CliIO; out: string[]; err: string[] } {
   const out: string[] = []
@@ -39,6 +39,24 @@ test('runCli usage error exits 2', async () => {
   const { io } = capture()
   assert.equal(await runCli(['--bogus'], io), 2)
   assert.equal(await runCli([], io), 2) // no intent, not fake
+})
+
+test('buildDeployTarget builds cloudflare, requires dokploy config, ignores unknown', () => {
+  assert.equal(buildDeployTarget('cloudflare', {}, '/ws').target?.name, 'cloudflare')
+  assert.match(buildDeployTarget('dokploy', {}, '/ws').error!, /dokploy-url and --dokploy-app/)
+  assert.equal(
+    buildDeployTarget('dokploy', { dokployUrl: 'https://d.example', dokployApp: 'app-1' }, '/ws').target?.name,
+    'dokploy',
+  )
+  const unknown = buildDeployTarget('fly', {}, '/ws')
+  assert.equal(unknown.target, undefined)
+  assert.equal(unknown.error, undefined)
+})
+
+test('runCli errors when --deploy dokploy lacks its config', async () => {
+  const { io } = capture()
+  const code = await runCli(['--deploy', 'dokploy', '--no-dashboard', 'a small app'], io)
+  assert.equal(code, 2)
 })
 
 test('runCli --fake --no-dashboard runs the whole flow offline to production-grade', async () => {

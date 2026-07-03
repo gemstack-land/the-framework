@@ -1,8 +1,8 @@
 import { strict as assert } from 'node:assert'
 import { test } from 'node:test'
-import { DecisionLedger, type SupervisorEvent } from '@gemstack/ai-autopilot'
+import { DecisionLedger, type DeployTarget, type SupervisorEvent } from '@gemstack/ai-autopilot'
 import { FakeDriver } from './driver/index.js'
-import { driverArchitect, driverBuild, driverChecklist, driverImprove, parseArchitectPlan } from './steps.js'
+import { deployWith, driverArchitect, driverBuild, driverChecklist, driverImprove, parseArchitectPlan } from './steps.js'
 
 const PLAN = { stack: 'Vike + universal-orm', narration: 'orders app', decisions: [] }
 
@@ -55,6 +55,27 @@ test('driverChecklist treats a verdict-less reply as passing', async () => {
   const session = await new FakeDriver({ turns: [{ text: 'looks fine to me' }] }).start({ cwd: '/ws' })
   const verdict = await driverChecklist(session)({ pass: 1, plan: PLAN, intent: 'x', blockers: [] })
   assert.deepEqual(verdict.blockers, [])
+})
+
+test('deployWith runs the target against the decided plan and uses its name', async () => {
+  const calls: string[] = []
+  const target: DeployTarget = {
+    name: 'cloudflare',
+    deploy: ctx => {
+      calls.push(ctx.plan.render)
+      return { deployed: true, url: 'https://app.workers.dev', detail: 'shipped' }
+    },
+  }
+  const outcome = await deployWith({ render: 'ssr', reason: 'per-request data' }, target)({
+    plan: PLAN,
+    scope: 'full',
+    intent: 'orders app',
+    productionGrade: true,
+  })
+  assert.equal(outcome.plan.target, 'cloudflare')
+  assert.equal(outcome.result.deployed, true)
+  assert.equal(outcome.result.url, 'https://app.workers.dev')
+  assert.deepEqual(calls, ['ssr'])
 })
 
 test('driverImprove prompts the driver with the blockers', async () => {

@@ -7,11 +7,12 @@ import {
   type BootstrapEvent,
   type BootstrapResult,
   type BootstrapScope,
+  type DeployTarget,
   type FrameworkDetection,
   type FrameworkSignals,
 } from '@gemstack/ai-autopilot'
 import type { Driver, DriverSession } from './driver/index.js'
-import { decideDeploy, driverArchitect, driverBuild, driverChecklist, driverImprove } from './steps.js'
+import { decideDeploy, deployWith, driverArchitect, driverBuild, driverChecklist, driverImprove } from './steps.js'
 import type { FrameworkEvent } from './events.js'
 
 /** The deploy decision to narrate at the end (plan-only in v1: it does not ship). */
@@ -39,6 +40,12 @@ export interface RunFrameworkOptions {
   maxPasses?: number
   /** A deploy decision to narrate at the end. Omit to skip the deploy phase. */
   deploy?: DeployDecision
+  /**
+   * A real {@link DeployTarget} to *execute* the decided plan (e.g.
+   * `cloudflareTarget` / `dokployTarget`). Requires {@link deploy}. Omit to only
+   * narrate a plan-only decision.
+   */
+  deployTarget?: DeployTarget
   /** A claude.ai/code (or other) link to the live agent session, for the dashboard. */
   sessionLink?: string
   /** Interrupt the run between phases. */
@@ -115,7 +122,11 @@ export async function runFramework(opts: RunFrameworkOptions): Promise<RunFramew
         build: driverBuild(session),
         checklist: driverChecklist(session),
         improve: driverImprove(session),
-        ...(opts.deploy ? { deploy: decideDeploy(opts.deploy) } : {}),
+        ...(opts.deploy && opts.deployTarget
+          ? { deploy: deployWith(opts.deploy, opts.deployTarget) }
+          : opts.deploy
+            ? { deploy: decideDeploy(opts.deploy) }
+            : {}),
       },
     })
     const result = await bootstrap.run()

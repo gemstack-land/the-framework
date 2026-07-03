@@ -6,6 +6,7 @@ import type {
   BuildContext,
   DeployContext,
   DeployOutcome,
+  DeployTarget,
   LoopPassContext,
   PlannedSubtask,
   SubtaskResult,
@@ -165,6 +166,23 @@ export function decideDeploy(
   plan: { render: 'ssr' | 'ssg' | 'spa'; target: string; reason: string },
 ): (ctx: DeployContext) => DeployOutcome {
   return () => ({ plan, result: { deployed: false, detail: 'plan-only (no deploy target wired)' } })
+}
+
+/**
+ * Deploy for real: run a {@link DeployTarget} against the decided plan. The plan
+ * is already chosen (the CLI decided render + target); this executes it. The
+ * target's own name wins for {@link DeployPlan.target}. Real targets never
+ * throw, so a missing token / build failure comes back as `{ deployed: false }`.
+ */
+export function deployWith(
+  decision: { render: 'ssr' | 'ssg' | 'spa'; reason: string },
+  target: DeployTarget,
+): (ctx: DeployContext) => Promise<DeployOutcome> {
+  return async ctx => {
+    const plan = { render: decision.render, target: target.name, reason: decision.reason }
+    const result = await target.deploy({ plan, intent: ctx.intent, ...(ctx.signal ? { signal: ctx.signal } : {}) })
+    return { plan, result }
+  }
 }
 
 /**

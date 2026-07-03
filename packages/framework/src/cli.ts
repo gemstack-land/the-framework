@@ -1,6 +1,8 @@
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { cloudflareTarget, dokployTarget, type DeployTarget } from '@gemstack/ai-autopilot'
 import { ClaudeCodeDriver, type ClaudeCodeDriverOptions, type Driver, type PermissionMode } from './driver/index.js'
+import { hostExecutor } from './host-exec.js'
 import { startDashboard, type Dashboard } from './dashboard/index.js'
 import { formatFrameworkEvent, type FrameworkEvent } from './events.js'
 import { runFramework, type DeployDecision, type RunFrameworkOptions } from './run.js'
@@ -34,7 +36,10 @@ Options:
   --permission-mode <mode>   Claude Code permission mode: default | acceptEdits |
                              bypassPermissions | plan (default: acceptEdits).
   --dangerously-skip-permissions   Bypass all agent permission checks (sandboxes only).
-  --deploy <target>      Narrate a deploy decision to this target (e.g. cloudflare, dokploy).
+  --deploy <target>      Deploy to this target (cloudflare, dokploy) or narrate any other.
+  --cf-project <name>    Cloudflare Pages project name (for a Pages deploy).
+  --dokploy-url <url>    Dokploy instance URL (required for --deploy dokploy).
+  --dokploy-app <id>     Dokploy application id (required for --deploy dokploy).
   --port <n>             Dashboard port (default: 4477).
   --no-dashboard         Do not start the localhost dashboard.
   --session-link <url>   Link to the live agent session (shown on the dashboard).
@@ -57,6 +62,9 @@ export interface CliOptions {
   scope: 'prototype' | 'full'
   maxPasses?: number
   deploy?: string | undefined
+  cfProject?: string | undefined
+  dokployUrl?: string | undefined
+  dokployApp?: string | undefined
   port?: number
   dashboard: boolean
   sessionLink?: string | undefined
@@ -115,6 +123,15 @@ export function parseArgs(argv: string[]): CliOptions {
         break
       case '--deploy':
         opts.deploy = argv[++i]
+        break
+      case '--cf-project':
+        opts.cfProject = argv[++i]
+        break
+      case '--dokploy-url':
+        opts.dokployUrl = argv[++i]
+        break
+      case '--dokploy-app':
+        opts.dokployApp = argv[++i]
         break
       case '--session-link':
         opts.sessionLink = argv[++i]
@@ -188,6 +205,20 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
       ? FAKE_DEPLOY
       : undefined
 
+  // A real deploy target actually ships the app. Only for live runs against a
+  // known target; --fake stays plan-only and deterministic. An unknown target
+  // just narrates the decision. Real targets never throw on missing creds.
+  let deployTarget: DeployTarget | undefined
+  if (!fake && opts.deploy) {
+    const built = buildDeployTarget(opts.deploy, opts, cwd)
+    if (built.error) {
+      io.err(built.error)
+      io.err('Run `framework --help` for usage.')
+      return 2
+    }
+    deployTarget = built.target
+  }
+
   let dashboard: Dashboard | undefined
   if (opts.dashboard) {
     try {
@@ -212,6 +243,7 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
     ...(opts.model ? { model: opts.model } : {}),
     ...(opts.maxPasses ? { maxPasses: opts.maxPasses } : {}),
     ...(deploy ? { deploy } : {}),
+    ...(deployTarget ? { deployTarget } : {}),
     ...(fake ? { signals: FAKE_SIGNALS } : {}),
     ...(opts.sessionLink ? { sessionLink: opts.sessionLink } : {}),
   }
@@ -234,6 +266,34 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
     await dashboard?.close()
     return 1
   }
+}
+
+/**
+ * Build a real {@link DeployTarget} for a known target name, or return an error /
+ * nothing. `cloudflare` runs `wrangler` via a host executor bound to the build's
+ * workspace; `dokploy` is a fetch to a self-hosted instance. Creds come from the
+ * environment (CLOUDFLARE_API_TOKEN / DOKPLOY_AUTH_TOKEN).
+ */
+export function buildDeployTarget(
+  name: string,
+  opts: Pick<CliOptions, 'cfProject' | 'dokployUrl' | 'dokployApp'>,
+  cwd: string,
+): { target?: DeployTarget; error?: string } {
+  if (name === 'cloudflare') {
+    return {
+      target: cloudflareTarget({
+        session: hostExecutor(cwd),
+        ...(opts.cfProject ? { projectName: opts.cfProject } : {}),
+      }),
+    }
+  }
+  if (name === 'dokploy') {
+    if (!opts.dokployUrl || !opts.dokployApp) {
+      return { error: '--deploy dokploy requires --dokploy-url and --dokploy-app' }
+    }
+    return { target: dokployTarget({ serverUrl: opts.dokployUrl, applicationId: opts.dokployApp }) }
+  }
+  return {} // Unknown target: narrate the decision only.
 }
 
 /** Resolve when the process is interrupted (Ctrl+C), so the dashboard stays up. */
