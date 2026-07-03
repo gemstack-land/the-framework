@@ -1,0 +1,22 @@
+{
+  "name": "@gemstack/example-framework-demo",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Showable end-to-end demo of @gemstack/framework: one prompt → scope → architect → build → full-fledged loop → deploy → a real running app, offline and deterministic via the fake driver.",
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "tsc -p tsconfig.test.json && cd dist-test && node --test",
+    "clean": "rm -rf dist-test",
+    "start": "tsx src/main.ts"
+  },
+  "dependencies": {
+    "@gemstack/framework": "workspace:^",
+    "@gemstack/ai-autopilot": "workspace:^"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.4.0"
+  }
+}
