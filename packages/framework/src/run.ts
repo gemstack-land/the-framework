@@ -19,6 +19,13 @@ import type { Driver, DriverEvent, DriverSession } from './driver/index.js'
 import { decideDeploy, deployWith, driverArchitect, driverBuild, driverChecklist, driverImprove } from './steps.js'
 import { hasSessionIdPlaceholder, resolveSessionLink, type FrameworkEvent } from './events.js'
 
+/**
+ * The framework's default full-fledged pass budget. Higher than ai-autopilot's
+ * base of 3 because a from-scratch build spends its first pass or two just
+ * bootstrapping an empty workspace before there is anything to polish (#182).
+ */
+export const DEFAULT_MAX_PASSES = 5
+
 /** The deploy decision to narrate at the end (plan-only in v1: it does not ship). */
 export interface DeployDecision {
   render: 'ssr' | 'ssg' | 'spa'
@@ -68,7 +75,7 @@ export interface RunFrameworkOptions {
   model?: string
   /** Signals for preset detection (deps/files). Default: none, so the flagship preset wins. */
   signals?: FrameworkSignals
-  /** Max full-fledged passes. Default 3 (ai-autopilot's default). */
+  /** Max full-fledged passes. Default {@link DEFAULT_MAX_PASSES} (5). */
   maxPasses?: number
   /** A deploy decision to narrate at the end. Omit to skip the deploy phase. */
   deploy?: DeployDecision
@@ -212,20 +219,26 @@ export async function runFramework(opts: RunFrameworkOptions): Promise<RunFramew
         )
       : driverChecklist(session)
 
+  // A real driver writes files to the workspace, so the build/improve steps can
+  // detect an empty workspace and hard-scaffold it (#182). The fake driver writes
+  // nothing (its whole workspace is always "empty"), so it opts out to stay
+  // deterministic.
+  const verifyWorkspace = opts.driver.name !== 'fake'
+
   const ledger = new DecisionLedger()
   let preview: AppPreview | undefined
   try {
     const bootstrap = new Bootstrap({
       ledger,
-      ...(opts.maxPasses ? { maxPasses: opts.maxPasses } : {}),
+      maxPasses: opts.maxPasses ?? DEFAULT_MAX_PASSES,
       ...(opts.signal ? { signal: opts.signal } : {}),
       onEvent: (event: BootstrapEvent) => emit({ kind: 'bootstrap', event }),
       steps: {
         scope: () => ({ scope: opts.scope ?? 'full', intent: opts.intent }),
         architect: driverArchitect(session),
-        build: driverBuild(session),
+        build: driverBuild(session, verifyWorkspace ? { verifyWorkspace: true } : {}),
         checklist,
-        improve: driverImprove(session),
+        improve: driverImprove(session, verifyWorkspace ? { verifyWorkspace: true } : {}),
         ...(opts.deploy && opts.deployTarget
           ? { deploy: deployWith(opts.deploy, opts.deployTarget) }
           : opts.deploy

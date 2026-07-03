@@ -185,7 +185,7 @@ function onEvent(fe) {
   else if (fe.kind === 'bootstrap') bootstrap(fe.event);
   else if (fe.kind === 'driver') driver(fe.event);
   else if (fe.kind === 'log') log(fe.message);
-  else if (fe.kind === 'end') { $('status').textContent = fe.ok ? '\\u25cf done' : '\\u25cf failed'; }
+  else if (fe.kind === 'end') { $('status').textContent = fe.ok ? '\\u25cf finished' : '\\u25cf failed'; }
 }
 function esc(s) { const d = document.createElement('div'); d.textContent = String(s); return d.innerHTML; }
 const src = new EventSource('/events');

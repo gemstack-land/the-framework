@@ -1,6 +1,6 @@
 import { strict as assert } from 'node:assert'
 import { test } from 'node:test'
-import { runFramework } from './run.js'
+import { DEFAULT_MAX_PASSES, runFramework } from './run.js'
 import { FAKE_DEPLOY, FAKE_INTENT, FAKE_SIGNALS, fakeDriver } from './fake-script.js'
 import type { FrameworkEvent } from './events.js'
 
@@ -95,6 +95,11 @@ test('runFramework shows a literal session link immediately (no template)', asyn
   const session = events.find(e => e.kind === 'session')
   assert.ok(session && session.kind === 'session')
   assert.equal(session.sessionLink, 'https://code.example.com/live')
+})
+
+test('the default pass budget is raised for from-scratch builds (#182)', () => {
+  // 3 was too low: the first passes go to bootstrapping an empty workspace.
+  assert.equal(DEFAULT_MAX_PASSES, 5)
 })
 
 test('runFramework prototype scope skips the full-fledged loop', async () => {

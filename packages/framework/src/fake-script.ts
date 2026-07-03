@@ -3,7 +3,7 @@ import { FakeDriver, type FakeTurn } from './driver/index.js'
 import type { DeployDecision } from './run.js'
 
 /**
- * The deterministic `--fake` scenario: a small Vike + universal-orm orders app.
+ * The deterministic `--fake` scenario: a small Vike + Prisma orders app.
  * It wires a {@link FakeDriver} whose scripted turns walk the exact prompt order
  * the flow issues (architect JSON, build summary, checklist-with-blocker,
  * improve, clean checklist), so the whole scope -> deploy flow runs offline with
@@ -16,7 +16,7 @@ export const FAKE_INTENT = 'A paginated orders page backed by an orders table, w
 
 /** Deps that make the Vike preset win detection in the demo. */
 export const FAKE_SIGNALS: FrameworkSignals = {
-  dependencies: { 'vike-react': '1.0.0', react: '18.0.0', '@universal-orm/core': '1.0.0' },
+  dependencies: { 'vike-react': '1.0.0', react: '18.0.0', '@prisma/client': '5.0.0' },
 }
 
 /** The deploy decision narrated at the end of the demo. */
@@ -27,10 +27,10 @@ export const FAKE_DEPLOY: DeployDecision = {
 }
 
 const ARCHITECT = {
-  stack: 'Vike + universal-orm on Postgres, with vike-auth',
-  narration: 'Server-rendered orders app: Vike pages, a universal-orm data layer, sessions via vike-auth.',
+  stack: 'Vike + Prisma on Postgres, with vike-auth',
+  narration: 'Server-rendered orders app: Vike pages, a Prisma data layer, sessions via vike-auth.',
   decisions: [
-    { choice: 'universal-orm on Postgres', why: 'the orders catalog is relational and needs typed queries' },
+    { choice: 'Prisma on Postgres', why: 'the orders catalog is relational and needs typed queries' },
     { choice: 'SSR over SPA', why: 'orders need per-request data and auth on the server' },
   ],
 }

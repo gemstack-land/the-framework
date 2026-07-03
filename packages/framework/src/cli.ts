@@ -34,7 +34,7 @@ Options:
   --cwd <dir>            Workspace the agent builds in (default: current directory).
   --model <id>           Model to pass through to the wrapped agent.
   --scope <prototype|full>   How much app to build (default: full).
-  --max-passes <n>       Full-fledged loop pass budget (default: 3).
+  --max-passes <n>       Full-fledged loop pass budget (default: 5).
   --permission-mode <mode>   Claude Code permission mode: default | acceptEdits |
                              bypassPermissions | plan (default: acceptEdits).
   --dangerously-skip-permissions   Bypass all agent permission checks (sandboxes only).

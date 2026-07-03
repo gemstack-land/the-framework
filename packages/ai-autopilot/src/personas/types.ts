@@ -5,7 +5,7 @@ import type { LoadedSkill } from '@gemstack/ai-skills'
  * A reusable, stack-aware role an agent can take on. A persona is *data*: a
  * name, a one-line role, a system-prompt fragment, and the skills/tools it
  * brings. It carries opinionated knowledge of the GemStack stack (Vike +
- * universal-orm) so an autopilot run is not generic — it knows where pages
+ * Prisma) so an autopilot run is not generic — it knows where pages
  * live, how the schema drives migrations, and to express UI as intent.
  *
  * A persona is materialized into an `Agent` on demand (see `personaAgent`),

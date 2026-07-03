@@ -54,12 +54,12 @@ import {
 export const INTENT = 'A paginated Orders page backed by an orders table, with sign-in.'
 
 /** The project we detect a framework from — Vike here, so the Vike preset wins. */
-const PROJECT_DEPS = { 'vike-react': '1.0.0', react: '18.0.0', '@universal-orm/core': '1.0.0' }
+const PROJECT_DEPS = { 'vike-react': '1.0.0', react: '18.0.0', '@prisma/client': '1.0.0' }
 
 /** Each build subtask, the persona that owns it, and the file it writes. */
 const WORK = [
   {
-    worker: 'universal-orm-modeler',
+    worker: 'data-modeler',
     description: 'Define the orders schema and a migration',
     file: 'database/schema.ts',
     contents: "export const orders = table('orders', { id: id(), total: integer(), createdAt: timestamp() })\n",
@@ -80,10 +80,10 @@ const WORK = [
 
 /** The architect's structured decision (what `agentArchitect` parses). */
 const ARCHITECT_PLAN = {
-  stack: 'Vike + universal-orm on Postgres, with vike-auth',
-  narration: 'Server-rendered orders app: Vike pages, a universal-orm data layer, sessions via vike-auth.',
+  stack: 'Vike + Prisma on Postgres, with vike-auth',
+  narration: 'Server-rendered orders app: Vike pages, a Prisma data layer, sessions via vike-auth.',
   decisions: [
-    { choice: 'universal-orm on Postgres', why: 'the orders catalog is relational and needs typed queries' },
+    { choice: 'Prisma on Postgres', why: 'the orders catalog is relational and needs typed queries' },
     { choice: 'SSR over SPA', why: 'orders need per-request data and auth on the server' },
   ],
 }
@@ -237,10 +237,10 @@ export async function runCapstone(write: (line: string) => void = () => {}): Pro
     // Scale mode: generate CODE-OVERVIEW.md from the scaffold (a material change).
     const maintainer = new CodeOverviewMaintainer({
       regenerate: () => ({
-        summary: 'A server-rendered orders app on Vike + universal-orm.',
+        summary: 'A server-rendered orders app on Vike + Prisma.',
         sections: [
           { title: 'Structure', body: '- `pages/orders/` — the paginated orders page\n- `database/` — the orders schema + migrations' },
-          { title: 'Conventions', body: 'Data goes through the universal-orm model builder; pages stay thin.' },
+          { title: 'Conventions', body: 'Data goes through the Prisma client; pages stay thin.' },
         ],
       }),
     })

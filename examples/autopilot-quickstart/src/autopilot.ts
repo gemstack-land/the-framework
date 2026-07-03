@@ -37,7 +37,7 @@ export const TASK = 'Add a paginated Orders page backed by an orders table'
 /** Each subtask, the persona that should own it, and the file it writes. */
 const WORK = [
   {
-    worker: 'universal-orm-modeler',
+    worker: 'data-modeler',
     description: 'Define the orders schema and a migration',
     file: 'database/schema.ts',
     contents: "export const orders = table('orders', { id: id(), total: integer(), createdAt: timestamp() })\n",

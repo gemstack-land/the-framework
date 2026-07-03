@@ -19,7 +19,7 @@ export {
 export {
   vikePageBuilder,
   nextPageBuilder,
-  universalOrmModeler,
+  dataModeler,
   uiIntentDesigner,
   sharedPersonas,
   stackPersonas,

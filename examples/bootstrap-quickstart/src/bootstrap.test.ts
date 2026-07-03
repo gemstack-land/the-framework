@@ -12,7 +12,7 @@ describe('bootstrap capstone: the whole epic composes end-to-end (offline)', () 
     assert.equal(detection.framework, 'Vike')
 
     // Architect: chose the stack and recorded its choices to the ledger.
-    assert.match(result.plan.stack, /Vike \+ universal-orm/)
+    assert.match(result.plan.stack, /Vike \+ Prisma/)
     assert.equal(result.plan.decisions.length, 2)
 
     // Build: each preset persona wrote its file into the sandbox.

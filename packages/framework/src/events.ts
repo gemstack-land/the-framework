@@ -51,7 +51,7 @@ export function formatFrameworkEvent(event: FrameworkEvent): string {
     case 'bootstrap':
       return formatBootstrapEvent(event.event)
     case 'end':
-      return event.ok ? '✓ done' : `✗ failed: ${event.detail ?? 'unknown error'}`
+      return event.ok ? '✓ finished' : `✗ failed: ${event.detail ?? 'unknown error'}`
   }
 }
 

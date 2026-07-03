@@ -1,3 +1,5 @@
+import { readdirSync } from 'node:fs'
+import { join } from 'node:path'
 import { parseVerdict } from '@gemstack/ai-autopilot'
 import type {
   ArchitectContext,
@@ -46,8 +48,28 @@ export function buildPrompt(plan: ArchitectPlan, intent: string): string {
     `Build this app end to end: ${intent}`,
     `Stack: ${plan.stack}`,
     plan.narration,
-    'Create every file needed and make the app run. Follow the stack conventions.',
+    'The workspace may be empty — if so, scaffold the whole project from scratch:',
+    'create package.json with scripts, all config, and every source file, install',
+    'the dependencies, and make the app run. Follow the stack conventions.',
     'When done, summarize what you built in one short paragraph.',
+  ].join('\n')
+}
+
+/**
+ * A hard "the app does not exist yet — create it from scratch" directive. Used
+ * when the workspace is empty at build or improve time, where the normal
+ * {@link improvePrompt} ("smallest changes / no unrelated features") would
+ * wrongly discourage scaffolding (#182).
+ */
+export function scaffoldPrompt(plan: ArchitectPlan, intent: string): string {
+  return [
+    `The workspace is empty — no app exists here yet. You must create the entire app now from scratch: ${intent}`,
+    `Stack: ${plan.stack}`,
+    plan.narration,
+    'This is a from-scratch build, not an edit: do not wait for existing code, and do',
+    'not refuse because the directory is empty — that is expected. Scaffold the full',
+    'project (package.json with scripts, config, and every source file), install',
+    'dependencies, and do not stop until the requested features exist and the app runs.',
   ].join('\n')
 }
 
@@ -66,8 +88,50 @@ export function improvePrompt(blockers: readonly string[]): string {
   return [
     'Address these blockers in the app, then stop:',
     ...blockers.map(b => `- ${b}`),
-    'Make the smallest changes that clear them. Do not add unrelated features.',
+    'Make the changes needed to clear them, and only those — but do whatever they',
+    'require, including adding missing features, files, or dependencies. Do not chase',
+    'unrelated polish.',
   ].join('\n')
+}
+
+const IGNORED_DIRS = new Set(['node_modules', '.git', 'dist', 'build', '.next', '.turbo', '.cache', '.vite'])
+const IGNORED_FILES = new Set([
+  'package-lock.json',
+  'pnpm-lock.yaml',
+  'yarn.lock',
+  '.gitignore',
+  '.npmrc',
+  '.DS_Store',
+])
+
+/**
+ * Whether a workspace holds no app yet — no source file the agent could have
+ * produced. Used to detect a build that stalled without scaffolding (#182):
+ * lockfiles, dotfiles, and dependency/output dirs do not count. Best-effort and
+ * cheap: it stops at the first real file and never throws.
+ */
+export function isWorkspaceEmpty(dir: string): boolean {
+  return !hasSourceFile(dir, 0)
+}
+
+function hasSourceFile(dir: string, depth: number): boolean {
+  if (depth > 6) return false
+  let entries
+  try {
+    entries = readdirSync(dir, { withFileTypes: true })
+  } catch {
+    return false // unreadable / missing dir: treat as empty.
+  }
+  for (const entry of entries) {
+    if (entry.isDirectory()) {
+      if (IGNORED_DIRS.has(entry.name) || entry.name.startsWith('.')) continue
+      if (hasSourceFile(join(dir, entry.name), depth + 1)) return true
+    } else if (entry.isFile()) {
+      if (IGNORED_FILES.has(entry.name) || entry.name.startsWith('.')) continue
+      return true
+    }
+  }
+  return false
 }
 
 /** Options shared by the driver-backed steps. */
@@ -102,23 +166,52 @@ export function driverArchitect(
  */
 export function driverBuild(
   session: DriverSession,
-  opts: { prompt?: (plan: ArchitectPlan, intent: string) => string } & DriverStepOptions = {},
+  opts: {
+    prompt?: (plan: ArchitectPlan, intent: string) => string
+    /**
+     * Guarantee the build produced files: after the build turn, if the workspace
+     * is still empty (the agent stalled instead of scaffolding), re-prompt once
+     * with a hard from-scratch directive (#182). Off by default; the runner
+     * enables it for real drivers (the fake driver writes no files, so it stays
+     * off there).
+     */
+    verifyWorkspace?: boolean
+  } & DriverStepOptions = {},
 ): (ctx: BuildContext) => Promise<SupervisorRun> {
   const compose = opts.prompt ?? buildPrompt
+  const promptOpts = {
+    ...(opts.system ? { system: opts.system } : {}),
+  }
   return async ctx => {
+    const signalOpt = ctx.signal ? { signal: ctx.signal } : {}
     const subtask: PlannedSubtask = { id: 'build-1', description: `Build with the wrapped agent` }
     ctx.onEvent({ type: 'plan', task: ctx.intent, subtasks: [subtask] })
     ctx.onEvent({ type: 'dispatch-start', subtask })
 
-    const turn = await session.prompt(compose(ctx.plan, ctx.intent), {
-      ...(opts.system ? { system: opts.system } : {}),
-      ...(ctx.signal ? { signal: ctx.signal } : {}),
-    })
+    let turn = await session.prompt(compose(ctx.plan, ctx.intent), { ...promptOpts, ...signalOpt })
+    const results: SubtaskResult[] = [{ subtask, text: turn.text, ok: true, usage: ZERO_USAGE }]
+    ctx.onEvent({ type: 'dispatch-result', result: results[0]! })
 
-    const result: SubtaskResult = { subtask, text: turn.text, ok: true, usage: ZERO_USAGE }
-    ctx.onEvent({ type: 'dispatch-result', result })
-    ctx.onEvent({ type: 'synthesize', results: [result] })
-    return { text: turn.text, plan: [subtask], results: [result], usage: ZERO_USAGE, stoppedEarly: false }
+    // #182: the build must actually produce an app. If nothing landed on disk,
+    // the agent stalled (e.g. sanity-checking the stack) — re-prompt once with a
+    // hard "create it from scratch" directive so an empty-dir run starts building.
+    if (opts.verifyWorkspace && isWorkspaceEmpty(session.cwd)) {
+      const retry: PlannedSubtask = { id: 'build-2', description: 'Scaffold the app from scratch (workspace was empty)' }
+      ctx.onEvent({ type: 'dispatch-start', subtask: retry })
+      turn = await session.prompt(scaffoldPrompt(ctx.plan, ctx.intent), { ...promptOpts, ...signalOpt })
+      const retryResult: SubtaskResult = { subtask: retry, text: turn.text, ok: true, usage: ZERO_USAGE }
+      results.push(retryResult)
+      ctx.onEvent({ type: 'dispatch-result', result: retryResult })
+    }
+
+    ctx.onEvent({ type: 'synthesize', results })
+    return {
+      text: turn.text,
+      plan: results.map(r => r.subtask),
+      results,
+      usage: ZERO_USAGE,
+      stoppedEarly: false,
+    }
   }
 }
 
@@ -146,11 +239,23 @@ export function driverChecklist(
 /** The improve step: a fresh invocation that fixes the current blockers. */
 export function driverImprove(
   session: DriverSession,
-  opts: { prompt?: (blockers: readonly string[]) => string } & DriverStepOptions = {},
+  opts: {
+    prompt?: (blockers: readonly string[]) => string
+    /**
+     * When the workspace is still empty at improve time, switch from the
+     * blocker-polish prompt to a hard "scaffold the whole app from scratch"
+     * directive (#182) — otherwise "smallest changes / no unrelated features"
+     * blocks the agent from building the app that does not exist yet. Off by
+     * default; the runner enables it for real drivers.
+     */
+    verifyWorkspace?: boolean
+  } & DriverStepOptions = {},
 ): (ctx: LoopPassContext) => Promise<void> {
   const compose = opts.prompt ?? improvePrompt
   return async ctx => {
-    await session.prompt(compose(ctx.blockers), {
+    const scaffold = opts.verifyWorkspace && isWorkspaceEmpty(session.cwd)
+    const text = scaffold ? scaffoldPrompt(ctx.plan, ctx.intent) : compose(ctx.blockers)
+    await session.prompt(text, {
       ...(opts.system ? { system: opts.system } : {}),
       ...(ctx.signal ? { signal: ctx.signal } : {}),
     })

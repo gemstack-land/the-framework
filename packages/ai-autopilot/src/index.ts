@@ -13,12 +13,12 @@
  * - {@link agentSynthesizer} / {@link defaultSynthesize} — combine results
  *
  * Personas add the stack-aware knowledge layer: reusable roles that know the
- * GemStack stack (Vike/Next + universal-orm), materialized into worker agents.
+ * GemStack stack (Vike/Next + Prisma), materialized into worker agents.
  *
  * - {@link definePersona} — define a stack-aware role
  * - {@link personaAgent} / {@link personaWorkers} — materialize personas for a run
  * - {@link personaRoster} — describe personas to a planner
- * - {@link stackPersonas} — the built-in Vike + universal-orm personas
+ * - {@link stackPersonas} — the built-in Vike + Prisma personas
  * - {@link sharedPersonas} — the framework-neutral core (data layer + intent UI)
  *
  * The runner is the pluggable execution seam: a workspace (filesystem + shell +
@@ -106,7 +106,7 @@ export {
   personaRoster,
   vikePageBuilder,
   nextPageBuilder,
-  universalOrmModeler,
+  dataModeler,
   uiIntentDesigner,
   sharedPersonas,
   stackPersonas,

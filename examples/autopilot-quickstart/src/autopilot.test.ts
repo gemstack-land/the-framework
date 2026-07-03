@@ -11,7 +11,7 @@ describe('autopilot quickstart: the four layers compose end-to-end', () => {
     assert.equal(result.run.plan.length, 3)
     assert.deepEqual(
       result.run.plan.map(s => s.worker).sort(),
-      ['ui-intent-designer', 'universal-orm-modeler', 'vike-page-builder'],
+      ['data-modeler', 'ui-intent-designer', 'vike-page-builder'],
     )
     assert.ok(result.run.results.every(r => r.ok), 'every subtask succeeded')
 

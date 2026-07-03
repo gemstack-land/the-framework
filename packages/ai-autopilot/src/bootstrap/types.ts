@@ -10,7 +10,7 @@ import type { Verdict } from '../loop/verdict.js'
  *   scope  →  architect  →  build  →  full-fledged loop
  *
  * - **Scope** is the one and only interrogation: prototype vs full, plus intent.
- * - **Architect** picks the stack (Vike + universal-orm), narrates it, and
+ * - **Architect** picks the stack (Vike + Prisma), narrates it, and
  *   records key choices to the decisions ledger — no permission asked.
  * - **Build** runs the Supervisor over the stack personas inside a runner,
  *   streaming narration; the caller can interrupt via an `AbortSignal`.
@@ -94,7 +94,7 @@ export interface DeployTarget {
 
 /** The architect's output: the stack it chose, a narration, and the key choices. */
 export interface ArchitectPlan {
-  /** The chosen stack, one line (e.g. "Vike + universal-orm, Postgres, vike-auth"). */
+  /** The chosen stack, one line (e.g. "Vike + Prisma, Postgres, vike-auth"). */
   stack: string
   /** What it is building and why, to narrate to the user. */
   narration: string

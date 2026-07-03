@@ -20,7 +20,7 @@ describe('built-in presets', () => {
 describe('presetPersonas', () => {
   it('is the preset page builder followed by the shared neutral personas', () => {
     const names = presetPersonas(vikePreset).map(p => p.name)
-    assert.deepEqual(names, ['vike-page-builder', 'universal-orm-modeler', 'ui-intent-designer'])
+    assert.deepEqual(names, ['vike-page-builder', 'data-modeler', 'ui-intent-designer'])
   })
 
   it('swaps only the page builder between frameworks — the rest of the stack is shared', () => {

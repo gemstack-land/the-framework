@@ -91,7 +91,7 @@ describe('personaWorkers', () => {
     const workers = personaWorkers(stackPersonas)
     assert.deepEqual(
       Object.keys(workers).sort(),
-      ['ui-intent-designer', 'universal-orm-modeler', 'vike-page-builder'],
+      ['data-modeler', 'ui-intent-designer', 'vike-page-builder'],
     )
   })
 
@@ -105,7 +105,7 @@ describe('personaRoster', () => {
   it('lists each persona name + role for a planner to route on', () => {
     const roster = personaRoster(stackPersonas)
     assert.match(roster, /`vike-page-builder`/)
-    assert.match(roster, /`universal-orm-modeler`/)
+    assert.match(roster, /`data-modeler`/)
     assert.match(roster, /`ui-intent-designer`/)
     assert.match(roster, /worker/)
   })

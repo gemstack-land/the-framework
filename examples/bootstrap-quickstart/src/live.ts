@@ -47,12 +47,12 @@ import { INTENT, formatBootstrapEvent, type CapstoneResult } from './bootstrap.j
 const MODEL = process.env['GEMSTACK_MODEL'] ?? 'anthropic/claude-haiku-4-5-20251001'
 
 /** The project we detect a framework from — Vike here, so the Vike preset wins. */
-const PROJECT_DEPS = { 'vike-react': '1.0.0', react: '18.0.0', '@universal-orm/core': '1.0.0' }
+const PROJECT_DEPS = { 'vike-react': '1.0.0', react: '18.0.0', '@prisma/client': '1.0.0' }
 
 /** The build plan: three subtasks, each owned by a preset persona (by name). The real
  *  worker decides the file contents; only the decomposition is fixed. */
 const WORK = [
-  { worker: 'universal-orm-modeler', description: 'Define the orders schema and a migration in database/schema.ts' },
+  { worker: 'data-modeler', description: 'Define the orders schema and a migration in database/schema.ts' },
   { worker: 'vike-page-builder', description: 'Build pages/orders/+Page.jsx: a server-rendered, paginated list of orders' },
   { worker: 'ui-intent-designer', description: 'Express the orders list as intent (a +config.js meta), not hardcoded markup' },
 ] as const
@@ -165,7 +165,7 @@ export async function runLiveCapstone(write: (line: string) => void = () => {}):
     // Scale mode: generate CODE-OVERVIEW.md from the real scaffold (a material change).
     const maintainer = new CodeOverviewMaintainer({
       regenerate: () => ({
-        summary: 'A server-rendered orders app on Vike + universal-orm.',
+        summary: 'A server-rendered orders app on Vike + Prisma.',
         sections: [{ title: 'Structure', body: Object.keys(files).map(f => `- \`${f}\``).join('\n') }],
       }),
     })
