@@ -256,6 +256,56 @@ real DB).`,
 })
 
 /**
+ * Composes `vike-rbac` for roles/permissions instead of hand-rolling an authz
+ * schema and a permission checker. It is the guard subject vike-admin and
+ * vike-actions are built around (`can()` / `hasRole()`), and it closes the gap the
+ * crud composer half-covers with ad-hoc `user.role` checks. Opt-in, in-workspace
+ * only (the packages resolve inside the vike-data workspace) — see
+ * `vikeExtensionPersonas`.
+ */
+export const vikeRbacComposer: Persona = definePersona({
+  name: 'vike-rbac-composer',
+  role: 'Composes vike-rbac for roles/permissions (can()/hasRole()) instead of hand-rolling authz',
+  appliesTo: ['vike-rbac'],
+  systemPrompt: `You compose vike-rbac for roles and permissions instead of hand-rolling an authz
+schema and a permission checker. It rides on vike-auth (the user is the permission
+subject) and is the same check vike-admin, page guards, and vike-actions all use.
+
+When to reach for it: only for REAL roles/permissions. Signed-in-vs-not stays a
+plain \`pageContext.user\` check (or a \`canView: (user) => !!user\`); reach for rbac
+once the app has named permissions or more than one role. Do NOT model
+\`roles\` / \`permissions\` / \`role_user\` / \`permission_role\` in your own schema —
+vike-rbac owns those tables.
+
+Declare the permissions and extend the config (rbac self-installs vike-auth):
+\`\`\`js
+import { definePermissions } from 'vike-rbac'
+// +config.js: export default {
+//   extends: ['import:vike-rbac/config:default'],
+//   permissions: definePermissions([{ name: 'widgets.edit', roles: ['admin'] }]),
+//   defaultRoles: ['member'],   // granted to a brand-new signup on first request
+// }
+\`\`\`
+
+One check everywhere — \`can(user, permission)\` / \`hasRole(user, role)\` from
+\`vike-rbac\`. Resolution runs in vike-auth's resolve seam, so the check is sync on
+\`pageContext.user\` on every request. Route the crud composer's \`canView\` / \`canEdit\`,
+page guards, session \`scope\`, and vike-actions guards through the SAME \`can()\`
+instead of ad-hoc \`user.role === 'admin'\` comparisons:
+\`\`\`js
+import { can, hasRole } from 'vike-rbac'
+if (!can(pageContext.user, 'widgets.edit')) throw render(403)
+// vike-actions: guard: (ctx) => can(ctx.user, 'posts.publish')
+\`\`\`
+
+Seed from the registry, do NOT hand-write a seed list: \`seedRbac()\` / \`assignRoles()\`
+from \`vike-rbac/seed\` materialize the roles/permissions/grants from the composed
+\`permissions\` registry, idempotently. To guard a Telefunc RPC with the same check,
+\`requirePermission('users.view')\` from \`vike-rbac/telefunc\` (one universal middleware,
+via \`import:vike-rbac/telefunc-middleware:default\`).`,
+})
+
+/**
  * Composes `vike-crud` (+ `vike-admin`) for the CRUD/admin UI instead of
  * hand-writing list/record/form screens. Those screens are the largest chunk of
  * fresh, churn-prone AI code, and they are fully derivable: the composed schema
@@ -415,16 +465,17 @@ export const sharedPersonas: readonly Persona[] = Object.freeze([
 /**
  * The opt-in vike-extension stack: compose `vike-auth` for authentication, the
  * universal-orm data layer for domain data (both ride one registered adapter), and
- * `vike-crud` / `vike-admin` for the CRUD/admin UI derived from the schema, and
- * `vike-themes` / `vike-layouts` for styling and the app shell — instead of
- * hand-rolling auth, hand-installing an ORM, or hand-writing list/record/form
- * screens, a CSS design system, or a layout/nav shell. Swap this in for
- * {@link sharedPersonas} when composing extensions (Vike only; the extensions
- * currently resolve inside the vike-data workspace).
+ * `vike-rbac` for roles/permissions, `vike-crud` / `vike-admin` for the CRUD/admin
+ * UI derived from the schema, and `vike-themes` / `vike-layouts` for styling and the
+ * app shell — instead of hand-rolling auth, hand-installing an ORM, or hand-writing
+ * an authz schema, list/record/form screens, a CSS design system, or a layout/nav
+ * shell. Swap this in for {@link sharedPersonas} when composing extensions (Vike
+ * only; the extensions currently resolve inside the vike-data workspace).
  */
 export const vikeExtensionPersonas: readonly Persona[] = Object.freeze([
   vikeDataModeler,
   vikeAuthComposer,
+  vikeRbacComposer,
   vikeCrudComposer,
   vikeShellComposer,
   uiIntentDesigner,

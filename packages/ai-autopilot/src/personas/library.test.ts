@@ -7,6 +7,7 @@ import {
   vikeCrudComposer,
   vikeDataModeler,
   vikeExtensionPersonas,
+  vikeRbacComposer,
   vikeShellComposer,
 } from './library.js'
 
@@ -58,6 +59,18 @@ describe('vike extension personas', () => {
     assert.match(text, /ejectView\(view, \{ framework \}\)/)
   })
 
+  it('vikeRbacComposer teaches composing vike-rbac, not a hand-rolled authz schema/checker', () => {
+    assert.equal(vikeRbacComposer.name, 'vike-rbac-composer')
+    const text = personaInstructions(vikeRbacComposer)
+    // Declare permissions + the one check everywhere, riding on vike-auth.
+    assert.match(text, /definePermissions/)
+    assert.match(text, /can\(user, permission\)/)
+    assert.match(text, /hasRole/)
+    // Seed from the registry, and do not model the RBAC tables by hand.
+    assert.match(text, /seedRbac/)
+    assert.match(text, /Do NOT model\s*\n?\s*`roles`/i)
+  })
+
   it('vikeShellComposer teaches composing vike-themes/vike-layouts, not hand-rolled CSS + shell', () => {
     assert.equal(vikeShellComposer.name, 'vike-shell-composer')
     const text = personaInstructions(vikeShellComposer)
@@ -74,11 +87,12 @@ describe('vike extension personas', () => {
     assert.match(text, /vike-toolbar\/react/)
   })
 
-  it('vikeExtensionPersonas composes data + auth + crud + shell (no Prisma, no hand-rolled auth/UI/CSS)', () => {
+  it('vikeExtensionPersonas composes data + auth + rbac + crud + shell (no Prisma, no hand-rolled auth/UI/CSS)', () => {
     const names = vikeExtensionPersonas.map(p => p.name)
     assert.deepEqual(names, [
       'vike-data-modeler',
       'vike-auth-composer',
+      'vike-rbac-composer',
       'vike-crud-composer',
       'vike-shell-composer',
       'ui-intent-designer',
