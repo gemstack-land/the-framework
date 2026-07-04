@@ -1,5 +1,12 @@
 # @gemstack/example-autopilot-quickstart
 
+## 0.0.6
+
+### Patch Changes
+
+- Updated dependencies [6f7e7e3]
+  - @gemstack/ai-autopilot@0.7.0
+
 ## 0.0.5
 
 ### Patch Changes

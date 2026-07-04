@@ -1,5 +1,12 @@
 # @gemstack/framework
 
+## 0.5.1
+
+### Patch Changes
+
+- Updated dependencies [6f7e7e3]
+  - @gemstack/ai-autopilot@0.7.0
+
 ## 0.5.0
 
 ### Minor Changes
