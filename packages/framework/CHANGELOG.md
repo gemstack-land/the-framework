@@ -1,5 +1,32 @@
 # @gemstack/framework
 
+## 0.5.2
+
+### Patch Changes
+
+- 1d3ce64: Fix the Claude Code driver treating a non-zero agent exit as success when the agent had already streamed some text. A crash mid-build now fails the turn (surfacing stderr or the partial text) instead of resolving as a result the loop can score production-grade.
+- 45b13b2: Default the CLI to bypassPermissions so the headless loop can build/verify
+
+  Every framework turn is a headless `claude -p` invocation, which can't answer an
+  interactive approval. The driver's library default (`acceptEdits`) auto-approves
+  edits but not Bash, so installs/builds/tests were silently denied: the
+  production-grade checklist tried `npm run build` / dev-boot, hit "Build needs
+  interactive approval which isn't available," failed pass 1 as "could not be
+  executed this session," and the loop ground on listing blockers it couldn't
+  verify.
+
+  The `framework` CLI now defaults its Claude Code driver to `bypassPermissions` so
+  the full loop (install, build, test, dev-boot) runs unattended and the checklist
+  verifies for real. This is a permissive default appropriate to a headless
+  autonomous builder; `--permission-mode <mode>` still overrides it (e.g.
+  `--permission-mode acceptEdits` for the old, conservative behavior), and
+  `--dangerously-skip-permissions` still takes precedence. The `ClaudeCodeDriver`
+  library default is unchanged (still `acceptEdits`); only the CLI opts up.
+
+  Closes #225.
+
+- 1259282: Fail closed when a checklist reply omits the required `{ blockers }` verdict. A verdict-less reply was scored as empty-blockers (production-grade) and stopped the loop; it now surfaces a blocker so the loop re-prompts instead of declaring the app done off an unverifiable reply.
+
 ## 0.5.1
 
 ### Patch Changes
