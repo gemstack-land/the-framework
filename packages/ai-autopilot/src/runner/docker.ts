@@ -330,7 +330,7 @@ export class DockerRunner implements Runner {
     const publish = this.opts.preview ? ['-p', `127.0.0.1:0:${this.opts.previewPort}`] : []
     const run = await docker(['run', '-d', '--name', name, '-w', WORKSPACE, ...publish, this.image, 'tail', '-f', '/dev/null'])
     if (run.exitCode !== 0) {
-      throw new RunnerError(`failed to boot container: ${(run.stderr.trim() || run.stdout.trim()) ?? ''}`)
+      throw new RunnerError(`failed to boot container: ${run.stderr.trim() || run.stdout.trim()}`)
     }
     try {
       const session = new DockerRunnerSession(id, name, opts, this.opts)

@@ -70,7 +70,6 @@ let sessionCounter = 0
 export class ClaudeCodeSession implements DriverSession {
   readonly id: string
   readonly cwd: string
-  private lastSessionId?: string
 
   constructor(
     private readonly config: ClaudeCodeDriverOptions,
@@ -102,9 +101,6 @@ export class ClaudeCodeSession implements DriverSession {
       spawn: this.config.spawn ?? (nodeSpawn as unknown as SpawnLike),
       emit,
       signals,
-    }).then(turn => {
-      if (turn.sessionId) this.lastSessionId = turn.sessionId
-      return turn
     })
   }
 
@@ -114,8 +110,7 @@ export class ClaudeCodeSession implements DriverSession {
 
   dispose(): Promise<void> {
     // Each prompt spawns and reaps its own process, so there is nothing durable
-    // to tear down. The last session id is kept only for a UI link.
-    void this.lastSessionId
+    // to tear down. The session id reaches the UI via the emitted result event.
     return Promise.resolve()
   }
 
