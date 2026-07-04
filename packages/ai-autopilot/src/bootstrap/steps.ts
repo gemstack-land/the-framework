@@ -23,13 +23,37 @@ export interface ArchitectAgentOptions {
   instructions?: string
 }
 
+/**
+ * Objective, reusable stack tradeoffs the architect grounds its justification in,
+ * so the PROS/CONS it reports are real reasons rather than invented per run. Kept
+ * as one exported block so the ai-sdk architect and the driver architect
+ * (framework) share the same knowledge. Extend it as the default stack evolves.
+ */
+export const STACK_TRADEOFFS = `Ground the stack justification in these objective tradeoffs, do not invent reasons:
+- Vike (Vite + SSR, renderer-agnostic): deploys anywhere including edge/serverless
+  (Cloudflare, Vercel, Node); works with React, Vue, or Solid; lighter and less
+  opinionated. Downsides: fewer batteries-included conventions and a smaller
+  ecosystem than Next.
+- Next.js (App Router + React Server Components): largest ecosystem, batteries
+  included (image/font/routing), first-class Vercel deploy. Downsides: heavier,
+  React-only, a more opinionated server model, and more constrained edge/Cloudflare
+  support.
+Prefer Vike as the default for edge, multi-renderer, or portability; prefer Next
+when the team wants the largest ecosystem and Vercel-native features.`
+
 const DEFAULT_ARCHITECT_INSTRUCTIONS = `You are the lead architect. Choose the stack and structure for the app the user
 describes and commit to it — act like a senior engineer who decides and explains,
 not one who asks permission. Default to the GemStack stack (Vike + Prisma)
 unless the intent clearly calls for something else. Only choose packages that are
 published and installable on npm. Narrate what you are building
 and why in a sentence or two, and list the key choices so they are recorded and
-not re-litigated later.`
+not re-litigated later.
+
+Justify the stack honestly: give its real PROS and its CONS (every stack has
+tradeoffs), and name the main alternative you rejected and why it lost. This is
+shown to the user as the rationale, so be concrete, not promotional.
+
+${STACK_TRADEOFFS}`
 
 /**
  * An architect step backed by an `ai-sdk` agent. It prompts the agent for a
@@ -44,6 +68,12 @@ export function agentArchitect(architect: Agent, opts: ArchitectAgentOptions = {
     decisions: z
       .array(z.object({ choice: z.string(), why: z.string() }))
       .describe('Key architectural choices and their rationale'),
+    pros: z.array(z.string()).describe('Why the chosen stack fits — its real upsides').optional(),
+    cons: z.array(z.string()).describe('Honest downsides / tradeoffs of the chosen stack').optional(),
+    alternatives: z
+      .array(z.object({ option: z.string(), whyNot: z.string() }))
+      .describe('Stacks considered but rejected, and why each lost')
+      .optional(),
   })
   const output = Output.object({ schema })
   const instructions = opts.instructions ?? DEFAULT_ARCHITECT_INSTRUCTIONS
@@ -53,7 +83,17 @@ export function agentArchitect(architect: Agent, opts: ArchitectAgentOptions = {
     const head = briefing ? `${briefing}\n\n${instructions}` : instructions
     const prompt = `${head}\n\n# What the user wants (${scope})\n${intent}\n\n${output.toSystemPrompt()}`
     const response = await architect.prompt(prompt)
-    return output.parse(response.text ?? '')
+    const parsed = output.parse(response.text ?? '')
+    // Omit the rationale fields when absent rather than setting them to
+    // `undefined` (exactOptionalPropertyTypes), so consumers see a clean plan.
+    return {
+      stack: parsed.stack,
+      narration: parsed.narration,
+      decisions: parsed.decisions,
+      ...(parsed.pros?.length ? { pros: parsed.pros } : {}),
+      ...(parsed.cons?.length ? { cons: parsed.cons } : {}),
+      ...(parsed.alternatives?.length ? { alternatives: parsed.alternatives } : {}),
+    }
   }
 }
 

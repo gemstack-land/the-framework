@@ -1,7 +1,8 @@
 import { readdirSync } from 'node:fs'
 import { join } from 'node:path'
-import { parseVerdict } from '@gemstack/ai-autopilot'
+import { parseVerdict, STACK_TRADEOFFS } from '@gemstack/ai-autopilot'
 import type {
+  ArchitectAlternative,
   ArchitectContext,
   ArchitectDecision,
   ArchitectPlan,
@@ -37,8 +38,11 @@ export function architectPrompt(intent: string): string {
     'You are the architect for a new app. Decide the stack and the key architectural choices.',
     `What the user wants: ${intent}`,
     'Prefer a modern, well-supported stack. Keep the choices minimal and justified.',
+    'Justify the stack honestly: give its real PROS and its CONS, and name the main',
+    'alternative you rejected and why it lost. This is shown to the user as the rationale.',
+    STACK_TRADEOFFS,
     'Respond with ONLY a fenced ```json block of the shape:',
-    '{ "stack": "<one line>", "narration": "<what you are building and why>", "decisions": [{ "choice": "<one line>", "why": "<one line>" }] }',
+    '{ "stack": "<one line>", "narration": "<what you are building and why>", "decisions": [{ "choice": "<one line>", "why": "<one line>" }], "pros": ["<upside>"], "cons": ["<downside>"], "alternatives": [{ "option": "<rejected stack>", "whyNot": "<one line>" }] }',
   ].join('\n')
 }
 
@@ -302,7 +306,20 @@ export function parseArchitectPlan(text: string, intent: string): ArchitectPlan 
   const decisions = Array.isArray(obj?.['decisions'])
     ? (obj['decisions'] as unknown[]).flatMap(coerceDecision)
     : []
-  return { stack, narration, decisions }
+  const pros = coerceStrings(obj?.['pros'])
+  const cons = coerceStrings(obj?.['cons'])
+  const alternatives = Array.isArray(obj?.['alternatives'])
+    ? (obj['alternatives'] as unknown[]).flatMap(coerceAlternative)
+    : []
+  // Omit empty rationale fields so a plan without them stays clean.
+  return {
+    stack,
+    narration,
+    decisions,
+    ...(pros.length ? { pros } : {}),
+    ...(cons.length ? { cons } : {}),
+    ...(alternatives.length ? { alternatives } : {}),
+  }
 }
 
 function coerceDecision(value: unknown): ArchitectDecision[] {
@@ -311,6 +328,19 @@ function coerceDecision(value: unknown): ArchitectDecision[] {
   const choice = typeof obj['choice'] === 'string' ? obj['choice'].trim() : ''
   const why = typeof obj['why'] === 'string' ? obj['why'].trim() : ''
   return choice && why ? [{ choice, why }] : []
+}
+
+function coerceStrings(value: unknown): string[] {
+  if (!Array.isArray(value)) return []
+  return value.filter((v): v is string => typeof v === 'string' && v.trim() !== '').map(v => v.trim())
+}
+
+function coerceAlternative(value: unknown): ArchitectAlternative[] {
+  if (typeof value !== 'object' || value === null) return []
+  const obj = value as Record<string, unknown>
+  const option = typeof obj['option'] === 'string' ? obj['option'].trim() : ''
+  const whyNot = typeof obj['whyNot'] === 'string' ? obj['whyNot'].trim() : ''
+  return option && whyNot ? [{ option, whyNot }] : []
 }
 
 const FENCE = /```(?:[a-zA-Z0-9]*)\n([\s\S]*?)```/g

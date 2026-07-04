@@ -43,6 +43,14 @@ export interface ArchitectDecision {
   why: string
 }
 
+/** A stack option the architect considered but did not choose, and why. */
+export interface ArchitectAlternative {
+  /** The rejected option (e.g. "Next.js"). */
+  option: string
+  /** Why it lost to the chosen stack, one line (e.g. "no first-class edge/Cloudflare deploy"). */
+  whyNot: string
+}
+
 /** How the app is rendered/served, which drives the deploy shape. */
 export type RenderMode = 'ssr' | 'ssg' | 'spa'
 
@@ -100,6 +108,12 @@ export interface ArchitectPlan {
   narration: string
   /** Key choices to record to the decisions ledger so they are not re-litigated. */
   decisions: readonly ArchitectDecision[]
+  /** Why the chosen stack fits — the upsides, for the rationale panel. */
+  pros?: readonly string[]
+  /** Honest downsides of the chosen stack — the tradeoffs it accepts. */
+  cons?: readonly string[]
+  /** Options considered and rejected, with why — recorded to the ledger as rejections. */
+  alternatives?: readonly ArchitectAlternative[]
 }
 
 /**
@@ -108,7 +122,14 @@ export interface ArchitectPlan {
  */
 export type BootstrapEvent =
   | { type: 'scope'; scope: BootstrapScope; intent: string }
-  | { type: 'architect'; stack: string; decisions: readonly ArchitectDecision[] }
+  | {
+      type: 'architect'
+      stack: string
+      decisions: readonly ArchitectDecision[]
+      pros?: readonly string[]
+      cons?: readonly string[]
+      alternatives?: readonly ArchitectAlternative[]
+    }
   | { type: 'narrate'; phase: BootstrapPhase; message: string }
   | { type: 'build'; event: SupervisorEvent }
   | { type: 'checklist'; pass: number; blockers: readonly string[]; passing: boolean }

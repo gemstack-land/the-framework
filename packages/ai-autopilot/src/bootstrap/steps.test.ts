@@ -42,6 +42,49 @@ describe('agentArchitect (default step over an ai-sdk agent)', () => {
       // the rejected idea reached the model as a briefing so it will not re-pitch it
       const sent = JSON.stringify(fake.getCalls()[0])
       assert.match(sent, /NoSQL document store/)
+      // the architect is asked to justify the stack, grounded in the objective tradeoffs
+      assert.match(sent, /PROS and its CONS/)
+      assert.match(sent, /renderer-agnostic/)
+    } finally {
+      fake.restore()
+    }
+  })
+
+  it('parses the stack rationale (pros/cons/alternatives) when the model returns it', async () => {
+    const fake = AiFake.fake()
+    try {
+      fake.respondWithSequence([
+        {
+          text: JSON.stringify({
+            stack: 'Vike + universal-orm',
+            narration: 'n',
+            decisions: [],
+            pros: ['edge deploy'],
+            cons: ['smaller ecosystem'],
+            alternatives: [{ option: 'Next.js', whyNot: 'constrained edge deploy' }],
+          }),
+        },
+      ])
+      const step = agentArchitect(agent({ instructions: 'architect' }))
+      const plan = await step(architectCtx({ ledger: new DecisionLedger() }))
+      assert.deepEqual(plan.pros, ['edge deploy'])
+      assert.deepEqual(plan.cons, ['smaller ecosystem'])
+      assert.deepEqual(plan.alternatives, [{ option: 'Next.js', whyNot: 'constrained edge deploy' }])
+    } finally {
+      fake.restore()
+    }
+  })
+
+  it('omits rationale fields when the model returns none (backward compatible)', async () => {
+    const fake = AiFake.fake()
+    try {
+      fake.respondWithSequence([
+        { text: JSON.stringify({ stack: 'Vike', narration: 'n', decisions: [] }) },
+      ])
+      const step = agentArchitect(agent({ instructions: 'architect' }))
+      const plan = await step(architectCtx({ ledger: new DecisionLedger() }))
+      assert.equal('pros' in plan, false)
+      assert.equal('alternatives' in plan, false)
     } finally {
       fake.restore()
     }

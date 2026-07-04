@@ -15,6 +15,7 @@
 export { Bootstrap, createBootstrap, BootstrapAborted } from './bootstrap.js'
 export {
   agentArchitect,
+  STACK_TRADEOFFS,
   supervisorBuild,
   loopChecklist,
   loopImprove,
@@ -45,6 +46,7 @@ export type {
   BootstrapPhase,
   ScopeAnswer,
   ArchitectDecision,
+  ArchitectAlternative,
   ArchitectPlan,
   RenderMode,
   DeployPlan,

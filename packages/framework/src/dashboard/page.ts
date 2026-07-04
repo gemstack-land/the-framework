@@ -41,6 +41,14 @@ export function dashboardHtml(title: string): string {
   li:last-child { border-bottom: 0; }
   .choice { color: #e8ecf3; }
   .why { color: #8b93a3; font-size: 13px; }
+  #rationale { margin-top: 10px; }
+  #rationale .rat-group { margin-top: 8px; }
+  #rationale .rat-label { font-size: 11px; text-transform: uppercase; letter-spacing: .6px;
+    color: #7b8496; font-weight: 600; margin-bottom: 4px; }
+  #rationale .pro { color: #a9d6b6; font-size: 13px; padding: 2px 0; }
+  #rationale .con { color: #d8b48a; font-size: 13px; padding: 2px 0; }
+  #rationale .alt { color: #8b93a3; font-size: 13px; padding: 2px 0; }
+  #rationale .alt b { color: #b7c0d0; font-weight: 600; }
   .pass-ok { color: #67d98f; }
   .pass-bad { color: #f0a35e; }
   .blocker { color: #f0a35e; }
@@ -71,6 +79,7 @@ export function dashboardHtml(title: string): string {
     <h2>Stack &amp; rationale</h2>
     <div class="stack muted" id="stack">deciding…</div>
     <ul id="decisions"></ul>
+    <div id="rationale"></div>
   </section>
   <section id="loop-panel">
     <h2>Loop status</h2>
@@ -120,6 +129,7 @@ function bootstrap(e) {
         li.innerHTML = '<div class="choice">' + esc(d.choice) + '</div><div class="why">' + esc(d.why) + '</div>';
         ul.appendChild(li);
       }
+      renderRationale(e);
       break;
     }
     case 'checklist': {
@@ -159,6 +169,22 @@ function driver(e) {
   else if (e.type === 'action') log('  \\u00b7 ' + e.label);
   else if (e.type === 'error') log('  ! ' + e.message);
   else if (e.type === 'start') log('\\u203a prompt sent');
+}
+function renderRationale(e) {
+  const el = $('rationale'); el.innerHTML = '';
+  const group = (label, items, render) => {
+    if (!items || !items.length) return;
+    const wrap = document.createElement('div'); wrap.className = 'rat-group';
+    const h = document.createElement('div'); h.className = 'rat-label'; h.textContent = label;
+    wrap.appendChild(h);
+    for (const it of items) { const row = document.createElement('div'); render(row, it); wrap.appendChild(row); }
+    el.appendChild(wrap);
+  };
+  group('Why this stack', e.pros, (row, p) => { row.className = 'pro'; row.textContent = '\\u2713 ' + p; });
+  group('Tradeoffs', e.cons, (row, c) => { row.className = 'con'; row.textContent = '\\u26a0 ' + c; });
+  group('Considered instead', e.alternatives, (row, a) => {
+    row.className = 'alt'; row.innerHTML = '<b>' + esc(a.option) + '</b> \\u2014 ' + esc(a.whyNot);
+  });
 }
 function setSessionLink(sessionId, sessionLink) {
   const el = $('session-link');

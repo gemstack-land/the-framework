@@ -33,6 +33,12 @@ const ARCHITECT = {
     { choice: 'Prisma on Postgres', why: 'the orders catalog is relational and needs typed queries' },
     { choice: 'SSR over SPA', why: 'orders need per-request data and auth on the server' },
   ],
+  pros: [
+    'Deploys to the edge (Cloudflare) for low-latency per-request orders data',
+    'Renderer-agnostic, so the UI is not locked to one framework',
+  ],
+  cons: ['Smaller ecosystem than Next.js', 'Fewer batteries-included conventions, so more is wired by hand'],
+  alternatives: [{ option: 'Next.js', whyNot: 'more constrained Cloudflare/edge deploy for the per-request data path' }],
 }
 
 const TURNS: FakeTurn[] = [

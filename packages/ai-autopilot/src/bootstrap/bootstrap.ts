@@ -79,7 +79,17 @@ export class Bootstrap {
       ...(this.signal ? { signal: this.signal } : {}),
     })
     for (const d of plan.decisions) this.ledger.accept(d.choice, d.why, ['architecture'])
-    this.emit({ type: 'architect', stack: plan.stack, decisions: plan.decisions })
+    // Record the rejected alternatives too, so the ledger shows what was weighed
+    // and not re-litigated (e.g. "Next.js — no first-class edge deploy").
+    for (const a of plan.alternatives ?? []) this.ledger.reject(a.option, a.whyNot, ['architecture'])
+    this.emit({
+      type: 'architect',
+      stack: plan.stack,
+      decisions: plan.decisions,
+      ...(plan.pros?.length ? { pros: plan.pros } : {}),
+      ...(plan.cons?.length ? { cons: plan.cons } : {}),
+      ...(plan.alternatives?.length ? { alternatives: plan.alternatives } : {}),
+    })
     if (plan.narration) this.emit({ type: 'narrate', phase: 'architect', message: plan.narration })
 
     // 3. Build — Supervisor over personas + runner; forward its events as narration.

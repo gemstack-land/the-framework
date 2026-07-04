@@ -55,6 +55,47 @@ describe('Bootstrap — happy path (full scope, passes first checklist)', () => 
     assert.equal(ledger.all()[0]?.status, 'accepted')
     assert.match(ledger.all()[0]!.title, /Vike for SSR/)
   })
+
+  it('emits the stack rationale (pros/cons/alternatives) and records alternatives as ledger rejections', async () => {
+    const events: BootstrapEvent[] = []
+    const ledger = new DecisionLedger()
+    const boot = new Bootstrap({
+      steps: stubSteps({
+        architect: () => ({
+          stack: 'Vike + universal-orm',
+          narration: 'n',
+          decisions: [{ choice: 'Use Vike for SSR', why: 'SEO' }],
+          pros: ['edge deploy'],
+          cons: ['smaller ecosystem'],
+          alternatives: [{ option: 'Next.js', whyNot: 'constrained edge deploy' }],
+        }),
+      }),
+      ledger,
+      onEvent: e => events.push(e),
+    })
+    await boot.run()
+
+    const arch = events.find(e => e.type === 'architect')
+    assert.ok(arch?.type === 'architect')
+    assert.deepEqual(arch.pros, ['edge deploy'])
+    assert.deepEqual(arch.cons, ['smaller ecosystem'])
+    assert.deepEqual(arch.alternatives, [{ option: 'Next.js', whyNot: 'constrained edge deploy' }])
+
+    // The rejected alternative is in the ledger, honestly marked rejected.
+    const rejected = ledger.all().find(d => d.status === 'rejected')
+    assert.ok(rejected, 'expected a rejected alternative in the ledger')
+    assert.match(rejected!.title, /Next\.js/)
+  })
+
+  it('omits rationale fields on the architect event when the plan has none', async () => {
+    const events: BootstrapEvent[] = []
+    const boot = new Bootstrap({ steps: stubSteps(), onEvent: e => events.push(e) })
+    await boot.run()
+    const arch = events.find(e => e.type === 'architect')
+    assert.ok(arch?.type === 'architect')
+    assert.equal('pros' in arch, false)
+    assert.equal('alternatives' in arch, false)
+  })
 })
 
 describe('Bootstrap — full-fledged loop', () => {

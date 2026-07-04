@@ -6,6 +6,7 @@ import { join } from 'node:path'
 import { DecisionLedger, type DeployTarget, type SupervisorEvent } from '@gemstack/ai-autopilot'
 import { FakeDriver } from './driver/index.js'
 import {
+  architectPrompt,
   deployWith,
   driverArchitect,
   driverBuild,
@@ -39,6 +40,38 @@ test('parseArchitectPlan falls back safely on garbage', () => {
   const plan = parseArchitectPlan('no json here', 'a blog')
   assert.match(plan.stack, /a blog/)
   assert.deepEqual(plan.decisions, [])
+})
+
+test('parseArchitectPlan reads the stack rationale (pros/cons/alternatives)', () => {
+  const text =
+    '```json\n' +
+    JSON.stringify({
+      stack: 'Vike',
+      narration: 'n',
+      decisions: [{ choice: 'SSR', why: 'data' }],
+      pros: ['edge deploy', 'renderer-agnostic'],
+      cons: ['smaller ecosystem'],
+      alternatives: [{ option: 'Next.js', whyNot: 'constrained edge deploy' }],
+    }) +
+    '\n```'
+  const plan = parseArchitectPlan(text, 'an app')
+  assert.deepEqual(plan.pros, ['edge deploy', 'renderer-agnostic'])
+  assert.deepEqual(plan.cons, ['smaller ecosystem'])
+  assert.deepEqual(plan.alternatives, [{ option: 'Next.js', whyNot: 'constrained edge deploy' }])
+})
+
+test('parseArchitectPlan omits rationale fields when absent (backward compatible)', () => {
+  const plan = parseArchitectPlan('```json\n{"stack":"Vike","narration":"n","decisions":[]}\n```', 'an app')
+  assert.equal('pros' in plan, false)
+  assert.equal('cons' in plan, false)
+  assert.equal('alternatives' in plan, false)
+})
+
+test('architectPrompt asks for pros/cons + the rejected alternative, grounded in the tradeoffs', () => {
+  const p = architectPrompt('a blog')
+  assert.match(p, /PROS and its CONS/)
+  assert.match(p, /"alternatives"/)
+  assert.match(p, /renderer-agnostic/) // STACK_TRADEOFFS is embedded
 })
 
 test('driverArchitect returns the parsed plan from the driver turn', async () => {
