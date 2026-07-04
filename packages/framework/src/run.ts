@@ -1,18 +1,23 @@
 import {
   Bootstrap,
   DecisionLedger,
+  ExtensionRegistry,
   LocalRunner,
+  SkillRegistry,
+  builtinExtensionNames,
   builtinPresetRegistry,
+  composePersonas,
   mergeChecklists,
+  neutralPersonas,
   personaInstructions,
-  presetPersonas,
   serveCheck,
-  vikeExtensionPersonas,
+  skillInstructions,
   type BootstrapEvent,
   type BootstrapResult,
   type BootstrapScope,
   type DeployTarget,
   type FrameworkDetection,
+  type FrameworkExtension,
   type FrameworkSignals,
   type LocalRunnerSession,
 } from '@gemstack/ai-autopilot'
@@ -77,15 +82,20 @@ export interface RunFrameworkOptions {
   /** Signals for preset detection (deps/files). Default: none, so the flagship preset wins. */
   signals?: FrameworkSignals
   /**
-   * Compose the vike-* extensions instead of hand-rolling them: vike-auth for
-   * auth, the universal-orm data layer for domain data, vike-rbac for
-   * roles/permissions, vike-crud/vike-admin for the CRUD+admin UI, and
-   * vike-themes/vike-layouts for styling and the app shell. Frames the agent
-   * with the extension personas. Opt-in and Vike-only: the extensions resolve
-   * inside the vike-data workspace, so the default (hand-rolled + Prisma) path
-   * stays publish-safe.
+   * Opt the built-in capability extensions in (auth, data, rbac, crud, shell) so
+   * a from-scratch build is framed to compose them instead of hand-rolling
+   * auth/data/UI. Vike-only: the built-in composers resolve inside the vike-data
+   * workspace, so the opt-in is ignored on a non-Vike preset. Off by default: the
+   * publish-safe path (hand-rolled + Prisma) still stands, and installed
+   * extensions auto-activate by signal either way (see #190).
    */
   composeExtensions?: boolean
+  /**
+   * Extra {@link FrameworkExtension}s to register on top of the built-ins —
+   * discovered `framework-*` packages from the project, or explicit ones. Each
+   * still activates by signal or opt-in; registering does not force it on.
+   */
+  extensions?: readonly FrameworkExtension[]
   /** Max full-fledged passes. Default {@link DEFAULT_MAX_PASSES} (5). */
   maxPasses?: number
   /** A deploy decision to narrate at the end. Omit to skip the deploy phase. */
@@ -162,25 +172,30 @@ export async function runFramework(opts: RunFrameworkOptions): Promise<RunFramew
     }
   }
 
-  // 1. Preset: detect the framework and turn its personas into prompt-framing.
-  // --compose-extensions swaps the shared personas for the vike-extension set
-  // (compose vike-auth/vike-rbac/vike-crud/vike-themes + the universal-orm data
-  // layer instead of hand-rolling them); default keeps Prisma. The extensions
-  // are Vike-only and resolve only in the vike-data workspace, so guard it: on a
-  // non-Vike preset, fall back to the hand-rolled + Prisma path and say why
-  // rather than framing (e.g.) Next with vike composers.
-  const { preset, detection } = builtinPresetRegistry().select(opts.signals ?? {})
-  const composeExtensions = opts.composeExtensions === true && preset.name === 'vike'
-  if (opts.composeExtensions && !composeExtensions) {
+  // 1. Detect the framework (its page-builder persona + narration), then compose
+  // the active capability extensions and framework skills on top — no framework
+  // is hardcoded (#190). Extensions activate by signal (a dep is present) or, with
+  // --compose-extensions, by opting the built-ins in for a from-scratch build. The
+  // built-in composers are Vike-only (they resolve inside the vike-data workspace),
+  // so the blanket opt-in is guarded to the Vike preset; on any other preset it is
+  // ignored with a log and only signal-matched extensions compose (#202). Skills
+  // are doc pointers (Vike -> vike.dev/llms.txt) that ride the same seam.
+  const signals = opts.signals ?? {}
+  const { preset, detection } = builtinPresetRegistry().select(signals)
+  const optInBuiltins = opts.composeExtensions === true && preset.name === 'vike'
+  if (opts.composeExtensions && !optInBuiltins) {
     emit({
       kind: 'log',
-      message: `--compose-extensions ignored: the vike-* extensions are Vike-only, but the detected preset is "${preset.name}". Using the hand-rolled + Prisma path.`,
+      message: `--compose-extensions ignored: the built-in extensions are Vike-only, but the detected preset is "${preset.name}". Using the hand-rolled + Prisma path.`,
     })
   }
-  const personas = composeExtensions
-    ? presetPersonas(preset, vikeExtensionPersonas)
-    : presetPersonas(preset)
-  const system = personas.map(personaInstructions).join('\n\n')
+  const extensionRegistry = new ExtensionRegistry().addAll(opts.extensions ?? [])
+  const activeExtensions = extensionRegistry.match(signals, {
+    include: optInBuiltins ? builtinExtensionNames : [],
+  })
+  const personas = composePersonas({ base: preset.personas, extensions: activeExtensions, neutral: neutralPersonas })
+  const skills = new SkillRegistry().match(signals)
+  const system = [...personas.map(personaInstructions), ...skills.map(skillInstructions)].join('\n\n')
 
   // The session id is not known until the first driver turn returns, so a
   // templated link (`.../{sessionId}`) can only resolve later. A literal link is
@@ -195,9 +210,11 @@ export async function runFramework(opts: RunFrameworkOptions): Promise<RunFramew
     fake: opts.driver.name === 'fake',
     ...(literalLink ? { sessionLink: literalLink } : {}),
   })
+  const extensionNote = activeExtensions.length ? `, ${activeExtensions.map(e => e.name).join(' + ')}` : ''
+  const skillNote = skills.length ? `, ${skills.length} skill(s)` : ''
   emit({
     kind: 'log',
-    message: `Detected ${detection.framework ?? preset.framework} (confidence ${detection.confidence}); framing with ${personas.length} persona(s)`,
+    message: `Detected ${detection.framework ?? preset.framework} (confidence ${detection.confidence}); framing with ${personas.length} persona(s)${extensionNote}${skillNote}`,
   })
 
   // Watch the black box for its real session id (the {type:'result'} event) and

@@ -1,5 +1,6 @@
 import { strict as assert } from 'node:assert'
 import { test } from 'node:test'
+import { defineFrameworkExtension, definePersona } from '@gemstack/ai-autopilot'
 import { DEFAULT_MAX_PASSES, runFramework } from './run.js'
 import { FAKE_DEPLOY, FAKE_INTENT, FAKE_SIGNALS, fakeDriver } from './fake-script.js'
 import type { Driver } from './driver/index.js'
@@ -159,6 +160,37 @@ test('without --compose-extensions the default framing has no vike-auth (publish
     onEvent: () => {},
   })
   assert.doesNotMatch(system(), /vike-auth/)
+})
+
+test('Vike arrives as a skill (llms.txt pointer) in the framing (#190)', async () => {
+  const { driver, system } = recordingDriver()
+  await runFramework({
+    intent: FAKE_INTENT,
+    driver,
+    cwd: '/tmp/ws',
+    signals: FAKE_SIGNALS, // has vike-react -> the Vike skill activates
+    onEvent: () => {},
+  })
+  assert.match(system(), /https:\/\/vike\.dev\/llms\.txt/)
+})
+
+test('a registered extension auto-activates by its signal, no opt-in needed (#190)', async () => {
+  const { driver, system } = recordingDriver()
+  const audit = defineFrameworkExtension({
+    name: 'framework-audit',
+    capability: 'audit',
+    personas: [definePersona({ name: 'auditor', role: 'audits', systemPrompt: 'AUDIT-LOG-EVERYTHING sentinel.' })],
+    signals: { dependencies: ['@prisma/client'] }, // present in FAKE_SIGNALS
+  })
+  await runFramework({
+    intent: FAKE_INTENT,
+    driver,
+    cwd: '/tmp/ws',
+    signals: FAKE_SIGNALS,
+    extensions: [audit],
+    onEvent: () => {},
+  })
+  assert.match(system(), /AUDIT-LOG-EVERYTHING sentinel/)
 })
 
 test('the default pass budget is raised for from-scratch builds (#182)', () => {

@@ -7,6 +7,7 @@ import { startDashboard, type Dashboard } from './dashboard/index.js'
 import { formatFrameworkEvent, type FrameworkEvent } from './events.js'
 import { runFramework, type DeployDecision, type RunFrameworkOptions, type ServeConfig } from './run.js'
 import { FAKE_DEPLOY, FAKE_INTENT, FAKE_SIGNALS, fakeDriver } from './fake-script.js'
+import { discoverExtensions, readProjectSignals } from './extensions.js'
 import { preflight } from './preflight.js'
 
 /** Where the CLI writes. Injectable so tests capture output. */
@@ -34,10 +35,10 @@ Options:
   --cwd <dir>            Workspace the agent builds in (default: current directory).
   --model <id>           Model to pass through to the wrapped agent.
   --scope <prototype|full>   How much app to build (default: full).
-  --compose-extensions   Compose the vike-* extensions (auth, data, rbac, crud,
-                         themes/layouts) instead of hand-rolling them. Vike-only;
-                         extensions resolve in the vike-data workspace
-                         (default: off, hand-rolled + Prisma).
+  --compose-extensions   Opt the built-in capability extensions in (auth, data,
+                         rbac, crud, shell) so the agent composes them instead of
+                         hand-rolling. Vike-only; installed framework-* extensions
+                         auto-activate either way (default: off, hand-rolled + Prisma).
   --max-passes <n>       Full-fledged loop pass budget (default: 5).
   --permission-mode <mode>   Claude Code permission mode: default | acceptEdits |
                              bypassPermissions | plan (default: acceptEdits).
@@ -318,18 +319,31 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
     dashboard?.push(event)
   }
 
+  // Detection signals: fixed for the fake demo, read from the project otherwise so
+  // preset detection and extension auto-activation reflect what is actually
+  // installed. Then discover installed `framework-*` capability packages (#190) and
+  // register them; each still activates by signal or --compose-extensions opt-in.
+  const signals = fake ? FAKE_SIGNALS : readProjectSignals(cwd)
+  let discovered: RunFrameworkOptions['extensions']
+  if (!fake) {
+    const { extensions, failed } = await discoverExtensions(cwd, signals)
+    for (const f of failed) io.err(`skipped framework extension ${f.package}: ${f.error}`)
+    if (extensions.length) discovered = extensions
+  }
+
   const runOpts: RunFrameworkOptions = {
     intent,
     scope: opts.scope,
     driver,
     cwd,
     onEvent,
+    signals,
     ...(opts.model ? { model: opts.model } : {}),
     ...(opts.maxPasses ? { maxPasses: opts.maxPasses } : {}),
     ...(deploy ? { deploy } : {}),
     ...(deployTarget ? { deployTarget } : {}),
     ...(serve ? { serve } : {}),
-    ...(fake ? { signals: FAKE_SIGNALS } : {}),
+    ...(discovered ? { extensions: discovered } : {}),
     ...(opts.composeExtensions ? { composeExtensions: true } : {}),
     ...(opts.sessionLink ? { sessionLink: opts.sessionLink } : {}),
   }

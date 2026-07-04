@@ -66,7 +66,7 @@ framework --fake               Offline demo (no CLI, no model, deterministic).
   --cwd <dir>            Workspace the agent builds in (default: cwd).
   --model <id>           Model to pass through to the wrapped agent.
   --scope <prototype|full>   How much app to build (default: full).
-  --compose-extensions   Compose the vike-* extensions instead of hand-rolling them (Vike-only, opt-in).
+  --compose-extensions   Opt the built-in capability extensions in (Vike-only; see below).
   --deploy <target>      Narrate a deploy decision (e.g. cloudflare, dokploy).
   --port <n>             Dashboard port (default: 4477).
   --no-dashboard         Run headless.
@@ -76,17 +76,62 @@ framework --fake               Offline demo (no CLI, no model, deterministic).
 The live path needs the Claude Code CLI installed (`claude` on `PATH`). The
 `--fake` path needs neither a CLI nor a model, so it is what CI runs.
 
-## Composing vike-* extensions
+## Extensions (#190)
 
-By default the agent hand-rolls auth and models data with Prisma, a fully
-publish-safe stack. Pass `--compose-extensions` (Vike-only) to instead frame the
-agent with the **composer personas**: compose vike-auth for identity, the
-universal-orm data layer for domain data, vike-rbac for roles/permissions,
-vike-crud/vike-admin for schema-derived CRUD + admin UI, and vike-themes/vike-layouts
-for styling and the app shell, rather than reinventing each. It is opt-in because
-those vike-* packages currently resolve only inside the vike-data workspace, so the
-default path is the one that stays publishable. See `@gemstack/ai-autopilot`'s
-`vikeExtensionPersonas`.
+The Framework is modular: it composes **capability extensions** and **skills**
+into the agent frame instead of hardcoding a fixed list. Nothing is framework-gated.
+
+- A **capability extension** (`framework-auth`, `framework-data`, ...) owns a
+  cross-cutting concern. When it matches a project it frames the agent with its
+  personas. An extension with the same `capability` as a built-in default
+  supersedes it (e.g. `framework-data` replaces the default ORM modeler), so the
+  agent never gets two conflicting personas for one concern.
+- A **skill** is a doc pointer — an `llms.txt` the agent consults for
+  framework/domain knowledge. A framework is a skill, not an adapter package:
+  Vike is `https://vike.dev/llms.txt`.
+
+An extension activates two ways: by **signal** (one of its dependencies is in the
+project's `package.json`) or by **opt-in** (`--compose-extensions` turns the
+built-ins on, for a from-scratch build where nothing is installed yet).
+
+The built-ins are the vike-* composers: `framework-auth` (vike-auth for identity),
+`framework-data` (the universal-orm data layer for domain data), `framework-rbac`
+(vike-rbac for roles/permissions), `framework-crud` (vike-crud/vike-admin for
+schema-derived CRUD + admin UI), and `framework-shell` (vike-themes/vike-layouts
+for styling and the app shell). They resolve only inside the vike-data workspace,
+so `--compose-extensions` is Vike-only and ignored on any other preset; the default
+path (hand-rolled auth + Prisma) is the one that stays publishable.
+
+### Authoring a `framework-*` extension
+
+Publish a package named `framework-<name>` (or `@scope/framework-<name>`) whose
+default export is a `FrameworkExtension`:
+
+```ts
+// framework-sentry/src/index.ts
+import { defineFrameworkExtension, definePersona, defineSkill } from '@gemstack/ai-autopilot'
+
+export default defineFrameworkExtension({
+  name: 'framework-sentry',
+  capability: 'tracking',
+  // deps/files that auto-activate it in a project:
+  signals: { dependencies: ['@sentry/node', '@sentry/react'] },
+  // personas frame the agent; skills point it at authoritative docs:
+  personas: [definePersona({
+    name: 'error-tracker',
+    role: 'Wires Sentry for error tracking instead of hand-rolling logging',
+    systemPrompt: 'Install @sentry/node and wrap the server; never hand-roll error capture. ...',
+  })],
+  skills: [defineSkill({
+    name: 'sentry', title: 'Sentry', description: 'Error tracking + performance.',
+    url: 'https://docs.sentry.io/llms.txt',
+  })],
+})
+```
+
+When a user's project depends on both `@gemstack/framework` and
+`framework-sentry`, the CLI discovers the package, registers it, and composes it
+whenever its signal matches — no change to the framework core.
 
 ## Status
 
