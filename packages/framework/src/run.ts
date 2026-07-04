@@ -77,10 +77,13 @@ export interface RunFrameworkOptions {
   /** Signals for preset detection (deps/files). Default: none, so the flagship preset wins. */
   signals?: FrameworkSignals
   /**
-   * Compose the vike-* extensions (currently: vike-auth for authentication)
-   * instead of hand-rolling them. Frames the agent with the extension personas.
-   * Opt-in and Vike-only: the extensions resolve inside the vike-data workspace,
-   * so the default (hand-rolled + Prisma) path stays publish-safe.
+   * Compose the vike-* extensions instead of hand-rolling them: vike-auth for
+   * auth, the universal-orm data layer for domain data, vike-rbac for
+   * roles/permissions, vike-crud/vike-admin for the CRUD+admin UI, and
+   * vike-themes/vike-layouts for styling and the app shell. Frames the agent
+   * with the extension personas. Opt-in and Vike-only: the extensions resolve
+   * inside the vike-data workspace, so the default (hand-rolled + Prisma) path
+   * stays publish-safe.
    */
   composeExtensions?: boolean
   /** Max full-fledged passes. Default {@link DEFAULT_MAX_PASSES} (5). */
@@ -161,7 +164,8 @@ export async function runFramework(opts: RunFrameworkOptions): Promise<RunFramew
 
   // 1. Preset: detect the framework and turn its personas into prompt-framing.
   // With --compose-extensions, swap the shared personas for the vike-extension
-  // set (compose vike-auth instead of hand-rolling auth); default keeps Prisma.
+  // set (compose vike-auth/vike-rbac/vike-crud/vike-themes + the universal-orm
+  // data layer instead of hand-rolling them); default keeps Prisma.
   const { preset, detection } = builtinPresetRegistry().select(opts.signals ?? {})
   const personas = opts.composeExtensions
     ? presetPersonas(preset, vikeExtensionPersonas)
