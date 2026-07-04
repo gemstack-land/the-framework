@@ -34,3 +34,9 @@ test('formatFrameworkEvent renders a preview line', () => {
     '▶ your app is running at http://localhost:3000',
   )
 })
+
+test('formatFrameworkEvent distinguishes finished / stopped / failed (#218)', () => {
+  assert.equal(formatFrameworkEvent({ kind: 'end', ok: true }), '✓ finished')
+  assert.equal(formatFrameworkEvent({ kind: 'end', ok: false, stopped: true }), '■ stopped')
+  assert.equal(formatFrameworkEvent({ kind: 'end', ok: false, detail: 'boom' }), '✗ failed: boom')
+})

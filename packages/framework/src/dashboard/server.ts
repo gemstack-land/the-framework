@@ -12,6 +12,12 @@ export interface DashboardOptions {
   host?: string
   /** Page title. Default `"The Framework"`. */
   title?: string
+  /**
+   * Called when the browser hits the Stop button (`POST /stop`). Wire this to
+   * abort the run (e.g. an `AbortController.abort()`). Omit to disable stopping;
+   * the page hides the button when the server reports no stop handler.
+   */
+  onStop?: () => void
 }
 
 /** A running localhost dashboard. Push {@link FrameworkEvent}s; it renders them live. */
@@ -40,10 +46,11 @@ export function startDashboard(opts: DashboardOptions = {}): Promise<Dashboard> 
   const host = opts.host ?? '127.0.0.1'
   const port = opts.port ?? 4477
   const title = opts.title ?? 'The Framework'
+  const onStop = opts.onStop
   const stream = new EventStream<FrameworkEvent>()
   const clients = new Set<ServerResponse>()
 
-  const server = createServer((req, res) => handle(req, res, stream, clients, title))
+  const server = createServer((req, res) => handle(req, res, stream, clients, title, onStop))
 
   return new Promise<Dashboard>((resolvePromise, rejectPromise) => {
     server.once('error', rejectPromise)
@@ -67,15 +74,35 @@ function handle(
   stream: EventStream<FrameworkEvent>,
   clients: Set<ServerResponse>,
   title: string,
+  onStop: (() => void) | undefined,
 ): void {
   const url = req.url ?? '/'
   if (url === '/' || url.startsWith('/?')) {
     res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' })
-    res.end(dashboardHtml(title))
+    res.end(dashboardHtml(title, Boolean(onStop)))
     return
   }
   if (url === '/events') {
     streamEvents(req, res, stream, clients)
+    return
+  }
+  if (url === '/stop') {
+    // The Stop button. Idempotent: a stop after the run has ended just aborts an
+    // already-aborted signal (a no-op). 405 for a non-POST so a stray GET can't
+    // interrupt a run. 404 when no handler was wired (stopping disabled).
+    if (req.method !== 'POST') {
+      res.writeHead(405, { 'content-type': 'text/plain', allow: 'POST' })
+      res.end('method not allowed')
+      return
+    }
+    if (!onStop) {
+      res.writeHead(404, { 'content-type': 'text/plain' })
+      res.end('stopping not enabled')
+      return
+    }
+    onStop()
+    res.writeHead(202, { 'content-type': 'application/json' })
+    res.end('{"ok":true}')
     return
   }
   res.writeHead(404, { 'content-type': 'text/plain' })

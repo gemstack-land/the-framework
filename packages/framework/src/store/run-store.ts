@@ -24,7 +24,7 @@ export const META_FILE = 'run.json'
 export const RUN_META_VERSION = 1
 
 /** How a run ended (or that it is still going). */
-export type RunStatus = 'running' | 'done' | 'failed'
+export type RunStatus = 'running' | 'done' | 'stopped' | 'failed'
 
 /**
  * A queryable snapshot of the run, derived entirely from the event log. Lets the
@@ -108,7 +108,7 @@ export function applyEventToMeta(meta: RunMeta, event: FrameworkEvent, at: strin
       break
     }
     case 'end':
-      next.status = event.ok ? 'done' : 'failed'
+      next.status = event.ok ? 'done' : event.stopped ? 'stopped' : 'failed'
       break
     default:
       break

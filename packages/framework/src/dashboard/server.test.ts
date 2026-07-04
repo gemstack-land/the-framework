@@ -1,6 +1,6 @@
 import { strict as assert } from 'node:assert'
 import { test } from 'node:test'
-import { get } from 'node:http'
+import { get, request } from 'node:http'
 import { startDashboard } from './server.js'
 import type { FrameworkEvent } from '../events.js'
 
@@ -11,6 +11,18 @@ function fetchText(url: string): Promise<{ status: number; body: string }> {
       res.on('data', c => (body += c))
       res.on('end', () => resolvePromise({ status: res.statusCode ?? 0, body }))
     }).on('error', rejectPromise)
+  })
+}
+
+function send(url: string, method: string): Promise<{ status: number; body: string }> {
+  return new Promise((resolvePromise, rejectPromise) => {
+    const req = request(url, { method }, res => {
+      let body = ''
+      res.on('data', c => (body += c))
+      res.on('end', () => resolvePromise({ status: res.statusCode ?? 0, body }))
+    })
+    req.on('error', rejectPromise)
+    req.end()
   })
 }
 
@@ -73,5 +85,39 @@ test('dashboard returns 404 for unknown paths', async () => {
     assert.equal(status, 404)
   } finally {
     await dash.close()
+  }
+})
+
+test('POST /stop invokes onStop and the page renders the Stop button (#218)', async () => {
+  let stopped = 0
+  const dash = await startDashboard({ port: 0, onStop: () => stopped++ })
+  try {
+    const { status, body } = await send(dash.url + '/stop', 'POST')
+    assert.equal(status, 202)
+    assert.match(body, /"ok":true/)
+    assert.equal(stopped, 1)
+    // The page ships the button + enables it when a stop handler is wired.
+    const page = await fetchText(dash.url + '/')
+    assert.match(page.body, /id="stop"/)
+    assert.match(page.body, /STOPPABLE = true/)
+  } finally {
+    await dash.close()
+  }
+})
+
+test('/stop is 405 for a non-POST and 404 when stopping is not wired (#218)', async () => {
+  const withStop = await startDashboard({ port: 0, onStop: () => {} })
+  try {
+    assert.equal((await send(withStop.url + '/stop', 'GET')).status, 405)
+  } finally {
+    await withStop.close()
+  }
+  const noStop = await startDashboard({ port: 0 })
+  try {
+    assert.equal((await send(noStop.url + '/stop', 'POST')).status, 404)
+    const page = await fetchText(noStop.url + '/')
+    assert.match(page.body, /STOPPABLE = false/)
+  } finally {
+    await noStop.close()
   }
 })

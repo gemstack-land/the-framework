@@ -30,8 +30,12 @@ export type FrameworkEvent =
   | { kind: 'preview'; url: string; command: string }
   /** A framework-level log line. */
   | { kind: 'log'; message: string }
-  /** The run finished. `ok` is false when it threw. */
-  | { kind: 'end'; ok: boolean; detail?: string }
+  /**
+   * The run finished. `ok` is false when it threw. `stopped` marks the common,
+   * non-error case where the user interrupted it (the dashboard Stop button /
+   * Ctrl+C), so a surface can show "stopped" rather than "failed".
+   */
+  | { kind: 'end'; ok: boolean; stopped?: boolean; detail?: string }
 
 /** Render a {@link FrameworkEvent} as one human-readable line (terminal surface). */
 export function formatFrameworkEvent(event: FrameworkEvent): string {
@@ -51,7 +55,7 @@ export function formatFrameworkEvent(event: FrameworkEvent): string {
     case 'bootstrap':
       return formatBootstrapEvent(event.event)
     case 'end':
-      return event.ok ? '✓ finished' : `✗ failed: ${event.detail ?? 'unknown error'}`
+      return event.ok ? '✓ finished' : event.stopped ? '■ stopped' : `✗ failed: ${event.detail ?? 'unknown error'}`
   }
 }
 
