@@ -1,7 +1,13 @@
 import { strict as assert } from 'node:assert'
 import { describe, it } from 'node:test'
 import { personaInstructions } from './compose.js'
-import { uiIntentDesigner, vikeAuthComposer, vikeDataModeler, vikeExtensionPersonas } from './library.js'
+import {
+  uiIntentDesigner,
+  vikeAuthComposer,
+  vikeCrudComposer,
+  vikeDataModeler,
+  vikeExtensionPersonas,
+} from './library.js'
 
 describe('vike extension personas', () => {
   it('vikeAuthComposer teaches composing vike-auth instead of hand-rolling auth', () => {
@@ -35,9 +41,25 @@ describe('vike extension personas', () => {
     assert.match(text, /drizzle-kit generate/)
   })
 
-  it('vikeExtensionPersonas composes the data layer + auth (no Prisma, no hand-rolled auth)', () => {
+  it('vikeCrudComposer teaches deriving CRUD/admin UI from the schema, not hand-written screens', () => {
+    assert.equal(vikeCrudComposer.name, 'vike-crud-composer')
+    const text = personaInstructions(vikeCrudComposer)
+    // Derive the screens with vike-crud / vike-admin rather than hand-authoring them.
+    assert.match(text, /crud\(\{ table \}\)/)
+    assert.match(text, /crudBlocks\(\{ table \}\)/)
+    assert.match(text, /definePage\(\{ route, sections \}\)/)
+    assert.match(text, /vike-admin/)
+    assert.match(text, /instead of hand-writing list\/record\/form/)
+    // Mutations go through named actions, never inline closures.
+    assert.match(text, /crudActions\(\{ table, tables, scope \}\)/)
+    assert.match(text, /BY NAME/)
+    // The customization ladder ends at eject, reached last.
+    assert.match(text, /ejectView\(view, \{ framework \}\)/)
+  })
+
+  it('vikeExtensionPersonas composes data + auth + crud (no Prisma, no hand-rolled auth/UI)', () => {
     const names = vikeExtensionPersonas.map(p => p.name)
-    assert.deepEqual(names, ['vike-data-modeler', 'vike-auth-composer', 'ui-intent-designer'])
+    assert.deepEqual(names, ['vike-data-modeler', 'vike-auth-composer', 'vike-crud-composer', 'ui-intent-designer'])
     assert.ok(vikeExtensionPersonas.includes(uiIntentDesigner))
   })
 })

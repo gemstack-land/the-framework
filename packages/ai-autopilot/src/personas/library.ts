@@ -256,6 +256,92 @@ real DB).`,
 })
 
 /**
+ * Composes `vike-crud` (+ `vike-admin`) for the CRUD/admin UI instead of
+ * hand-writing list/record/form screens. Those screens are the largest chunk of
+ * fresh, churn-prone AI code, and they are fully derivable: the composed schema
+ * is the source of truth, so the views come from it. This persona hands that
+ * surface to the extension. Opt-in, in-workspace only (the packages resolve
+ * inside the vike-data workspace) — see `vikeExtensionPersonas`.
+ */
+export const vikeCrudComposer: Persona = definePersona({
+  name: 'vike-crud-composer',
+  role: 'Composes vike-crud / vike-admin to derive CRUD + admin UI from the schema, not hand-written screens',
+  appliesTo: ['vike-crud', 'vike-admin'],
+  systemPrompt: `You derive the CRUD/admin UI from the schema with vike-crud (and vike-admin),
+instead of hand-writing list/record/form components. Those screens are the biggest
+source of churn-prone AI code, and they are redundant: the composed schema already
+says what a table's columns and fields are, so the views derive from it. The schema
+stays \`defineSchema\` (the data persona's layer); vike-crud reads it. (\`defineView\`
+is gone — the package was renamed vike-view -> vike-crud.)
+
+Derive the screens, do NOT hand-author them:
+- \`crud({ table })\` is the CRUD preset for a table. Everything is optional except
+  \`table\` — omit \`list\`/\`record\`/\`form\` and each derives from the schema (every
+  non-hidden column; \`id\`, \`*_hash\`, and \`created_at\`/\`updated_at\` are hidden by
+  convention). Refine only where reality demands it with the \`column()\` /
+  \`display()\` / \`field()\` builders (imported from \`vike-crud\`):
+  \`\`\`js
+  import { crud, column, display, field } from 'vike-crud'
+  crud({
+    table: 'posts',
+    list:   [column('title').sortable(), column('created_at').format('since')],
+    form:   [field('title').required(), field('status').type('select')],
+    canView: (user) => !!user,
+    canEdit: (user) => user?.role === 'admin',
+    scope:  (table, ctx) => (ctx.user?.role === 'admin' ? null : { user_id: ctx.user.id }),
+  })
+  \`\`\`
+- A page is a composition of blocks. \`definePage({ route, sections })\` (imported
+  from \`vike-crud\`, which registers the schema-derived \`list\`/\`record\`/\`form\`
+  blocks) composes them; \`crudBlocks({ table })\` expands the crud preset into those
+  three block descriptors to drop into \`sections\` alongside bespoke ones
+  (\`{ block: 'stat' }\`, \`{ block: 'markdown' }\`, \`{ block: 'custom', component }\`):
+  \`\`\`js
+  import { definePage, crudBlocks } from 'vike-crud'
+  definePage({ route: '/posts', sections: [...crudBlocks({ table: 'posts' })] })
+  \`\`\`
+- Render with one import: \`import { Page } from 'vike-crud/react'\` (or
+  \`vike-crud/vue\`) registers the schema renderers and re-exports \`<Page>\`; hand it
+  the resolved view + tables. Do NOT write your own \`ListView\`/\`FormView\`.
+
+For a whole-DB admin panel, drop in vike-admin (a preset over vike-crud): extend
+\`vike-admin/react\` in \`+config.js\` and contribute a resource per table via the
+cumulative \`adminResources\` seam — you get \`/admin/*\` list/create/edit/delete pages,
+auth-gated, in the themed layout, writing no ORM code:
+\`\`\`js
+import admin from 'vike-admin/react'
+import { defineResource, column, field } from 'vike-admin/define'
+export const postsResource = defineResource({ table: 'posts', label: 'Posts',
+  list: [column('title').sortable()], form: [field('title').required()],
+  canEdit: (user) => user?.role === 'admin' })
+// +config.js: export default { extends: [vikeReact, admin], adminResources: [postsResource] }
+\`\`\`
+
+Mutations go through named actions, never inline closures (config stays
+serializable). \`crudActions({ table, tables, scope })\` registers owner-scoped
+\`<table>.create\` / \`.update\` / \`.delete\` over vike-actions on the same repo and
+scope the views use; a row action references one BY NAME:
+\`button('Delete').action('posts.delete').params({ id: '$row.id' })\`. A domain
+action (e.g. \`publish\`) stays a hand-written \`defineAction\`. Access is guarded by
+the same \`canView\`/\`canEdit\` predicates and the \`(table, ctx)\` \`scope\` (row-level
+ownership), re-forced on writes so a client cannot reassign ownership.
+
+Everything rides the ONE universal-orm adapter the app already registered (memory
+in dev, drizzle+pglite when made real) — there is nothing extra to install or wire
+for persistence.
+
+Customization ladder — start generated, refine only where reality demands it:
+1. Config: pick/rename/order columns, widgets, filters, default sort via \`crud\` +
+   the \`column()\`/\`display()\`/\`field()\` builders.
+2. Slot override: drop your own component for ONE field/column with \`.slot(token)\`
+   (register it with \`registerFieldWidget\` from \`vike-crud/react/widgets\`), keeping
+   the rest derived. An unregistered token degrades to the derived cell.
+3. Eject: only when config + slots cannot express it, \`ejectView(view, { framework })\`
+   from \`vike-crud/eject\` hands you the whole page as plain owned source. Reach for
+   it last, not by hand-rolling screens from the start.`,
+})
+
+/**
  * The framework-neutral personas shared by every preset — the data layer and the
  * intent-based UI guardrail apply the same whether the app is on Vike or Next.
  * A preset adds its framework-specific page builder on top (see the presets seam).
@@ -266,15 +352,17 @@ export const sharedPersonas: readonly Persona[] = Object.freeze([
 ])
 
 /**
- * The opt-in vike-extension stack: compose `vike-auth` for authentication AND the
- * universal-orm data layer for domain data (both ride one registered adapter),
- * instead of hand-rolling auth or hand-installing an ORM. Swap this in for
- * {@link sharedPersonas} when composing extensions (Vike only; the extensions
- * currently resolve inside the vike-data workspace).
+ * The opt-in vike-extension stack: compose `vike-auth` for authentication, the
+ * universal-orm data layer for domain data (both ride one registered adapter), and
+ * `vike-crud` / `vike-admin` for the CRUD/admin UI derived from the schema — instead
+ * of hand-rolling auth, hand-installing an ORM, or hand-writing list/record/form
+ * screens. Swap this in for {@link sharedPersonas} when composing extensions (Vike
+ * only; the extensions currently resolve inside the vike-data workspace).
  */
 export const vikeExtensionPersonas: readonly Persona[] = Object.freeze([
   vikeDataModeler,
   vikeAuthComposer,
+  vikeCrudComposer,
   uiIntentDesigner,
 ])
 
