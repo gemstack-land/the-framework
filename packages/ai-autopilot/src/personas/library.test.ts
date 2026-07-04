@@ -7,6 +7,7 @@ import {
   vikeCrudComposer,
   vikeDataModeler,
   vikeExtensionPersonas,
+  vikeShellComposer,
 } from './library.js'
 
 describe('vike extension personas', () => {
@@ -57,9 +58,31 @@ describe('vike extension personas', () => {
     assert.match(text, /ejectView\(view, \{ framework \}\)/)
   })
 
-  it('vikeExtensionPersonas composes data + auth + crud (no Prisma, no hand-rolled auth/UI)', () => {
+  it('vikeShellComposer teaches composing vike-themes/vike-layouts, not hand-rolled CSS + shell', () => {
+    assert.equal(vikeShellComposer.name, 'vike-shell-composer')
+    const text = personaInstructions(vikeShellComposer)
+    // Styling comes from vike-themes (a theme + CSS vars), not a hand-written design system.
+    assert.match(text, /defineTheme/)
+    assert.match(text, /vike-themes\/react/)
+    assert.match(text, /appearance/)
+    assert.match(text, /var\(--primary\)/)
+    // The app shell comes from vike-layouts, not a hand-written topbar/sidebar.
+    assert.match(text, /vike-layouts\/react/)
+    assert.match(text, /'centered'/)
+    assert.match(text, /do NOT write your own\s*\n?\s*color system/i)
+    // The toolbar is an install-and-forget one-liner.
+    assert.match(text, /vike-toolbar\/react/)
+  })
+
+  it('vikeExtensionPersonas composes data + auth + crud + shell (no Prisma, no hand-rolled auth/UI/CSS)', () => {
     const names = vikeExtensionPersonas.map(p => p.name)
-    assert.deepEqual(names, ['vike-data-modeler', 'vike-auth-composer', 'vike-crud-composer', 'ui-intent-designer'])
+    assert.deepEqual(names, [
+      'vike-data-modeler',
+      'vike-auth-composer',
+      'vike-crud-composer',
+      'vike-shell-composer',
+      'ui-intent-designer',
+    ])
     assert.ok(vikeExtensionPersonas.includes(uiIntentDesigner))
   })
 })
