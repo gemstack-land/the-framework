@@ -463,7 +463,7 @@ const neutralGuardrails: readonly Persona[] = Object.freeze([uiIntentDesigner])
 /**
  * The framework-neutral personas shared by every preset — the data layer and the
  * intent-based UI guardrail apply the same whether the app is on Vike or Next.
- * A preset adds its framework-specific page builder on top (see the presets seam).
+ * The framework's own skill adds its page builder on top (see the skill seam).
  */
 export const sharedPersonas: readonly Persona[] = Object.freeze([
   dataModeler,

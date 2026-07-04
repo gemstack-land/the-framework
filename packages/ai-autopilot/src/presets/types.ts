@@ -1,16 +1,18 @@
 import type { Persona } from '../personas/types.js'
+import type { Skill } from '../extensions/types.js'
 
 /**
  * The web-app preset seam (#115). The engine (loop + state layer) is
- * framework-agnostic; the framework-specific knowledge lives here, at the
- * persona layer, and is selected by *detecting* the app's framework rather than
- * forking the runtime. Vike is the flagship preset; Next.js is the second. New
- * frameworks are a new {@link Preset}, not a change to the core.
+ * framework-agnostic; a preset *detects* which framework a project is on and
+ * points at that framework's {@link Skill} (its page builder + `llms.txt`).
+ * Vike is the flagship preset; Next.js is the second. New frameworks are a new
+ * {@link Preset}, not a change to the core.
  *
- * A preset is data: a name, its framework-specific personas, and the signals that
- * identify it in a project. {@link detectFramework} scores the signals; the
- * shared, framework-neutral personas (data layer, intent UI) are added on top by
- * {@link presetPersonas}, so a preset only carries what is genuinely per-framework.
+ * A preset is data: a name, the {@link Skill} carrying its framework knowledge,
+ * and the signals that identify it in a project. {@link detectFramework} scores
+ * the signals; the framework's page builder rides its skill (not the preset), and
+ * the shared, framework-neutral personas (data layer, intent UI) are added on top
+ * by {@link presetPersonas} — so the preset itself only carries detection.
  */
 
 /** How to recognize a framework in a project. */
@@ -21,22 +23,25 @@ export interface PresetSignals {
   files?: readonly RegExp[]
 }
 
-/** A framework preset: framework-specific personas + the signals that detect it. */
+/** A framework preset: detection signals + the {@link Skill} carrying its framework knowledge. */
 export interface Preset {
   /** Stable id, kebab-case (e.g. `vike`, `next`). */
   readonly name: string
   /** Human framework name (e.g. `Vike`, `Next.js`). */
   readonly framework: string
-  /** The framework-specific personas (the neutral shared ones are added separately). */
+  /** The framework's knowledge unit (page builder + `llms.txt`); its personas frame the run. */
+  readonly skill?: Skill
+  /** Extra always-on personas beyond the skill's — usually empty; the page builder rides {@link skill}. */
   readonly personas: readonly Persona[]
   /** How this preset is detected in a project. */
   readonly signals: PresetSignals
 }
 
-/** The author-facing shape for {@link definePreset}; personas/signals default to empty. */
+/** The author-facing shape for {@link definePreset}; `skill`/`personas`/`signals` default to empty. */
 export interface PresetSpec {
   name: string
   framework: string
+  skill?: Skill
   personas?: readonly Persona[]
   signals?: PresetSignals
 }

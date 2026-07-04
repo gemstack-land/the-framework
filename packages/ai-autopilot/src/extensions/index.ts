@@ -21,7 +21,14 @@ export {
   builtinSkillRegistry,
   type MatchOptions,
 } from './registry.js'
-export { composePersonas, composeSkills, skillInstructions, type ComposePersonasInput, type NeutralPersona } from './compose.js'
+export {
+  composePersonas,
+  composeSkills,
+  skillPersonas,
+  skillInstructions,
+  type ComposePersonasInput,
+  type NeutralPersona,
+} from './compose.js'
 export {
   frameworkAuth,
   frameworkData,
@@ -31,6 +38,7 @@ export {
   builtinExtensions,
   builtinExtensionNames,
   vikeSkill,
+  nextSkill,
   builtinSkills,
   neutralPersonas,
 } from './library.js'

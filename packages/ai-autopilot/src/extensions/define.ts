@@ -60,6 +60,7 @@ export function defineSkill(spec: SkillSpec): Skill {
     title: spec.title.trim(),
     description: spec.description.trim(),
     url,
+    personas: Object.freeze([...(spec.personas ?? [])]),
     signals: frozenSignals(spec.signals),
   })
 }

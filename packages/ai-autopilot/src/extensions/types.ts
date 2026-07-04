@@ -8,11 +8,13 @@ import type { FrameworkSignals, PresetSignals } from '../presets/types.js'
  *
  * - {@link FrameworkExtension} — a capability (auth, data, ...) that frames the
  *   agent with personas when it matches a project.
- * - {@link Skill} — a doc pointer (framework/domain knowledge = an `llms.txt`),
- *   the shared unit with Open Loop (#204).
+ * - {@link Skill} — framework/domain knowledge: a doc pointer (an `llms.txt`)
+ *   plus the curated personas it frames the agent with, the shared unit with
+ *   Open Loop (#204).
  *
- * A framework is not a special package: it is a {@link Skill} pointing at its
- * `llms.txt`. There is no adapter axis.
+ * A framework is not a special package: it is a {@link Skill} carrying its page
+ * builder and pointing at its `llms.txt`. There is no adapter axis, and no
+ * separate seam supplies the page builder.
  */
 
 /** How a unit is recognized in a project — the same deps/files shape presets use. */
@@ -22,11 +24,13 @@ export type ExtensionSignals = PresetSignals
 export type { FrameworkSignals } from '../presets/types.js'
 
 /**
- * A doc-pointer skill: framework or domain knowledge an agent pulls in by
- * reading an `llms.txt`. Distinct from `@gemstack/ai-skills`' on-disk
- * `SKILL.md`/`LoadedSkill` (instructions + tools) — a {@link Skill} is just a
- * pointer, the lightweight unit shared with Open Loop (#204). Vike is a skill
- * (https://vike.dev/llms.txt), not an adapter package.
+ * A skill: framework or domain knowledge an agent pulls in. It carries two
+ * things — a doc pointer (an `llms.txt` the agent consults) and, optionally, the
+ * curated framing {@link Persona}s that knowledge always brings (e.g. Vike's page
+ * builder). Distinct from `@gemstack/ai-skills`' on-disk `SKILL.md`/`LoadedSkill`
+ * (instructions + tools) — a {@link Skill} is the lightweight unit shared with
+ * Open Loop (#204). A framework is a skill (Vike -> https://vike.dev/llms.txt +
+ * its page builder), not an adapter package; there is no adapter axis.
  */
 export interface Skill {
   /** Stable kebab-case id (e.g. `vike`). */
@@ -37,16 +41,19 @@ export interface Skill {
   readonly description: string
   /** The `llms.txt` (or other LLM-optimized doc) URL the agent should consult. */
   readonly url: string
+  /** Curated personas this knowledge always frames the agent with (e.g. a page builder). Empty for a pure doc pointer. */
+  readonly personas: readonly Persona[]
   /** When to auto-activate it; empty means opt-in only. */
   readonly signals: ExtensionSignals
 }
 
-/** The author-facing shape for {@link defineSkill}; `signals` defaults to empty. */
+/** The author-facing shape for {@link defineSkill}; `personas`/`signals` default to empty. */
 export interface SkillSpec {
   name: string
   title: string
   description: string
   url: string
+  personas?: readonly Persona[]
   signals?: ExtensionSignals
 }
 

@@ -9,7 +9,7 @@ export interface NeutralPersona {
 
 /** Inputs to {@link composePersonas}. */
 export interface ComposePersonasInput {
-  /** Always-on base personas (e.g. a preset's page builder). */
+  /** Always-on base personas (e.g. the framework skill's page builder). */
   base?: readonly Persona[]
   /** The active capability extensions. */
   extensions: readonly FrameworkExtension[]
@@ -45,6 +45,24 @@ export function composeSkills(input: { matched?: readonly Skill[]; extensions: r
     if (seen.has(skill.name)) continue
     seen.add(skill.name)
     out.push(skill)
+  }
+  return out
+}
+
+/**
+ * The framing personas an active skill set brings — every skill's curated
+ * {@link Skill.personas} in order, deduped by name (first occurrence wins).
+ * These are the base personas for a run (e.g. the detected framework's page
+ * builder), symmetric with {@link composeSkills}: the same skill carries both
+ * its doc pointer and the personas that knowledge always frames the agent with.
+ */
+export function skillPersonas(skills: readonly Skill[]): Persona[] {
+  const out: Persona[] = []
+  const seen = new Set<string>()
+  for (const persona of skills.flatMap(s => s.personas)) {
+    if (seen.has(persona.name)) continue
+    seen.add(persona.name)
+    out.push(persona)
   }
   return out
 }

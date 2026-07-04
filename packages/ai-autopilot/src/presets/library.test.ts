@@ -10,10 +10,15 @@ import {
 } from './library.js'
 
 describe('built-in presets', () => {
-  it('ship Vike (flagship) and Next, each with its page builder', () => {
+  it('ship Vike (flagship) and Next, each pointing at its framework skill', () => {
     assert.deepEqual(builtinPresets().map(p => p.name), ['vike', 'next'])
-    assert.equal(vikePreset.personas[0]?.name, 'vike-page-builder')
-    assert.equal(nextPreset.personas[0]?.name, 'next-page-builder')
+    // The page builder rides the framework skill, not the preset itself.
+    assert.deepEqual(vikePreset.personas, [])
+    assert.deepEqual(nextPreset.personas, [])
+    assert.equal(vikePreset.skill?.name, 'vike')
+    assert.equal(nextPreset.skill?.name, 'next')
+    assert.equal(vikePreset.skill?.personas[0]?.name, 'vike-page-builder')
+    assert.equal(nextPreset.skill?.personas[0]?.name, 'next-page-builder')
   })
 })
 

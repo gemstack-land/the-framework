@@ -1,9 +1,11 @@
 import {
   dataModeler,
+  nextPageBuilder,
   uiIntentDesigner,
   vikeAuthComposer,
   vikeCrudComposer,
   vikeDataModeler,
+  vikePageBuilder,
   vikeRbacComposer,
   vikeShellComposer,
 } from '../personas/library.js'
@@ -72,9 +74,10 @@ export function builtinExtensions(): FrameworkExtension[] {
 export const builtinExtensionNames: readonly string[] = Object.freeze(builtinExtensions().map(e => e.name))
 
 /**
- * Vike as a {@link Skill}: framework knowledge arrives as a doc pointer to
- * `vike.dev/llms.txt`, not a special adapter package. Auto-activates whenever
- * Vike is detected. Proof that a framework rides the skill seam.
+ * Vike as a {@link Skill}: the whole framework rides the skill seam — its page
+ * builder ({@link vikePageBuilder}) plus a doc pointer to `vike.dev/llms.txt`,
+ * not a special adapter package or a preset-supplied persona. Auto-activates
+ * whenever Vike is detected.
  */
 export const vikeSkill: Skill = defineSkill({
   name: 'vike',
@@ -82,15 +85,34 @@ export const vikeSkill: Skill = defineSkill({
   description:
     'Vike is the Vite-based, renderer-agnostic meta-framework the app is built on (filesystem routing under `pages/`, `+` config files, server-side `+data` loading).',
   url: 'https://vike.dev/llms.txt',
+  personas: [vikePageBuilder],
   signals: {
     dependencies: ['vike', 'vike-react', 'vike-vue', 'vike-solid'],
     files: [/(^|\/)\+Page(\.[\w-]+)?\.[jt]sx?$/, /(^|\/)\+config\.[jt]s$/],
   },
 })
 
-/** The built-in skills (doc pointers). */
+/**
+ * Next.js as a {@link Skill}: same seam as {@link vikeSkill} — its App Router
+ * page builder plus a doc pointer to `nextjs.org/llms.txt`. The second framework
+ * is another skill, not a runtime fork.
+ */
+export const nextSkill: Skill = defineSkill({
+  name: 'next',
+  title: 'Next.js',
+  description:
+    'Next.js with the App Router (React Server Components): filesystem routing under `app/`, `page.tsx`/`layout.tsx`, server components by default, server actions for mutations.',
+  url: 'https://nextjs.org/llms.txt',
+  personas: [nextPageBuilder],
+  signals: {
+    dependencies: ['next'],
+    files: [/(^|\/)next\.config\.[cm]?[jt]s$/, /(^|\/)app\/.*\/page\.[jt]sx?$/, /(^|\/)app\/layout\.[jt]sx?$/],
+  },
+})
+
+/** The built-in framework skills (page builder + doc pointer), flagship first. */
 export function builtinSkills(): Skill[] {
-  return [vikeSkill]
+  return [vikeSkill, nextSkill]
 }
 
 /**

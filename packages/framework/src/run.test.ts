@@ -174,6 +174,22 @@ test('Vike arrives as a skill (llms.txt pointer) in the framing (#190)', async (
   assert.match(system(), /https:\/\/vike\.dev\/llms\.txt/)
 })
 
+test('the framework page builder is framed via its skill, not a preset persona', async () => {
+  const { driver, system } = recordingDriver()
+  await runFramework({ intent: FAKE_INTENT, driver, cwd: '/tmp/ws', signals: FAKE_SIGNALS, onEvent: () => {} })
+  // The vike-page-builder persona (page-builder conventions) rides the Vike skill.
+  assert.match(system(), /You build UI on Vike \(Vite \+ SSR\), which is renderer-agnostic/)
+})
+
+test('an empty from-scratch project is still framed with the flagship page builder (skill fallback)', async () => {
+  const { driver, system } = recordingDriver()
+  // No signals match any skill, so only preset selection (fallback = flagship Vike)
+  // brings the framework skill in. Its page builder must still frame the agent.
+  await runFramework({ intent: FAKE_INTENT, driver, cwd: '/tmp/ws', signals: {}, onEvent: () => {} })
+  assert.match(system(), /You build UI on Vike \(Vite \+ SSR\), which is renderer-agnostic/)
+  assert.match(system(), /https:\/\/vike\.dev\/llms\.txt/)
+})
+
 test('a registered extension auto-activates by its signal, no opt-in needed (#190)', async () => {
   const { driver, system } = recordingDriver()
   const audit = defineFrameworkExtension({

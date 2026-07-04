@@ -2,7 +2,7 @@ import { strict as assert } from 'node:assert'
 import { test } from 'node:test'
 import { definePersona } from '../personas/define.js'
 import { dataModeler, uiIntentDesigner } from '../personas/library.js'
-import { composePersonas, composeSkills, skillInstructions } from './compose.js'
+import { composePersonas, composeSkills, skillPersonas, skillInstructions } from './compose.js'
 import { defineFrameworkExtension, defineSkill, ExtensionError } from './define.js'
 import {
   builtinExtensionNames,
@@ -31,8 +31,32 @@ test('defineFrameworkExtension validates and freezes', () => {
 test('defineSkill validates the required fields', () => {
   const s = defineSkill({ name: 'vike', title: 'Vike', description: 'd', url: 'https://x/llms.txt' })
   assert.equal(s.url, 'https://x/llms.txt')
+  assert.deepEqual(s.personas, []) // a pure doc pointer frames no personas
   assert.throws(() => defineSkill({ name: 'vike', title: 'Vike', description: 'd', url: '' }), ExtensionError)
   assert.throws(() => defineSkill({ name: 'Vike', title: 'Vike', description: 'd', url: 'u' }), ExtensionError)
+})
+
+test('a skill carries its curated framing personas (page builder rides the skill, not a preset)', () => {
+  const pb = definePersona({ name: 'astro-page-builder', role: 'builds Astro pages', systemPrompt: 'astro' })
+  const s = defineSkill({
+    name: 'astro',
+    title: 'Astro',
+    description: 'd',
+    url: 'https://astro.build/llms.txt',
+    personas: [pb],
+  })
+  assert.deepEqual(s.personas.map(p => p.name), ['astro-page-builder'])
+  // The built-in framework skills each ship their page builder.
+  assert.equal(vikeSkill.personas[0]?.name, 'vike-page-builder')
+})
+
+test('skillPersonas flattens the framing personas of a skill set, deduped by name', () => {
+  const pb = definePersona({ name: 'astro-page-builder', role: 'builds', systemPrompt: 'a' })
+  const astro = defineSkill({ name: 'astro', title: 'Astro', description: 'd', url: 'https://x/llms.txt', personas: [pb] })
+  const docOnly = defineSkill({ name: 'domain', title: 'Domain', description: 'd', url: 'https://x/d.txt' })
+  // vikeSkill re-listed twice contributes its page builder once.
+  const names = skillPersonas([vikeSkill, astro, docOnly, vikeSkill]).map(p => p.name)
+  assert.deepEqual(names, ['vike-page-builder', 'astro-page-builder'])
 })
 
 test('matchSignals scores deps over files; selectActive unions signal-match and opt-in', () => {

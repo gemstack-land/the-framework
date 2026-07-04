@@ -8,7 +8,7 @@
  * - {@link vikePreset} / {@link nextPreset} — the built-ins
  * - {@link detectFramework} — score a project's deps/files against presets
  * - {@link PresetRegistry} — register presets and {@link PresetRegistry.select} one
- * - {@link presetPersonas} — a preset's personas + the shared neutral ones
+ * - {@link presetPersonas} — its framework skill's page builder + the shared neutral ones
  */
 export { definePreset, PresetError } from './define.js'
 export { detectFramework } from './detect.js'

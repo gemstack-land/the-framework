@@ -85,13 +85,14 @@
  * - {@link agentOverview} / {@link overviewLoopPrompt} — regenerate with an agent,
  *   and wire the maintainer into the loop
  *
- * Presets are the web-app layer: framework-specific personas selected by detecting
- * the app's framework (Vike flagship, Next.js second), on top of the agnostic core.
+ * Presets are the web-app layer: detect the app's framework (Vike flagship,
+ * Next.js second) and point at its {@link Skill} (page builder + `llms.txt`), on
+ * top of the agnostic core.
  *
  * - {@link PresetRegistry} — register presets, {@link PresetRegistry.select} one
  * - {@link detectFramework} — score a project's deps/files against presets
  * - {@link vikePreset} / {@link nextPreset} — the built-ins
- * - {@link presetPersonas} — a preset's personas + the shared neutral ones
+ * - {@link presetPersonas} — its framework skill's page builder + the shared neutral ones
  */
 export { Supervisor } from './supervisor.js'
 export { agentPlanner, type AgentPlannerOptions } from './planner.js'
@@ -323,6 +324,7 @@ export {
   builtinSkillRegistry,
   composePersonas,
   composeSkills,
+  skillPersonas,
   skillInstructions,
   frameworkAuth,
   frameworkData,
@@ -332,6 +334,7 @@ export {
   builtinExtensions,
   builtinExtensionNames,
   vikeSkill,
+  nextSkill,
   builtinSkills,
   neutralPersonas,
   EXTENSION_NAME_RE,

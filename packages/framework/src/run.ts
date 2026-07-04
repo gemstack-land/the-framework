@@ -13,6 +13,7 @@ import {
   personaInstructions,
   serveCheck,
   skillInstructions,
+  skillPersonas,
   type BootstrapEvent,
   type BootstrapResult,
   type BootstrapScope,
@@ -154,7 +155,7 @@ export interface RunFrameworkResult {
 
 /**
  * Run the whole turnkey flow: detect the framework preset, frame the wrapped
- * agent with that preset's personas, then drive ai-autopilot's `Bootstrap`
+ * agent with its framework skill (page builder + docs), then drive ai-autopilot's `Bootstrap`
  * (scope → architect → build → full-fledged loop → deploy) entirely *through*
  * the driver (option A). Every phase, plus the agent's own progress, streams as
  * a {@link FrameworkEvent}. Reversible: swap in a real deploy target, or a
@@ -173,14 +174,16 @@ export async function runFramework(opts: RunFrameworkOptions): Promise<RunFramew
     }
   }
 
-  // 1. Detect the framework (its page-builder persona + narration), then compose
-  // the active capability extensions and framework skills on top — no framework
-  // is hardcoded (#190). Extensions activate by signal (a dep is present) or, with
-  // --compose-extensions, by opting the built-ins in for a from-scratch build. The
-  // built-in composers are Vike-only (they resolve inside the vike-data workspace),
-  // so the blanket opt-in is guarded to the Vike preset; on any other preset it is
-  // ignored with a log and only signal-matched extensions compose (#202). Skills
-  // are doc pointers (Vike -> vike.dev/llms.txt) that ride the same seam.
+  // 1. Detect the framework, then compose the active capability extensions and
+  // framework skills on top — no framework is hardcoded (#190). Extensions
+  // activate by signal (a dep is present) or, with --compose-extensions, by opting
+  // the built-ins in for a from-scratch build. The built-in composers are Vike-only
+  // (they resolve inside the vike-data workspace), so the blanket opt-in is guarded
+  // to the Vike preset; on any other preset it is ignored with a log and only
+  // signal-matched extensions compose (#202). The framework rides the skill seam:
+  // the detected preset points at its skill (page builder + vike.dev/llms.txt),
+  // which is always framed — even on an empty project where nothing signal-matched,
+  // since preset selection is the fallback. No preset-supplied page-builder persona.
   const signals = opts.signals ?? {}
   const { preset, detection } = builtinPresetRegistry().select(signals)
   const optInBuiltins = opts.composeExtensions === true && preset.name === 'vike'
@@ -194,8 +197,16 @@ export async function runFramework(opts: RunFrameworkOptions): Promise<RunFramew
   const activeExtensions = extensionRegistry.match(signals, {
     include: optInBuiltins ? builtinExtensionNames : [],
   })
-  const personas = composePersonas({ base: preset.personas, extensions: activeExtensions, neutral: neutralPersonas })
-  const skills = composeSkills({ matched: new SkillRegistry().match(signals), extensions: activeExtensions })
+  const matchedSkills = new SkillRegistry().match(signals)
+  const skills = composeSkills({
+    matched: preset.skill ? [preset.skill, ...matchedSkills] : matchedSkills,
+    extensions: activeExtensions,
+  })
+  const personas = composePersonas({
+    base: [...preset.personas, ...skillPersonas(skills)],
+    extensions: activeExtensions,
+    neutral: neutralPersonas,
+  })
   const system = [...personas.map(personaInstructions), ...skills.map(skillInstructions)].join('\n\n')
 
   // The session id is not known until the first driver turn returns, so a
