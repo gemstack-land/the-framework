@@ -23,7 +23,11 @@ Chromium** against the compiled adapter. This directory is that proof.
 
 ```bash
 pnpm build                          # compile the adapter into dist/
-node harness/webcontainer/drive.mjs # boot-and-serve proof; exits non-zero on any failed check
+node harness/webcontainer/drive.mjs # headless boot-and-serve proof; exits non-zero on any failed check
+
+HEADED=1 node harness/webcontainer/drive.mjs # opens a real Chrome window, runs the checks,
+                                             # and renders the live app served by the WebContainer;
+                                             # stays open until Ctrl-C
 ```
 
 Requirements:

@@ -60,16 +60,31 @@
     const served = await s.exec("node -e \"fetch('http://localhost:3000').then(r=>r.text()).then(t=>process.stdout.write(t))\"")
     check('the started server actually serves', served.stdout.includes('hello from webcontainer'), JSON.stringify(served.stdout.trim()))
 
-    await dev.stop()
-    await s.dispose()
-    check('dispose blocks further exec', await (async () => { try { await s.exec('true'); return false } catch { return true } })())
+    // `?demo=1`: leave the server up and render the live preview, so a headed
+    // browser shows the app actually served by the WebContainer.
+    if (new URLSearchParams(location.search).has('demo')) {
+      log('demo mode: server left running; live preview below')
+      const h = document.createElement('h3')
+      h.textContent = 'Live app served by the WebContainer:'
+      const a = document.createElement('a')
+      a.href = preview.url; a.textContent = preview.url; a.target = '_blank'
+      const frame = document.createElement('iframe')
+      frame.src = preview.url
+      frame.style.cssText = 'display:block;width:100%;height:120px;border:1px solid #888;margin-top:8px'
+      document.body.append(h, a, frame)
+      window.__RESULT__ = { done: true, ok: checks.every(c => c.ok), checks, demo: true }
+    } else {
+      await dev.stop()
+      await s.dispose()
+      check('dispose blocks further exec', await (async () => { try { await s.exec('true'); return false } catch { return true } })())
 
-    // Single-instance guard: a fresh boot after dispose must succeed.
-    const s2 = await runner.boot()
-    check('boot succeeds again after dispose (single-instance slot freed)', !!s2.id)
-    await s2.dispose()
+      // Single-instance guard: a fresh boot after dispose must succeed.
+      const s2 = await runner.boot()
+      check('boot succeeds again after dispose (single-instance slot freed)', !!s2.id)
+      await s2.dispose()
 
-    window.__RESULT__ = { done: true, ok: checks.every(c => c.ok), checks }
+      window.__RESULT__ = { done: true, ok: checks.every(c => c.ok), checks }
+    }
   } catch (err) {
     log('ERROR ' + (err && err.stack || err))
     window.__RESULT__ = { done: true, ok: false, checks, error: String(err && err.message || err) }
