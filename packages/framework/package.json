@@ -1,6 +1,6 @@
 {
   "name": "@gemstack/framework",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "The (AI) Framework: turnkey, zero-config AI orchestration that wraps a coding-agent CLI (Claude Code) as a black box and takes you from an idea to a running app. Vite for AI.",
   "keywords": [
     "ai",

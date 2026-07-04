@@ -1,5 +1,13 @@
 # @gemstack/example-framework-demo
 
+## 0.0.3
+
+### Patch Changes
+
+- Updated dependencies [6f7e7e3]
+  - @gemstack/ai-autopilot@0.7.0
+  - @gemstack/framework@0.5.1
+
 ## 0.0.2
 
 ### Patch Changes
