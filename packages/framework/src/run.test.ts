@@ -1,6 +1,6 @@
 import { strict as assert } from 'node:assert'
 import { test } from 'node:test'
-import { defineFrameworkExtension, definePersona } from '@gemstack/ai-autopilot'
+import { defineFrameworkExtension, definePersona, defineSkill } from '@gemstack/ai-autopilot'
 import { DEFAULT_MAX_PASSES, runFramework } from './run.js'
 import { FAKE_DEPLOY, FAKE_INTENT, FAKE_SIGNALS, fakeDriver } from './fake-script.js'
 import type { Driver } from './driver/index.js'
@@ -191,6 +191,19 @@ test('a registered extension auto-activates by its signal, no opt-in needed (#19
     onEvent: () => {},
   })
   assert.match(system(), /AUDIT-LOG-EVERYTHING sentinel/)
+})
+
+test('an active extension pulls its own skill into the framing (#190)', async () => {
+  const { driver, system } = recordingDriver()
+  const audit = defineFrameworkExtension({
+    name: 'framework-audit',
+    capability: 'audit',
+    personas: [definePersona({ name: 'auditor', role: 'audits', systemPrompt: 'audit sentinel' })],
+    skills: [defineSkill({ name: 'audit-guide', title: 'Audit Guide', description: 'd', url: 'https://x/audit/llms.txt' })],
+    signals: { dependencies: ['@prisma/client'] }, // present in FAKE_SIGNALS
+  })
+  await runFramework({ intent: FAKE_INTENT, driver, cwd: '/tmp/ws', signals: FAKE_SIGNALS, extensions: [audit], onEvent: () => {} })
+  assert.match(system(), /https:\/\/x\/audit\/llms\.txt/)
 })
 
 test('the default pass budget is raised for from-scratch builds (#182)', () => {

@@ -21,7 +21,7 @@ export {
   builtinSkillRegistry,
   type MatchOptions,
 } from './registry.js'
-export { composePersonas, skillInstructions, type ComposePersonasInput, type NeutralPersona } from './compose.js'
+export { composePersonas, composeSkills, skillInstructions, type ComposePersonasInput, type NeutralPersona } from './compose.js'
 export {
   frameworkAuth,
   frameworkData,

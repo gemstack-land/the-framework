@@ -2,7 +2,7 @@ import { strict as assert } from 'node:assert'
 import { test } from 'node:test'
 import { definePersona } from '../personas/define.js'
 import { dataModeler, uiIntentDesigner } from '../personas/library.js'
-import { composePersonas, skillInstructions } from './compose.js'
+import { composePersonas, composeSkills, skillInstructions } from './compose.js'
 import { defineFrameworkExtension, defineSkill, ExtensionError } from './define.js'
 import {
   builtinExtensionNames,
@@ -86,6 +86,14 @@ test('composePersonas: extensions supersede the neutral default of their capabil
   assert.ok(names.includes('vike-data-modeler'))
   assert.ok(!names.includes(dataModeler.name)) // superseded
   assert.ok(names.includes(uiIntentDesigner.name)) // no extension owns 'ui'
+})
+
+test('composeSkills unions matched skills with active extensions own skills, deduped by name', () => {
+  const guide = defineSkill({ name: 'hello-guide', title: 'Hello', description: 'd', url: 'https://x/llms.txt' })
+  const ext = defineFrameworkExtension({ name: 'framework-hello', capability: 'greeting', skills: [guide, vikeSkill] })
+  const composed = composeSkills({ matched: [vikeSkill], extensions: [ext] })
+  // vikeSkill (matched) is not duplicated by the extension re-declaring it; hello-guide is added.
+  assert.deepEqual(composed.map(s => s.name), ['vike', 'hello-guide'])
 })
 
 test('skillInstructions renders the doc pointer', () => {

@@ -322,6 +322,7 @@ export {
   builtinExtensionRegistry,
   builtinSkillRegistry,
   composePersonas,
+  composeSkills,
   skillInstructions,
   frameworkAuth,
   frameworkData,

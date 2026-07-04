@@ -7,6 +7,7 @@ import {
   builtinExtensionNames,
   builtinPresetRegistry,
   composePersonas,
+  composeSkills,
   mergeChecklists,
   neutralPersonas,
   personaInstructions,
@@ -194,7 +195,7 @@ export async function runFramework(opts: RunFrameworkOptions): Promise<RunFramew
     include: optInBuiltins ? builtinExtensionNames : [],
   })
   const personas = composePersonas({ base: preset.personas, extensions: activeExtensions, neutral: neutralPersonas })
-  const skills = new SkillRegistry().match(signals)
+  const skills = composeSkills({ matched: new SkillRegistry().match(signals), extensions: activeExtensions })
   const system = [...personas.map(personaInstructions), ...skills.map(skillInstructions)].join('\n\n')
 
   // The session id is not known until the first driver turn returns, so a

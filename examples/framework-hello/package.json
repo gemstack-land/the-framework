@@ -1,0 +1,13 @@
+{
+  "name": "framework-hello",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Example third-party framework-* capability extension. Proves The Framework's extension SPI (#190): install it into a project and the CLI discovers, registers, and composes it with no change to the framework core.",
+  "type": "module",
+  "exports": {
+    ".": "./index.js"
+  },
+  "dependencies": {
+    "@gemstack/ai-autopilot": "workspace:^"
+  }
+}

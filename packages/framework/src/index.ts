@@ -55,6 +55,11 @@ export {
   type ServeConfig,
   type AppPreview,
 } from './run.js'
+export {
+  discoverExtensions,
+  readProjectSignals,
+  type DiscoverExtensionsResult,
+} from './extensions.js'
 export { hostExecutor, type HostExecutorOptions } from './host-exec.js'
 export {
   type FrameworkEvent,
