@@ -43,8 +43,10 @@ export {
   parseArchitectPlan,
   architectPrompt,
   buildPrompt,
+  extendPrompt,
   improvePrompt,
   PRODUCTION_GRADE_PROMPT,
+  isWorkspaceEmpty,
   type DriverStepOptions,
 } from './steps.js'
 export {

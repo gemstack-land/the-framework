@@ -60,6 +60,26 @@ export function buildPrompt(plan: ArchitectPlan, intent: string): string {
 }
 
 /**
+ * Framing for a run against an *existing* codebase: extend it, do not rebuild it.
+ * The greenfield {@link buildPrompt} tells the agent the workspace may be empty
+ * and to scaffold from scratch, which is the wrong instruction when the user
+ * pointed the framework at a project that already exists (#185). Chosen when the
+ * workspace already holds source at build time.
+ */
+export function extendPrompt(plan: ArchitectPlan, intent: string): string {
+  return [
+    `Work within the existing codebase in this workspace to deliver: ${intent}`,
+    `Detected stack: ${plan.stack}`,
+    plan.narration,
+    'This project already exists — do NOT re-scaffold or rebuild it, and do not',
+    'replace its structure or swap its stack. Read the existing code first, follow',
+    'its conventions, and make the smallest coherent set of changes that adds what',
+    'is asked; new files and dependencies are fine when the feature needs them.',
+    'When done, summarize what you changed in one short paragraph.',
+  ].join('\n')
+}
+
+/**
  * A hard "the app does not exist yet — create it from scratch" directive. Used
  * when the workspace is empty at build or improve time, where the normal
  * {@link improvePrompt} ("smallest changes / no unrelated features") would
@@ -182,17 +202,30 @@ export function driverBuild(
     verifyWorkspace?: boolean
   } & DriverStepOptions = {},
 ): (ctx: BuildContext) => Promise<SupervisorRun> {
-  const compose = opts.prompt ?? buildPrompt
+  const composeOverride = opts.prompt
   const promptOpts = {
     ...(opts.system ? { system: opts.system } : {}),
   }
   return async ctx => {
     const signalOpt = ctx.signal ? { signal: ctx.signal } : {}
-    const subtask: PlannedSubtask = { id: 'build-1', description: `Build with the wrapped agent` }
+    // An existing project (a non-empty workspace at build time) is *extended*, not
+    // rebuilt from scratch (#185). Gated on verifyWorkspace so the fake driver
+    // (which writes nothing, so its workspace always reads empty) always takes the
+    // greenfield path and stays deterministic. A caller-supplied prompt wins.
+    const existing = opts.verifyWorkspace === true && !isWorkspaceEmpty(session.cwd)
+    const firstPrompt = composeOverride
+      ? composeOverride(ctx.plan, ctx.intent)
+      : existing
+        ? extendPrompt(ctx.plan, ctx.intent)
+        : buildPrompt(ctx.plan, ctx.intent)
+    const subtask: PlannedSubtask = {
+      id: 'build-1',
+      description: existing ? 'Extend the existing codebase' : 'Build with the wrapped agent',
+    }
     ctx.onEvent({ type: 'plan', task: ctx.intent, subtasks: [subtask] })
     ctx.onEvent({ type: 'dispatch-start', subtask })
 
-    let turn = await session.prompt(compose(ctx.plan, ctx.intent), { ...promptOpts, ...signalOpt })
+    let turn = await session.prompt(firstPrompt, { ...promptOpts, ...signalOpt })
     const results: SubtaskResult[] = [{ subtask, text: turn.text, ok: true, usage: ZERO_USAGE }]
     ctx.onEvent({ type: 'dispatch-result', result: results[0]! })
 

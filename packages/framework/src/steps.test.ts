@@ -12,6 +12,7 @@ import {
   driverBuild,
   driverChecklist,
   driverImprove,
+  extendPrompt,
   isWorkspaceEmpty,
   parseArchitectPlan,
 } from './steps.js'
@@ -198,6 +199,53 @@ test('driverBuild does not re-prompt when the build produced files', async () =>
   } finally {
     rmSync(cwd, { recursive: true, force: true })
   }
+})
+
+test('driverBuild extends an existing project instead of rebuilding it (#185)', async () => {
+  const cwd = makeWorkspace({ 'package.json': '{}', 'src/index.ts': 'export {}' })
+  try {
+    const session = await new FakeDriver({ turns: [{ text: 'added the feature' }] }).start({ cwd })
+    const events: SupervisorEvent[] = []
+    await driverBuild(session, { verifyWorkspace: true })({
+      plan: PLAN,
+      scope: 'full',
+      intent: 'add a search box',
+      onEvent: e => events.push(e),
+    })
+    // Existing codebase: extend framing, and no from-scratch scaffolding language.
+    assert.equal(session.prompts.length, 1)
+    assert.match(session.prompts[0]!, /existing codebase|do NOT re-scaffold/i)
+    assert.doesNotMatch(session.prompts[0]!, /scaffold the whole project|workspace may be empty/i)
+    const plan = events.find(e => e.type === 'plan')
+    assert.ok(plan?.type === 'plan')
+    assert.match(plan.subtasks[0]!.description, /existing codebase/i)
+  } finally {
+    rmSync(cwd, { recursive: true, force: true })
+  }
+})
+
+test('driverBuild uses greenfield framing for an empty workspace (#185)', async () => {
+  const cwd = makeWorkspace() // empty: a from-scratch build
+  try {
+    const session = await new FakeDriver({ turns: [{ text: 'scaffolded it' }] }).start({ cwd })
+    await driverBuild(session, { verifyWorkspace: true })({
+      plan: PLAN,
+      scope: 'full',
+      intent: 'a blog',
+      onEvent: () => {},
+    })
+    assert.match(session.prompts[0]!, /Build this app end to end/i)
+    assert.doesNotMatch(session.prompts[0]!, /existing codebase/i)
+  } finally {
+    rmSync(cwd, { recursive: true, force: true })
+  }
+})
+
+test('extendPrompt names the intent and the detected stack, and forbids a rebuild', () => {
+  const prompt = extendPrompt({ stack: 'Next.js', narration: 'n', decisions: [] }, 'add a settings page')
+  assert.match(prompt, /add a settings page/)
+  assert.match(prompt, /Next\.js/)
+  assert.match(prompt, /do NOT re-scaffold|do not.*swap its stack/i)
 })
 
 test('driverImprove scaffolds from scratch when the workspace is empty, else fixes blockers (#182)', async () => {

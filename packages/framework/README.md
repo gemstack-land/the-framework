@@ -41,6 +41,12 @@ small structured JSON decision the agent returns; build and improve are prompts;
 the production-grade checklist gates on the `{ blockers }` verdict the agent ends
 its output with.
 
+**From-scratch or existing project.** Point `--cwd` at an empty directory and the
+agent scaffolds the whole app from scratch. Point it at a project that already has
+source and the framework detects the real stack (from its `package.json` + marker
+files) and frames the agent to **extend** the codebase — read it, follow its
+conventions, add what was asked — instead of rebuilding it from scratch.
+
 ## Library API
 
 ```ts
