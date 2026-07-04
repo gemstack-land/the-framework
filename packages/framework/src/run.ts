@@ -163,11 +163,21 @@ export async function runFramework(opts: RunFrameworkOptions): Promise<RunFramew
   }
 
   // 1. Preset: detect the framework and turn its personas into prompt-framing.
-  // With --compose-extensions, swap the shared personas for the vike-extension
-  // set (compose vike-auth/vike-rbac/vike-crud/vike-themes + the universal-orm
-  // data layer instead of hand-rolling them); default keeps Prisma.
+  // --compose-extensions swaps the shared personas for the vike-extension set
+  // (compose vike-auth/vike-rbac/vike-crud/vike-themes + the universal-orm data
+  // layer instead of hand-rolling them); default keeps Prisma. The extensions
+  // are Vike-only and resolve only in the vike-data workspace, so guard it: on a
+  // non-Vike preset, fall back to the hand-rolled + Prisma path and say why
+  // rather than framing (e.g.) Next with vike composers.
   const { preset, detection } = builtinPresetRegistry().select(opts.signals ?? {})
-  const personas = opts.composeExtensions
+  const composeExtensions = opts.composeExtensions === true && preset.name === 'vike'
+  if (opts.composeExtensions && !composeExtensions) {
+    emit({
+      kind: 'log',
+      message: `--compose-extensions ignored: the vike-* extensions are Vike-only, but the detected preset is "${preset.name}". Using the hand-rolled + Prisma path.`,
+    })
+  }
+  const personas = composeExtensions
     ? presetPersonas(preset, vikeExtensionPersonas)
     : presetPersonas(preset)
   const system = personas.map(personaInstructions).join('\n\n')
