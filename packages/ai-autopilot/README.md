@@ -95,9 +95,12 @@ sit on those harnesses rather than competing with them.
 
 This package ships the interface, a **`FakeRunner`** (the runner analog of
 `ai-sdk`'s `AiFake`) so autopilot can be driven and tested without any infra,
-and a **`LocalRunner`** — the first real adapter: each workspace is a real temp
-directory on the host, with real files and real child processes. The sandboxed
-adapters (WebContainer, Docker, Flue) land as separate packages and mirror it.
+and three real adapters that satisfy the same interface: **`LocalRunner`** (a
+real temp directory on the host, the reference the sandboxed ones mirror),
+**`DockerRunner`** (a container via the `docker` CLI, isolated from the host with
+a published preview port), and **`WebContainerRunner`** (an in-browser
+WebContainer for an instant Vike preview, nothing touching the host). A **Flue**
+adapter (in-memory / edge / container) is the next one behind the same seam.
 
 `LocalRunner` runs commands **unsandboxed on the host**, so reach for it only
 where execution is already trusted (local dev, or a CI job that is itself the
@@ -128,9 +131,10 @@ const { url } = (await session.preview?.({ port: 5173 })) ?? {}
 ```
 
 `runnerTools(session)` exposes the session to an agent as `ai-sdk` tools
-(`read_file`, `write_file`, `list_files`, `exec`, and — only when the session
-supports it — `preview`). Toggle `write` / `exec` for a read-only surface, or set
-a `prefix` to avoid name collisions.
+(`read_file`, `write_file`, `remove_file`, `list_files`, `exec`, plus
+`start_server` and `preview` only when the session supports them). Toggle
+`write` / `exec` for a read-only surface, or set a `prefix` to avoid name
+collisions.
 
 To implement a real runner, satisfy the `Runner` interface: `boot()` returns a
 `RunnerSession` with an `fs`, `exec()`, an optional `preview()`, and `dispose()`.
