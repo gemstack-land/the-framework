@@ -89,6 +89,27 @@ test('runClaude rejects on a non-zero exit with no result text', async () => {
   )
 })
 
+test('runClaude rejects on a non-zero exit even when the agent streamed text', async () => {
+  const events: DriverEvent[] = []
+  const lines = [JSON.stringify({ type: 'assistant', message: { content: [{ type: 'text', text: 'started building' }] } })]
+  await assert.rejects(
+    () =>
+      runClaude({
+        bin: 'claude',
+        args: [],
+        cwd: '/ws',
+        env: {},
+        prompt: 'x',
+        spawn: fakeSpawn(lines, 1),
+        emit: e => events.push(e),
+        signals: [],
+      }),
+    /exited \(1\): started building/,
+  )
+  assert.equal(events.at(-1)!.type, 'error')
+  assert.ok(!events.some(e => e.type === 'result'))
+})
+
 test('ClaudeCodeDriver builds correct CLI args (permission mode, system, model)', async () => {
   let captured: string[] = []
   const spawn: SpawnLike = (_cmd, args) => {

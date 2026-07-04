@@ -187,10 +187,13 @@ export function runClaude(opts: RunClaudeOptions): Promise<DriverTurn> {
 
     child.on('close', code => {
       const turn = parser.result()
-      if (code !== 0 && !turn.text) {
-        const detail = stderrChunks.join('').trim() || `exit code ${code ?? 'null'}`
+      // A non-zero exit is a failed turn even when the agent streamed some text
+      // first: the loop gates on the outcome, so a crash mid-build must not pass
+      // as a result. Surface stderr, else the partial text, as context.
+      if (code !== 0) {
+        const detail = stderrChunks.join('').trim() || turn.text.trim() || `exit code ${code ?? 'null'}`
         opts.emit({ type: 'error', message: detail })
-        finish(() => rejectPromise(new Error(`[framework] claude-code exited: ${detail}`)))
+        finish(() => rejectPromise(new Error(`[framework] claude-code exited (${code ?? 'null'}): ${detail}`)))
         return
       }
       opts.emit({ type: 'result', text: turn.text, ...(turn.sessionId ? { sessionId: turn.sessionId } : {}) })
