@@ -1,5 +1,62 @@
 # @gemstack/ai-autopilot
 
+## 0.6.0
+
+### Minor Changes
+
+- 1db19e2: Teach the compose personas the opt-in real-persistence path (drizzle + pglite)
+
+  The composed stack (vike-auth + the universal-orm data layer) runs on the memory adapter, which resets on every server restart, so accounts and posts vanish on reboot. The `vike-data-modeler` persona now teaches the "make it real" swap: register the Drizzle adapter over an embedded pglite Postgres instead of the memory adapter, add the `vikeSchema()` Vite plugin to codegen `drizzle/schema.generated.ts`, and derive/apply migrations with drizzle-kit. Because auth and domain data ride the same one adapter, that single swap makes both durable at once; `defineSchema` tables and `db()` queries do not change. The `vike-auth-composer` persona points at the same step, and the memory adapter stays the zero-config dev default. Reference: the proven `examples/drizzle-pglite` twin. Part of #186. Closes #187.
+
+- c3e7e9e: Thread an active extension's own skills into the agent frame
+
+  The extension SPI (#190) let a `FrameworkExtension` carry `skills` (llms.txt doc pointers), but `run.ts` only framed the built-in `SkillRegistry` matches, so a discovered extension's own skills were collected and then dropped. Add `composeSkills` (symmetric with `composePersonas`): it unions the registry-matched skills with every active extension's skills, deduped by name. `run.ts` uses it, so an active extension now contributes both its personas and its doc pointers to the frame. Surfaced by the new `examples/framework-discovery-demo` end-to-end proof, where the third-party `framework-hello` extension's `hello-guide` skill now reaches the agent.
+
+- 6625ca7: Compose vike-crud / vike-admin for the CRUD/admin UI instead of hand-writing screens
+
+  The composed stack taught the agent to compose vike-auth (identity) and the universal-orm data layer (domain data), but it still hand-wrote the list/record/form screens and admin panel, which is the largest chunk of fresh, churn-prone AI code. The new `vike-crud-composer` persona (wired into `vikeExtensionPersonas`) teaches the agent to derive those screens from the schema instead: `crud({ table })` / `crudBlocks({ table })` inside a `definePage`, rendered through `vike-crud/react` (or `/vue`); vike-admin dropped on top for a whole-DB `/admin/*` panel via the cumulative `adminResources` seam; mutations through named `crudActions` (`posts.delete`) rather than inline closures; and the config -> slot -> eject customization ladder so eject is the last resort, not the starting point. Everything rides the one universal-orm adapter already registered, so there is nothing extra to install. No runtime change; the agent stays a black box. Part of #186. Closes #189.
+
+- bd13fcf: Compose vike-rbac for roles/permissions instead of hand-rolling authz
+
+  The crud composer teaches ad-hoc role checks (`canEdit: (user) => user?.role === 'admin'`), which is fine for signed-in-vs-not but leaves the agent to hand-roll a roles/permissions schema and a permission checker the moment an app has named permissions or more than one role. The new `vike-rbac-composer` persona (wired into `vikeExtensionPersonas`, between auth and crud) teaches the agent to compose vike-rbac instead: declare permissions with `definePermissions` and `extends: ['import:vike-rbac/config:default']` (self-installs vike-auth), route every guard through the same `can(user, permission)` / `hasRole(user, role)` (the crud `canView`/`canEdit`, page guards, session scope, and vike-actions guards all delegate to it), and seed roles/permissions from the composed registry with `seedRbac()` rather than a hand-written list. vike-rbac owns the `roles`/`permissions`/`role_user`/`permission_role` tables and is the guard subject vike-admin and vike-actions are built around. No runtime change; the agent stays a black box. Part of #186. Closes #194.
+
+- 11f76da: Compose vike-themes / vike-layouts for styling and the app shell instead of hand-rolling CSS + nav
+
+  After auth, data, and the CRUD/admin UI, the remaining big hand-rolled surface is styling and the app shell: an agent writes its own CSS design system, dark-mode toggle, and layout/nav chrome on every build, and that fresh CSS is the root of the loop's over-polish churn. The new `vike-shell-composer` persona (wired into `vikeExtensionPersonas`) teaches the agent to declare a brand with `defineTheme` and `extends: [themesExt]` (flash-free system dark mode, a picker, and a CSS-variable contract to style against) instead of hand-writing a color system, and to pick a shell with `vike-layouts` (`layout: 'centered' | 'topbar' | 'sidebar'` plus `logo` / cumulative `nav` slots) instead of a hand-written topbar/sidebar. It also notes the one-line `vike-toolbar` install that gives the theme/locale controls a home. No runtime change; the agent stays a black box. Part of #186. Closes #192.
+
+- c79f567: Point the flagship data persona at Prisma (installable) instead of the unpublished universal-orm
+
+  The bootstrap data persona told the agent to build the data layer on `universal-orm`, which isn't installable (`@universal-orm/core` 404s on npm), so from-scratch live builds stalled sanity-checking the stack and produced nothing. It now defaults to Prisma with concrete install/init steps (schema-first, migrations derived from the schema, a fully typed client), and the architect default no longer names an unpublished package. The persona export is renamed `universalOrmModeler` -> `dataModeler` (persona name `data-modeler`). Closes #181.
+
+- 93892d7: Export the vike-rbac / vike-crud / vike-shell composer personas individually
+
+  `vikeAuthComposer` and `vikeDataModeler` were re-exported individually from the package root, but their three peers `vikeRbacComposer`, `vikeCrudComposer`, and `vikeShellComposer` were only reachable through the `vikeExtensionPersonas` array. They are now exported individually too, so a consumer building a custom persona roster can cherry-pick any of the built-in extension composers uniformly. No runtime change.
+
+- de37e7e: Make The Framework modular: a capability-extension + skill SPI, discovered instead of hardcoded
+
+  The composition was pinned in `run.ts` (a fixed `vikeExtensionPersonas` list swapped in behind `--compose-extensions`), so no third party could publish a `framework-*` package and have it compose. This adds the extension SPI (#190), all agnostic (nothing is framework-gated):
+
+  - `defineFrameworkExtension` — a capability (auth, data, rbac, crud, shell, ...) that self-registers, matched by signal (a dependency is present) or opt-in, and frames the agent with its personas. An extension supersedes the neutral default persona of the same `capability` (e.g. `framework-data` replaces the default ORM modeler), so the agent never gets two conflicting personas for one concern.
+  - `defineSkill` — a doc pointer (an `llms.txt`), the shared unit with Open Loop (#204). A framework is a skill, not an adapter package: Vike now rides the same seam as `https://vike.dev/llms.txt`.
+  - `ExtensionRegistry` / `SkillRegistry`, `composePersonas`, `skillInstructions`, and `loadExtensionsFromModules` for discovering installed `framework-*` packages.
+
+  `run.ts` now composes matched extensions + skills through the registry instead of the hardcoded list, and the CLI reads the project's real signals and discovers installed `framework-*` capability packages (resolved from the user's workspace, failures reported not thrown). The built-in vike-\* composers ship as extensions (`framework-auth`, `framework-data`, `framework-rbac`, `framework-crud`, `framework-shell`) and Vike ships as a skill, proving the seam. `--compose-extensions` still opts every built-in in; the publish-safe default (hand-rolled + Prisma) is unchanged. Closes #190.
+
+- d98d4ad: Move the framework page builder off the preset onto its skill (fully skill-driven framing)
+
+  A framework was represented twice: its page-builder persona rode the preset seam (`preset.personas`, framed as the run's base) while its docs rode the skill seam (`vike.dev/llms.txt`). This finishes the "framework = skill, adapter axis gone" design: a `Skill` now carries its own curated framing personas alongside the doc pointer, so all of a framework's knowledge lives in one unit. `vikeSkill` carries `vikePageBuilder`; the new `nextSkill` carries `nextPageBuilder`. A preset is now a pure detector that points at its framework `skill`, and `run.ts` frames the page builder through the skill set (the detected preset's skill is always framed, even on an empty from-scratch project where nothing signal-matched, since preset selection is the fallback). New exports: `nextSkill`, `skillPersonas`. `presetPersonas` and the framing narration are unchanged. Part of #190.
+
+- f1d11d9: Architect stack rationale: PROS/CONS + alternatives considered
+
+  The web dashboard's edge over the CLI is showing _why_ the AI chose the stack. The architect step now returns that rationale, not just a one-line why:
+
+  - `ArchitectPlan` gains optional `pros`, `cons`, and `alternatives` (`{option, whyNot}`). The `agentArchitect` (ai-sdk) and `driverArchitect` (framework) both ask for them and parse them; absent fields are omitted, so existing producers are unaffected.
+  - A new exported `STACK_TRADEOFFS` block gives the architect objective, reusable Vike-vs-Next reasons (edge/Cloudflare deploy, renderer-agnostic, ecosystem size) so the justification is grounded rather than invented per run. Both architect prompts embed it.
+  - The `Bootstrap` orchestrator emits `pros`/`cons`/`alternatives` on the `architect` event and records the rejected alternatives to the decisions ledger as rejections, so the ledger shows what was weighed.
+  - The framework dashboard's "Stack & rationale" panel renders the pros, cons, and "Considered instead" alternatives. The `--fake` demo populates them.
+
+  Part of #209. Closes #210.
+
 ## 0.5.0
 
 ### Minor Changes

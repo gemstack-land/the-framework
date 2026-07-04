@@ -1,6 +1,6 @@
 {
   "name": "@gemstack/ai-autopilot",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Orchestration for @gemstack/ai-sdk agents: a Supervisor that plans, dispatches subagents (bounded concurrency + budget guardrails), and synthesizes the result.",
   "keywords": [
     "ai",

@@ -1,5 +1,88 @@
 # @gemstack/framework
 
+## 0.4.0
+
+### Minor Changes
+
+- c3e7e9e: Thread an active extension's own skills into the agent frame
+
+  The extension SPI (#190) let a `FrameworkExtension` carry `skills` (llms.txt doc pointers), but `run.ts` only framed the built-in `SkillRegistry` matches, so a discovered extension's own skills were collected and then dropped. Add `composeSkills` (symmetric with `composePersonas`): it unions the registry-matched skills with every active extension's skills, deduped by name. `run.ts` uses it, so an active extension now contributes both its personas and its doc pointers to the frame. Surfaced by the new `examples/framework-discovery-demo` end-to-end proof, where the third-party `framework-hello` extension's `hello-guide` skill now reaches the agent.
+
+- f156cf8: Default the live-run session link to claude.ai/code
+
+  A live run now shows a session link to `https://claude.ai/code` by default (the page where a Claude Code session appears once Remote Control is enabled), so the dashboard points somewhere useful without needing `--session-link`. `--fake` gets no link (it has no real session), and an explicit `--session-link` still wins — including the `{sessionId}` template, which is filled in with the real Claude session id once known.
+
+  Why not a per-session deep link: we drive Claude Code headless, and Remote Control (which powers the claude.ai/code session view) is opt-in and subscription-gated, so there is no session-URL slug to construct. The session id is already surfaced on the dashboard and in the CLI narration; the README's new "Watching the live session" section documents the Remote Control path. New exports: `chooseSessionLink`, `CLAUDE_CODE_SESSION_LIST`.
+
+  Part of #209. Closes #212.
+
+- 97b2943: Extend an existing project instead of rebuilding it from scratch
+
+  Pointed at a workspace that already has source, the build step now frames the wrapped agent to work _within_ the existing codebase (read it, follow its conventions, add what was asked) rather than scaffold a fresh app. Greenfield runs (an empty workspace) are unchanged, and detection is gated on a real driver, so `--fake` stays deterministic. Combined with the live preset detection already wired from the real workspace, running in an existing project now detects its real stack and extends it.
+
+  New exports: `extendPrompt`, `isWorkspaceEmpty`.
+
+  Part of #110. Closes #185.
+
+- de37e7e: Make The Framework modular: a capability-extension + skill SPI, discovered instead of hardcoded
+
+  The composition was pinned in `run.ts` (a fixed `vikeExtensionPersonas` list swapped in behind `--compose-extensions`), so no third party could publish a `framework-*` package and have it compose. This adds the extension SPI (#190), all agnostic (nothing is framework-gated):
+
+  - `defineFrameworkExtension` — a capability (auth, data, rbac, crud, shell, ...) that self-registers, matched by signal (a dependency is present) or opt-in, and frames the agent with its personas. An extension supersedes the neutral default persona of the same `capability` (e.g. `framework-data` replaces the default ORM modeler), so the agent never gets two conflicting personas for one concern.
+  - `defineSkill` — a doc pointer (an `llms.txt`), the shared unit with Open Loop (#204). A framework is a skill, not an adapter package: Vike now rides the same seam as `https://vike.dev/llms.txt`.
+  - `ExtensionRegistry` / `SkillRegistry`, `composePersonas`, `skillInstructions`, and `loadExtensionsFromModules` for discovering installed `framework-*` packages.
+
+  `run.ts` now composes matched extensions + skills through the registry instead of the hardcoded list, and the CLI reads the project's real signals and discovers installed `framework-*` capability packages (resolved from the user's workspace, failures reported not thrown). The built-in vike-\* composers ship as extensions (`framework-auth`, `framework-data`, `framework-rbac`, `framework-crud`, `framework-shell`) and Vike ships as a skill, proving the seam. `--compose-extensions` still opts every built-in in; the publish-safe default (hand-rolled + Prisma) is unchanged. Closes #190.
+
+- d98d4ad: Move the framework page builder off the preset onto its skill (fully skill-driven framing)
+
+  A framework was represented twice: its page-builder persona rode the preset seam (`preset.personas`, framed as the run's base) while its docs rode the skill seam (`vike.dev/llms.txt`). This finishes the "framework = skill, adapter axis gone" design: a `Skill` now carries its own curated framing personas alongside the doc pointer, so all of a framework's knowledge lives in one unit. `vikeSkill` carries `vikePageBuilder`; the new `nextSkill` carries `nextPageBuilder`. A preset is now a pure detector that points at its framework `skill`, and `run.ts` frames the page builder through the skill set (the detected preset's skill is always framed, even on an empty from-scratch project where nothing signal-matched, since preset selection is the fallback). New exports: `nextSkill`, `skillPersonas`. `presetPersonas` and the framing narration are unchanged. Part of #190.
+
+- a06e845: Persist the orchestration state so a restarted dashboard can resume it
+
+  A run now saves its orchestration state (the stack rationale, loop status, and decisions ledger) so it survives a restart. Because the dashboard is a pure projection of the run's `FrameworkEvent` stream, persisting is durably logging that stream: each run appends to `.framework/events.jsonl` in the workspace, keeps a small derived `run.json` snapshot beside it, and writes a human-readable `DECISIONS.md` at the root. `framework --resume` reopens the last run's dashboard read-only by replaying the log into a fresh stream, exactly as it looked, without running the agent again. `--no-persist` opts out of writing state.
+
+  Per the design sync we do not persist the agent's chat transcript (Claude Code owns that); only our own orchestration events. New `RunStore` module and exports (`RunStore`, `nodeStoreFs`, `metaFromEvents`, `applyEventToMeta`, `RunMeta`, `StoreFs`, ...); new `--resume` / `--no-persist` CLI flags.
+
+  Part of #209. Closes #211.
+
+- c79f567: Recover from-scratch builds: scaffold an empty workspace instead of only polishing
+
+  The full-fledged loop assumed an app already existed, so a from-scratch run could end at the framework's default "Welcome" page. The build step now verifies it produced files and hard re-prompts to scaffold from scratch if the workspace is still empty; the improve step switches to a "create the whole app from scratch" directive when the workspace is empty (instead of "smallest change / no unrelated features"); and the default `--max-passes` is raised from 3 to 5 so a from-scratch build has room to recover. Also clarifies the dashboard/terminal end status ("finished", not "done", so it reads as separate from the production-grade badge). Closes #182.
+
+- f1d11d9: Architect stack rationale: PROS/CONS + alternatives considered
+
+  The web dashboard's edge over the CLI is showing _why_ the AI chose the stack. The architect step now returns that rationale, not just a one-line why:
+
+  - `ArchitectPlan` gains optional `pros`, `cons`, and `alternatives` (`{option, whyNot}`). The `agentArchitect` (ai-sdk) and `driverArchitect` (framework) both ask for them and parse them; absent fields are omitted, so existing producers are unaffected.
+  - A new exported `STACK_TRADEOFFS` block gives the architect objective, reusable Vike-vs-Next reasons (edge/Cloudflare deploy, renderer-agnostic, ecosystem size) so the justification is grounded rather than invented per run. Both architect prompts embed it.
+  - The `Bootstrap` orchestrator emits `pros`/`cons`/`alternatives` on the `architect` event and records the rejected alternatives to the decisions ledger as rejections, so the ledger shows what was weighed.
+  - The framework dashboard's "Stack & rationale" panel renders the pros, cons, and "Considered instead" alternatives. The `--fake` demo populates them.
+
+  Part of #209. Closes #210.
+
+### Patch Changes
+
+- 5288ca6: Enforce the Vike-only constraint on `--compose-extensions`
+
+  `--compose-extensions` is documented as Vike-only, but `runFramework` applied the vike-\* composer personas regardless of the detected preset, so a Next project would be framed with `nextPageBuilder` plus composers telling the agent to install vike-auth/vike-crud/etc.: an incoherent prompt. It now gates compose on the Vike preset and, on any other preset, falls back to the hand-rolled + Prisma path and emits a log explaining why.
+
+- c9cf96b: Fix the `--compose-extensions` help text to name the full composer set
+
+  The `framework --help` output described `--compose-extensions` as composing "vike-auth for auth" only, but the flag frames the agent with the whole vike-\* composer set: auth, the universal-orm data layer, rbac, crud/admin, and themes/layouts. The help text now names them accurately.
+
+- Updated dependencies [1db19e2]
+- Updated dependencies [c3e7e9e]
+- Updated dependencies [6625ca7]
+- Updated dependencies [bd13fcf]
+- Updated dependencies [11f76da]
+- Updated dependencies [c79f567]
+- Updated dependencies [93892d7]
+- Updated dependencies [de37e7e]
+- Updated dependencies [d98d4ad]
+- Updated dependencies [f1d11d9]
+  - @gemstack/ai-autopilot@0.6.0
+
 ## 0.3.0
 
 ### Minor Changes
