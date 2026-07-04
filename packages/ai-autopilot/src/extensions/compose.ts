@@ -32,6 +32,24 @@ export function composePersonas(input: ComposePersonasInput): Persona[] {
 }
 
 /**
+ * Compose the skill set for a run: the registry-matched skills (activated by the
+ * project's own signals) plus every skill an active extension pulls in, deduped
+ * by name so a registry skill is not shadowed when an extension re-declares it
+ * (first occurrence wins). Keeps the two skill sources in one place, symmetric
+ * with {@link composePersonas}.
+ */
+export function composeSkills(input: { matched?: readonly Skill[]; extensions: readonly FrameworkExtension[] }): Skill[] {
+  const out: Skill[] = []
+  const seen = new Set<string>()
+  for (const skill of [...(input.matched ?? []), ...input.extensions.flatMap(e => e.skills)]) {
+    if (seen.has(skill.name)) continue
+    seen.add(skill.name)
+    out.push(skill)
+  }
+  return out
+}
+
+/**
  * Render a doc-pointer {@link Skill} as a system-prompt fragment: what the
  * knowledge is and where its `llms.txt` lives, so the agent consults the source
  * of truth for that framework/domain instead of guessing.
