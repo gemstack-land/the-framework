@@ -5,7 +5,7 @@
  * that foreground the orchestration (stack rationale, loop status, decisions)
  * beside a tail of the wrapped agent's own activity.
  */
-export function dashboardHtml(title: string): string {
+export function dashboardHtml(title: string, stoppable = false): string {
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -26,6 +26,12 @@ export function dashboardHtml(title: string): string {
   #session-link { margin-left: auto; font-size: 12px; color: #7b8496; }
   #session-link code { color: #b7c0d0; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
   #status { font-size: 12px; color: #7b8496; }
+  #stop { margin-left: 12px; font: inherit; font-size: 12px; font-weight: 600; cursor: pointer;
+    color: #f0a35e; background: #241a15; border: 1px solid #4a3320; border-radius: 6px;
+    padding: 4px 12px; }
+  #stop:hover { background: #2f2118; border-color: #6a4a2e; }
+  #stop:disabled { opacity: .5; cursor: default; }
+  #stop[hidden] { display: none; }
   #app-banner { display: flex; align-items: center; gap: 8px; padding: 10px 20px;
     background: #0f2417; border-bottom: 1px solid #1c3a28; font-size: 13px; }
   #app-banner .dot { color: #67d98f; }
@@ -68,6 +74,7 @@ export function dashboardHtml(title: string): string {
   <span class="sub" id="session">connecting…</span>
   <span id="session-link"></span>
   <span id="status">●</span>
+  <button id="stop" hidden>■ Stop</button>
 </header>
 <div id="app-banner" hidden>
   <span class="dot">▶</span>
@@ -100,15 +107,17 @@ export function dashboardHtml(title: string): string {
   </section>
 </main>
 <script>
-${clientScript()}
+${clientScript(stoppable)}
 </script>
 </body>
 </html>`
 }
 
-function clientScript(): string {
+function clientScript(stoppable: boolean): string {
   // Runs in the browser. Keep it dependency-free.
   return `
+const STOPPABLE = ${stoppable ? 'true' : 'false'};
+let ended = false;
 const $ = id => document.getElementById(id);
 const log = line => {
   const el = $('log');
@@ -201,6 +210,7 @@ function onEvent(fe) {
     s += '  in  ' + fe.workspace;
     $('session').textContent = s;
     if (fe.sessionLink) setSessionLink(undefined, fe.sessionLink);
+    if (STOPPABLE && !ended) $('stop').hidden = false;
   } else if (fe.kind === 'session-update') setSessionLink(fe.sessionId, fe.sessionLink);
   else if (fe.kind === 'preview') {
     const a = $('app-link');
@@ -211,9 +221,20 @@ function onEvent(fe) {
   else if (fe.kind === 'bootstrap') bootstrap(fe.event);
   else if (fe.kind === 'driver') driver(fe.event);
   else if (fe.kind === 'log') log(fe.message);
-  else if (fe.kind === 'end') { $('status').textContent = fe.ok ? '\\u25cf finished' : '\\u25cf failed'; }
+  else if (fe.kind === 'end') {
+    ended = true;
+    $('status').textContent = fe.ok ? '\\u25cf finished' : fe.stopped ? '\\u25a0 stopped' : '\\u25cf failed';
+    $('stop').hidden = true;
+  }
+}
+function stopRun() {
+  const btn = $('stop');
+  btn.disabled = true;
+  btn.textContent = 'stopping\\u2026';
+  fetch('/stop', { method: 'POST' }).catch(() => {});
 }
 function esc(s) { const d = document.createElement('div'); d.textContent = String(s); return d.innerHTML; }
+$('stop').addEventListener('click', stopRun);
 const src = new EventSource('/events');
 src.onmessage = ev => { try { onEvent(JSON.parse(ev.data)); } catch {} };
 src.onerror = () => { $('status').textContent = '\\u25cb offline'; };

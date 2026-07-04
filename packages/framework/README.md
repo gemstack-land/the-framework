@@ -34,7 +34,10 @@ pieces:
   driver for `--fake` and tests. Codex / opencode slot in behind the same three
   methods.
 - **The product shell** - the `framework` CLI and the localhost
-  [dashboard](./src/dashboard/server.ts) over an event stream we own.
+  [dashboard](./src/dashboard/server.ts) over an event stream we own. The
+  dashboard has a **Stop** button that interrupts the run from the browser (it
+  aborts the same signal Ctrl+C does); the run ends cleanly as *stopped*, and a
+  persisted run reflects that so `--resume` shows it stopped.
 
 Everything runs *through* the driver (single execution path): the architect is a
 small structured JSON decision the agent returns; build and improve are prompts;

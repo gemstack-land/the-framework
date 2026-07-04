@@ -116,3 +116,9 @@ test('applyEventToMeta marks a thrown run as failed', () => {
   const failed = applyEventToMeta(base, { kind: 'end', ok: false, detail: 'boom' }, AT)
   assert.equal(failed.status, 'failed')
 })
+
+test('applyEventToMeta marks a user-stopped run as stopped, not failed (#218)', () => {
+  const base = metaFromEvents(RUN.slice(0, 4), AT)
+  const stopped = applyEventToMeta(base, { kind: 'end', ok: false, stopped: true }, AT)
+  assert.equal(stopped.status, 'stopped')
+})

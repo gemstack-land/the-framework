@@ -314,7 +314,10 @@ export async function runFramework(opts: RunFrameworkOptions): Promise<RunFramew
     emit({ kind: 'end', ok: true })
     return { result, detection, events, ledger, ...(preview ? { preview } : {}) }
   } catch (err) {
-    emit({ kind: 'end', ok: false, detail: err instanceof Error ? err.message : String(err) })
+    // A user interrupt (the dashboard Stop button / Ctrl+C aborts the signal) is a
+    // clean stop, not a failure — mark it so surfaces show "stopped".
+    const stopped = opts.signal?.aborted === true
+    emit({ kind: 'end', ok: false, ...(stopped ? { stopped: true } : {}), detail: err instanceof Error ? err.message : String(err) })
     throw err
   } finally {
     await session.dispose()

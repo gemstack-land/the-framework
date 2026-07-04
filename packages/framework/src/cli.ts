@@ -352,10 +352,18 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
       }
     : undefined
 
+  // One controller for the whole run: the dashboard Stop button aborts it.
+  // runFramework checks the signal between phases and the driver kills its current
+  // turn on it, so a stop takes effect promptly.
+  const controller = new AbortController()
+
   let dashboard: Dashboard | undefined
   if (opts.dashboard) {
     try {
-      dashboard = await startDashboard(opts.port !== undefined ? { port: opts.port } : {})
+      dashboard = await startDashboard({
+        ...(opts.port !== undefined ? { port: opts.port } : {}),
+        onStop: () => controller.abort(),
+      })
       io.out(`◆ dashboard: ${dashboard.url}`)
     } catch (err) {
       io.err(`could not start dashboard (${err instanceof Error ? err.message : String(err)}); continuing headless`)
@@ -400,6 +408,7 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
     cwd,
     onEvent,
     signals,
+    signal: controller.signal,
     ...(opts.model ? { model: opts.model } : {}),
     ...(opts.maxPasses ? { maxPasses: opts.maxPasses } : {}),
     ...(deploy ? { deploy } : {}),
@@ -435,8 +444,20 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
     }
     return 0
   } catch (err) {
-    io.err(`\n✗ run failed: ${err instanceof Error ? err.message : String(err)}`)
     await store?.close()
+    // A user stop (the dashboard Stop button aborted the signal) is not a failure:
+    // report it cleanly, keep the dashboard up so the stopped state is visible, and
+    // exit 0.
+    if (controller.signal.aborted) {
+      io.out('\n■ Stopped.')
+      if (dashboard) {
+        io.out(`\nDashboard still live at ${dashboard.url}. Press Ctrl+C to exit.`)
+        await waitForInterrupt()
+        await dashboard.close()
+      }
+      return 0
+    }
+    io.err(`\n✗ run failed: ${err instanceof Error ? err.message : String(err)}`)
     await dashboard?.close()
     return 1
   }
