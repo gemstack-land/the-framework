@@ -127,6 +127,28 @@ test('--compose-extensions frames the agent with vike-auth, not hand-rolled auth
   assert.match(system(), /npm install vike-auth/)
 })
 
+test('--compose-extensions is ignored on a non-Vike preset and falls back with a log (#202)', async () => {
+  const events: FrameworkEvent[] = []
+  const { driver, system } = recordingDriver()
+  const { detection } = await runFramework({
+    intent: FAKE_INTENT,
+    driver,
+    cwd: '/tmp/ws',
+    signals: { dependencies: ['next'] }, // detect Next, not Vike
+    composeExtensions: true,
+    onEvent: e => events.push(e),
+  })
+
+  // The vike-* extensions are Vike-only, so a Next project does not get them.
+  assert.equal(detection.framework, 'Next.js')
+  assert.doesNotMatch(system(), /vike-auth/)
+  // And we say why, rather than silently framing Next with vike composers.
+  assert.ok(
+    events.some(e => e.kind === 'log' && /--compose-extensions ignored/.test(e.message)),
+    'expected a log explaining the compose fallback',
+  )
+})
+
 test('without --compose-extensions the default framing has no vike-auth (publish-safe)', async () => {
   const { driver, system } = recordingDriver()
   await runFramework({
