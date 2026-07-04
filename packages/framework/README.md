@@ -76,6 +76,18 @@ framework --fake               Offline demo (no CLI, no model, deterministic).
 The live path needs the Claude Code CLI installed (`claude` on `PATH`). The
 `--fake` path needs neither a CLI nor a model, so it is what CI runs.
 
+### Watching the live session
+
+Every run surfaces the current Claude Code **session id** on the dashboard (and in
+the CLI narration) as soon as the wrapped agent reports it. To open the live
+session in a browser, enable [Remote Control](https://code.claude.com/docs/en/remote-control)
+(`claude remote-control` / `--remote-control`; requires a claude.ai subscription
+and Claude Code v2.1.51+) and find the session by id/name at
+[claude.ai/code](https://claude.ai/code) — the dashboard's session link points
+there by default. If you have a direct per-session URL scheme, pass it with
+`--session-link "https://.../{sessionId}"`; `{sessionId}` is filled in with the
+real Claude session id once it is known.
+
 ## Extensions (#190)
 
 The Framework is modular: it composes **capability extensions** and **skills**

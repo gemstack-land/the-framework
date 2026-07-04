@@ -1,6 +1,13 @@
 import { strict as assert } from 'node:assert'
 import { test } from 'node:test'
-import { buildDeployTarget, parseArgs, runCli, type CliIO } from './cli.js'
+import {
+  buildDeployTarget,
+  chooseSessionLink,
+  CLAUDE_CODE_SESSION_LIST,
+  parseArgs,
+  runCli,
+  type CliIO,
+} from './cli.js'
 
 function capture(): { io: CliIO; out: string[]; err: string[] } {
   const out: string[] = []
@@ -26,6 +33,19 @@ test('parseArgs reads permission-mode and skip-permissions', () => {
   const opts = parseArgs(['--permission-mode', 'bypassPermissions', '--dangerously-skip-permissions', 'x'])
   assert.equal(opts.permissionMode, 'bypassPermissions')
   assert.equal(opts.skipPermissions, true)
+})
+
+test('chooseSessionLink defaults a live run to the claude.ai/code session list (#212)', () => {
+  assert.equal(chooseSessionLink({ sessionLink: undefined }, false), CLAUDE_CODE_SESSION_LIST)
+  assert.equal(CLAUDE_CODE_SESSION_LIST, 'https://claude.ai/code')
+})
+
+test('chooseSessionLink honors an explicit --session-link over the default', () => {
+  assert.equal(chooseSessionLink({ sessionLink: 'https://x/s/{sessionId}' }, false), 'https://x/s/{sessionId}')
+})
+
+test('chooseSessionLink gives no link for a fake run (no real session)', () => {
+  assert.equal(chooseSessionLink({ sessionLink: undefined }, true), undefined)
 })
 
 test('runCli --help prints usage and exits 0', async () => {

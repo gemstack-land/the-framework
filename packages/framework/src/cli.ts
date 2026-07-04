@@ -10,6 +10,26 @@ import { FAKE_DEPLOY, FAKE_INTENT, FAKE_SIGNALS, fakeDriver } from './fake-scrip
 import { discoverExtensions, readProjectSignals } from './extensions.js'
 import { preflight } from './preflight.js'
 
+/**
+ * The claude.ai/code session list — the default link shown for a live run. It is
+ * the page where a Claude Code session appears *when Remote Control is enabled*
+ * (`claude remote-control` / `--remote-control`, a claude.ai subscription, Claude
+ * Code v2.1.51+; https://code.claude.com/docs/en/remote-control). We drive Claude
+ * Code headless, so there is no per-session deep link to construct — pass
+ * `--session-link "...{sessionId}..."` if you have a real one.
+ */
+export const CLAUDE_CODE_SESSION_LIST = 'https://claude.ai/code'
+
+/**
+ * The session link to show for a run: the user's `--session-link` if given, else
+ * the claude.ai/code list for a live run (nothing for `--fake`, which has no real
+ * session). Pure, so the default is unit-testable without a live run.
+ */
+export function chooseSessionLink(opts: Pick<CliOptions, 'sessionLink'>, fake: boolean): string | undefined {
+  if (opts.sessionLink) return opts.sessionLink
+  return fake ? undefined : CLAUDE_CODE_SESSION_LIST
+}
+
 /** Where the CLI writes. Injectable so tests capture output. */
 export interface CliIO {
   out: (line: string) => void
@@ -57,8 +77,11 @@ Options:
   --no-dashboard         Do not start the localhost dashboard.
   --skip-preflight       Skip the prerequisite checks before a live run.
   --session-link <url>   Link to the live agent session (shown on the dashboard).
-                         Use {sessionId} as a placeholder to template in the real
-                         id, e.g. "https://example.com/s/{sessionId}".
+                         Defaults to https://claude.ai/code for a live run, where
+                         the Claude Code session appears when Remote Control is on
+                         (see code.claude.com/docs/en/remote-control). Pass your own
+                         URL, using {sessionId} to template in the real Claude
+                         session id, e.g. "https://example.com/s/{sessionId}".
   -h, --help             Show this help.
   -v, --version          Print the version.
 
@@ -345,7 +368,10 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
     ...(serve ? { serve } : {}),
     ...(discovered ? { extensions: discovered } : {}),
     ...(opts.composeExtensions ? { composeExtensions: true } : {}),
-    ...(opts.sessionLink ? { sessionLink: opts.sessionLink } : {}),
+    ...((): { sessionLink?: string } => {
+      const link = chooseSessionLink(opts, fake)
+      return link ? { sessionLink: link } : {}
+    })(),
   }
 
   try {
