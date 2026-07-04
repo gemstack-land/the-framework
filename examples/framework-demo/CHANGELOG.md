@@ -1,5 +1,13 @@
 # @gemstack/example-framework-demo
 
+## 0.0.2
+
+### Patch Changes
+
+- Updated dependencies [16f6bb8]
+- Updated dependencies [c7eae83]
+  - @gemstack/framework@0.5.0
+
 ## 0.0.1
 
 ### Patch Changes

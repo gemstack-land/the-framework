@@ -1,5 +1,25 @@
 # @gemstack/framework
 
+## 0.5.0
+
+### Minor Changes
+
+- 16f6bb8: Stop a run from the dashboard
+
+  The dashboard now has a **Stop** button that interrupts the running build from the browser, instead of only from the terminal. It POSTs to a new `/stop` route that aborts the run's `AbortSignal`, which `runFramework` checks between phases and the driver honours mid-turn (it kills the current agent turn). The run ends cleanly as _stopped_ (not _failed_): the CLI prints `■ Stopped` and exits 0, the dashboard shows a stopped status, and the persisted run records `status: "stopped"` so `--resume` shows it that way.
+
+  `startDashboard` gains an `onStop` option (wire it to `controller.abort()`); the page hides the button when no stop handler is wired (e.g. a read-only `--resume` view). The `end` event gained an optional `stopped` flag.
+
+  Part of #110 (first interactive slice of #165's web client). Closes #218.
+
+### Patch Changes
+
+- c7eae83: Label the dashboard session link honestly
+
+  Our runs are headless, which is deliberately not Remote-Controlled, so the default `https://claude.ai/code` link is a generic entry point, not a live per-run session. The dashboard now labels it **Open Claude Code** instead of "live session"; the "live session" label is kept only for a real user-supplied `--session-link`. The real session id (the local transcript id, usable with `claude --resume`) is still shown.
+
+  The README's session section is rewritten to be accurate: to steer a session live in the browser you start your own interactive `claude auth login` + `claude --remote-control --name <run>` session and open it from claude.ai/code, which is a separate process from an orchestration run. Corrects the overpromise from #212. Closes #221.
+
 ## 0.4.0
 
 ### Minor Changes
