@@ -453,13 +453,21 @@ style it with the theme's CSS variables so it tracks light/dark and the brand.`,
 })
 
 /**
+ * The framework- and path-neutral guardrails that apply on every path — plain
+ * Prisma or composed extensions, Vike or Next. Kept as one named tail so both
+ * {@link sharedPersonas} and {@link vikeExtensionPersonas} spread it instead of
+ * re-listing it, and adding a neutral guardrail can't silently drop from a path.
+ */
+const neutralGuardrails: readonly Persona[] = Object.freeze([uiIntentDesigner])
+
+/**
  * The framework-neutral personas shared by every preset — the data layer and the
  * intent-based UI guardrail apply the same whether the app is on Vike or Next.
  * A preset adds its framework-specific page builder on top (see the presets seam).
  */
 export const sharedPersonas: readonly Persona[] = Object.freeze([
   dataModeler,
-  uiIntentDesigner,
+  ...neutralGuardrails,
 ])
 
 /**
@@ -478,7 +486,7 @@ export const vikeExtensionPersonas: readonly Persona[] = Object.freeze([
   vikeRbacComposer,
   vikeCrudComposer,
   vikeShellComposer,
-  uiIntentDesigner,
+  ...neutralGuardrails,
 ])
 
 /** All built-in stack personas (the Vike stack), in a stable order. */

@@ -236,6 +236,7 @@ export async function runFramework(opts: RunFrameworkOptions): Promise<RunFramew
   // nothing (its whole workspace is always "empty"), so it opts out to stay
   // deterministic.
   const verifyWorkspace = opts.driver.name !== 'fake'
+  const workspaceOpt = verifyWorkspace ? { verifyWorkspace: true } : {}
 
   const ledger = new DecisionLedger()
   let preview: AppPreview | undefined
@@ -248,14 +249,16 @@ export async function runFramework(opts: RunFrameworkOptions): Promise<RunFramew
       steps: {
         scope: () => ({ scope: opts.scope ?? 'full', intent: opts.intent }),
         architect: driverArchitect(session),
-        build: driverBuild(session, verifyWorkspace ? { verifyWorkspace: true } : {}),
+        build: driverBuild(session, workspaceOpt),
         checklist,
-        improve: driverImprove(session, verifyWorkspace ? { verifyWorkspace: true } : {}),
-        ...(opts.deploy && opts.deployTarget
-          ? { deploy: deployWith(opts.deploy, opts.deployTarget) }
-          : opts.deploy
-            ? { deploy: decideDeploy(opts.deploy) }
-            : {}),
+        improve: driverImprove(session, workspaceOpt),
+        ...(opts.deploy
+          ? {
+              deploy: opts.deployTarget
+                ? deployWith(opts.deploy, opts.deployTarget)
+                : decideDeploy(opts.deploy),
+            }
+          : {}),
       },
     })
     const result = await bootstrap.run()
