@@ -43,12 +43,12 @@ Each stage is a plain function, so you mix LLM and deterministic logic freely:
 ## Personas — the stack-aware layer
 
 The Supervisor is stack-agnostic. **Personas** add the opinionated knowledge that
-makes autopilot know the GemStack stack (Vike + universal-orm) instead of
+makes autopilot know the GemStack stack (Vike + Prisma) instead of
 guessing. A persona is *data*: a name, a one-line role, a system-prompt fragment,
 and the skills/tools it brings (composed over [`@gemstack/ai-skills`](https://github.com/gemstack-land/gemstack/tree/main/packages/ai-skills)).
 
 Three are built in: `vikePageBuilder` (Vike `+` file conventions, renderer-agnostic),
-`universalOrmModeler` (schema-first data, derived migrations), and
+`dataModeler` (schema-first data on Prisma, derived migrations), and
 `uiIntentDesigner` — the "declare intent, decouple implementation" guardrail that
 expresses UI as intent so an AI can't hardcode the wrong markup.
 
@@ -69,6 +69,20 @@ await supervisor.run('Add a paginated orders page backed by an orders table')
 Define your own with `definePersona({ name, role, systemPrompt, skills?, tools? })`,
 or materialize a single persona into an agent with `personaAgent(persona)`. Because
 a persona is data, it can be inspected and listed without building an agent first.
+
+### Composing vike-* extensions (opt-in)
+
+For a Vike app, an opt-in set swaps the hand-rolled default for personas that
+**compose** the vike-* extensions instead of reinventing them: `vikeAuthComposer`
+(vike-auth for identity/sessions), `vikeDataModeler` (the universal-orm data layer),
+`vikeRbacComposer` (vike-rbac roles/permissions), `vikeCrudComposer`
+(vike-crud/vike-admin for schema-derived CRUD + admin UI), and `vikeShellComposer`
+(vike-themes/vike-layouts for styling and the app shell), plus the shared
+`uiIntentDesigner` guardrail. They ship as the `vikeExtensionPersonas` array.
+
+This path is opt-in because the vike-* packages currently resolve only inside the
+vike-data workspace (they are not published to npm), so the default `stackPersonas`
+path stays publish-safe. `@gemstack/framework` exposes it as `--compose-extensions`.
 
 ## Runner — the pluggable execution seam
 

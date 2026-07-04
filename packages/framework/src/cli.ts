@@ -34,9 +34,10 @@ Options:
   --cwd <dir>            Workspace the agent builds in (default: current directory).
   --model <id>           Model to pass through to the wrapped agent.
   --scope <prototype|full>   How much app to build (default: full).
-  --compose-extensions   Compose the vike-* extensions (vike-auth for auth) instead
-                         of hand-rolling them. Vike-only; extensions resolve in the
-                         vike-data workspace (default: off, hand-rolled + Prisma).
+  --compose-extensions   Compose the vike-* extensions (auth, data, rbac, crud,
+                         themes/layouts) instead of hand-rolling them. Vike-only;
+                         extensions resolve in the vike-data workspace
+                         (default: off, hand-rolled + Prisma).
   --max-passes <n>       Full-fledged loop pass budget (default: 5).
   --permission-mode <mode>   Claude Code permission mode: default | acceptEdits |
                              bypassPermissions | plan (default: acceptEdits).

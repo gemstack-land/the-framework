@@ -66,6 +66,7 @@ framework --fake               Offline demo (no CLI, no model, deterministic).
   --cwd <dir>            Workspace the agent builds in (default: cwd).
   --model <id>           Model to pass through to the wrapped agent.
   --scope <prototype|full>   How much app to build (default: full).
+  --compose-extensions   Compose the vike-* extensions instead of hand-rolling them (Vike-only, opt-in).
   --deploy <target>      Narrate a deploy decision (e.g. cloudflare, dokploy).
   --port <n>             Dashboard port (default: 4477).
   --no-dashboard         Run headless.
@@ -74,6 +75,18 @@ framework --fake               Offline demo (no CLI, no model, deterministic).
 
 The live path needs the Claude Code CLI installed (`claude` on `PATH`). The
 `--fake` path needs neither a CLI nor a model, so it is what CI runs.
+
+## Composing vike-* extensions
+
+By default the agent hand-rolls auth and models data with Prisma, a fully
+publish-safe stack. Pass `--compose-extensions` (Vike-only) to instead frame the
+agent with the **composer personas**: compose vike-auth for identity, the
+universal-orm data layer for domain data, vike-rbac for roles/permissions,
+vike-crud/vike-admin for schema-derived CRUD + admin UI, and vike-themes/vike-layouts
+for styling and the app shell, rather than reinventing each. It is opt-in because
+those vike-* packages currently resolve only inside the vike-data workspace, so the
+default path is the one that stays publishable. See `@gemstack/ai-autopilot`'s
+`vikeExtensionPersonas`.
 
 ## Status
 
