@@ -70,11 +70,25 @@ framework --fake               Offline demo (no CLI, no model, deterministic).
   --deploy <target>      Narrate a deploy decision (e.g. cloudflare, dokploy).
   --port <n>             Dashboard port (default: 4477).
   --no-dashboard         Run headless.
+  --resume               Reopen the last run's dashboard from .framework/ (see below).
+  --no-persist           Do not write the orchestration state to .framework/.
   --session-link <url>   Link to the live agent session (shown on the dashboard).
 ```
 
 The live path needs the Claude Code CLI installed (`claude` on `PATH`). The
 `--fake` path needs neither a CLI nor a model, so it is what CI runs.
+
+### Persistence + resume
+
+The orchestration state (the stack rationale, loop status, and decisions ledger)
+is our part of the run, not the agent's chat transcript, so we persist it. Each
+run appends its event stream to `.framework/events.jsonl` in the workspace, with a
+small `run.json` snapshot beside it and a human-readable `DECISIONS.md` at the
+root. Because the dashboard is a pure projection of that stream, a restart can
+replay it: `framework --resume` reopens the last run's dashboard read-only, exactly
+as it looked, without running the agent again. Add `--cwd <dir>` to resume a run
+from another workspace. Pass `--no-persist` to skip writing state. We do not
+persist the agent's transcript; Claude Code owns that.
 
 ### Watching the live session
 

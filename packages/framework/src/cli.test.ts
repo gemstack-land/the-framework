@@ -35,6 +35,15 @@ test('parseArgs reads permission-mode and skip-permissions', () => {
   assert.equal(opts.skipPermissions, true)
 })
 
+test('parseArgs persists by default and reads --resume / --no-persist (#211)', () => {
+  const dflt = parseArgs(['x'])
+  assert.equal(dflt.persist, true)
+  assert.equal(dflt.resume, false)
+  const opts = parseArgs(['--resume', '--no-persist'])
+  assert.equal(opts.resume, true)
+  assert.equal(opts.persist, false)
+})
+
 test('chooseSessionLink defaults a live run to the claude.ai/code session list (#212)', () => {
   assert.equal(chooseSessionLink({ sessionLink: undefined }, false), CLAUDE_CODE_SESSION_LIST)
   assert.equal(CLAUDE_CODE_SESSION_LIST, 'https://claude.ai/code')

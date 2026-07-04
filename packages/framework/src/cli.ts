@@ -1,14 +1,21 @@
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { cloudflareTarget, dokployTarget, type DeployTarget } from '@gemstack/ai-autopilot'
+import { cloudflareTarget, dokployTarget, nodeLedgerFs, saveLedger, type DeployTarget } from '@gemstack/ai-autopilot'
 import { ClaudeCodeDriver, type ClaudeCodeDriverOptions, type Driver, type PermissionMode } from './driver/index.js'
 import { hostExecutor } from './host-exec.js'
 import { startDashboard, type Dashboard } from './dashboard/index.js'
 import { formatFrameworkEvent, type FrameworkEvent } from './events.js'
-import { runFramework, type DeployDecision, type RunFrameworkOptions, type ServeConfig } from './run.js'
+import {
+  runFramework,
+  type DeployDecision,
+  type RunFrameworkOptions,
+  type RunFrameworkResult,
+  type ServeConfig,
+} from './run.js'
 import { FAKE_DEPLOY, FAKE_INTENT, FAKE_SIGNALS, fakeDriver } from './fake-script.js'
 import { discoverExtensions, readProjectSignals } from './extensions.js'
 import { preflight } from './preflight.js'
+import { RunStore } from './store/index.js'
 
 /**
  * The claude.ai/code session list — the default link shown for a live run. It is
@@ -75,6 +82,9 @@ Options:
   --dokploy-app <id>     Dokploy application id (required for --deploy dokploy).
   --port <n>             Dashboard port (default: 4477).
   --no-dashboard         Do not start the localhost dashboard.
+  --resume               Reopen the last run's dashboard from .framework/ in --cwd
+                         (read-only replay; no new agent run). Survives a restart.
+  --no-persist           Do not write the orchestration state to .framework/.
   --skip-preflight       Skip the prerequisite checks before a live run.
   --session-link <url>   Link to the live agent session (shown on the dashboard).
                          Defaults to https://claude.ai/code for a live run, where
@@ -117,6 +127,8 @@ export interface CliOptions {
   sessionLink?: string | undefined
   permissionMode?: PermissionMode | undefined
   skipPermissions: boolean
+  resume: boolean
+  persist: boolean
   error?: string
 }
 
@@ -133,6 +145,8 @@ export function parseArgs(argv: string[]): CliOptions {
     dashboard: true,
     composeExtensions: false,
     skipPermissions: false,
+    resume: false,
+    persist: true,
   }
   const PERMISSION_MODES: PermissionMode[] = ['default', 'acceptEdits', 'bypassPermissions', 'plan']
   const words: string[] = []
@@ -155,6 +169,12 @@ export function parseArgs(argv: string[]): CliOptions {
         break
       case '--compose-extensions':
         opts.composeExtensions = true
+        break
+      case '--resume':
+        opts.resume = true
+        break
+      case '--no-persist':
+        opts.persist = false
         break
       case '--skip-preflight':
         opts.skipPreflight = true
@@ -269,6 +289,11 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
     return result.ok ? 0 : 1
   }
 
+  // Resume a previous run's dashboard from its persisted log — the reload half of
+  // #211. No agent runs; we just replay the saved events into a fresh stream so
+  // the dashboard rehydrates exactly as it looked, then leave it up read-only.
+  if (opts.resume) return resumeRun(opts, io)
+
   const fake = opts.fake
   const intent = opts.intent || (fake ? FAKE_INTENT : '')
   if (!intent) {
@@ -337,9 +362,23 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
     }
   }
 
+  // Persist the orchestration state so a restart can --resume it (#211). The log
+  // is the dashboard's own event stream, appended to .framework/ in the workspace.
+  // Best-effort: a store that fails to open just means no persistence, never a
+  // failed run. --no-persist opts out entirely.
+  let store: RunStore | undefined
+  if (opts.persist) {
+    try {
+      store = await RunStore.open(cwd, { fresh: true })
+    } catch (err) {
+      io.err(`could not persist run state (${err instanceof Error ? err.message : String(err)}); continuing without it`)
+    }
+  }
+
   const onEvent = (event: FrameworkEvent) => {
     io.out(formatFrameworkEvent(event))
     dashboard?.push(event)
+    void store?.append(event)
   }
 
   // Detection signals: fixed for the fake demo, read from the project otherwise so
@@ -375,13 +414,17 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
   }
 
   try {
-    const { result, preview } = await runFramework(runOpts)
+    const { result, preview, ledger } = await runFramework(runOpts)
     io.out(
       result.productionGrade
         ? `\n✓ production-grade in ${result.passes} pass(es).`
         : `\n• prototype ready${result.stoppedEarly ? ` (stopped with ${result.blockers.length} blocker(s))` : ''}.`,
     )
     if (preview) io.out(`\n▶ Your app is running at ${preview.url} — open it in a browser.`)
+    // Flush the event log, and drop a human-readable DECISIONS.md beside it so the
+    // ledger is legible without the dashboard. Both best-effort.
+    await store?.close()
+    await writeDecisions(cwd, ledger, io)
     // Stay up while the dashboard and/or the app are live, then tear both down.
     if (dashboard || preview) {
       if (dashboard) io.out(`\nDashboard still live at ${dashboard.url}. Press Ctrl+C to exit.`)
@@ -393,8 +436,68 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
     return 0
   } catch (err) {
     io.err(`\n✗ run failed: ${err instanceof Error ? err.message : String(err)}`)
+    await store?.close()
     await dashboard?.close()
     return 1
+  }
+}
+
+/**
+ * Reopen the last run from its persisted `.framework/` log and replay it into a
+ * fresh dashboard (#211). No agent runs; the dashboard rehydrates from the saved
+ * event stream and stays up read-only until Ctrl+C.
+ */
+async function resumeRun(opts: CliOptions, io: CliIO): Promise<number> {
+  const cwd = opts.cwd ?? process.cwd()
+  let store: RunStore
+  try {
+    store = await RunStore.open(cwd, { fresh: false })
+  } catch (err) {
+    io.err(`could not open .framework/ in ${cwd} (${err instanceof Error ? err.message : String(err)})`)
+    return 1
+  }
+  const events = await store.loadEvents()
+  if (events.length === 0) {
+    io.err(`Nothing to resume: no saved run found in ${store.dir}. Run \`framework "..."\` first.`)
+    return 1
+  }
+  const meta = (await store.readMeta()) ?? store.snapshot()
+
+  let dashboard: Dashboard | undefined
+  if (opts.dashboard) {
+    try {
+      dashboard = await startDashboard(opts.port !== undefined ? { port: opts.port } : {})
+      io.out(`◆ dashboard (resumed): ${dashboard.url}`)
+    } catch (err) {
+      io.err(`could not start dashboard (${err instanceof Error ? err.message : String(err)}); replaying to terminal only`)
+    }
+  }
+
+  for (const event of events) {
+    io.out(formatFrameworkEvent(event))
+    dashboard?.push(event)
+  }
+  io.out(`\n• resumed ${meta.status} run of "${meta.intent ?? 'unknown intent'}" (${events.length} event(s), ${meta.passes} pass(es)).`)
+
+  if (dashboard) {
+    io.out(`\nDashboard live at ${dashboard.url}. Press Ctrl+C to exit.`)
+    await waitForInterrupt()
+    await dashboard.close()
+  }
+  return 0
+}
+
+/**
+ * Persist the decisions ledger as a human-readable `DECISIONS.md` at the
+ * workspace root, reusing ai-autopilot's markdown store. Best-effort: a write
+ * failure is reported but never fails the run.
+ */
+async function writeDecisions(cwd: string, ledger: RunFrameworkResult['ledger'], io: CliIO): Promise<void> {
+  if (ledger.all().length === 0) return
+  try {
+    await saveLedger(nodeLedgerFs(), ledger, join(cwd, 'DECISIONS.md'))
+  } catch (err) {
+    io.err(`could not write DECISIONS.md (${err instanceof Error ? err.message : String(err)})`)
   }
 }
 

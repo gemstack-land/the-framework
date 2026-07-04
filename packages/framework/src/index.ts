@@ -69,6 +69,20 @@ export {
   SESSION_ID_PLACEHOLDER,
 } from './events.js'
 export { startDashboard, dashboardHtml, type Dashboard, type DashboardOptions } from './dashboard/index.js'
+export {
+  RunStore,
+  nodeStoreFs,
+  applyEventToMeta,
+  metaFromEvents,
+  FRAMEWORK_DIR,
+  EVENTS_FILE,
+  META_FILE,
+  RUN_META_VERSION,
+  type StoreFs,
+  type RunMeta,
+  type RunStatus,
+  type OpenStoreOptions,
+} from './store/index.js'
 export { runCli, parseArgs, buildDeployTarget, type CliIO, type CliOptions } from './cli.js'
 export {
   preflight,
