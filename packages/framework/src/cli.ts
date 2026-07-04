@@ -4,7 +4,7 @@ import { cloudflareTarget, dokployTarget, nodeLedgerFs, saveLedger, type DeployT
 import { ClaudeCodeDriver, type ClaudeCodeDriverOptions, type Driver, type PermissionMode } from './driver/index.js'
 import { hostExecutor } from './host-exec.js'
 import { startDashboard, type Dashboard } from './dashboard/index.js'
-import { formatFrameworkEvent, type FrameworkEvent } from './events.js'
+import { formatFrameworkEvent, CLAUDE_CODE_SESSION_LINK, type FrameworkEvent } from './events.js'
 import {
   runFramework,
   type DeployDecision,
@@ -18,19 +18,18 @@ import { preflight } from './preflight.js'
 import { RunStore } from './store/index.js'
 
 /**
- * The claude.ai/code session list — the default link shown for a live run. It is
- * the page where a Claude Code session appears *when Remote Control is enabled*
- * (`claude remote-control` / `--remote-control`, a claude.ai subscription, Claude
- * Code v2.1.51+; https://code.claude.com/docs/en/remote-control). We drive Claude
- * Code headless, so there is no per-session deep link to construct — pass
- * `--session-link "...{sessionId}..."` if you have a real one.
+ * The default link shown for a live run: the generic Claude Code entry point,
+ * surfaced as "Open Claude Code" (not a per-run live session). We drive Claude
+ * Code headless, which is not Remote-Controlled, so there is no per-session deep
+ * link to construct (#214). Pass `--session-link "...{sessionId}..."` if you
+ * wire up a real one.
  */
-export const CLAUDE_CODE_SESSION_LIST = 'https://claude.ai/code'
+export const CLAUDE_CODE_SESSION_LIST = CLAUDE_CODE_SESSION_LINK
 
 /**
  * The session link to show for a run: the user's `--session-link` if given, else
- * the claude.ai/code list for a live run (nothing for `--fake`, which has no real
- * session). Pure, so the default is unit-testable without a live run.
+ * the generic Claude Code entry point for a live run (nothing for `--fake`, which
+ * has no real session). Pure, so the default is unit-testable without a live run.
  */
 export function chooseSessionLink(opts: Pick<CliOptions, 'sessionLink'>, fake: boolean): string | undefined {
   if (opts.sessionLink) return opts.sessionLink
@@ -86,12 +85,12 @@ Options:
                          (read-only replay; no new agent run). Survives a restart.
   --no-persist           Do not write the orchestration state to .framework/.
   --skip-preflight       Skip the prerequisite checks before a live run.
-  --session-link <url>   Link to the live agent session (shown on the dashboard).
-                         Defaults to https://claude.ai/code for a live run, where
-                         the Claude Code session appears when Remote Control is on
-                         (see code.claude.com/docs/en/remote-control). Pass your own
-                         URL, using {sessionId} to template in the real Claude
-                         session id, e.g. "https://example.com/s/{sessionId}".
+  --session-link <url>   A real per-session link to the live agent session, shown
+                         on the dashboard. Our runs are headless (not Remote-
+                         Controlled), so by default the dashboard only offers the
+                         generic "Open Claude Code" entry point. Pass your own URL,
+                         using {sessionId} to template in the real Claude session
+                         id, e.g. "https://example.com/s/{sessionId}".
   -h, --help             Show this help.
   -v, --version          Print the version.
 

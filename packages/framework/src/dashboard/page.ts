@@ -1,3 +1,5 @@
+import { CLAUDE_CODE_SESSION_LINK } from '../events.js'
+
 /**
  * The single self-contained dashboard page: HTML + inline CSS + inline JS, no
  * assets, no build step. The client opens an `EventSource` to `/events` and
@@ -117,6 +119,7 @@ function clientScript(stoppable: boolean): string {
   // Runs in the browser. Keep it dependency-free.
   return `
 const STOPPABLE = ${stoppable ? 'true' : 'false'};
+const GENERIC_SESSION_LINK = ${JSON.stringify(CLAUDE_CODE_SESSION_LINK)};
 let ended = false;
 const $ = id => document.getElementById(id);
 const log = line => {
@@ -198,8 +201,14 @@ function renderRationale(e) {
 function setSessionLink(sessionId, sessionLink) {
   const el = $('session-link');
   if (sessionLink) {
-    el.innerHTML = '\\u25b6 <a href="' + esc(sessionLink) + '" target="_blank" rel="noopener">live session</a>';
-    if (sessionId) el.title = sessionId;
+    // The generic default is not a live per-run session (our runs are headless,
+    // not Remote-Controlled), so label it honestly. A real --session-link keeps
+    // "live session". Show the session id alongside when we know it.
+    const generic = sessionLink === GENERIC_SESSION_LINK;
+    const label = generic ? 'Open Claude Code' : 'live session';
+    const idTail = sessionId ? ' <code>' + esc(sessionId) + '</code>' : '';
+    el.innerHTML = '\\u25b6 <a href="' + esc(sessionLink) + '" target="_blank" rel="noopener">' + label + '</a>' + idTail;
+    el.title = generic ? 'Generic Claude Code entry point, not a live session link' : (sessionId || '');
   } else if (sessionId) {
     el.innerHTML = 'session <code>' + esc(sessionId) + '</code>';
   }

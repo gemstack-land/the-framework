@@ -99,17 +99,31 @@ as it looked, without running the agent again. Add `--cwd <dir>` to resume a run
 from another workspace. Pass `--no-persist` to skip writing state. We do not
 persist the agent's transcript; Claude Code owns that.
 
-### Watching the live session
+### Watching the session, and steering it live
 
 Every run surfaces the current Claude Code **session id** on the dashboard (and in
-the CLI narration) as soon as the wrapped agent reports it. To open the live
-session in a browser, enable [Remote Control](https://code.claude.com/docs/en/remote-control)
-(`claude remote-control` / `--remote-control`; requires a claude.ai subscription
-and Claude Code v2.1.51+) and find the session by id/name at
-[claude.ai/code](https://claude.ai/code) — the dashboard's session link points
-there by default. If you have a direct per-session URL scheme, pass it with
-`--session-link "https://.../{sessionId}"`; `{sessionId}` is filled in with the
-real Claude session id once it is known.
+the CLI narration) as soon as the wrapped agent reports it. That id is the local
+transcript id: use it with `claude --resume <id>` to reopen the transcript. By
+default the dashboard also shows an **Open Claude Code** link to
+[claude.ai/code](https://claude.ai/code), a generic entry point (not a live link
+to this run).
+
+We drive Claude Code **headless**, which is deliberately not Remote-Controlled, so
+there is no per-session URL to deep-link into (`--remote-control` is silently
+ignored in headless mode, emits no URL, and
+[Remote Control](https://code.claude.com/docs/en/remote-control) refuses
+automation tokens anyway). To actually steer a session live in the browser, start
+your **own** interactive session and open it from claude.ai/code:
+
+```bash
+claude auth login                          # full-scope login (Remote Control needs it)
+claude --remote-control --name my-run      # interactive; find "my-run" at claude.ai/code
+```
+
+That is a separate process from an orchestration run, not the same agent. If you do
+have a real per-session URL scheme, point the dashboard at it with
+`--session-link "https://.../{sessionId}"` (`{sessionId}` fills in with the real
+Claude session id once known), and the dashboard labels it a **live session**.
 
 ## Extensions (#190)
 

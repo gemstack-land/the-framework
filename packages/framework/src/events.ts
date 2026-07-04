@@ -119,3 +119,11 @@ export function hasSessionIdPlaceholder(template: string): boolean {
 export function resolveSessionLink(template: string, sessionId: string): string {
   return template.split(SESSION_ID_PLACEHOLDER).join(sessionId)
 }
+
+/**
+ * The generic Claude Code entry point. It is NOT a per-run live session: a
+ * headless run is not Remote-Controlled, so there is no deep link to build (see
+ * #214). We surface this only as an "Open Claude Code" affordance; a real live
+ * link comes from an explicit `--session-link`.
+ */
+export const CLAUDE_CODE_SESSION_LINK = 'https://claude.ai/code'

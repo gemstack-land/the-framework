@@ -78,6 +78,19 @@ test('dashboard replays buffered events and streams them over SSE', async () => 
   }
 })
 
+test('page labels the generic default "Open Claude Code", not a live session (#214)', async () => {
+  const dash = await startDashboard({ port: 0 })
+  try {
+    const { body } = await fetchText(dash.url + '/')
+    // Honest label: the generic entry point is not a per-run live session.
+    assert.match(body, /GENERIC_SESSION_LINK = "https:\/\/claude\.ai\/code"/)
+    assert.match(body, /'Open Claude Code'/)
+    assert.match(body, /'live session'/) // still used for a real --session-link
+  } finally {
+    await dash.close()
+  }
+})
+
 test('dashboard returns 404 for unknown paths', async () => {
   const dash = await startDashboard({ port: 0 })
   try {
