@@ -213,7 +213,7 @@ export class WebContainerRunnerSession implements RunnerSession {
             timer = setTimeout(() => {
               timedOut = true
               proc.kill()
-              res(137)
+              res(124) // discarded; the timedOut branch below sets the real code
             }, timeoutMs)
           })
         : undefined
