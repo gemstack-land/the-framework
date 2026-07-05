@@ -24,6 +24,7 @@ import {
 import { FAKE_DEPLOY, FAKE_INTENT, FAKE_SIGNALS, fakeDriver } from './fake-script.js'
 import { discoverExtensions, readProjectSignals } from './extensions.js'
 import { loadFrameworkConfig, type FrameworkFileConfig } from './config.js'
+import { loadRepoMemory } from './memory.js'
 import { preflight } from './preflight.js'
 import { RunStore } from './store/index.js'
 
@@ -521,6 +522,12 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
     if (extensions.length) discovered = extensions
   }
 
+  // The repo's own memory files (#260) frame the agent: it reads them for context
+  // and keeps the ones it owns current. Read from the run's workspace; --fake's
+  // empty tmp cwd simply has none, so the demo stays deterministic.
+  const memory = await loadRepoMemory(cwd)
+  if (memory.some(m => m.content)) io.out(`◆ project memory: ${memory.filter(m => m.content).map(m => m.name).join(', ')}`)
+
   const runOpts: RunFrameworkOptions = {
     intent,
     scope: opts.scope,
@@ -537,6 +544,7 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
     ...(discovered ? { extensions: discovered } : {}),
     ...(opts.composeExtensions ? { composeExtensions: true } : {}),
     ...(domainPreset ? { preset: domainPreset, ...(modes.length ? { modes } : {}) } : {}),
+    ...(memory.length ? { memory } : {}),
     ...((): { sessionLink?: string } => {
       const link = chooseSessionLink(opts, fake)
       return link ? { sessionLink: link } : {}

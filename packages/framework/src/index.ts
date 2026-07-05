@@ -93,6 +93,13 @@ export {
   type FrameworkFileConfig,
 } from './config.js'
 export {
+  loadRepoMemory,
+  memoryFraming,
+  MEMORY_FILES,
+  type MemoryFile,
+  type LoadedMemory,
+} from './memory.js'
+export {
   preflight,
   type PreflightResult,
   type PreflightCheck,

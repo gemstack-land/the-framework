@@ -190,6 +190,31 @@ test('an empty from-scratch project is still framed with the flagship page build
   assert.match(system(), /https:\/\/vike\.dev\/llms\.txt/)
 })
 
+test('repo memory files frame the agent: contents + a maintain instruction (#260)', async () => {
+  const { driver, system } = recordingDriver()
+  await runFramework({
+    intent: FAKE_INTENT,
+    driver,
+    cwd: '/tmp/ws',
+    signals: FAKE_SIGNALS,
+    memory: [
+      { name: 'CODE-OVERVIEW.md', purpose: 'a map of the codebase', content: 'A blog with comments.' },
+      { name: 'DECISIONS.md', purpose: 'the decision log', agentMaintained: false },
+    ],
+    onEvent: () => {},
+  })
+  assert.match(system(), /Project memory/)
+  assert.match(system(), /A blog with comments\./) // contents inlined as context
+  assert.match(system(), /Keep these up to date[\s\S]*CODE-OVERVIEW\.md/)
+  assert.match(system(), /Read-only[\s\S]*DECISIONS\.md/) // agent must not clobber our ledger write
+})
+
+test('no memory option leaves the framing unchanged (#260)', async () => {
+  const { driver, system } = recordingDriver()
+  await runFramework({ intent: FAKE_INTENT, driver, cwd: '/tmp/ws', signals: FAKE_SIGNALS, onEvent: () => {} })
+  assert.doesNotMatch(system(), /Project memory/)
+})
+
 test('a registered extension auto-activates by its signal, no opt-in needed (#190)', async () => {
   const { driver, system } = recordingDriver()
   const audit = defineFrameworkExtension({

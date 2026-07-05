@@ -26,6 +26,7 @@ import {
   type LocalRunnerSession,
 } from '@gemstack/ai-autopilot'
 import type { Driver, DriverEvent, DriverSession } from './driver/index.js'
+import { memoryFraming, type LoadedMemory } from './memory.js'
 import { decideDeploy, deployWith, driverArchitect, driverBuild, driverChecklist, driverImprove, driverLoopPrompts } from './steps.js'
 import { hasSessionIdPlaceholder, resolveSessionLink, type FrameworkEvent } from './events.js'
 
@@ -85,6 +86,13 @@ export interface RunFrameworkOptions {
   model?: string
   /** Signals for preset detection (deps/files). Default: none, so the flagship preset wins. */
   signals?: FrameworkSignals
+  /**
+   * The repo's memory files ({@link LoadedMemory}) to frame the agent with (#260):
+   * their current contents become context and the agent is told to keep the ones
+   * it owns current (persistence lives in the repo as markdown). Load with
+   * `loadRepoMemory(cwd)`. Omit or pass `[]` to frame no memory.
+   */
+  memory?: readonly LoadedMemory[]
   /**
    * A user-picked Open Loop domain preset ({loops, prompts, skills}) to run the
    * build under (#251). Its skills (and their personas) frame every phase, and
@@ -238,7 +246,14 @@ export async function runFramework(opts: RunFrameworkOptions): Promise<RunFramew
     extensions: activeExtensions,
     neutral: neutralPersonas,
   })
-  const system = [...personas.map(personaInstructions), ...skills.map(skillInstructions)].join('\n\n')
+  // The repo's own memory files (#260) frame the agent alongside personas + skills:
+  // their contents give context, and the agent is told to keep the ones it owns current.
+  const memoryBlock = opts.memory && opts.memory.length ? memoryFraming(opts.memory) : ''
+  const system = [
+    ...personas.map(personaInstructions),
+    ...skills.map(skillInstructions),
+    ...(memoryBlock ? [memoryBlock] : []),
+  ].join('\n\n')
 
   // The session id is not known until the first driver turn returns, so a
   // templated link (`.../{sessionId}`) can only resolve later. A literal link is
