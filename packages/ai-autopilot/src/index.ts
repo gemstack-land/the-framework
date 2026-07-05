@@ -94,6 +94,15 @@
  * - {@link detectFramework} — score a project's deps/files against presets
  * - {@link vikePreset} / {@link nextPreset} — the built-ins
  * - {@link presetPersonas} — its framework skill's page builder + the shared neutral ones
+ *
+ * Domain presets are the Open Loop bundle unit (#204): one selectable, composable
+ * bundle of {loops, prompts, skills}. Author in code or load a directory of `.md`
+ * files; compose several into one (presets-of-presets). Distinct from the
+ * framework `Preset` above — this is the user-picked domain, not a detector.
+ *
+ * - {@link defineDomainPreset} / {@link loadDomainPreset} — author, or load from a directory
+ * - {@link composeDomainPresets} — merge presets into one (later wins on prompt/skill id)
+ * - {@link selectPreset} — pick the user's chosen domain by name
  */
 export { Supervisor } from './supervisor.js'
 export { agentPlanner, type AgentPlannerOptions } from './planner.js'
@@ -319,6 +328,18 @@ export {
   type PresetScore,
   type FrameworkDetection,
 } from './presets/index.js'
+export {
+  defineDomainPreset,
+  DomainPresetError,
+  composeDomainPresets,
+  selectPreset,
+  loadDomainPreset,
+  loadLoopsFrom,
+  loadSkillsFrom,
+  type DomainPreset,
+  type DomainPresetSpec,
+  type DomainPresetMeta,
+} from './preset/index.js'
 export {
   defineFrameworkExtension,
   defineSkill,
