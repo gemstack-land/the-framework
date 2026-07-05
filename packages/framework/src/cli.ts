@@ -23,6 +23,7 @@ import {
 } from './run.js'
 import { FAKE_DEPLOY, FAKE_INTENT, FAKE_SIGNALS, fakeDriver } from './fake-script.js'
 import { discoverExtensions, readProjectSignals } from './extensions.js'
+import { loadFrameworkConfig, type FrameworkFileConfig } from './config.js'
 import { preflight } from './preflight.js'
 import { RunStore } from './store/index.js'
 
@@ -74,6 +75,8 @@ Options:
                          + skills frame the build), e.g. software-development.
   --autopilot            Activate the preset's Autopilot mode variants.
   --technical            Activate the preset's Technical mode variants.
+                         (--preset / --autopilot / --technical can also be set per
+                          repo in the-framework.yml; these flags override it.)
   --compose-extensions   Opt the built-in capability extensions in (auth, data,
                          rbac, crud, shell) so the agent composes them instead of
                          hand-rolling. Vike-only; installed framework-* extensions
@@ -313,6 +316,32 @@ export function activeModes(opts: Pick<CliOptions, 'autopilot' | 'technical'>): 
 }
 
 /**
+ * Merge CLI flags over a project's `the-framework.yml` defaults (#258). A `--preset`
+ * flag wins over the file's `preset`; the mode flags OR with the file's booleans
+ * (a flag can only *enable* a mode, so there is nothing to override the other way).
+ */
+export function mergeRunConfig(
+  opts: Pick<CliOptions, 'preset' | 'autopilot' | 'technical'>,
+  file: FrameworkFileConfig,
+): { presetName?: string; autopilot: boolean; technical: boolean } {
+  const presetName = opts.preset ?? file.preset
+  return {
+    ...(presetName ? { presetName } : {}),
+    autopilot: opts.autopilot || file.autopilot === true,
+    technical: opts.technical || file.technical === true,
+  }
+}
+
+/** A short summary of what the-framework.yml contributed and is in effect, or `''` for nothing to report. */
+function describeConfigSource(opts: Pick<CliOptions, 'preset'>, file: FrameworkFileConfig): string {
+  const parts: string[] = []
+  if (file.preset && !opts.preset) parts.push(`preset=${file.preset}`) // a --preset flag would override it
+  if (file.autopilot) parts.push('autopilot')
+  if (file.technical) parts.push('technical')
+  return parts.join(', ')
+}
+
+/**
  * Resolve `--preset <name>` to a shipped {@link DomainPreset}, loaded with the
  * active `modes` so its conditions variants are selected (#254, #256). Returns
  * nothing when no `--preset` was given; an error (with the available names) when
@@ -371,18 +400,29 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
     return 2
   }
 
+  const cwd = opts.cwd ?? (fake ? join(tmpdir(), 'framework-fake-workspace') : process.cwd())
+
+  // The project can carry its own Open Loop defaults in the-framework.yml (#258):
+  // which domain preset + modes to build under. CLI flags override the file; a bad
+  // file is a warning, never a failed run. Read from the run's own workspace, so a
+  // --fake demo (empty tmp cwd) stays deterministic unless pointed at a config dir.
+  const fileConfig = await loadFrameworkConfig(cwd, msg => io.err(msg))
+  const fromFile = describeConfigSource(opts, fileConfig)
+  if (fromFile) io.out(`◆ the-framework.yml: ${fromFile}`)
+
   // Resolve an Open Loop domain preset by name (#256), loaded with the active mode
   // variants. A bad name is a usage error before we do any work. The mode flags
   // only act on a preset, so note when they are given without one.
-  const modes = activeModes(opts)
-  const { preset: domainPreset, error: presetError } = await resolveDomainPreset(opts.preset, modes)
+  const merged = mergeRunConfig(opts, fileConfig)
+  const modes = activeModes(merged)
+  const { preset: domainPreset, error: presetError } = await resolveDomainPreset(merged.presetName, modes)
   if (presetError) {
     io.err(presetError)
     io.err('Run `framework --help` for usage.')
     return 2
   }
   if (modes.length && !domainPreset) {
-    io.err(`note: ${modes.join(' + ')} mode(s) have no effect without --preset.`)
+    io.err(`note: ${modes.join(' + ')} mode(s) have no effect without a preset.`)
   }
 
   // Fail early and clearly if a live run's prerequisites are missing.
@@ -397,7 +437,6 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
 
   const claudeOpts = claudeDriverOptions(opts)
   const driver: Driver = fake ? fakeDriver() : new ClaudeCodeDriver(claudeOpts)
-  const cwd = opts.cwd ?? (fake ? join(tmpdir(), 'framework-fake-workspace') : process.cwd())
   // The fake demo defaults to a Cloudflare deploy decision so the flow ends with
   // a deploy phase; a live run only narrates deploy when asked.
   const deploy: DeployDecision | undefined = opts.deploy

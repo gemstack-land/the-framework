@@ -87,6 +87,12 @@ export {
 } from './store/index.js'
 export { runCli, parseArgs, buildDeployTarget, type CliIO, type CliOptions } from './cli.js'
 export {
+  loadFrameworkConfig,
+  parseFrameworkConfig,
+  FRAMEWORK_CONFIG_FILES,
+  type FrameworkFileConfig,
+} from './config.js'
+export {
   preflight,
   type PreflightResult,
   type PreflightCheck,

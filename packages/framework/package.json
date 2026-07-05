@@ -49,7 +49,8 @@
     "clean": "rm -rf dist dist-test"
   },
   "dependencies": {
-    "@gemstack/ai-autopilot": "workspace:^"
+    "@gemstack/ai-autopilot": "workspace:^",
+    "yaml": "^2.5.0"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",

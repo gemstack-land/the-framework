@@ -6,6 +6,7 @@ import {
   chooseSessionLink,
   claudeDriverOptions,
   CLAUDE_CODE_SESSION_LIST,
+  mergeRunConfig,
   parseArgs,
   resolveDomainPreset,
   runCli,
@@ -77,6 +78,25 @@ test('activeModes maps the mode flags to Open Loop mode names', () => {
   assert.deepEqual(activeModes({ autopilot: true, technical: true }), ['autopilot', 'technical'])
 })
 
+test('mergeRunConfig: the-framework.yml supplies defaults, flags override (#258)', () => {
+  const flags = { preset: undefined, autopilot: false, technical: false }
+  // file-only: the repo config drives the run
+  assert.deepEqual(mergeRunConfig(flags, { preset: 'software-development', autopilot: true }), {
+    presetName: 'software-development',
+    autopilot: true,
+    technical: false,
+  })
+  // a --preset flag wins over the file's preset
+  assert.equal(mergeRunConfig({ ...flags, preset: 'web-dev' }, { preset: 'software-development' }).presetName, 'web-dev')
+  // modes OR together: a flag can only enable a mode
+  assert.deepEqual(mergeRunConfig({ ...flags, technical: true }, { autopilot: true }), {
+    autopilot: true,
+    technical: true,
+  })
+  // nothing set anywhere: no preset, no modes
+  assert.deepEqual(mergeRunConfig(flags, {}), { autopilot: false, technical: false })
+})
+
 test('resolveDomainPreset resolves a shipped preset by name (#254/#256)', async () => {
   const none = await resolveDomainPreset(undefined, [])
   assert.deepEqual(none, {})
@@ -104,7 +124,7 @@ test('runCli notes mode flags given without a preset', async () => {
   // --fake so the note fires before any real run; unknown-preset path is not hit.
   const code = await runCli(['--fake', '--no-dashboard', '--autopilot'], io)
   assert.equal(code, 0)
-  assert.ok(err.some(l => /have no effect without --preset/.test(l)))
+  assert.ok(err.some(l => /have no effect without a preset/.test(l)))
 })
 
 test('chooseSessionLink defaults a live run to the claude.ai/code session list (#212)', () => {
