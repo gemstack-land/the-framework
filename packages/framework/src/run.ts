@@ -28,7 +28,7 @@ import {
 import type { Driver, DriverEvent, DriverSession } from './driver/index.js'
 import { memoryFraming, type LoadedMemory } from './memory.js'
 import { decideDeploy, deployWith, domainLoopChecklist, driverArchitect, driverBuild, driverChecklist, driverImprove, driverLoopPrompts } from './steps.js'
-import { hasSessionIdPlaceholder, resolveSessionLink, type FrameworkEvent } from './events.js'
+import { hasSessionIdPlaceholder, OPEN_LOOP_MODES, resolveSessionLink, type FrameworkEvent } from './events.js'
 
 /**
  * The framework's default full-fledged pass budget. Higher than ai-autopilot's
@@ -289,6 +289,8 @@ export async function runFramework(opts: RunFrameworkOptions): Promise<RunFramew
       kind: 'log',
       message: `Domain preset: ${domainPreset.title}${modeNote}; ${domainPreset.loops.length}-loop review policy in effect`,
     })
+    // Surface the run's active modes as read-only checkboxes on the dashboard (#272).
+    emit({ kind: 'modes', all: OPEN_LOOP_MODES, active: opts.modes ?? [] })
   }
 
   // Watch the black box for its real session id (the {type:'result'} event) and

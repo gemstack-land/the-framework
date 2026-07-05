@@ -60,6 +60,9 @@ test('dashboard serves the HTML page with the title', async () => {
     assert.equal(status, 200)
     assert.match(body, /My Framework/)
     assert.match(body, /new EventSource\('\/events'\)/)
+    // The Modes panel + its renderer ship in the page (#272), hidden until a modes event.
+    assert.match(body, /id="modes-panel" hidden/)
+    assert.match(body, /function renderModes/)
   } finally {
     await dash.close()
   }
