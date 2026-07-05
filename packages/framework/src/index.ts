@@ -85,7 +85,17 @@ export {
   type RunStatus,
   type OpenStoreOptions,
 } from './store/index.js'
-export { runCli, parseArgs, buildDeployTarget, type CliIO, type CliOptions } from './cli.js'
+export { runCli, parseArgs, buildDeployTarget, workspaceSummary, autoSelectPreset, type CliIO, type CliOptions } from './cli.js'
+export {
+  metaSelect,
+  metaSelectPrompt,
+  parseMetaSelection,
+  presetCatalog,
+  META_SELECT_MODES,
+  META_SELECT_SYSTEM,
+  type MetaSelection,
+  type PresetCatalogEntry,
+} from './meta-select.js'
 export {
   loadFrameworkConfig,
   parseFrameworkConfig,

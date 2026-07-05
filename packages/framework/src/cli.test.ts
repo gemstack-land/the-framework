@@ -1,7 +1,11 @@
 import { strict as assert } from 'node:assert'
 import { test } from 'node:test'
+import { mkdtemp, writeFile, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import {
   activeModes,
+  autoSelectPreset,
   buildDeployTarget,
   chooseSessionLink,
   claudeDriverOptions,
@@ -10,8 +14,10 @@ import {
   parseArgs,
   resolveDomainPreset,
   runCli,
+  workspaceSummary,
   type CliIO,
 } from './cli.js'
+import { FakeDriver } from './driver/index.js'
 
 function capture(): { io: CliIO; out: string[]; err: string[] } {
   const out: string[] = []
@@ -75,6 +81,52 @@ test('parseArgs reads --preset and the mode flags (#256)', () => {
 test('parseArgs reads --kind as the build event (#265)', () => {
   assert.equal(parseArgs(['--kind', 'bug-fix', 'x']).buildEvent, 'bug-fix')
   assert.equal(parseArgs(['x']).buildEvent, undefined)
+})
+
+test('parseArgs defaults autoPreset on, and --no-auto-preset turns it off (#204)', () => {
+  assert.equal(parseArgs(['x']).autoPreset, true)
+  assert.equal(parseArgs(['--no-auto-preset', 'x']).autoPreset, false)
+})
+
+test('workspaceSummary describes an empty vs an existing workspace', async () => {
+  const empty = await mkdtemp(join(tmpdir(), 'framework-ws-'))
+  try {
+    assert.match(workspaceSummary(empty, {}), /empty/)
+    await writeFile(join(empty, 'index.ts'), 'export const x = 1\n')
+    const summary = workspaceSummary(empty, { dependencies: { react: '^19', vite: '^5' } })
+    assert.match(summary, /existing project/)
+    assert.match(summary, /react/)
+    assert.match(summary, /vite/)
+  } finally {
+    await rm(empty, { recursive: true, force: true })
+  }
+})
+
+test('autoSelectPreset routes the pick through an injected driver and returns the selection (#204)', async () => {
+  const empty = await mkdtemp(join(tmpdir(), 'framework-ws-'))
+  try {
+    const driver = new FakeDriver({
+      turns: [{ text: '```json\n{ "preset": "software-development", "modes": ["technical"], "event": "bug-fix", "why": "a fix" }\n```' }],
+    })
+    const { io } = capture()
+    const selection = await autoSelectPreset({ intent: 'fix a crash', cwd: empty, signals: {}, claudeOpts: {}, io, driver })
+    assert.deepEqual(selection, { preset: 'software-development', modes: ['technical'], buildEvent: 'bug-fix', why: 'a fix' })
+  } finally {
+    await rm(empty, { recursive: true, force: true })
+  }
+})
+
+test('autoSelectPreset degrades to undefined when the driver errors', async () => {
+  const empty = await mkdtemp(join(tmpdir(), 'framework-ws-'))
+  try {
+    const driver = new FakeDriver({ respond: () => { throw new Error('agent unavailable') } })
+    const { io, err } = capture()
+    const selection = await autoSelectPreset({ intent: 'anything', cwd: empty, signals: {}, claudeOpts: {}, io, driver })
+    assert.equal(selection, undefined)
+    assert.ok(err.some(l => /auto-select skipped/.test(l)))
+  } finally {
+    await rm(empty, { recursive: true, force: true })
+  }
 })
 
 test('activeModes maps the mode flags to Open Loop mode names', () => {
