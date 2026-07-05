@@ -7,9 +7,9 @@ import {
   loopImprove,
   agentDeploy,
   cloudflareTarget,
-  Loop,
+  LoopEngine,
   definePrompt,
-  defineRule,
+  defineLoop,
   personaInstructions,
   personaTools,
   builtinPresetRegistry,
@@ -128,16 +128,16 @@ function presetWorkers(session: RunnerSession, personas: ReturnType<typeof prese
 }
 
 /** The full-fledged loop: the checklist blocks once, then clears after the fix. */
-function buildLoop(): Loop {
+function buildLoop(): LoopEngine {
   const verdicts = [
     '```json\n{ "blockers": ["No authentication on the orders page yet"] }\n```',
     '```json\n{ "blockers": [] }\n```',
   ]
   let pass = 0
-  return new Loop({
-    rules: [
-      defineRule({ on: 'production-check', run: ['production-grade'] }),
-      defineRule({ on: 'major-change', run: ['address-blockers'] }),
+  return new LoopEngine({
+    loops: [
+      defineLoop({ on: 'production-check', run: ['production-grade'] }),
+      defineLoop({ on: 'major-change', run: ['address-blockers'] }),
     ],
     prompts: [
       definePrompt({ id: 'production-grade', run: () => verdicts[Math.min(pass++, verdicts.length - 1)]! }),
