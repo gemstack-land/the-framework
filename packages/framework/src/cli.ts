@@ -1,6 +1,15 @@
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { cloudflareTarget, dokployTarget, nodeLedgerFs, saveLedger, type DeployTarget } from '@gemstack/ai-autopilot'
+import {
+  builtinDomainPresets,
+  cloudflareTarget,
+  dokployTarget,
+  nodeLedgerFs,
+  saveLedger,
+  selectPreset,
+  type DeployTarget,
+  type DomainPreset,
+} from '@gemstack/ai-autopilot'
 import { ClaudeCodeDriver, type ClaudeCodeDriverOptions, type Driver, type PermissionMode } from './driver/index.js'
 import { hostExecutor } from './host-exec.js'
 import { startDashboard, type Dashboard } from './dashboard/index.js'
@@ -61,6 +70,10 @@ Options:
   --cwd <dir>            Workspace the agent builds in (default: current directory).
   --model <id>           Model to pass through to the wrapped agent.
   --scope <prototype|full>   How much app to build (default: full).
+  --preset <name>        Run under an Open Loop domain preset (its loops + prompts
+                         + skills frame the build), e.g. software-development.
+  --autopilot            Activate the preset's Autopilot mode variants.
+  --technical            Activate the preset's Technical mode variants.
   --compose-extensions   Opt the built-in capability extensions in (auth, data,
                          rbac, crud, shell) so the agent composes them instead of
                          hand-rolling. Vike-only; installed framework-* extensions
@@ -111,6 +124,9 @@ export interface CliOptions {
   cwd?: string | undefined
   model?: string | undefined
   scope: 'prototype' | 'full'
+  preset?: string | undefined
+  autopilot: boolean
+  technical: boolean
   maxPasses?: number
   deploy?: string | undefined
   cfProject?: string | undefined
@@ -142,6 +158,8 @@ export function parseArgs(argv: string[]): CliOptions {
     skipPreflight: false,
     intent: '',
     scope: 'full',
+    autopilot: false,
+    technical: false,
     dashboard: true,
     composeExtensions: false,
     skipPermissions: false,
@@ -169,6 +187,15 @@ export function parseArgs(argv: string[]): CliOptions {
         break
       case '--compose-extensions':
         opts.composeExtensions = true
+        break
+      case '--preset':
+        opts.preset = argv[++i]
+        break
+      case '--autopilot':
+        opts.autopilot = true
+        break
+      case '--technical':
+        opts.technical = true
         break
       case '--resume':
         opts.resume = true
@@ -277,6 +304,34 @@ export function claudeDriverOptions(opts: Pick<CliOptions, 'permissionMode' | 's
     : { permissionMode: opts.permissionMode ?? 'bypassPermissions' }
 }
 
+/** The active Open Loop modes from the mode flags, in a stable order. */
+export function activeModes(opts: Pick<CliOptions, 'autopilot' | 'technical'>): string[] {
+  const modes: string[] = []
+  if (opts.autopilot) modes.push('autopilot')
+  if (opts.technical) modes.push('technical')
+  return modes
+}
+
+/**
+ * Resolve `--preset <name>` to a shipped {@link DomainPreset}, loaded with the
+ * active `modes` so its conditions variants are selected (#254, #256). Returns
+ * nothing when no `--preset` was given; an error (with the available names) when
+ * the name does not match a built-in.
+ */
+export async function resolveDomainPreset(
+  name: string | undefined,
+  modes: readonly string[],
+): Promise<{ preset?: DomainPreset; error?: string }> {
+  if (!name) return {}
+  const presets = await builtinDomainPresets({ modes })
+  const preset = selectPreset(presets, name)
+  if (!preset) {
+    const available = presets.map(p => p.name).join(', ') || '(none shipped)'
+    return { error: `unknown --preset: ${name}. Available: ${available}` }
+  }
+  return { preset }
+}
+
 /**
  * The `framework` command. Wires the parsed options into {@link runFramework}
  * over a live dashboard + terminal narration, and resolves with an exit code.
@@ -314,6 +369,20 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
   if (!intent) {
     io.err('Describe what to build, e.g. `framework "a blog with comments"` (or try `framework --fake`).')
     return 2
+  }
+
+  // Resolve an Open Loop domain preset by name (#256), loaded with the active mode
+  // variants. A bad name is a usage error before we do any work. The mode flags
+  // only act on a preset, so note when they are given without one.
+  const modes = activeModes(opts)
+  const { preset: domainPreset, error: presetError } = await resolveDomainPreset(opts.preset, modes)
+  if (presetError) {
+    io.err(presetError)
+    io.err('Run `framework --help` for usage.')
+    return 2
+  }
+  if (modes.length && !domainPreset) {
+    io.err(`note: ${modes.join(' + ')} mode(s) have no effect without --preset.`)
   }
 
   // Fail early and clearly if a live run's prerequisites are missing.
@@ -428,6 +497,7 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
     ...(serve ? { serve } : {}),
     ...(discovered ? { extensions: discovered } : {}),
     ...(opts.composeExtensions ? { composeExtensions: true } : {}),
+    ...(domainPreset ? { preset: domainPreset, ...(modes.length ? { modes } : {}) } : {}),
     ...((): { sessionLink?: string } => {
       const link = chooseSessionLink(opts, fake)
       return link ? { sessionLink: link } : {}
