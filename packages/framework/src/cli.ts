@@ -109,6 +109,8 @@ Options:
   --serve-build <cmd>    Build command before serving (e.g. "npm run build").
   --serve-port <n>       Port the app listens on (default: 3000).
   --serve-path <path>    Path to health-check once it is up (default: /).
+  --sandbox <where>      Where --serve runs: "local" (host, default) or "docker"
+                         (a throwaway container, so agent code never runs on the host).
   --deploy <target>      Deploy to this target (cloudflare, dokploy) or narrate any other.
   --cf-project <name>    Cloudflare Pages project name (for a Pages deploy).
   --dokploy-url <url>    Dokploy instance URL (required for --deploy dokploy).
@@ -159,6 +161,7 @@ export interface CliOptions {
   serveBuild?: string | undefined
   servePort?: number
   servePath?: string | undefined
+  sandbox?: 'local' | 'docker' | undefined
   port?: number
   dashboard: boolean
   composeExtensions: boolean
@@ -281,6 +284,12 @@ export function parseArgs(argv: string[]): CliOptions {
         const n = Number(argv[++i])
         if (!Number.isInteger(n) || n < 1) opts.error = `invalid --serve-port: must be a positive integer`
         else opts.servePort = n
+        break
+      }
+      case '--sandbox': {
+        const where = argv[++i]
+        if (where !== 'local' && where !== 'docker') opts.error = `invalid --sandbox: expected "local" or "docker"`
+        else opts.sandbox = where
         break
       }
       case '--session-link':
@@ -556,6 +565,10 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
   if (buildEvent && !domainPreset) {
     io.err(`note: build event "${buildEvent}" has no effect without a preset.`)
   }
+  // The sandbox only wraps the serve verification, so it is a no-op without --serve.
+  if (opts.sandbox === 'docker' && !opts.serve) {
+    io.err(`note: --sandbox docker has no effect without --serve.`)
+  }
 
   const driver: Driver = fake ? fakeDriver() : new ClaudeCodeDriver(claudeOpts)
   // The fake demo defaults to a Cloudflare deploy decision so the flow ends with
@@ -657,6 +670,7 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
     ...(deploy ? { deploy } : {}),
     ...(deployTarget ? { deployTarget } : {}),
     ...(serve ? { serve } : {}),
+    ...(serve && opts.sandbox ? { sandbox: opts.sandbox } : {}),
     ...(discovered ? { extensions: discovered } : {}),
     ...(opts.composeExtensions ? { composeExtensions: true } : {}),
     ...(domainPreset ? { preset: domainPreset, ...(modeList.length ? { modes: modeList } : {}) } : {}),

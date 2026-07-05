@@ -88,6 +88,13 @@ test('parseArgs defaults autoPreset on, and --no-auto-preset turns it off (#204)
   assert.equal(parseArgs(['--no-auto-preset', 'x']).autoPreset, false)
 })
 
+test('parseArgs reads --sandbox and rejects an unknown value (#229)', () => {
+  assert.equal(parseArgs(['--sandbox', 'docker', 'x']).sandbox, 'docker')
+  assert.equal(parseArgs(['--sandbox', 'local', 'x']).sandbox, 'local')
+  assert.equal(parseArgs(['x']).sandbox, undefined)
+  assert.match(parseArgs(['--sandbox', 'vm', 'x']).error!, /invalid --sandbox/)
+})
+
 test('workspaceSummary describes an empty vs an existing workspace', async () => {
   const empty = await mkdtemp(join(tmpdir(), 'framework-ws-'))
   try {
@@ -193,6 +200,13 @@ test('runCli notes --kind given without a preset (#265)', async () => {
   const code = await runCli(['--fake', '--no-dashboard', '--kind', 'bug-fix'], io)
   assert.equal(code, 0)
   assert.ok(err.some(l => /build event "bug-fix" has no effect without a preset/.test(l)))
+})
+
+test('runCli notes --sandbox docker given without --serve (#229)', async () => {
+  const { io, err } = capture()
+  const code = await runCli(['--fake', '--no-dashboard', '--sandbox', 'docker'], io)
+  assert.equal(code, 0)
+  assert.ok(err.some(l => /--sandbox docker has no effect without --serve/.test(l)))
 })
 
 test('chooseSessionLink defaults a live run to the claude.ai/code session list (#212)', () => {

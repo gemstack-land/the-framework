@@ -1,9 +1,11 @@
 import {
   Bootstrap,
   DecisionLedger,
+  DockerRunner,
   ExtensionRegistry,
   LocalRunner,
   LoopEngine,
+  dockerAvailable,
   SkillRegistry,
   builtinExtensionNames,
   builtinPresetRegistry,
@@ -18,13 +20,17 @@ import {
   type BootstrapEvent,
   type BootstrapResult,
   type BootstrapScope,
+  type BootstrapSteps,
   type DeployTarget,
   type DomainPreset,
   type FrameworkDetection,
   type FrameworkExtension,
   type FrameworkSignals,
-  type LocalRunnerSession,
+  type LoopPassContext,
+  type RunnerSession,
+  type Verdict,
 } from '@gemstack/ai-autopilot'
+import { snapshotWorkspace } from './sandbox.js'
 import type { Driver, DriverEvent, DriverSession } from './driver/index.js'
 import { memoryFraming, type LoadedMemory } from './memory.js'
 import { decideDeploy, deployWith, domainLoopChecklist, driverArchitect, driverBuild, driverChecklist, driverImprove, driverLoopPrompts } from './steps.js'
@@ -146,6 +152,23 @@ export interface RunFrameworkOptions {
    * checklist gates on the app actually running, not just an agent review.
    */
   serve?: ServeConfig
+  /**
+   * Where the {@link serve} verification runs (#229). `"local"` (default) boots the
+   * app on the host, adopting the agent's cwd in place. `"docker"` sandboxes it: a
+   * throwaway container is booted, the source is copied in fresh before each check
+   * (the build still runs on the host in this slice), deps install inside the
+   * container, and the app serves on a mapped port — so agent-authored code never
+   * installs or runs on the host. Requires a reachable Docker daemon; no-op without
+   * {@link serve}.
+   */
+  sandbox?: 'local' | 'docker'
+  /**
+   * A pre-provisioned {@link RunnerSession} to run the serve check in, bypassing
+   * {@link sandbox} provisioning. Advanced / testing seam — the caller owns its
+   * lifecycle is handed to the run (it is disposed with the run). Omit to let
+   * {@link sandbox} provision one.
+   */
+  runner?: RunnerSession
   /**
    * A link to the live agent session, shown on the dashboard. Either a literal
    * URL, or a template with `{sessionId}` (see {@link SESSION_ID_PLACEHOLDER})
@@ -348,27 +371,31 @@ export async function runFramework(opts: RunFrameworkOptions): Promise<RunFramew
       message: `Review policy: the ${domainPreset!.title} loop drives the ${buildEvent} review`,
     })
 
-  // Boot-and-serve gate: adopt the agent's workspace so the checklist can gate
-  // on the app actually running (mergeChecklists unions the review with a real
-  // serveCheck). The runner adopts, never deletes, the driver's cwd.
-  let runner: LocalRunnerSession | undefined
-  if (opts.serve) runner = await new LocalRunner().adopt(opts.cwd)
+  // Boot-and-serve gate: provision a runner so the checklist can gate on the app
+  // actually running (mergeChecklists unions the review with a real serveCheck).
+  // Local adopts (never deletes) the driver's cwd in place; docker sandboxes the
+  // check in a throwaway container (#229). An injected runner wins over both.
+  const sandbox = opts.sandbox ?? 'local'
+  let runner: RunnerSession | undefined
+  if (opts.serve) runner = opts.runner ?? (await provisionServeRunner(sandbox, opts.cwd, opts.serve, emit))
   const s = opts.serve
-  const checklist =
-    runner && s
-      ? mergeChecklists(
-          reviewChecklist,
-          serveCheck(runner, {
-            serve: s.command,
-            ...(s.install ? { install: s.install } : {}),
-            ...(s.build ? { build: s.build } : {}),
-            ...(s.port !== undefined ? { port: s.port } : {}),
-            ...(s.waitMs !== undefined ? { waitMs: s.waitMs } : {}),
-            ...(s.healthPath ? { healthPath: s.healthPath } : {}),
-            onProgress: message => emit({ kind: 'log', message: `serve: ${message}` }),
-          }),
-        )
-      : reviewChecklist
+  let checklist: NonNullable<BootstrapSteps['checklist']> = reviewChecklist
+  if (runner && s) {
+    const check = serveCheck(runner, {
+      serve: s.command,
+      ...(s.install ? { install: s.install } : {}),
+      ...(s.build ? { build: s.build } : {}),
+      ...(s.port !== undefined ? { port: s.port } : {}),
+      ...(s.waitMs !== undefined ? { waitMs: s.waitMs } : {}),
+      ...(s.healthPath ? { healthPath: s.healthPath } : {}),
+      onProgress: message => emit({ kind: 'log', message: `serve: ${message}` }),
+    })
+    // The build runs on the host, so a sandboxed container must be re-seeded with
+    // the latest host source before every check (each pass changes it). Local reads
+    // the host dir live, so it needs no sync.
+    const serveStep = sandbox === 'docker' && !opts.runner ? syncThenServe(runner, opts.cwd, check, emit) : check
+    checklist = mergeChecklists(reviewChecklist, serveStep)
+  }
 
   // A real driver writes files to the workspace, so the build/improve steps can
   // detect an empty workspace and hard-scaffold it (#182). The fake driver writes
@@ -430,12 +457,12 @@ export async function runFramework(opts: RunFrameworkOptions): Promise<RunFramew
  * come up.
  */
 async function startAppPreview(
-  runner: LocalRunnerSession,
+  runner: RunnerSession,
   serve: ServeConfig,
   emit: (event: FrameworkEvent) => void,
 ): Promise<AppPreview | undefined> {
   if (!runner.start || !runner.preview) return undefined
-  let proc: Awaited<ReturnType<NonNullable<LocalRunnerSession['start']>>> | undefined
+  let proc: Awaited<ReturnType<NonNullable<RunnerSession['start']>>> | undefined
   try {
     proc = await runner.start(serve.command)
     const { url } = await runner.preview({
@@ -461,5 +488,50 @@ async function startAppPreview(
     emit({ kind: 'log', message: `preview: could not boot the app (${err instanceof Error ? err.message : String(err)})` })
     // Leave cleanup to the caller's finally (runner.dispose stops leftovers).
     return undefined
+  }
+}
+
+/**
+ * Provision the runner the serve gate verifies in (#229). `local` adopts the host
+ * cwd in place (dispose leaves it); `docker` boots a throwaway container the check
+ * seeds and tears down. Fails fast with a clear message when docker is requested
+ * but not reachable, so the run never limps on unsandboxed by surprise.
+ */
+async function provisionServeRunner(
+  sandbox: 'local' | 'docker',
+  cwd: string,
+  serve: ServeConfig,
+  emit: (event: FrameworkEvent) => void,
+): Promise<RunnerSession> {
+  if (sandbox === 'docker') {
+    if (!(await dockerAvailable())) {
+      throw new Error(
+        'sandbox: --sandbox docker was requested but Docker is not reachable (need a running daemon and the `docker` CLI on PATH).',
+      )
+    }
+    emit({ kind: 'log', message: 'sandbox: booting a Docker container for the serve check' })
+    // preview() publishes the container's fixed port, so it must match the port the
+    // serve check previews on (serve.port, default 3000).
+    return new DockerRunner({ previewPort: serve.port ?? 3000 }).boot()
+  }
+  return new LocalRunner().adopt(cwd)
+}
+
+/**
+ * Wrap a serve check so the sandbox is re-seeded with the host source before it
+ * runs. The build happens on the host in this slice, so an isolated container has
+ * to be synced each pass to see what the agent just wrote.
+ */
+function syncThenServe(
+  runner: RunnerSession,
+  cwd: string,
+  check: NonNullable<BootstrapSteps['checklist']>,
+  emit: (event: FrameworkEvent) => void,
+): NonNullable<BootstrapSteps['checklist']> {
+  return async (ctx: LoopPassContext): Promise<Verdict> => {
+    const files = await snapshotWorkspace(cwd)
+    for (const [path, contents] of Object.entries(files)) await runner.fs.write(path, contents)
+    emit({ kind: 'log', message: `serve: synced ${Object.keys(files).length} file(s) into the sandbox` })
+    return check(ctx)
   }
 }

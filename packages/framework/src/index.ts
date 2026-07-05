@@ -57,6 +57,7 @@ export {
   type ServeConfig,
   type AppPreview,
 } from './run.js'
+export { snapshotWorkspace, SANDBOX_IGNORE, type SnapshotOptions } from './sandbox.js'
 export {
   discoverExtensions,
   readProjectSignals,

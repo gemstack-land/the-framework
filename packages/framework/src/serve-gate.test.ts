@@ -8,6 +8,7 @@ import { FakeDriver } from './driver/index.js'
 import { runFramework } from './run.js'
 import { FAKE_SIGNALS } from './fake-script.js'
 import type { FrameworkEvent } from './events.js'
+import { FakeRunner, dockerAvailable } from '@gemstack/ai-autopilot'
 
 /** An ephemeral free port so parallel test runs do not collide. */
 function freePort(): Promise<number> {
@@ -82,6 +83,66 @@ test('serve gate: the app is left running with a preview link after a successful
     // stop() tears it down; the port stops answering.
     await preview!.stop()
     await assert.rejects(fetch(preview!.url))
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
+test('serve gate: an injected runner is used as-is, bypassing sandbox provisioning', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'fw-serve-'))
+  try {
+    await writeFile(join(dir, 'server.js'), `require('http').createServer((_,res)=>res.end('ok')).listen(3000)\n`)
+    const runner = await new FakeRunner().boot({ files: {} })
+    const events: FrameworkEvent[] = []
+    // sandbox:'docker' is set, but the injected runner wins: no container is booted
+    // and no host→container sync runs. The serve check runs on the injected runner.
+    await runFramework({
+      intent: 'a tiny http service',
+      driver: new FakeDriver({ turns: CLEAN_REVIEW }),
+      cwd: dir,
+      signals: FAKE_SIGNALS,
+      maxPasses: 1,
+      sandbox: 'docker',
+      runner,
+      serve: { command: 'node server.js', port: 3000, waitMs: 500 },
+      onEvent: e => events.push(e),
+    })
+    // The serve command started on the injected runner — it was used, not provisioned away.
+    assert.ok(runner.startCalls.some(c => c.command === 'node server.js'))
+    // Provisioning was bypassed: no container-boot log, no sync log.
+    assert.ok(!events.some(e => e.kind === 'log' && e.message.includes('Docker container')))
+    assert.ok(!events.some(e => e.kind === 'log' && e.message.includes('synced')))
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
+// Real Docker end-to-end: install-free tiny server, booted and served inside a
+// throwaway container. Skips when Docker is not reachable (so CI without a daemon
+// stays green); the local dev machine with a daemon exercises the real path.
+test('serve gate (docker sandbox): boots and serves the app inside a container', async t => {
+  if (!(await dockerAvailable())) {
+    t.skip('docker not available')
+    return
+  }
+  const dir = await mkdtemp(join(tmpdir(), 'fw-serve-'))
+  try {
+    // Listens on the container-internal port (3000); Docker maps it to a host port.
+    await writeFile(join(dir, 'server.js'), `require('http').createServer((_,res)=>res.end('served in docker')).listen(3000)\n`)
+    const events: FrameworkEvent[] = []
+    const { result } = await runFramework({
+      intent: 'a tiny http service',
+      driver: new FakeDriver({ turns: CLEAN_REVIEW }),
+      cwd: dir,
+      signals: FAKE_SIGNALS,
+      maxPasses: 1,
+      sandbox: 'docker',
+      serve: { command: 'node server.js', port: 3000, waitMs: 20_000 },
+      onEvent: e => events.push(e),
+    })
+    assert.equal(result.productionGrade, true)
+    assert.ok(events.some(e => e.kind === 'log' && e.message.includes('Docker container')))
+    assert.ok(events.some(e => e.kind === 'log' && e.message.includes('synced')))
   } finally {
     await rm(dir, { recursive: true, force: true })
   }
