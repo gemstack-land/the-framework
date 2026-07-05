@@ -72,12 +72,14 @@ await runFramework({
 framework [intent...]          Build what you describe, from scratch.
 framework --fake               Offline demo (no CLI, no model, deterministic).
 framework doctor               Check prerequisites (Claude Code installed, etc.).
+framework relay                Host a run relay so teammates can watch a run (see below).
 
   --cwd <dir>            Workspace the agent builds in (default: cwd).
   --model <id>           Model to pass through to the wrapped agent.
   --scope <prototype|full>   How much app to build (default: full).
   --max-passes <n>       Loop pass budget for a full build (default: 5).
   --preset <name>        Run under an Open Loop domain preset (see below).
+  --no-auto-preset       Do not auto-pick a preset on a live run; use the plain flow.
   --autopilot            Activate the preset's Autopilot mode variants.
   --technical            Activate the preset's Technical mode variants.
   --kind <name>          Build event kind the preset's review loop fires for
@@ -93,12 +95,15 @@ framework doctor               Check prerequisites (Claude Code installed, etc.)
   --serve-build <cmd>    Build command before serving (e.g. "npm run build").
   --serve-port <n>       Port the app listens on (default: 3000).
   --serve-path <path>    Path to health-check once it is up (default: /).
+  --sandbox <where>      Where --serve runs: "local" (host, default) or "docker"
+                         (a throwaway container, so agent code never runs on the host).
   --deploy <target>      Deploy to this target (cloudflare, dokploy) or narrate any other.
   --cf-project <name>    Cloudflare Pages project name (for a Pages deploy).
   --dokploy-url <url>    Dokploy instance URL (required for --deploy dokploy).
   --dokploy-app <id>     Dokploy application id (required for --deploy dokploy).
-  --port <n>             Dashboard port (default: 4477).
+  --port <n>             Dashboard port (default: 4477); with `relay`, the relay port (4488).
   --no-dashboard         Run headless.
+  --share <relay-url>    Publish this run to a relay (see below) so teammates can watch it.
   --resume               Reopen the last run's dashboard from .framework/ (see below).
   --no-persist           Do not write the orchestration state to .framework/.
   --skip-preflight       Skip the prerequisite checks before a live run.
@@ -146,16 +151,36 @@ have a real per-session URL scheme, point the dashboard at it with
 `--session-link "https://.../{sessionId}"` (`{sessionId}` fills in with the real
 Claude session id once known), and the dashboard labels it a **live session**.
 
+### Watching from more than one machine (#230)
+
+The dashboard binds localhost. To let a teammate watch a run from another machine,
+host a **relay** and publish the run to it:
+
+```bash
+framework relay                                # on a reachable host; prints its URL
+framework "..." --share http://that-host:4488  # the run publishes its event stream to the relay
+```
+
+The run prints a shareable URL (`http://that-host:4488/r/<id>/`); open it from any
+browser to watch the same dashboard live, replaying the run's full history first.
+The relay only projects the event stream — it never runs an agent, and it is
+unauthenticated (anyone with the URL can watch), so it is a keystone for shared
+sessions, not the final hosted product. Accounts, teams, and steering layer on later.
+
 ## Open Loop domain presets (#204)
 
 A **domain preset** bundles the review loops, prompts, and skills a kind of work
 wants, so a run is framed for that domain instead of the generic web-app default.
-Three ship built in:
+Five ship built in:
 
 - `software-development` — code-review + test-coverage + security-review on a
   major change; root-cause + regression-test on a bug fix.
 - `web-development` — accessibility + performance-budget + web-security.
 - `data-science` — reproducibility + data-validation + methodology.
+- `product-management` — requirements + user-experience + metrics review;
+  product-root-cause + regression-test on a fix.
+- `biological-science` — experimental-design + data-provenance + statistical-rigor
+  review; analysis-root-cause + regression-test on a fix.
 
 Pick one with `--preset`. Its review loop drives the build's checklist, so the
 loop's prompts are what gate each pass:
@@ -163,6 +188,10 @@ loop's prompts are what gate each pass:
 ```bash
 framework --preset software-development "Add an orders page with sign-in"
 ```
+
+On a live run with no `--preset` (and none in `the-framework.yml`), the framework
+**auto-picks** the best-fit preset, modes, and build event kind from your prompt and
+the workspace, then runs under it. `--no-auto-preset` opts out and uses the plain flow.
 
 **Modes** tune a preset without swapping it. `--autopilot` and `--technical`
 activate a preset's mode variants (e.g. a leaner review chain under `--technical`).
