@@ -1,5 +1,12 @@
 # framework-hello
 
+## 0.0.4
+
+### Patch Changes
+
+- Updated dependencies [08f5710]
+  - @gemstack/ai-autopilot@0.9.0
+
 ## 0.0.3
 
 ### Patch Changes

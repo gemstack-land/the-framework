@@ -1,5 +1,17 @@
 # @gemstack/example-framework-discovery
 
+## 0.0.5
+
+### Patch Changes
+
+- Updated dependencies [cc6a8db]
+- Updated dependencies [5f319ff]
+- Updated dependencies [9f62be7]
+- Updated dependencies [08f5710]
+  - @gemstack/framework@0.7.0
+  - @gemstack/ai-autopilot@0.9.0
+  - framework-hello@0.0.4
+
 ## 0.0.4
 
 ### Patch Changes
