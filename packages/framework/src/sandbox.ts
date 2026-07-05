@@ -1,4 +1,4 @@
-import { readdir, readFile } from 'node:fs/promises'
+import { readdir, readFile, stat } from 'node:fs/promises'
 import { join, relative, sep } from 'node:path'
 import type { FileTree } from '@gemstack/ai-autopilot'
 
@@ -55,8 +55,11 @@ export async function snapshotWorkspace(dir: string, opts: SnapshotOptions = {})
         continue
       }
       if (!entry.isFile()) continue // skip symlinks, sockets, devices
+      // Check the size before reading, so a huge asset is skipped without ever
+      // loading it into memory.
+      const st = await stat(child)
+      if (st.size > maxBytes) continue
       const buf = await readFile(child)
-      if (buf.byteLength > maxBytes) continue
       if (buf.includes(0)) continue // binary
       // Always use POSIX separators: the key is a path inside a Linux container.
       tree[relative(dir, child).split(sep).join('/')] = buf.toString('utf8')

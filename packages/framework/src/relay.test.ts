@@ -1,6 +1,7 @@
 import { strict as assert } from 'node:assert'
 import { test } from 'node:test'
 import { get, request } from 'node:http'
+import { createServer as createNetServer } from 'node:net'
 import { startRelay, relayPublisher } from './relay.js'
 import type { FrameworkEvent } from './events.js'
 
@@ -120,6 +121,35 @@ test('GET /r/:id redirects to the trailing-slash page; the page loads relative S
     assert.match(page.body, /new EventSource\('events'\)/) // resolves under /r/xyz/
   } finally {
     await relay.close()
+  }
+})
+
+test('run count is bounded: least-recently-used runs are evicted at maxRuns (#230 hardening)', async () => {
+  const relay = await startRelay({ ...local, maxRuns: 2 })
+  try {
+    relay.ingest('a', { kind: 'log', message: '1' })
+    relay.ingest('b', { kind: 'log', message: '1' })
+    relay.ingest('a', { kind: 'log', message: '2' }) // touch a → a is now most-recent
+    relay.ingest('c', { kind: 'log', message: '1' }) // over cap → evict the LRU, which is b (not a)
+    assert.deepEqual(relay.runIds().sort(), ['a', 'c'])
+  } finally {
+    await relay.close()
+  }
+})
+
+test('relayPublisher does not hang flush() when the relay accepts but never responds (#230 hardening)', async () => {
+  // A server that accepts the TCP connection and the request but never replies.
+  const stall = createNetServer(() => {})
+  await new Promise<void>(r => stall.listen(0, '127.0.0.1', () => r()))
+  const port = (stall.address() as { port: number }).port
+  try {
+    const errors: unknown[] = []
+    const pub = relayPublisher(`http://127.0.0.1:${port}`, 'x', e => errors.push(e), 250)
+    pub.publish({ kind: 'log', message: 'hi' })
+    await pub.flush() // must resolve (via the fetch timeout), not hang forever
+    assert.equal(errors.length, 1) // the timed-out POST surfaced as an error, best-effort
+  } finally {
+    stall.close()
   }
 })
 

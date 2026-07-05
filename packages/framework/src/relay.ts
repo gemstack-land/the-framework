@@ -34,6 +34,13 @@ export interface RelayOptions {
   title?: string
   /** Max bytes accepted per publish request body. Default 256 KiB. */
   maxBodyBytes?: number
+  /**
+   * Max concurrent runs kept in memory. The relay is unauthenticated, so any
+   * request to `/r/<id>/…` would otherwise create a run that never frees — an
+   * anonymous caller could exhaust memory. On overflow the least-recently-touched
+   * run is evicted (its stream closed, its viewers dropped). Default 200.
+   */
+  maxRuns?: number
 }
 
 /** A running relay. Ingest events programmatically or over HTTP; browsers watch by run id. */
@@ -63,14 +70,29 @@ export function startRelay(opts: RelayOptions = {}): Promise<Relay> {
   const port = opts.port ?? 4488
   const title = opts.title ?? 'The Framework'
   const maxBody = opts.maxBodyBytes ?? 256 * 1024
+  const maxRuns = opts.maxRuns ?? 200
+  // Insertion-ordered as an LRU: touching a run re-inserts it at the end, so the
+  // first entry is always the least-recently-used and the eviction victim.
   const runs = new Map<string, Run>()
 
   const run = (id: string): Run => {
-    let r = runs.get(id)
-    if (!r) {
-      r = { stream: new EventStream<FrameworkEvent>(), clients: new Set() }
-      runs.set(id, r)
+    const existing = runs.get(id)
+    if (existing) {
+      runs.delete(id)
+      runs.set(id, existing) // touch: move to most-recently-used
+      return existing
     }
+    // Bound memory: evict the least-recently-used run before creating a new one.
+    while (runs.size >= maxRuns) {
+      const oldest = runs.keys().next().value
+      if (oldest === undefined) break
+      const victim = runs.get(oldest)!
+      victim.stream.close()
+      for (const res of victim.clients) res.end()
+      runs.delete(oldest)
+    }
+    const r: Run = { stream: new EventStream<FrameworkEvent>(), clients: new Set() }
+    runs.set(id, r)
     return r
   }
 
@@ -202,7 +224,12 @@ export interface RelayPublisher {
  * replay order matches the run, and best-effort: a failed POST is reported via
  * `onError` but never interrupts the run.
  */
-export function relayPublisher(base: string, runId: string, onError?: (err: unknown) => void): RelayPublisher {
+export function relayPublisher(
+  base: string,
+  runId: string,
+  onError?: (err: unknown) => void,
+  timeoutMs = 10_000,
+): RelayPublisher {
   const root = `${base.replace(/\/+$/, '')}/r/${encodeURIComponent(runId)}`
   let chain: Promise<void> = Promise.resolve()
   return {
@@ -210,10 +237,13 @@ export function relayPublisher(base: string, runId: string, onError?: (err: unkn
     publish(event) {
       chain = chain.then(async () => {
         try {
+          // Timeout so a relay that accepts but never responds can't wedge flush()
+          // (awaited on shutdown) and hang the whole CLI on exit.
           await fetch(`${root}/publish`, {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
             body: JSON.stringify(event),
+            signal: AbortSignal.timeout(timeoutMs),
           })
         } catch (err) {
           onError?.(err)
