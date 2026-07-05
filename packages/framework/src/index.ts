@@ -69,6 +69,7 @@ export {
   resolveSessionLink,
   hasSessionIdPlaceholder,
   SESSION_ID_PLACEHOLDER,
+  OPEN_LOOP_MODES,
 } from './events.js'
 export { startDashboard, dashboardHtml, type Dashboard, type DashboardOptions } from './dashboard/index.js'
 export {

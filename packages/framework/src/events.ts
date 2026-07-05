@@ -31,6 +31,13 @@ export type FrameworkEvent =
   /** A framework-level log line. */
   | { kind: 'log'; message: string }
   /**
+   * The run's active Open Loop modes (#272), emitted once when a domain preset is
+   * in effect. `all` is every mode the run knows about (stable order); `active` is
+   * the subset switched on for this run. The dashboard renders them as read-only
+   * checkboxes so the policy driving the build is visible.
+   */
+  | { kind: 'modes'; all: readonly string[]; active: readonly string[] }
+  /**
    * The run finished. `ok` is false when it threw. `stopped` marks the common,
    * non-error case where the user interrupted it (the dashboard Stop button /
    * Ctrl+C), so a surface can show "stopped" rather than "failed".
@@ -50,6 +57,10 @@ export function formatFrameworkEvent(event: FrameworkEvent): string {
       return `▶ your app is running at ${event.url}`
     case 'log':
       return `  ${event.message}`
+    case 'modes': {
+      const shown = event.all.map(m => `${event.active.includes(m) ? '[x]' : '[ ]'} ${m}`).join('  ')
+      return `  modes: ${shown}`
+    }
     case 'driver':
       return formatDriverEvent(event.event)
     case 'bootstrap':
@@ -101,6 +112,13 @@ function truncate(text: string, max = 100): string {
   const flat = text.replace(/\s+/g, ' ').trim()
   return flat.length > max ? flat.slice(0, max - 1) + '…' : flat
 }
+
+/**
+ * The Open Loop modes a run can activate, in the order the dashboard shows them.
+ * The single source of truth for both the mode checkboxes (#272) and the
+ * meta-select router's validation ({@link import('./meta-select.js').META_SELECT_MODES}).
+ */
+export const OPEN_LOOP_MODES = ['autopilot', 'technical'] as const
 
 /**
  * The placeholder a `--session-link` template uses for the real session id.

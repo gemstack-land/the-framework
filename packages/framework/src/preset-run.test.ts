@@ -51,8 +51,28 @@ test('a domain preset frames the run and is narrated', async () => {
   assert.ok(log, 'domain preset is logged')
   assert.match((log as { message: string }).message, /modes: technical/)
 
+  // The active modes are emitted for the dashboard checkboxes (#272): both known
+  // modes, with only the active one on.
+  const modes = events.find(e => e.kind === 'modes')
+  assert.deepEqual(modes, { kind: 'modes', all: ['autopilot', 'technical'], active: ['technical'] })
+
   // The run still completes normally.
   assert.equal(result.productionGrade, true)
+})
+
+test('no modes event is emitted without a domain preset (#272)', async () => {
+  const events: FrameworkEvent[] = []
+  await runFramework({
+    intent: FAKE_INTENT,
+    driver: fakeDriver(),
+    cwd: '/tmp/ws',
+    signals: FAKE_SIGNALS,
+    onEvent: e => events.push(e),
+  })
+  assert.equal(
+    events.some(e => e.kind === 'modes'),
+    false,
+  )
 })
 
 test('the preset loop is materialized against the driver and runs its chain', async () => {

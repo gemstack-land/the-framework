@@ -64,6 +64,10 @@ export function dashboardHtml(title: string, stoppable = false): string {
     font-weight: 600; }
   .badge.grade { background: #14371f; color: #67d98f; }
   .badge.proto { background: #2a2320; color: #f0a35e; }
+  #modes li { display: flex; align-items: center; gap: 8px; color: #b7c0d0; }
+  #modes .box { color: #6ea8fe; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  #modes li.off { color: #5c657a; }
+  #modes li.off .box { color: #3a4256; }
   #activity { grid-column: 1 / -1; }
   #log { font: 12px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace; color: #96a0b3;
     max-height: 320px; overflow-y: auto; white-space: pre-wrap; }
@@ -94,6 +98,10 @@ export function dashboardHtml(title: string, stoppable = false): string {
     <h2>Loop status</h2>
     <div id="grade" class="muted">building…</div>
     <ul id="passes"></ul>
+  </section>
+  <section id="modes-panel" hidden>
+    <h2>Modes</h2>
+    <ul id="modes"></ul>
   </section>
   <section id="deploy-panel">
     <h2>Deploy</h2>
@@ -198,6 +206,18 @@ function renderRationale(e) {
     row.className = 'alt'; row.innerHTML = '<b>' + esc(a.option) + '</b> \\u2014 ' + esc(a.whyNot);
   });
 }
+function renderModes(all, active) {
+  const on = new Set(active || []);
+  const ul = $('modes'); ul.innerHTML = '';
+  for (const m of (all || [])) {
+    const checked = on.has(m);
+    const li = document.createElement('li');
+    if (!checked) li.className = 'off';
+    li.innerHTML = '<span class="box">' + (checked ? '[x]' : '[ ]') + '</span> ' + esc(m);
+    ul.appendChild(li);
+  }
+  $('modes-panel').hidden = false;
+}
 function setSessionLink(sessionId, sessionLink) {
   const el = $('session-link');
   if (sessionLink) {
@@ -229,6 +249,7 @@ function onEvent(fe) {
   }
   else if (fe.kind === 'bootstrap') bootstrap(fe.event);
   else if (fe.kind === 'driver') driver(fe.event);
+  else if (fe.kind === 'modes') renderModes(fe.all, fe.active);
   else if (fe.kind === 'log') log(fe.message);
   else if (fe.kind === 'end') {
     ended = true;

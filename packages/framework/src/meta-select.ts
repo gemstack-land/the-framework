@@ -1,5 +1,6 @@
 import type { DomainPreset } from '@gemstack/ai-autopilot'
 import type { DriverSession } from './driver/index.js'
+import { OPEN_LOOP_MODES } from './events.js'
 
 /**
  * AI meta-select (#204, Rom's "meta-meta prompt"): before a run, infer which Open
@@ -16,7 +17,7 @@ import type { DriverSession } from './driver/index.js'
  */
 
 /** The Open Loop modes a run can activate. Mirrors the CLI's `--autopilot` / `--technical`. */
-export const META_SELECT_MODES = ['autopilot', 'technical'] as const
+export const META_SELECT_MODES = OPEN_LOOP_MODES
 
 /** The system framing for the meta-select turn: a tiny, fast classifier, not a builder. */
 export const META_SELECT_SYSTEM =
