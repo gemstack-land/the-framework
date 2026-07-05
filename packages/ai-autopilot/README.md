@@ -298,6 +298,29 @@ own bodies from a directory with `loadPromptsFrom(dir)`, or add one to a library
 with `library.add(...)`. The bodies are the main open-source contribution surface;
 PRs that sharpen them are welcome.
 
+## Domain presets — a loop + prompts + skills bundled per domain
+
+A **domain preset** packages a domain's review loops, prompt bodies, and skill
+pointers as one `{ loops, prompts, skills }` unit, so a run is framed for a *kind*
+of work (software, web, data, product, science) instead of the generic default.
+Each preset is a directory of markdown under `presets/` — a `preset.md` manifest
+plus `loops/`, `prompts/`, and `skills/` — so a contributor adds one by writing
+files, not code.
+
+```ts
+import { builtinDomainPresets, selectPreset } from '@gemstack/ai-autopilot'
+
+const presets = await builtinDomainPresets()             // discovers every shipped preset
+const sw = selectPreset(presets, 'software-development')  // sw.loops / sw.prompts / sw.skills
+```
+
+Five ship built in (`software-development`, `web-development`, `data-science`,
+`product-management`, `biological-science`). Load your own with
+`loadDomainPreset(dir)`, and merge several with `composeDomainPresets(...)`
+(presets-of-presets). A mode variant (a `stem.<mode>.md` sibling carrying
+`metadata.conditions`) swaps in a leaner loop under a mode like `technical`.
+`@gemstack/framework` surfaces these to end users as `--preset`.
+
 ## Guardrails
 
 - **`concurrency`** (optional, default 4) — max workers in flight; positive integer.
