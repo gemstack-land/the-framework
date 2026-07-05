@@ -103,6 +103,7 @@
  * - {@link defineDomainPreset} / {@link loadDomainPreset} — author, or load from a directory
  * - {@link composeDomainPresets} — merge presets into one (later wins on prompt/skill id)
  * - {@link selectPreset} — pick the user's chosen domain by name
+ * - {@link softwareDevelopmentPreset} — the shipped, stack-agnostic built-in
  */
 export { Supervisor } from './supervisor.js'
 export { agentPlanner, type AgentPlannerOptions } from './planner.js'
@@ -336,6 +337,8 @@ export {
   loadDomainPreset,
   loadLoopsFrom,
   loadSkillsFrom,
+  builtinPresetsDir,
+  softwareDevelopmentPreset,
   type DomainPreset,
   type DomainPresetSpec,
   type DomainPresetMeta,

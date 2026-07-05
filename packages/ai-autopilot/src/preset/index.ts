@@ -9,5 +9,11 @@
  */
 export { defineDomainPreset, DomainPresetError } from './define.js'
 export { composeDomainPresets, selectPreset } from './compose.js'
-export { loadDomainPreset, loadLoopsFrom, loadSkillsFrom } from './load.js'
+export {
+  loadDomainPreset,
+  loadLoopsFrom,
+  loadSkillsFrom,
+  builtinPresetsDir,
+  softwareDevelopmentPreset,
+} from './load.js'
 export type { DomainPreset, DomainPresetSpec, DomainPresetMeta } from './types.js'

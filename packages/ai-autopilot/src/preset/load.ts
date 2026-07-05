@@ -1,4 +1,5 @@
 import { readFile, readdir } from 'node:fs/promises'
+import { fileURLToPath } from 'node:url'
 import { join } from 'node:path'
 import { parseSkillManifest } from '@gemstack/ai-skills'
 import { defineLoop } from '../loop/define.js'
@@ -49,6 +50,17 @@ export async function loadDomainPreset(dir: string): Promise<DomainPreset> {
     prompts,
     skills,
   })
+}
+
+/** Absolute path to the package's shipped `presets/` directory. */
+export function builtinPresetsDir(): string {
+  // From dist/preset/load.js (and dist-test/…), the package root is two up.
+  return fileURLToPath(new URL('../../presets/', import.meta.url))
+}
+
+/** The shipped, stack-agnostic "Software Development" domain preset (#243). */
+export function softwareDevelopmentPreset(): Promise<DomainPreset> {
+  return loadDomainPreset(join(builtinPresetsDir(), 'software-development'))
 }
 
 /** Load every `*.md` loop file in a directory (a missing directory yields `[]`). */

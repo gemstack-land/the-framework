@@ -29,7 +29,8 @@
   },
   "files": [
     "dist",
-    "prompts"
+    "prompts",
+    "presets"
   ],
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
