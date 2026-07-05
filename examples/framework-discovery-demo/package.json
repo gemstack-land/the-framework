@@ -1,6 +1,6 @@
 {
   "name": "@gemstack/example-framework-discovery",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "private": true,
   "description": "End-to-end proof of The Framework's extension SPI (#190): this project depends on the third-party `framework-hello` package, and the CLI discovers, registers, and composes it into the agent frame - offline and deterministic via the fake driver.",
   "type": "module",

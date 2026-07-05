@@ -1,6 +1,6 @@
 {
   "name": "@gemstack/example-framework-demo",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "private": true,
   "description": "Showable end-to-end demo of @gemstack/framework: one prompt → scope → architect → build → full-fledged loop → deploy → a real running app, offline and deterministic via the fake driver.",
   "type": "module",

@@ -1,5 +1,87 @@
 # @gemstack/framework
 
+## 0.6.0
+
+### Minor Changes
+
+- 4a6311e: Domain preset runs can now pick a build event kind, so a preset's bug-fix loop actually fires. A run chooses it with `runFramework({ buildEvent })` / the `framework --kind <name>` flag, and a preset can declare its own default via `preset.md` `metadata.event` (surfaced as `DomainPreset.defaultEvent`). Precedence: run choice > preset default > `major-change`; an event the preset has no loop for still falls back to the built-in checklist.
+- b81e563: Run a build under an Open Loop domain preset (#251).
+
+  `runFramework({ preset, modes })` now accepts a user-picked domain preset
+  ({loops, prompts, skills}). Its skills (and their personas) frame every phase of
+  the run alongside the detected framework skill, the selected domain and active
+  modes are narrated, and its loops + prompts are materialized into a driver-backed
+  `LoopEngine` exposed as `result.loop` (each pass is a fresh driver prompt). The
+  new `driverLoopPrompts` bridge does the materialization. Opt-in and additive: a
+  run with no preset is unchanged. Driving the exposed loop as a run phase is the
+  follow-up (#252).
+
+- c28c373: the-framework.yml gains an `event:` key so a repo can pin its build event kind (e.g. `bug-fix`) alongside `preset`/`autopilot`/`technical`. Precedence: `--kind` flag > `the-framework.yml` event > preset default > `major-change`.
+- 74a9907: CLI: `--preset <name>` runs a build under an Open Loop domain preset, with
+  `--autopilot` / `--technical` mode flags (#256).
+
+  `--preset` resolves a shipped domain preset by name (via `builtinDomainPresets` +
+  `selectPreset`) and hands it to `runFramework`, so its loops, prompts, and skills
+  frame the build. `--autopilot` / `--technical` activate the preset's `conditions`
+  variants (applied at load time and narrated). An unknown preset name is a usage
+  error that lists the available presets; the mode flags note when given without a
+  preset. Additive: a run with no `--preset` is unchanged.
+
+- 8c3e7d0: The domain loop drives the production-grade review phase (#252).
+
+  When a run has a domain preset, its review loop now _replaces_ the built-in
+  checklist: each pass dispatches a `major-change` event through the preset's
+  driver-backed loop, so its review chain (e.g. code review, test coverage, security
+  review) fires through the wrapped agent, and Bootstrap's pass / improve / maxPasses
+  machinery gates on the union of the `{ blockers }` verdicts the chain reports. A
+  preset with no loop for the build event falls back to the built-in checklist, so a
+  run is never left unreviewed. New: `domainLoopChecklist` + `verdictFromLoopRun`
+  (@gemstack/framework).
+
+  The shipped Software Development preset's review prompts (code review, test
+  coverage, security review) now end with a `{ blockers }` verdict so the loop
+  actually gates rather than only running.
+
+- c24ae22: Read `the-framework.yml` for per-repo Open Loop defaults (#258).
+
+  A project can now carry its own domain preset + modes, so you do not retype the
+  flags each run:
+
+  ```yaml
+  preset: software-development
+  autopilot: true
+  ```
+
+  The CLI reads it from the run's workspace and merges it with the flags: `--preset`
+  wins over the file's `preset`; `--autopilot` / `--technical` OR with the file's
+  booleans (a flag only ever enables a mode). A missing file is a no-op and a
+  malformed one is a warning, never a failed run. New exports: `loadFrameworkConfig`,
+  `parseFrameworkConfig`, `mergeRunConfig`, `FRAMEWORK_CONFIG_FILES`,
+  `FrameworkFileConfig`.
+
+- edd242b: Repo files as persistent AI memory (#260).
+
+  The agent now reads the project's special files (CODE-OVERVIEW.md,
+  KNOWLEDGE-BASE.md, BRAINSTORMING.md, DECISIONS.md) at the start of a run and is
+  told to keep the ones it owns current, so a project's memory lives in the repo as
+  plain markdown and the next run picks up where the last left off. `DECISIONS.md`
+  stays framework-owned (we write it from the decisions ledger), so the agent reads
+  it but does not edit it. New: `loadRepoMemory(cwd)`, `memoryFraming`,
+  `MEMORY_FILES`, and a `memory` option on `runFramework`; the CLI reads the files
+  from the workspace and frames them alongside personas and skills.
+
+### Patch Changes
+
+- Updated dependencies [4a6311e]
+- Updated dependencies [8c3e7d0]
+- Updated dependencies [03e06aa]
+- Updated dependencies [3c72f14]
+- Updated dependencies [e45e4d0]
+- Updated dependencies [396dc7f]
+- Updated dependencies [24944b9]
+- Updated dependencies [d2acba4]
+  - @gemstack/ai-autopilot@0.8.0
+
 ## 0.5.2
 
 ### Patch Changes

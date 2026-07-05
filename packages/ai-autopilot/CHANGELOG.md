@@ -1,5 +1,80 @@
 # @gemstack/ai-autopilot
 
+## 0.8.0
+
+### Minor Changes
+
+- 4a6311e: Domain preset runs can now pick a build event kind, so a preset's bug-fix loop actually fires. A run chooses it with `runFramework({ buildEvent })` / the `framework --kind <name>` flag, and a preset can declare its own default via `preset.md` `metadata.event` (surfaced as `DomainPreset.defaultEvent`). Precedence: run choice > preset default > `major-change`; an event the preset has no loop for still falls back to the built-in checklist.
+- 8c3e7d0: The domain loop drives the production-grade review phase (#252).
+
+  When a run has a domain preset, its review loop now _replaces_ the built-in
+  checklist: each pass dispatches a `major-change` event through the preset's
+  driver-backed loop, so its review chain (e.g. code review, test coverage, security
+  review) fires through the wrapped agent, and Bootstrap's pass / improve / maxPasses
+  machinery gates on the union of the `{ blockers }` verdicts the chain reports. A
+  preset with no loop for the build event falls back to the built-in checklist, so a
+  run is never left unreviewed. New: `domainLoopChecklist` + `verdictFromLoopRun`
+  (@gemstack/framework).
+
+  The shipped Software Development preset's review prompts (code review, test
+  coverage, security review) now end with a `{ blockers }` verdict so the loop
+  actually gates rather than only running.
+
+- 03e06aa: Add the Open Loop bundle unit: a domain preset = {loops, prompts, skills} (#242).
+
+  This is the keystone that ties the three data types the framework already ships
+  separately into one selectable, composable thing. Author one in code with
+  `defineDomainPreset`, or load one from a directory of `.md` files (`preset.md` +
+  `loops/`, `prompts/`, `skills/`) with `loadDomainPreset`. `composeDomainPresets`
+  merges several into one (loops concatenate; prompts and skills merge by id/name,
+  later wins), so presets-of-presets falls out; `selectPreset` picks the user's
+  domain by name. Kept distinct from the framework `Preset` detector in `presets/`
+  (skipped for the Open Loop MVP) by naming this `DomainPreset`.
+
+- 3c72f14: Add modes (Autopilot / Technical) to domain presets via `conditions` frontmatter (#244).
+
+  A preset content file can now ship mode variants: a `stem.<variant>.md` sibling
+  that declares `metadata.conditions` (a mode or list) overrides its `stem.md` base
+  when those modes are active. `loadDomainPreset(dir, { modes })` (and
+  `softwareDevelopmentPreset({ modes })`) resolve the winner per stem — the most
+  specific eligible variant, falling back to the base. The shipped Software
+  Development preset gains a `technical` variant of its major-change loop as an
+  illustration. This is the simple frontmatter fan-out; composing prompts from
+  parameters is the follow-up (#245).
+
+- e45e4d0: Preset discovery API: enumerate domain presets so the CLI/UI picker can list and
+  pick one by name (#254).
+
+  `builtinDomainPresets()` loads every domain preset shipped under the package's
+  `presets/` directory (today just Software Development; new built-ins are picked up
+  automatically). `loadDomainPresetsFrom(dir)` loads every immediate subdirectory
+  that holds a `preset.md`, skipping the rest, sorted by name. Pair either with the
+  existing `selectPreset(list, name)` to pick the user's chosen domain.
+
+- 396dc7f: Rename the loop engine's `rules` vocabulary to `loops` (Open Loop, #241).
+
+  A loop is a meta prompt, so that is the user-facing unit even though rule logic powers it. `defineLoop` / `defaultLoops` / `Loop` / `LoopSpec` replace `defineRule` / `defaultLoopRules` / `LoopRule` / `LoopRuleSpec`; the engine class is now `LoopEngine` (was `Loop`), created via `createLoopEngine` with `LoopEngineOptions`; and its option key is `loops` (was `rules`). Vocabulary only, no behavior change.
+
+- 24944b9: Ship the "Software Development" domain preset (#243).
+
+  The first built-in Open Loop preset, authored as a directory of `.md` files:
+  two loops (major-change -> code-review + test-coverage + security-review; bug-fix
+  -> root-cause + regression-test), five stack-agnostic prompt bodies, and one skill
+  pointer. Non-web and user-picked (no dependency detection). Load it with
+  `softwareDevelopmentPreset()`; `builtinPresetsDir()` points at the shipped
+  `presets/` directory. Proves the bundle unit end to end.
+
+- d2acba4: Add two more built-in domain presets: `web-development` and `data-science`.
+
+  Each ships as a directory of `.md` files like `software-development`, so it is
+  auto-discovered by `builtinDomainPresets()`, selectable via `--preset <name>` and
+  `the-framework.yml`, and drives the review phase. Both carry a Technical Control
+  variant (leaner major-change loop) and a bug-fix loop. Their major-change review
+  prompts end with the `{ blockers }` verdict footer so the review loop gates.
+
+  - **web-development** — accessibility, performance budget, and web-security review; skill points at web.dev.
+  - **data-science** — reproducibility, data validation, and methodology review; skill points at Google's Rules of ML.
+
 ## 0.7.0
 
 ### Minor Changes
