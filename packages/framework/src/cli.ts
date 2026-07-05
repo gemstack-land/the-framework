@@ -76,11 +76,12 @@ Options:
                          + skills frame the build), e.g. software-development.
   --autopilot            Activate the preset's Autopilot mode variants.
   --technical            Activate the preset's Technical mode variants.
-                         (--preset / --autopilot / --technical can also be set per
-                          repo in the-framework.yml; these flags override it.)
+                         (--preset / --autopilot / --technical / --kind can also be
+                          set per repo in the-framework.yml; these flags override it.)
   --kind <name>          Build event kind the preset's review loop fires for, e.g.
-                         bug-fix or major-change (default: the preset's own, else
-                         major-change). Selects which review chain gates the run.
+                         bug-fix or major-change (default: the-framework.yml's event,
+                         else the preset's own, else major-change). Selects which
+                         review chain gates the run.
   --compose-extensions   Opt the built-in capability extensions in (auth, data,
                          rbac, crud, shell) so the agent composes them instead of
                          hand-rolling. Vike-only; installed framework-* extensions
@@ -329,23 +330,26 @@ export function activeModes(opts: Pick<CliOptions, 'autopilot' | 'technical'>): 
  * (a flag can only *enable* a mode, so there is nothing to override the other way).
  */
 export function mergeRunConfig(
-  opts: Pick<CliOptions, 'preset' | 'autopilot' | 'technical'>,
+  opts: Pick<CliOptions, 'preset' | 'autopilot' | 'technical' | 'buildEvent'>,
   file: FrameworkFileConfig,
-): { presetName?: string; autopilot: boolean; technical: boolean } {
+): { presetName?: string; autopilot: boolean; technical: boolean; buildEvent?: string } {
   const presetName = opts.preset ?? file.preset
+  const buildEvent = opts.buildEvent ?? file.event
   return {
     ...(presetName ? { presetName } : {}),
+    ...(buildEvent ? { buildEvent } : {}),
     autopilot: opts.autopilot || file.autopilot === true,
     technical: opts.technical || file.technical === true,
   }
 }
 
 /** A short summary of what the-framework.yml contributed and is in effect, or `''` for nothing to report. */
-function describeConfigSource(opts: Pick<CliOptions, 'preset'>, file: FrameworkFileConfig): string {
+function describeConfigSource(opts: Pick<CliOptions, 'preset' | 'buildEvent'>, file: FrameworkFileConfig): string {
   const parts: string[] = []
   if (file.preset && !opts.preset) parts.push(`preset=${file.preset}`) // a --preset flag would override it
   if (file.autopilot) parts.push('autopilot')
   if (file.technical) parts.push('technical')
+  if (file.event && !opts.buildEvent) parts.push(`event=${file.event}`) // a --kind flag would override it
   return parts.join(', ')
 }
 
@@ -432,8 +436,8 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
   if (modes.length && !domainPreset) {
     io.err(`note: ${modes.join(' + ')} mode(s) have no effect without a preset.`)
   }
-  if (opts.buildEvent && !domainPreset) {
-    io.err(`note: --kind ${opts.buildEvent} has no effect without a preset.`)
+  if (merged.buildEvent && !domainPreset) {
+    io.err(`note: build event "${merged.buildEvent}" has no effect without a preset.`)
   }
 
   // Fail early and clearly if a live run's prerequisites are missing.
@@ -554,7 +558,7 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
     ...(discovered ? { extensions: discovered } : {}),
     ...(opts.composeExtensions ? { composeExtensions: true } : {}),
     ...(domainPreset ? { preset: domainPreset, ...(modes.length ? { modes } : {}) } : {}),
-    ...(opts.buildEvent ? { buildEvent: opts.buildEvent } : {}),
+    ...(merged.buildEvent ? { buildEvent: merged.buildEvent } : {}),
     ...(memory.length ? { memory } : {}),
     ...((): { sessionLink?: string } => {
       const link = chooseSessionLink(opts, fake)

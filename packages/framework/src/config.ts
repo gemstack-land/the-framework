@@ -14,6 +14,8 @@ export interface FrameworkFileConfig {
   autopilot?: boolean
   /** Activate the preset's Technical mode variants. */
   technical?: boolean
+  /** Build event kind the preset's review loop fires for, e.g. `bug-fix` (#265). */
+  event?: string
 }
 
 /** Config file names read from the workspace root, in precedence order. */
@@ -59,9 +61,11 @@ export function parseFrameworkConfig(raw: string, source = 'the-framework.yml'):
   }
   const obj = data as Record<string, unknown>
   const config: FrameworkFileConfig = {}
-  if (obj['preset'] !== undefined) {
-    if (typeof obj['preset'] !== 'string') throw new Error(`${source}: "preset" must be a string`)
-    config.preset = obj['preset']
+  for (const key of ['preset', 'event'] as const) {
+    if (obj[key] !== undefined) {
+      if (typeof obj[key] !== 'string') throw new Error(`${source}: "${key}" must be a string`)
+      config[key] = obj[key] as string
+    }
   }
   for (const key of ['autopilot', 'technical'] as const) {
     if (obj[key] !== undefined) {

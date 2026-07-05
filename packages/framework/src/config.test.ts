@@ -5,12 +5,16 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { loadFrameworkConfig, parseFrameworkConfig } from './config.js'
 
-test('parseFrameworkConfig reads preset + mode booleans', () => {
-  assert.deepEqual(parseFrameworkConfig('preset: software-development\nautopilot: true\ntechnical: false\n'), {
-    preset: 'software-development',
-    autopilot: true,
-    technical: false,
-  })
+test('parseFrameworkConfig reads preset + mode booleans + event', () => {
+  assert.deepEqual(
+    parseFrameworkConfig('preset: software-development\nautopilot: true\ntechnical: false\nevent: bug-fix\n'),
+    {
+      preset: 'software-development',
+      autopilot: true,
+      technical: false,
+      event: 'bug-fix',
+    },
+  )
 })
 
 test('parseFrameworkConfig treats an empty document as {}', () => {
@@ -21,6 +25,7 @@ test('parseFrameworkConfig treats an empty document as {}', () => {
 test('parseFrameworkConfig rejects a non-map document and mistyped fields', () => {
   assert.throws(() => parseFrameworkConfig('- a\n- b\n'), /must be a YAML map/)
   assert.throws(() => parseFrameworkConfig('preset: 3\n'), /"preset" must be a string/)
+  assert.throws(() => parseFrameworkConfig('event: 3\n'), /"event" must be a string/)
   assert.throws(() => parseFrameworkConfig('autopilot: yep\n'), /"autopilot" must be a boolean/)
 })
 

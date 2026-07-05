@@ -100,6 +100,10 @@ test('mergeRunConfig: the-framework.yml supplies defaults, flags override (#258)
   })
   // nothing set anywhere: no preset, no modes
   assert.deepEqual(mergeRunConfig(flags, {}), { autopilot: false, technical: false })
+  // build event: the file's `event` supplies a default, --kind overrides it (#265)
+  assert.equal(mergeRunConfig(flags, { event: 'bug-fix' }).buildEvent, 'bug-fix')
+  assert.equal(mergeRunConfig({ ...flags, buildEvent: 'major-change' }, { event: 'bug-fix' }).buildEvent, 'major-change')
+  assert.equal(mergeRunConfig(flags, {}).buildEvent, undefined)
 })
 
 test('resolveDomainPreset resolves a shipped preset by name (#254/#256)', async () => {
@@ -136,7 +140,7 @@ test('runCli notes --kind given without a preset (#265)', async () => {
   const { io, err } = capture()
   const code = await runCli(['--fake', '--no-dashboard', '--kind', 'bug-fix'], io)
   assert.equal(code, 0)
-  assert.ok(err.some(l => /--kind bug-fix has no effect without a preset/.test(l)))
+  assert.ok(err.some(l => /build event "bug-fix" has no effect without a preset/.test(l)))
 })
 
 test('chooseSessionLink defaults a live run to the claude.ai/code session list (#212)', () => {
