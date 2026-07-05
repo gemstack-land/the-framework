@@ -20,3 +20,5 @@ Look for:
 
 Report each concrete risk with the file, why it is exploitable, and the fix. If the
 change introduces no new exposure, say so and stop.
+
+End your reply with a fenced ```json block: `{ "blockers": ["<what must be fixed>", ...] }`. List only what must be fixed before this is production-grade; an empty array means nothing blocks.

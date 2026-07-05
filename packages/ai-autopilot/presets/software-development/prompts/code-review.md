@@ -19,3 +19,5 @@ Focus on:
 
 For each finding give one line on what is wrong and one line on the fix. Skip nits
 the linter already catches. If the change is sound, say so plainly and stop.
+
+End your reply with a fenced ```json block: `{ "blockers": ["<what must be fixed>", ...] }`. List only what must be fixed before this is production-grade; an empty array means nothing blocks.

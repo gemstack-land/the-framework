@@ -1,6 +1,6 @@
 import { readdirSync } from 'node:fs'
 import { join } from 'node:path'
-import { definePrompt, parseVerdict, promptInstructions, renderTask, STACK_TRADEOFFS } from '@gemstack/ai-autopilot'
+import { definePrompt, LoopEngine, parseVerdict, promptInstructions, renderTask, STACK_TRADEOFFS } from '@gemstack/ai-autopilot'
 import type {
   ArchitectAlternative,
   ArchitectContext,
@@ -11,8 +11,10 @@ import type {
   DeployContext,
   DeployOutcome,
   DeployTarget,
+  LoopEvent,
   LoopPassContext,
   LoopPrompt,
+  LoopRunResult,
   PlannedSubtask,
   Prompt,
   SubtaskResult,
@@ -280,6 +282,47 @@ export function driverChecklist(
 /** The blocker surfaced when a checklist reply omits the required `{ blockers }` verdict. */
 export const MISSING_VERDICT_BLOCKER =
   'End your reply with the required fenced ```json { "blockers": [...] } verdict; it was missing.'
+
+/**
+ * A checklist step backed by a domain preset's review loop (#252): each pass
+ * dispatches a `major-change` (by default) loop event, so the preset's review
+ * chain fires through the wrapped agent, and returns the union of the `{ blockers }`
+ * verdicts its prompts reported. This is what makes "the domain loop replaces the
+ * built-in checklist" concrete — Bootstrap keeps its pass/improve/maxPasses
+ * machinery, the domain policy just decides what "production-grade" means.
+ *
+ * A preset with no loop for the event kind is not a review at all: it falls back
+ * to `fallback` (the built-in production-grade checklist) when given, so a run is
+ * never left silently unreviewed, else nothing blocks.
+ */
+export function domainLoopChecklist(
+  loop: LoopEngine,
+  opts: { kind?: string; fallback?: (ctx: LoopPassContext) => Promise<Verdict> } = {},
+): (ctx: LoopPassContext) => Promise<Verdict> {
+  const kind = opts.kind ?? 'major-change'
+  return async ctx => {
+    const event: LoopEvent = { kind, summary: ctx.intent }
+    if (loop.matches(event).length === 0) {
+      return opts.fallback ? opts.fallback(ctx) : { blockers: [] }
+    }
+    return verdictFromLoopRun(await loop.handle(event))
+  }
+}
+
+/**
+ * Fold a loop run into one {@link Verdict}: the union of every prompt's reported
+ * blockers. A prompt that ran but reported no verdict is advisory (it does not
+ * block); a prompt that failed to execute is surfaced as a blocker so an errored
+ * review is not mistaken for a pass.
+ */
+export function verdictFromLoopRun(run: LoopRunResult): Verdict {
+  const blockers: string[] = []
+  for (const outcome of run.outcomes) {
+    if (outcome.verdict && outcome.verdict.blockers.length) blockers.push(...outcome.verdict.blockers)
+    else if (!outcome.passing) blockers.push(`review "${outcome.promptId}" did not complete`)
+  }
+  return { blockers }
+}
 
 /** The improve step: a fresh invocation that fixes the current blockers. */
 export function driverImprove(

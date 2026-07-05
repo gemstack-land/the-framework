@@ -19,3 +19,5 @@ Ask:
 
 Name the specific untested paths and, for each, the one test worth adding. If the
 change is a pure refactor with existing coverage, say so and stop.
+
+End your reply with a fenced ```json block: `{ "blockers": ["<what must be fixed>", ...] }`. List only what must be fixed before this is production-grade; an empty array means nothing blocks.

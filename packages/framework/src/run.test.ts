@@ -1,9 +1,10 @@
 import { strict as assert } from 'node:assert'
 import { test } from 'node:test'
-import { defineFrameworkExtension, definePersona, defineSkill } from '@gemstack/ai-autopilot'
+import { defineDomainPreset, defineFrameworkExtension, defineLoop, definePersona, defineSkill } from '@gemstack/ai-autopilot'
+import type { Prompt } from '@gemstack/ai-autopilot'
 import { DEFAULT_MAX_PASSES, runFramework } from './run.js'
 import { FAKE_DEPLOY, FAKE_INTENT, FAKE_SIGNALS, fakeDriver } from './fake-script.js'
-import type { Driver } from './driver/index.js'
+import { FakeDriver, type Driver } from './driver/index.js'
 import type { FrameworkEvent } from './events.js'
 
 /** A driver that records the `system` framing it is started with, delegating the run to the fake. */
@@ -213,6 +214,73 @@ test('no memory option leaves the framing unchanged (#260)', async () => {
   const { driver, system } = recordingDriver()
   await runFramework({ intent: FAKE_INTENT, driver, cwd: '/tmp/ws', signals: FAKE_SIGNALS, onEvent: () => {} })
   assert.doesNotMatch(system(), /Project memory/)
+})
+
+/** A minimal domain preset whose major-change loop runs one review prompt. */
+function reviewPreset() {
+  const review: Prompt = {
+    id: 'review',
+    name: 'review',
+    title: 'Review',
+    description: 'Review the change.',
+    instructions: 'Review the app and end with a { blockers } verdict.',
+    passes: 1,
+    appliesTo: [],
+  }
+  return defineDomainPreset({
+    name: 'test-domain',
+    title: 'Test Domain',
+    loops: [defineLoop({ on: 'major-change', run: ['review'] })],
+    prompts: [review],
+    skills: [],
+  })
+}
+
+test("a domain preset's loop drives the production-grade review phase (#252)", async () => {
+  const events: FrameworkEvent[] = []
+  const driver = new FakeDriver({
+    turns: [
+      { text: '```json\n{"stack":"X","narration":"n","decisions":[]}\n```' }, // architect
+      { text: 'Built the app.' }, // build
+      { text: 'Reviewed.\n```json\n{"blockers":[]}\n```' }, // the domain review prompt, clean
+    ],
+    sessionId: 'test',
+  })
+  const { result, loop } = await runFramework({
+    intent: FAKE_INTENT,
+    driver,
+    cwd: '/tmp/ws',
+    signals: FAKE_SIGNALS,
+    preset: reviewPreset(),
+    onEvent: e => events.push(e),
+  })
+  assert.ok(loop) // the preset loop was materialized...
+  assert.ok(events.some(e => e.kind === 'log' && /Test Domain loop drives/.test(e.message))) // ...and announced as the reviewer
+  assert.equal(result.productionGrade, true)
+  assert.equal(result.passes, 1) // cleared on the first domain-review pass (not the built-in checklist)
+})
+
+test('the domain review loop blocks, improve runs, then it clears (#252)', async () => {
+  const driver = new FakeDriver({
+    turns: [
+      { text: '```json\n{"stack":"X","narration":"n","decisions":[]}\n```' }, // architect
+      { text: 'Built the app.' }, // build
+      { text: 'Reviewed.\n```json\n{"blockers":["needs error handling"]}\n```' }, // review, pass 1: blocks
+      { text: 'Added error handling.' }, // improve
+      { text: 'Reviewed.\n```json\n{"blockers":[]}\n```' }, // review, pass 2: clean
+    ],
+    sessionId: 'test',
+  })
+  const { result } = await runFramework({
+    intent: FAKE_INTENT,
+    driver,
+    cwd: '/tmp/ws',
+    signals: FAKE_SIGNALS,
+    preset: reviewPreset(),
+    onEvent: () => {},
+  })
+  assert.equal(result.passes, 2) // blocked once, improved, cleared — the domain loop drove both passes
+  assert.equal(result.productionGrade, true)
 })
 
 test('a registered extension auto-activates by its signal, no opt-in needed (#190)', async () => {

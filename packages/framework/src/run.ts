@@ -27,7 +27,7 @@ import {
 } from '@gemstack/ai-autopilot'
 import type { Driver, DriverEvent, DriverSession } from './driver/index.js'
 import { memoryFraming, type LoadedMemory } from './memory.js'
-import { decideDeploy, deployWith, driverArchitect, driverBuild, driverChecklist, driverImprove, driverLoopPrompts } from './steps.js'
+import { decideDeploy, deployWith, domainLoopChecklist, driverArchitect, driverBuild, driverChecklist, driverImprove, driverLoopPrompts } from './steps.js'
 import { hasSessionIdPlaceholder, resolveSessionLink, type FrameworkEvent } from './events.js'
 
 /**
@@ -179,8 +179,9 @@ export interface RunFrameworkResult {
   /**
    * The domain preset's review policy, materialized against this run's driver:
    * its loops plus its prompts as driver-backed passes. Present only when a
-   * {@link RunFrameworkOptions.preset} was supplied. Driving it (dispatching a
-   * `major-change` / `bug-fix` event) is left to the caller for now (#252).
+   * {@link RunFrameworkOptions.preset} was supplied. It also drives the run's
+   * production-grade review phase (#252): each checklist pass dispatches a
+   * `major-change` event through it, so its chain replaces the built-in checklist.
    */
   loop?: LoopEngine
 }
@@ -278,7 +279,7 @@ export async function runFramework(opts: RunFrameworkOptions): Promise<RunFramew
     const modeNote = opts.modes?.length ? ` (modes: ${opts.modes.join(', ')})` : ''
     emit({
       kind: 'log',
-      message: `Domain preset: ${domainPreset.title}${modeNote}; ${domainPreset.loops.length}-loop review policy available`,
+      message: `Domain preset: ${domainPreset.title}${modeNote}; ${domainPreset.loops.length}-loop review policy in effect`,
     })
   }
 
@@ -305,16 +306,40 @@ export async function runFramework(opts: RunFrameworkOptions): Promise<RunFramew
     onEvent: onDriverEvent,
   })
 
+  const ledger = new DecisionLedger()
+
+  // Materialize the domain preset's review policy against this run's driver: its
+  // loops, with its prompts as driver-backed passes sharing the run's ledger and
+  // abort signal. Exposed on the result, and driven as the review phase below (#252).
+  const loop = domainPreset
+    ? new LoopEngine({
+        loops: [...domainPreset.loops],
+        prompts: driverLoopPrompts(session, domainPreset.prompts, {
+          ledger,
+          ...(opts.signal ? { signal: opts.signal } : {}),
+        }),
+      })
+    : undefined
+
+  // The production-grade review phase. Default: the built-in checklist. With a
+  // domain preset, its loop *replaces* the checklist (#252) — each pass fires the
+  // preset's review chain through the driver — falling back to the built-in when
+  // the preset has no loop for the build event, so a run is never left unreviewed.
+  const reviewChecklist = loop
+    ? domainLoopChecklist(loop, { fallback: driverChecklist(session) })
+    : driverChecklist(session)
+  if (loop) emit({ kind: 'log', message: `Review policy: the ${domainPreset!.title} loop drives the production-grade checks` })
+
   // Boot-and-serve gate: adopt the agent's workspace so the checklist can gate
-  // on the app actually running (mergeChecklists unions the agent review with a
-  // real serveCheck). The runner adopts, never deletes, the driver's cwd.
+  // on the app actually running (mergeChecklists unions the review with a real
+  // serveCheck). The runner adopts, never deletes, the driver's cwd.
   let runner: LocalRunnerSession | undefined
   if (opts.serve) runner = await new LocalRunner().adopt(opts.cwd)
   const s = opts.serve
   const checklist =
     runner && s
       ? mergeChecklists(
-          driverChecklist(session),
+          reviewChecklist,
           serveCheck(runner, {
             serve: s.command,
             ...(s.install ? { install: s.install } : {}),
@@ -325,7 +350,7 @@ export async function runFramework(opts: RunFrameworkOptions): Promise<RunFramew
             onProgress: message => emit({ kind: 'log', message: `serve: ${message}` }),
           }),
         )
-      : driverChecklist(session)
+      : reviewChecklist
 
   // A real driver writes files to the workspace, so the build/improve steps can
   // detect an empty workspace and hard-scaffold it (#182). The fake driver writes
@@ -333,21 +358,6 @@ export async function runFramework(opts: RunFrameworkOptions): Promise<RunFramew
   // deterministic.
   const verifyWorkspace = opts.driver.name !== 'fake'
   const workspaceOpt = verifyWorkspace ? { verifyWorkspace: true } : {}
-
-  const ledger = new DecisionLedger()
-
-  // Materialize the domain preset's review policy against this run's driver: its
-  // loops, with its prompts as driver-backed passes sharing the run's ledger and
-  // abort signal. Exposed on the result; who drives it is the follow-up (#252).
-  const loop = domainPreset
-    ? new LoopEngine({
-        loops: [...domainPreset.loops],
-        prompts: driverLoopPrompts(session, domainPreset.prompts, {
-          ledger,
-          ...(opts.signal ? { signal: opts.signal } : {}),
-        }),
-      })
-    : undefined
 
   let preview: AppPreview | undefined
   try {

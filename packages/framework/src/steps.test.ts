@@ -3,11 +3,12 @@ import { test } from 'node:test'
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { DecisionLedger, type DeployTarget, type SupervisorEvent } from '@gemstack/ai-autopilot'
+import { DecisionLedger, LoopEngine, defineLoop, definePrompt, type DeployTarget, type SupervisorEvent } from '@gemstack/ai-autopilot'
 import { FakeDriver } from './driver/index.js'
 import {
   architectPrompt,
   deployWith,
+  domainLoopChecklist,
   driverArchitect,
   driverBuild,
   driverChecklist,
@@ -16,6 +17,7 @@ import {
   isWorkspaceEmpty,
   MISSING_VERDICT_BLOCKER,
   parseArchitectPlan,
+  verdictFromLoopRun,
 } from './steps.js'
 
 /** Make a throwaway workspace dir, seeded with the given relative files. */
@@ -30,6 +32,47 @@ function makeWorkspace(files: Record<string, string> = {}): string {
 }
 
 const PLAN = { stack: 'Vike + universal-orm', narration: 'orders app', decisions: [] }
+
+test('domainLoopChecklist dispatches a review event and unions the prompts blockers (#252)', async () => {
+  const loop = new LoopEngine({
+    loops: [defineLoop({ on: 'major-change', run: ['a', 'b'] })],
+    prompts: [
+      definePrompt({ id: 'a', run: async () => 'reviewed\n```json\n{"blockers":["fix X"]}\n```' }),
+      definePrompt({ id: 'b', run: async () => 'reviewed\n```json\n{"blockers":[]}\n```' }),
+    ],
+  })
+  const verdict = await domainLoopChecklist(loop)({ pass: 1, plan: PLAN, intent: 'build a thing', blockers: [] })
+  assert.deepEqual(verdict.blockers, ['fix X']) // union across the chain (b reported none)
+})
+
+test('domainLoopChecklist falls back to the built-in checklist when no loop matches the event (#252)', async () => {
+  const loop = new LoopEngine({
+    loops: [defineLoop({ on: 'bug-fix', run: ['x'] })], // no major-change loop
+    prompts: [definePrompt({ id: 'x', run: async () => '' })],
+  })
+  let fellBack = false
+  const checklist = domainLoopChecklist(loop, {
+    fallback: async () => {
+      fellBack = true
+      return { blockers: ['from built-in'] }
+    },
+  })
+  const verdict = await checklist({ pass: 1, plan: PLAN, intent: 'x', blockers: [] })
+  assert.equal(fellBack, true)
+  assert.deepEqual(verdict.blockers, ['from built-in'])
+})
+
+test('verdictFromLoopRun surfaces a review that failed to execute as a blocker', () => {
+  const blockers = verdictFromLoopRun({
+    event: { kind: 'major-change' },
+    matched: true,
+    outcomes: [
+      { promptId: 'a', passes: [], ok: false, passing: false },
+      { promptId: 'b', passes: [], ok: true, passing: true },
+    ],
+  }).blockers
+  assert.deepEqual(blockers, ['review "a" did not complete'])
+})
 
 test('parseArchitectPlan reads a fenced json plan', () => {
   const text = 'Here is the plan:\n```json\n{"stack":"Vike","narration":"n","decisions":[{"choice":"SSR","why":"data"}]}\n```'
