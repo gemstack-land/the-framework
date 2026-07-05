@@ -1,5 +1,28 @@
 # @gemstack/framework
 
+## 0.7.0
+
+### Minor Changes
+
+- cc6a8db: feat(framework): AI meta-select — auto-pick the Open Loop domain preset, modes, and build event kind from the prompt + workspace (#270)
+
+  A live run with no `--preset` (and none in `the-framework.yml`) now infers the best-fit domain preset, its modes (technical / autopilot), and the build event kind from what you asked for and the project you are in, then runs under it. So `framework "add a login page"` in a web app picks Web Development on its own. `--no-auto-preset` opts out (plain framework flow); `--fake` stays deterministic. Any failed or empty pick falls back to the plain flow, so the auto-pick never blocks a run.
+
+- 5f319ff: feat(framework): show the active Open Loop modes as read-only checkboxes on the dashboard (#272)
+
+  When a run builds under a domain preset, the dashboard now renders a Modes panel with the run's modes as checkboxes ([x] technical / [ ] autopilot), so the policy driving the build is visible beside the stack and loop panels. Backed by a new `modes` framework event (`OPEN_LOOP_MODES` is the canonical mode ordering, shared with the meta-select router); a run with no preset emits nothing and shows no panel. The event persists with the run, so `--resume` rehydrates the panel too.
+
+- 9f62be7: feat(framework): run the `--serve` verification in a Docker sandbox (#229)
+
+  `framework --serve ... --sandbox docker` now boots the app inside a throwaway container instead of on the host: the source is copied in, deps install and the dev server runs in the container, and the health check hits a mapped port. So agent-authored code never installs or runs on your machine to be verified. `--sandbox local` (the default) is unchanged — it adopts the host cwd in place.
+
+  This is the first slice of #229: only the serve verification is sandboxed; the build itself still runs on the host (the container is re-seeded with the latest source before each check). Requires a reachable Docker daemon — a run that asks for the sandbox without one fails fast with a clear message; `--sandbox docker` without `--serve` is a no-op note. `runFramework` gains `sandbox` and an injectable `runner` option.
+
+### Patch Changes
+
+- Updated dependencies [08f5710]
+  - @gemstack/ai-autopilot@0.9.0
+
 ## 0.6.0
 
 ### Minor Changes
