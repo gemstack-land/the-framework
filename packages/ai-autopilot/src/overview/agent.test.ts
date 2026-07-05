@@ -3,8 +3,8 @@ import assert from 'node:assert/strict'
 import { AiFake, agent } from '@gemstack/ai-sdk'
 import { agentOverview, overviewLoopPrompt } from './agent.js'
 import { CodeOverviewMaintainer } from './maintainer.js'
-import { Loop } from '../loop/loop.js'
-import { defineRule } from '../loop/define.js'
+import { LoopEngine } from '../loop/loop.js'
+import { defineLoop } from '../loop/define.js'
 import type { CodeOverview } from './types.js'
 
 describe('agentOverview (default regenerate over an ai-sdk agent)', () => {
@@ -35,8 +35,8 @@ describe('overviewLoopPrompt (wire the maintainer into the loop)', () => {
     const maintainer = new CodeOverviewMaintainer({
       regenerate: () => { regenerated++; return { summary: 'fresh', sections: [] } },
     })
-    const loop = new Loop({
-      rules: [defineRule({ on: 'major-change', run: ['code-overview'] })],
+    const loop = new LoopEngine({
+      loops: [defineLoop({ on: 'major-change', run: ['code-overview'] })],
       prompts: [overviewLoopPrompt(maintainer)],
     })
     const result = await loop.handle({ kind: 'major-change', summary: 'switched build tool', paths: ['vite.config.ts'] })
@@ -52,8 +52,8 @@ describe('overviewLoopPrompt (wire the maintainer into the loop)', () => {
       overview: { summary: 'kept', sections: [] },
       regenerate: () => { regenerated++; return { summary: 'nope', sections: [] } },
     })
-    const loop = new Loop({
-      rules: [defineRule({ on: 'major-change', run: ['code-overview'] })],
+    const loop = new LoopEngine({
+      loops: [defineLoop({ on: 'major-change', run: ['code-overview'] })],
       prompts: [overviewLoopPrompt(maintainer)],
     })
     const result = await loop.handle({ kind: 'major-change', summary: 'tweak copy', paths: ['pages/about.tsx'] })

@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
-import { definePrompt, defineRule, LoopError } from './define.js'
+import { definePrompt, defineLoop, LoopError } from './define.js'
 
 describe('definePrompt', () => {
   it('defaults passes to 1 and freezes', () => {
@@ -17,17 +17,17 @@ describe('definePrompt', () => {
   })
 })
 
-describe('defineRule', () => {
+describe('defineLoop', () => {
   it('normalizes a single `on` to a de-duped array', () => {
-    const r = defineRule({ on: 'major-change', run: ['review', 'security'] })
+    const r = defineLoop({ on: 'major-change', run: ['review', 'security'] })
     assert.deepEqual(r.on, ['major-change'])
     assert.deepEqual(r.run, ['review', 'security'])
     assert.ok(Object.isFrozen(r))
   })
 
   it('de-dupes kinds and requires non-empty on/run', () => {
-    assert.deepEqual(defineRule({ on: ['a', 'a', 'b'], run: ['x'] }).on, ['a', 'b'])
-    assert.throws(() => defineRule({ on: [], run: ['x'] }), LoopError)
-    assert.throws(() => defineRule({ on: 'a', run: [] }), LoopError)
+    assert.deepEqual(defineLoop({ on: ['a', 'a', 'b'], run: ['x'] }).on, ['a', 'b'])
+    assert.throws(() => defineLoop({ on: [], run: ['x'] }), LoopError)
+    assert.throws(() => defineLoop({ on: 'a', run: [] }), LoopError)
   })
 })

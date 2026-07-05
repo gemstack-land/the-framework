@@ -63,7 +63,7 @@ export interface OverviewLoopPromptOptions {
 
 /**
  * Bridge a {@link CodeOverviewMaintainer} into a {@link LoopPrompt}, so adding its
- * id to a loop rule (e.g. on `major-change`) makes the overview self-maintain: the
+ * id to a loop (e.g. on `major-change`) makes the overview self-maintain: the
  * loop hands it the event, the maintainer refreshes only if the change is
  * material, and the prompt reports what it did. This is the "regen via the loop"
  * wiring (#113) the issue asks for.

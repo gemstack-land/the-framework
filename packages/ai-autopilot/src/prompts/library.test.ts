@@ -1,12 +1,12 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import { builtinLibrary, builtinPrompts, PromptLibrary } from './library.js'
-import { LOOP_PROMPTS, LOOP_EVENTS, defaultLoopRules } from '../loop/policy.js'
+import { LOOP_PROMPTS, LOOP_EVENTS, defaultLoops } from '../loop/policy.js'
 
 describe('builtin prompts', () => {
   it('ships a body for every id the default loop policy references', async () => {
     const library = await builtinLibrary()
-    const referenced = new Set(defaultLoopRules().flatMap(r => r.run))
+    const referenced = new Set(defaultLoops().flatMap(r => r.run))
     for (const id of referenced) {
       assert.ok(library.get(id), `built-in prompt "${id}" exists`)
       assert.ok(library.get(id)!.instructions.length > 0, `prompt "${id}" has a body`)

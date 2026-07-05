@@ -69,8 +69,8 @@ export function toLoopPrompt(prompt: Prompt, makeAgent: MakePromptAgent): LoopPr
 
 /**
  * Materialize a whole {@link PromptLibrary} (or list of prompts) into loop
- * prompts, ready to drop into `new Loop({ prompts })`. This is the turnkey wire:
- * the loop's `defaultLoopRules()` ids now resolve to real bodies.
+ * prompts, ready to drop into `new LoopEngine({ prompts })`. This is the turnkey wire:
+ * the loop's `defaultLoops()` ids now resolve to real bodies.
  */
 export function loopPromptsFor(
   prompts: PromptLibrary | readonly Prompt[],

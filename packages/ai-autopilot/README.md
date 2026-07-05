@@ -230,14 +230,14 @@ runs QA + UX. Semantic (a *kind* of change picks a *set* of prompts), not
 command-driven and not run-on-every-PR.
 
 ```ts
-import { Loop, definePrompt, defaultLoopRules } from '@gemstack/ai-autopilot'
+import { LoopEngine, definePrompt, defaultLoops } from '@gemstack/ai-autopilot'
 
-const loop = new Loop({
-  rules: defaultLoopRules(),                 // major-change → [review, code-quality, security]; ui-flow → [qa, ux]
+const loop = new LoopEngine({
+  loops: defaultLoops(),                 // major-change → [review, code-quality, security]; ui-flow → [qa, ux]
   prompts: [
     definePrompt({ id: 'review', passes: 2, run: ctx => runReview(ctx.event) }),
     definePrompt({ id: 'code-quality', run: ctx => runQuality(ctx.event) }),
-    // ...register a prompt per id the rules reference
+    // ...register a prompt per id the loops reference
   ],
   ledger,                                    // optional: exposed to each prompt via ctx.ledger (#112)
   onEvent: e => log(e),                      // observe match / pass / done (observer-isolated)
@@ -260,10 +260,10 @@ Design choices for the two open questions:
 
 Each prompt runs for its `passes` with **fresh context every pass** (Rom's
 finding: re-running the same prompt with a reset context improves the result), so
-`run` is expected to build a new agent per call. `defaultLoopRules()` is the
-built-in policy as data; extend it by concatenating your own `defineRule` results.
+`run` is expected to build a new agent per call. `defaultLoops()` is the
+built-in policy as data; extend it by concatenating your own `defineLoop` results.
 The prompt bodies themselves are the prompts library (#111), registered under the
-ids the rules reference.
+ids the loops reference.
 
 ## Built-in prompts — the loop's bodies, shipped as data
 
@@ -273,16 +273,16 @@ They ship ready to use and already know the stack (Vike + universal-orm): review
 template. Each is a markdown file under `prompts/`, so a contributor improves the
 prompt by editing prose, not code.
 
-`loopPromptsFor` materializes a library into loop prompts, so `defaultLoopRules()`
+`loopPromptsFor` materializes a library into loop prompts, so `defaultLoops()`
 ids resolve to real bodies — this is the turnkey wire:
 
 ```ts
 import { agent } from '@gemstack/ai-sdk'
-import { Loop, defaultLoopRules, builtinLibrary, loopPromptsFor, runnerTools } from '@gemstack/ai-autopilot'
+import { LoopEngine, defaultLoops, builtinLibrary, loopPromptsFor, runnerTools } from '@gemstack/ai-autopilot'
 
 const library = await builtinLibrary()          // the shipped bodies
-const loop = new Loop({
-  rules: defaultLoopRules(),                     // review / code-quality / security / qa / ux ids
+const loop = new LoopEngine({
+  loops: defaultLoops(),                     // review / code-quality / security / qa / ux ids
   prompts: loopPromptsFor(library, ctx =>        // a FRESH agent per pass
     agent({ instructions: ctx.instructions, tools: runnerTools(session) })),
   ledger,                                         // ctx.instructions already includes the decisions briefing

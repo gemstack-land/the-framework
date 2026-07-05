@@ -9,18 +9,18 @@ import type { Verdict } from './verdict.js'
  * This is the web-app-specific orchestration layer generic harnesses do not
  * have. It is semantic (a *kind* of change selects a *set* of prompts), not
  * command-driven or run-on-every-PR. The trigger is a {@link LoopEvent} the
- * agent declares; a {@link LoopRule} maps its kind to an ordered chain of
- * {@link LoopPrompt}s; the {@link Loop} runs them (N fresh-context passes each)
+ * agent declares; a {@link Loop} maps its kind to an ordered chain of
+ * {@link LoopPrompt}s; the {@link LoopEngine} runs them (N fresh-context passes each)
  * and can consult the decisions ledger along the way.
  */
 
 /**
  * A semantic trigger the agent declares after doing work — the input to the
- * loop. `kind` selects which rules fire (e.g. `major-change`, `ui-flow`); the
+ * loop. `kind` selects which loops fire (e.g. `major-change`, `ui-flow`); the
  * rest is context handed to the prompts that run.
  */
 export interface LoopEvent {
-  /** The semantic change type; matched against {@link LoopRule.on}. */
+  /** The semantic change type; matched against {@link Loop.on}. */
   kind: string
   /** One-line description of what happened, for the prompts that run. */
   summary?: string
@@ -51,7 +51,7 @@ export interface LoopContext {
  * invocation rather than carry state across passes.
  */
 export interface LoopPrompt {
-  /** Stable id, kebab-case; referenced by {@link LoopRule.run}. */
+  /** Stable id, kebab-case; referenced by {@link Loop.run}. */
   readonly id: string
   /** Number of fresh-context passes to run. Positive integer; default 1. */
   readonly passes: number
@@ -67,17 +67,17 @@ export interface LoopPromptSpec {
 }
 
 /**
- * A policy rule: when an event of one of `on`'s kinds fires, run the prompts in
- * `run`, in order (a chain). Multiple rules can match one event; their prompt
- * ids are concatenated in rule order and de-duped.
+ * A policy loop: when an event of one of `on`'s kinds fires, run the prompts in
+ * `run`, in order (a chain). Multiple loops can match one event; their prompt
+ * ids are concatenated in loop order and de-duped.
  */
-export interface LoopRule {
+export interface Loop {
   readonly on: readonly string[]
   readonly run: readonly string[]
 }
 
-/** Author-facing shape for {@link defineRule}; `on` may be a single kind. */
-export interface LoopRuleSpec {
+/** Author-facing shape for {@link defineLoop}; `on` may be a single kind. */
+export interface LoopSpec {
   on: string | string[]
   run: string[]
 }
@@ -114,7 +114,7 @@ export interface PromptOutcome {
 /** The full result of handling one {@link LoopEvent}. */
 export interface LoopRunResult {
   event: LoopEvent
-  /** False when no rule matched the event's kind (nothing ran). */
+  /** False when no loop matched the event's kind (nothing ran). */
   matched: boolean
   /** One entry per dispatched prompt, in chain order. */
   outcomes: PromptOutcome[]

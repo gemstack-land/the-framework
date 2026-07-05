@@ -50,9 +50,9 @@
  * change (a {@link LoopEvent}) and the right follow-up prompts fire — a major
  * change runs review + code-quality + security, a new UI flow runs QA + UX.
  *
- * - {@link Loop} — match an event to a prompt chain and run it (N fresh passes)
- * - {@link definePrompt} / {@link defineRule} — author prompts and policy rules
- * - {@link defaultLoopRules} — the built-in web-app policy
+ * - {@link LoopEngine} — match an event to a prompt chain and run it (N fresh passes)
+ * - {@link definePrompt} / {@link defineLoop} — author prompts and policy loops
+ * - {@link defaultLoops} — the built-in web-app policy
  * - {@link parseVerdict} / {@link isPassing} — the `{ blockers }` verdict the loop
  *   gates on, so it stops on a review's *outcome*, not just execution
  *
@@ -188,23 +188,23 @@ export {
 } from './decisions/index.js'
 export {
   definePrompt,
-  defineRule,
+  defineLoop,
   LoopError,
-  Loop,
-  createLoop,
-  defaultLoopRules,
+  LoopEngine,
+  createLoopEngine,
+  defaultLoops,
   LOOP_EVENTS,
   LOOP_PROMPTS,
   parseVerdict,
   isPassing,
   type Verdict,
-  type LoopOptions,
+  type LoopEngineOptions,
   type LoopEvent,
   type LoopContext,
   type LoopPrompt,
   type LoopPromptSpec,
-  type LoopRule,
-  type LoopRuleSpec,
+  type Loop,
+  type LoopSpec,
   type PassResult,
   type PromptOutcome,
   type LoopRunResult,

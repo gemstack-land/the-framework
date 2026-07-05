@@ -5,8 +5,8 @@ import type { AgentResponse, TokenUsage } from '@gemstack/ai-sdk'
 import { promptInstructions, renderTask, toLoopPrompt, loopPromptsFor, type PromptAgentContext } from './bridge.js'
 import { PromptLibrary } from './library.js'
 import type { Prompt } from './types.js'
-import { Loop } from '../loop/loop.js'
-import { defineRule } from '../loop/define.js'
+import { LoopEngine } from '../loop/loop.js'
+import { defineLoop } from '../loop/define.js'
 import { DecisionLedger } from '../decisions/ledger.js'
 
 const usage: TokenUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 }
@@ -60,7 +60,7 @@ describe('toLoopPrompt', () => {
       return new EchoAgent(`p${ctx.pass}`)
     })
     assert.equal(lp.passes, 3)
-    const loop = new Loop({ rules: [defineRule({ on: 'major-change', run: ['review'] })], prompts: [lp] })
+    const loop = new LoopEngine({ loops: [defineLoop({ on: 'major-change', run: ['review'] })], prompts: [lp] })
     const result = await loop.handle({ kind: 'major-change', summary: 's' })
 
     assert.equal(seen.length, 3) // one fresh agent per pass
@@ -76,8 +76,8 @@ describe('loopPromptsFor', () => {
       prompt({ id: 'review' }),
       prompt({ id: 'security', name: 'security', instructions: 'SEC' }),
     ])
-    const loop = new Loop({
-      rules: [defineRule({ on: 'major-change', run: ['review', 'security'] })],
+    const loop = new LoopEngine({
+      loops: [defineLoop({ on: 'major-change', run: ['review', 'security'] })],
       prompts: loopPromptsFor(library, ctx => new EchoAgent(ctx.prompt.id)),
     })
     const result = await loop.handle({ kind: 'major-change' })

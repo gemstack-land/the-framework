@@ -3,7 +3,7 @@ import type { Agent } from '@gemstack/ai-sdk'
 import { z } from 'zod'
 import { Supervisor } from '../supervisor.js'
 import { decisionBriefing } from '../decisions/tools.js'
-import { Loop } from '../loop/loop.js'
+import { LoopEngine } from '../loop/loop.js'
 import { LOOP_EVENTS, LOOP_PROMPTS } from '../loop/policy.js'
 import type { Planner, Synthesizer, SupervisorOptions } from '../types.js'
 import type { Verdict } from '../loop/verdict.js'
@@ -11,7 +11,7 @@ import type { BootstrapSteps, BuildContext } from './types.js'
 
 /**
  * Default wirings of the four bootstrap steps onto the real primitives —
- * Supervisor, personas, and the Loop. Each is thin (it constructs a primitive
+ * Supervisor, personas, and the LoopEngine. Each is thin (it constructs a primitive
  * and adapts its I/O to the step contract), so the same orchestrator runs
  * against these in production or against stubs in a test. The model + runner stay
  * injected: you pass the architect agent, the planner/workers, and the loop.
@@ -137,7 +137,7 @@ export function supervisorBuild(opts: SupervisorBuildOptions): BootstrapSteps['b
 /** Options for {@link loopChecklist} and {@link loopImprove}. */
 export interface LoopStepOptions {
   /** The loop that resolves the prompt ids to bodies (via `loopPromptsFor`). */
-  loop: Loop
+  loop: LoopEngine
 }
 
 /** Options for {@link loopChecklist}. */

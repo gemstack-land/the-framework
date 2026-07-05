@@ -3,7 +3,7 @@
  *
  * Load the built-ins with {@link builtinLibrary} (or {@link loadPromptsFrom} for
  * your own directory), then materialize them into loop prompts with
- * {@link loopPromptsFor} so `defaultLoopRules()` ids resolve to real bodies. Each
+ * {@link loopPromptsFor} so `defaultLoops()` ids resolve to real bodies. Each
  * prompt is a {@link Prompt}: frontmatter + a markdown instructions body a
  * contributor can improve without touching code.
  */

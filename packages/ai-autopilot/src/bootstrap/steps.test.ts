@@ -5,8 +5,8 @@ import { agentArchitect, supervisorBuild, loopChecklist, loopImprove } from './s
 import { agentDeploy, FakeDeployTarget } from './deploy.js'
 import { Bootstrap } from './bootstrap.js'
 import { DecisionLedger } from '../decisions/ledger.js'
-import { Loop } from '../loop/loop.js'
-import { definePrompt, defineRule } from '../loop/define.js'
+import { LoopEngine } from '../loop/loop.js'
+import { definePrompt, defineLoop } from '../loop/define.js'
 import type { BootstrapEvent } from './types.js'
 import type { SupervisorEvent } from '../types.js'
 import type { ArchitectContext, BuildContext, LoopPassContext } from './types.js'
@@ -139,8 +139,8 @@ describe('loopChecklist / loopImprove (default full-fledged loop steps)', () => 
   })
 
   it('reads the { blockers } verdict the production-grade prompt returns', async () => {
-    const loop = new Loop({
-      rules: [defineRule({ on: 'production-check', run: ['production-grade'] })],
+    const loop = new LoopEngine({
+      loops: [defineLoop({ on: 'production-check', run: ['production-grade'] })],
       prompts: [definePrompt({ id: 'production-grade', run: () => '```json\n{ "blockers": ["no auth"] }\n```' })],
     })
     const verdict = await loopChecklist({ loop })(passCtx())
@@ -148,8 +148,8 @@ describe('loopChecklist / loopImprove (default full-fledged loop steps)', () => 
   })
 
   it('treats a missing verdict as a blocker', async () => {
-    const loop = new Loop({
-      rules: [defineRule({ on: 'production-check', run: ['production-grade'] })],
+    const loop = new LoopEngine({
+      loops: [defineLoop({ on: 'production-check', run: ['production-grade'] })],
       prompts: [definePrompt({ id: 'production-grade', run: () => 'no verdict here' })],
     })
     const verdict = await loopChecklist({ loop })(passCtx())
@@ -159,8 +159,8 @@ describe('loopChecklist / loopImprove (default full-fledged loop steps)', () => 
 
   it('fires the change events so the review chain runs', async () => {
     let reviewRan = 0
-    const loop = new Loop({
-      rules: [defineRule({ on: 'major-change', run: ['review'] })],
+    const loop = new LoopEngine({
+      loops: [defineLoop({ on: 'major-change', run: ['review'] })],
       prompts: [definePrompt({ id: 'review', run: () => { reviewRan++; return 'reviewed' } })],
     })
     await loopImprove({ loop })(passCtx({ blockers: ['no auth'] }))
@@ -189,10 +189,10 @@ describe('Bootstrap end-to-end with the default steps (offline)', () => {
       const verdicts = ['```json\n{ "blockers": ["no auth"] }\n```', '```json\n{ "blockers": [] }\n```']
       let checked = 0
       let improved = 0
-      const loop = new Loop({
-        rules: [
-          defineRule({ on: 'production-check', run: ['production-grade'] }),
-          defineRule({ on: 'major-change', run: ['fix'] }),
+      const loop = new LoopEngine({
+        loops: [
+          defineLoop({ on: 'production-check', run: ['production-grade'] }),
+          defineLoop({ on: 'major-change', run: ['fix'] }),
         ],
         prompts: [
           definePrompt({ id: 'production-grade', run: () => verdicts[checked++] ?? '```json\n{ "blockers": [] }\n```' }),

@@ -3,7 +3,7 @@ import type {
   LoopEvent,
   LoopProgress,
   LoopPrompt,
-  LoopRule,
+  Loop,
   LoopRunResult,
   PassResult,
   PromptOutcome,
@@ -11,11 +11,11 @@ import type {
 import type { Verdict } from './verdict.js'
 import { parseVerdict } from './verdict.js'
 
-/** Options for {@link Loop}. */
-export interface LoopOptions {
+/** Options for {@link LoopEngine}. */
+export interface LoopEngineOptions {
   /** The policy: which prompt chains fire for which event kinds. */
-  rules: LoopRule[]
-  /** The prompts a rule can reference, as a list or a map keyed by id. */
+  loops: Loop[]
+  /** The prompts a loop can reference, as a list or a map keyed by id. */
   prompts: LoopPrompt[] | Record<string, LoopPrompt>
   /** Consulted by prompts (exposed on {@link LoopContext.ledger}). Optional. */
   ledger?: DecisionLedger
@@ -25,7 +25,7 @@ export interface LoopOptions {
    *   of a prior one failing.
    * - `false` — blocking gate: if a prompt does not *pass*, stop the chain (a
    *   `gate-stop` event); the remaining prompts do not run. "Pass" means the
-   *   final pass executed and, when a {@link LoopOptions.verdict} parser is set,
+   *   final pass executed and, when a {@link LoopEngineOptions.verdict} parser is set,
    *   returned no blockers.
    */
   continueOnError?: boolean
@@ -45,13 +45,13 @@ export interface LoopOptions {
 }
 
 /**
- * The loop engine. Give it a policy ({@link LoopRule}s) and a set of
+ * The loop engine. Give it a policy ({@link Loop}s) and a set of
  * {@link LoopPrompt}s; call {@link handle} with a {@link LoopEvent} the agent
  * declared and it runs the matching prompt chain (each prompt for its
  * fresh-context passes), consulting the decisions ledger when one is set.
  *
  * ```ts
- * const loop = new Loop({ rules: defaultLoopRules(), prompts: [reviewPrompt, ...] })
+ * const loop = new LoopEngine({ loops: defaultLoops(), prompts: [reviewPrompt, ...] })
  * await loop.handle({ kind: 'major-change', summary: 'reworked auth', paths: ['src/auth/*'] })
  * ```
  *
@@ -59,19 +59,19 @@ export interface LoopOptions {
  * over a stream of events, feed them through {@link watch}, or run `handle`
  * inside `launchAutopilot` for a detached background run.
  */
-export class Loop {
-  private readonly rules: LoopRule[]
+export class LoopEngine {
+  private readonly loops: Loop[]
   private readonly prompts: Map<string, LoopPrompt>
   private readonly ledger?: DecisionLedger
   private readonly continueOnError: boolean
   private readonly parseVerdict: ((text: string) => Verdict | undefined) | null
   private readonly emit: (event: LoopProgress) => void
 
-  constructor(opts: LoopOptions) {
-    if (!Array.isArray(opts?.rules)) throw new TypeError('[ai-autopilot] Loop requires `rules`')
-    if (opts.prompts == null) throw new TypeError('[ai-autopilot] Loop requires `prompts`')
+  constructor(opts: LoopEngineOptions) {
+    if (!Array.isArray(opts?.loops)) throw new TypeError('[ai-autopilot] LoopEngine requires `loops`')
+    if (opts.prompts == null) throw new TypeError('[ai-autopilot] LoopEngine requires `prompts`')
 
-    this.rules = opts.rules
+    this.loops = opts.loops
     this.prompts = indexPrompts(opts.prompts)
     if (opts.ledger !== undefined) this.ledger = opts.ledger
     this.continueOnError = opts.continueOnError ?? true
@@ -81,14 +81,14 @@ export class Loop {
 
   /**
    * The prompt ids that would fire for `event`, in chain order and de-duped
-   * across all matching rules. Pure — no prompts run.
+   * across all matching loops. Pure — no prompts run.
    */
   matches(event: LoopEvent): string[] {
     const ids: string[] = []
     const seen = new Set<string>()
-    for (const rule of this.rules) {
-      if (!rule.on.includes(event.kind)) continue
-      for (const id of rule.run) {
+    for (const loop of this.loops) {
+      if (!loop.on.includes(event.kind)) continue
+      for (const id of loop.run) {
         if (seen.has(id)) continue
         seen.add(id)
         ids.push(id)
@@ -170,9 +170,9 @@ export class Loop {
   }
 }
 
-/** Factory mirror of `new Loop(...)`. */
-export function createLoop(opts: LoopOptions): Loop {
-  return new Loop(opts)
+/** Factory mirror of `new LoopEngine(...)`. */
+export function createLoopEngine(opts: LoopEngineOptions): LoopEngine {
+  return new LoopEngine(opts)
 }
 
 // ─── Internals ───────────────────────────────────────────────────
@@ -184,7 +184,7 @@ function indexPrompts(prompts: LoopPrompt[] | Record<string, LoopPrompt>): Map<s
   return map
 }
 
-function makeEmitter(onEvent: LoopOptions['onEvent']): (event: LoopProgress) => void {
+function makeEmitter(onEvent: LoopEngineOptions['onEvent']): (event: LoopProgress) => void {
   if (!onEvent) return () => {}
   return (event) => {
     try {
