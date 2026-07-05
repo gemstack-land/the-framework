@@ -1,11 +1,13 @@
 import { strict as assert } from 'node:assert'
 import { test } from 'node:test'
 import {
+  activeModes,
   buildDeployTarget,
   chooseSessionLink,
   claudeDriverOptions,
   CLAUDE_CODE_SESSION_LIST,
   parseArgs,
+  resolveDomainPreset,
   runCli,
   type CliIO,
 } from './cli.js'
@@ -56,6 +58,53 @@ test('parseArgs persists by default and reads --resume / --no-persist (#211)', (
   const opts = parseArgs(['--resume', '--no-persist'])
   assert.equal(opts.resume, true)
   assert.equal(opts.persist, false)
+})
+
+test('parseArgs reads --preset and the mode flags (#256)', () => {
+  const opts = parseArgs(['--preset', 'software-development', '--autopilot', '--technical', 'x'])
+  assert.equal(opts.preset, 'software-development')
+  assert.equal(opts.autopilot, true)
+  assert.equal(opts.technical, true)
+  const dflt = parseArgs(['x'])
+  assert.equal(dflt.preset, undefined)
+  assert.equal(dflt.autopilot, false)
+  assert.equal(dflt.technical, false)
+})
+
+test('activeModes maps the mode flags to Open Loop mode names', () => {
+  assert.deepEqual(activeModes({ autopilot: false, technical: false }), [])
+  assert.deepEqual(activeModes({ autopilot: true, technical: false }), ['autopilot'])
+  assert.deepEqual(activeModes({ autopilot: true, technical: true }), ['autopilot', 'technical'])
+})
+
+test('resolveDomainPreset resolves a shipped preset by name (#254/#256)', async () => {
+  const none = await resolveDomainPreset(undefined, [])
+  assert.deepEqual(none, {})
+
+  const { preset, error } = await resolveDomainPreset('software-development', [])
+  assert.equal(error, undefined)
+  assert.equal(preset?.name, 'software-development')
+  assert.ok((preset?.loops.length ?? 0) >= 1)
+
+  const bad = await resolveDomainPreset('no-such-domain', [])
+  assert.equal(bad.preset, undefined)
+  assert.match(bad.error!, /unknown --preset: no-such-domain/)
+  assert.match(bad.error!, /software-development/) // lists what's available
+})
+
+test('runCli rejects an unknown --preset with a usage error (exit 2)', async () => {
+  const { io, err } = capture()
+  const code = await runCli(['--preset', 'nope', 'a blog'], io)
+  assert.equal(code, 2)
+  assert.ok(err.some(l => /unknown --preset: nope/.test(l)))
+})
+
+test('runCli notes mode flags given without a preset', async () => {
+  const { io, err } = capture()
+  // --fake so the note fires before any real run; unknown-preset path is not hit.
+  const code = await runCli(['--fake', '--no-dashboard', '--autopilot'], io)
+  assert.equal(code, 0)
+  assert.ok(err.some(l => /have no effect without --preset/.test(l)))
 })
 
 test('chooseSessionLink defaults a live run to the claude.ai/code session list (#212)', () => {
