@@ -1,17 +1,20 @@
 import { readdirSync } from 'node:fs'
 import { join } from 'node:path'
-import { parseVerdict, STACK_TRADEOFFS } from '@gemstack/ai-autopilot'
+import { definePrompt, parseVerdict, promptInstructions, renderTask, STACK_TRADEOFFS } from '@gemstack/ai-autopilot'
 import type {
   ArchitectAlternative,
   ArchitectContext,
   ArchitectDecision,
   ArchitectPlan,
   BuildContext,
+  DecisionLedger,
   DeployContext,
   DeployOutcome,
   DeployTarget,
   LoopPassContext,
+  LoopPrompt,
   PlannedSubtask,
+  Prompt,
   SubtaskResult,
   SupervisorRun,
   Verdict,
@@ -302,6 +305,34 @@ export function driverImprove(
       ...(ctx.signal ? { signal: ctx.signal } : {}),
     })
   }
+}
+
+/**
+ * Materialize a domain preset's {@link Prompt} bodies into driver-backed
+ * {@link LoopPrompt}s so its loops can run through the wrapped agent. Each pass is
+ * one fresh {@link DriverSession.prompt} call (the driver's fresh-context unit),
+ * prompted with the composed instructions (body + decisions briefing) and the
+ * rendered {@link renderTask | loop event}, returning the agent's text.
+ */
+export function driverLoopPrompts(
+  session: DriverSession,
+  prompts: readonly Prompt[],
+  opts: { ledger?: DecisionLedger; signal?: AbortSignal } & DriverStepOptions = {},
+): LoopPrompt[] {
+  return prompts.map(prompt =>
+    definePrompt({
+      id: prompt.id,
+      passes: prompt.passes,
+      run: async ctx => {
+        const instructions = promptInstructions(prompt, opts.ledger ? { ledger: opts.ledger } : {})
+        const framing = opts.system ? `${opts.system}\n\n${instructions}` : instructions
+        const turn = await session.prompt(`${framing}\n\n${renderTask(ctx.event)}`, {
+          ...(opts.signal ? { signal: opts.signal } : {}),
+        })
+        return turn.text
+      },
+    }),
+  )
 }
 
 /**

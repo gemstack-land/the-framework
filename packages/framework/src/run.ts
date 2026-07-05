@@ -3,6 +3,7 @@ import {
   DecisionLedger,
   ExtensionRegistry,
   LocalRunner,
+  LoopEngine,
   SkillRegistry,
   builtinExtensionNames,
   builtinPresetRegistry,
@@ -18,13 +19,14 @@ import {
   type BootstrapResult,
   type BootstrapScope,
   type DeployTarget,
+  type DomainPreset,
   type FrameworkDetection,
   type FrameworkExtension,
   type FrameworkSignals,
   type LocalRunnerSession,
 } from '@gemstack/ai-autopilot'
 import type { Driver, DriverEvent, DriverSession } from './driver/index.js'
-import { decideDeploy, deployWith, driverArchitect, driverBuild, driverChecklist, driverImprove } from './steps.js'
+import { decideDeploy, deployWith, driverArchitect, driverBuild, driverChecklist, driverImprove, driverLoopPrompts } from './steps.js'
 import { hasSessionIdPlaceholder, resolveSessionLink, type FrameworkEvent } from './events.js'
 
 /**
@@ -83,6 +85,21 @@ export interface RunFrameworkOptions {
   model?: string
   /** Signals for preset detection (deps/files). Default: none, so the flagship preset wins. */
   signals?: FrameworkSignals
+  /**
+   * A user-picked Open Loop domain preset ({loops, prompts, skills}) to run the
+   * build under (#251). Its skills (and their personas) frame every phase, and
+   * its loops + prompts are materialized into a driver-backed {@link LoopEngine}
+   * exposed as {@link RunFrameworkResult.loop}. Load it with `loadDomainPreset` /
+   * `softwareDevelopmentPreset` (pass `modes` there to activate variants). Omit
+   * for the framework-only run.
+   */
+  preset?: DomainPreset
+  /**
+   * The active modes for {@link preset} (e.g. `['autopilot']`), for narration.
+   * The preset is expected to be loaded with these already applied; this is the
+   * label shown to the user.
+   */
+  modes?: readonly string[]
   /**
    * Opt the built-in capability extensions in (auth, data, rbac, crud, shell) so
    * a from-scratch build is framed to compose them instead of hand-rolling
@@ -151,6 +168,13 @@ export interface RunFrameworkResult {
    * config was set or the app could not be booted.
    */
   preview?: AppPreview
+  /**
+   * The domain preset's review policy, materialized against this run's driver:
+   * its loops plus its prompts as driver-backed passes. Present only when a
+   * {@link RunFrameworkOptions.preset} was supplied. Driving it (dispatching a
+   * `major-change` / `bug-fix` event) is left to the caller for now (#252).
+   */
+  loop?: LoopEngine
 }
 
 /**
@@ -197,9 +221,16 @@ export async function runFramework(opts: RunFrameworkOptions): Promise<RunFramew
   const activeExtensions = extensionRegistry.match(signals, {
     include: optInBuiltins ? builtinExtensionNames : [],
   })
+  // A user-picked domain preset (#251) frames the whole run: its skills (and the
+  // personas they carry) compose in alongside the detected framework's skill.
+  const domainPreset = opts.preset
   const matchedSkills = new SkillRegistry().match(signals)
   const skills = composeSkills({
-    matched: preset.skill ? [preset.skill, ...matchedSkills] : matchedSkills,
+    matched: [
+      ...(preset.skill ? [preset.skill] : []),
+      ...matchedSkills,
+      ...(domainPreset ? domainPreset.skills : []),
+    ],
     extensions: activeExtensions,
   })
   const personas = composePersonas({
@@ -228,6 +259,13 @@ export async function runFramework(opts: RunFrameworkOptions): Promise<RunFramew
     kind: 'log',
     message: `Detected ${detection.framework ?? preset.framework} (confidence ${detection.confidence}); framing with ${personas.length} persona(s)${extensionNote}${skillNote}`,
   })
+  if (domainPreset) {
+    const modeNote = opts.modes?.length ? ` (modes: ${opts.modes.join(', ')})` : ''
+    emit({
+      kind: 'log',
+      message: `Domain preset: ${domainPreset.title}${modeNote}; ${domainPreset.loops.length}-loop review policy available`,
+    })
+  }
 
   // Watch the black box for its real session id (the {type:'result'} event) and
   // surface it as `session-update` once known — that is the honest handle a UI
@@ -282,6 +320,20 @@ export async function runFramework(opts: RunFrameworkOptions): Promise<RunFramew
   const workspaceOpt = verifyWorkspace ? { verifyWorkspace: true } : {}
 
   const ledger = new DecisionLedger()
+
+  // Materialize the domain preset's review policy against this run's driver: its
+  // loops, with its prompts as driver-backed passes sharing the run's ledger and
+  // abort signal. Exposed on the result; who drives it is the follow-up (#252).
+  const loop = domainPreset
+    ? new LoopEngine({
+        loops: [...domainPreset.loops],
+        prompts: driverLoopPrompts(session, domainPreset.prompts, {
+          ledger,
+          ...(opts.signal ? { signal: opts.signal } : {}),
+        }),
+      })
+    : undefined
+
   let preview: AppPreview | undefined
   try {
     const bootstrap = new Bootstrap({
@@ -312,7 +364,7 @@ export async function runFramework(opts: RunFrameworkOptions): Promise<RunFramew
     // process a caller that ignores `preview` would never stop.
     if (runner && s?.keepAlive) preview = await startAppPreview(runner, s, emit)
     emit({ kind: 'end', ok: true })
-    return { result, detection, events, ledger, ...(preview ? { preview } : {}) }
+    return { result, detection, events, ledger, ...(preview ? { preview } : {}), ...(loop ? { loop } : {}) }
   } catch (err) {
     // A user interrupt (the dashboard Stop button / Ctrl+C aborts the signal) is a
     // clean stop, not a failure — mark it so surfaces show "stopped".
