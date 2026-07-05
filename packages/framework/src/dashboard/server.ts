@@ -3,6 +3,7 @@ import type { AddressInfo } from 'node:net'
 import { EventStream } from '@gemstack/ai-autopilot'
 import type { FrameworkEvent } from '../events.js'
 import { dashboardHtml } from './page.js'
+import { serveSSE } from './sse.js'
 
 /** Options for {@link startDashboard}. */
 export interface DashboardOptions {
@@ -83,7 +84,7 @@ function handle(
     return
   }
   if (url === '/events') {
-    streamEvents(req, res, stream, clients)
+    serveSSE(req, res, stream, clients)
     return
   }
   if (url === '/stop') {
@@ -107,39 +108,6 @@ function handle(
   }
   res.writeHead(404, { 'content-type': 'text/plain' })
   res.end('not found')
-}
-
-function streamEvents(
-  req: IncomingMessage,
-  res: ServerResponse,
-  stream: EventStream<FrameworkEvent>,
-  clients: Set<ServerResponse>,
-): void {
-  res.writeHead(200, {
-    'content-type': 'text/event-stream',
-    'cache-control': 'no-cache',
-    connection: 'keep-alive',
-  })
-  clients.add(res)
-
-  const send = (event: FrameworkEvent) => res.write(`data: ${JSON.stringify(event)}\n\n`)
-  // Replay history, then follow live. A fresh iterator gives this client its own
-  // cursor, so a late browser still sees the whole run from the start.
-  void (async () => {
-    try {
-      for await (const event of stream[Symbol.asyncIterator]()) send(event)
-    } catch {
-      // client went away
-    } finally {
-      clients.delete(res)
-      res.end()
-    }
-  })()
-
-  req.on('close', () => {
-    clients.delete(res)
-    res.end()
-  })
 }
 
 function closeServer(

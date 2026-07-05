@@ -95,6 +95,18 @@ test('parseArgs reads --sandbox and rejects an unknown value (#229)', () => {
   assert.match(parseArgs(['--sandbox', 'vm', 'x']).error!, /invalid --sandbox/)
 })
 
+test('parseArgs reads the relay subcommand and --share (#230)', () => {
+  const relay = parseArgs(['relay', '--port', '5000'])
+  assert.equal(relay.relayServe, true)
+  assert.equal(relay.intent, '') // 'relay' is a subcommand, not an intent word
+  assert.equal(relay.port, 5000)
+  const share = parseArgs(['--share', 'http://host:4488', 'a', 'blog'])
+  assert.equal(share.share, 'http://host:4488')
+  assert.equal(share.intent, 'a blog')
+  assert.equal(parseArgs(['x']).relayServe, false)
+  assert.equal(parseArgs(['x']).share, undefined)
+})
+
 test('workspaceSummary describes an empty vs an existing workspace', async () => {
   const empty = await mkdtemp(join(tmpdir(), 'framework-ws-'))
   try {

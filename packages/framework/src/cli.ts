@@ -14,6 +14,8 @@ import {
 import { ClaudeCodeDriver, type ClaudeCodeDriverOptions, type Driver, type DriverSession, type PermissionMode } from './driver/index.js'
 import { hostExecutor } from './host-exec.js'
 import { startDashboard, type Dashboard } from './dashboard/index.js'
+import { startRelay, relayPublisher, type RelayPublisher } from './relay.js'
+import { randomUUID } from 'node:crypto'
 import { formatFrameworkEvent, CLAUDE_CODE_SESSION_LINK, type FrameworkEvent } from './events.js'
 import {
   runFramework,
@@ -74,6 +76,7 @@ Usage:
   framework [intent...]           Build what you describe, from scratch.
   framework --fake                Run the offline demo (no CLI, no model, deterministic).
   framework doctor                Check prerequisites (Claude Code installed, etc.).
+  framework relay                 Host a run relay so teammates can watch a run (#230).
 
 Options:
   --fake                 Use the fake driver + scripted run (offline / CI).
@@ -115,8 +118,10 @@ Options:
   --cf-project <name>    Cloudflare Pages project name (for a Pages deploy).
   --dokploy-url <url>    Dokploy instance URL (required for --deploy dokploy).
   --dokploy-app <id>     Dokploy application id (required for --deploy dokploy).
-  --port <n>             Dashboard port (default: 4477).
+  --port <n>             Dashboard port (default: 4477); with the relay, the relay port (4488).
   --no-dashboard         Do not start the localhost dashboard.
+  --share <relay-url>    Publish this run to a relay (from "framework relay") so
+                         teammates can watch it live; prints the shareable URL.
   --resume               Reopen the last run's dashboard from .framework/ in --cwd
                          (read-only replay; no new agent run). Survives a restart.
   --no-persist           Do not write the orchestration state to .framework/.
@@ -164,6 +169,8 @@ export interface CliOptions {
   sandbox?: 'local' | 'docker' | undefined
   port?: number
   dashboard: boolean
+  relayServe: boolean
+  share?: string | undefined
   composeExtensions: boolean
   sessionLink?: string | undefined
   permissionMode?: PermissionMode | undefined
@@ -187,6 +194,7 @@ export function parseArgs(argv: string[]): CliOptions {
     autopilot: false,
     technical: false,
     dashboard: true,
+    relayServe: false,
     composeExtensions: false,
     skipPermissions: false,
     resume: false,
@@ -292,6 +300,9 @@ export function parseArgs(argv: string[]): CliOptions {
         else opts.sandbox = where
         break
       }
+      case '--share':
+        opts.share = argv[++i]
+        break
       case '--session-link':
         opts.sessionLink = argv[++i]
         break
@@ -318,9 +329,12 @@ export function parseArgs(argv: string[]): CliOptions {
         else words.push(arg)
     }
   }
-  // `framework doctor` is a subcommand, not an intent.
+  // `framework doctor` / `framework relay` are subcommands, not an intent.
   if (words[0] === 'doctor') {
     opts.doctor = true
+    words.shift()
+  } else if (words[0] === 'relay') {
+    opts.relayServe = true
     words.shift()
   }
   opts.intent = words.join(' ').trim()
@@ -476,6 +490,10 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
     io.out(result.ok ? '\nAll good. You are ready to build.' : '\nSome checks failed. Fix them, then try again.')
     return result.ok ? 0 : 1
   }
+
+  // `framework relay` hosts the run relay: teammates open a run's URL and watch it
+  // live (#230). It runs until interrupted; a run publishes to it with `--share`.
+  if (opts.relayServe) return runRelayServer(opts, io)
 
   // Resume a previous run's dashboard from its persisted log — the reload half of
   // #211. No agent runs; we just replay the saved events into a fresh stream so
@@ -635,10 +653,21 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
     }
   }
 
+  // Publish the run to a relay (#230) so teammates can watch it live. Best-effort:
+  // a relay that is down never fails the run (relayPublisher swallows POST errors).
+  let publisher: RelayPublisher | undefined
+  if (opts.share) {
+    publisher = relayPublisher(opts.share, randomUUID(), err =>
+      io.err(`relay publish failed (${err instanceof Error ? err.message : String(err)})`),
+    )
+    io.out(`◆ shared run: ${publisher.url}`)
+  }
+
   const onEvent = (event: FrameworkEvent) => {
     io.out(formatFrameworkEvent(event))
     dashboard?.push(event)
     void store?.append(event)
+    publisher?.publish(event)
   }
 
   // Discover installed `framework-*` capability packages (#190) from the signals
@@ -720,7 +749,26 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
     io.err(`\n✗ run failed: ${err instanceof Error ? err.message : String(err)}`)
     await dashboard?.close()
     return 1
+  } finally {
+    // Make sure every event (including the final `end`) reached the relay before exit.
+    if (publisher) await publisher.flush()
   }
+}
+
+/**
+ * `framework relay`: host the run relay (#230). Teammates open a run's URL
+ * (printed when a run uses `--share <this-url>`) and watch it live with full
+ * history replay. Runs until interrupted. Unauthenticated by design — anyone with
+ * a run URL can watch; accounts/teams/steering come later.
+ */
+async function runRelayServer(opts: CliOptions, io: CliIO): Promise<number> {
+  const relay = await startRelay(opts.port !== undefined ? { port: opts.port } : {})
+  io.out(`◆ relay listening at ${relay.url}`)
+  io.out(`  Runs published with \`framework "..." --share ${relay.url}\` are watchable at ${relay.url}/r/<id>/`)
+  io.out(`  Press Ctrl+C to stop.`)
+  await waitForInterrupt()
+  await relay.close()
+  return 0
 }
 
 /**

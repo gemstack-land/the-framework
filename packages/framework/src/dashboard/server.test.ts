@@ -59,7 +59,9 @@ test('dashboard serves the HTML page with the title', async () => {
     const { status, body } = await fetchText(dash.url + '/')
     assert.equal(status, 200)
     assert.match(body, /My Framework/)
-    assert.match(body, /new EventSource\('\/events'\)/)
+    // Relative path so it resolves against the page's base URL — /events on the
+    // localhost dashboard, /r/<id>/events when re-served by the relay (#230).
+    assert.match(body, /new EventSource\('events'\)/)
     // The Modes panel + its renderer ship in the page (#272), hidden until a modes event.
     assert.match(body, /id="modes-panel" hidden/)
     assert.match(body, /function renderModes/)

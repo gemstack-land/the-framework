@@ -2,7 +2,7 @@ import { CLAUDE_CODE_SESSION_LINK } from '../events.js'
 
 /**
  * The single self-contained dashboard page: HTML + inline CSS + inline JS, no
- * assets, no build step. The client opens an `EventSource` to `/events` and
+ * assets, no build step. The client opens an `EventSource` to `events` and
  * projects the {@link import('../events.js').FrameworkEvent} stream into panels
  * that foreground the orchestration (stack rationale, loop status, decisions)
  * beside a tail of the wrapped agent's own activity.
@@ -261,11 +261,11 @@ function stopRun() {
   const btn = $('stop');
   btn.disabled = true;
   btn.textContent = 'stopping\\u2026';
-  fetch('/stop', { method: 'POST' }).catch(() => {});
+  fetch('stop', { method: 'POST' }).catch(() => {});
 }
 function esc(s) { const d = document.createElement('div'); d.textContent = String(s); return d.innerHTML; }
 $('stop').addEventListener('click', stopRun);
-const src = new EventSource('/events');
+const src = new EventSource('events');
 src.onmessage = ev => { try { onEvent(JSON.parse(ev.data)); } catch {} };
 src.onerror = () => { $('status').textContent = '\\u25cb offline'; };
 `

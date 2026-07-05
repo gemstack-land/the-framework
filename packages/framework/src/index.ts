@@ -59,6 +59,13 @@ export {
 } from './run.js'
 export { snapshotWorkspace, SANDBOX_IGNORE, type SnapshotOptions } from './sandbox.js'
 export {
+  startRelay,
+  relayPublisher,
+  type Relay,
+  type RelayOptions,
+  type RelayPublisher,
+} from './relay.js'
+export {
   discoverExtensions,
   readProjectSignals,
   type DiscoverExtensionsResult,
