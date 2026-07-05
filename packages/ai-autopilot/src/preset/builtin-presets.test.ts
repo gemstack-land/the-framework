@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { builtinDomainPresets } from './load.js'
 import { selectPreset } from './compose.js'
 
-// The two web/data presets added alongside software-development. They are pure
+// The built-in presets added alongside software-development. They are pure
 // .md content, auto-discovered by builtinDomainPresets(); these guard their shape.
 const CASES = [
   {
@@ -19,6 +19,20 @@ const CASES = [
     skillUrl: 'https://developers.google.com/machine-learning/guides/rules-of-ml',
     majorRun: ['reproducibility-review', 'data-validation', 'methodology-review'],
     technicalRun: ['reproducibility-review'],
+  },
+  {
+    name: 'product-management',
+    title: 'Product Management',
+    skillUrl: 'https://basecamp.com/shapeup',
+    majorRun: ['requirements-review', 'user-experience-review', 'metrics-review'],
+    technicalRun: ['requirements-review'],
+  },
+  {
+    name: 'biological-science',
+    title: 'Biological Science',
+    skillUrl: 'https://doi.org/10.1371/journal.pcbi.1003285',
+    majorRun: ['experimental-design-review', 'data-provenance-review', 'statistical-rigor-review'],
+    technicalRun: ['experimental-design-review'],
   },
 ]
 
