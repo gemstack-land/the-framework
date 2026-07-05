@@ -58,22 +58,42 @@ export class EventStream<E = SupervisorEvent> {
    */
   [Symbol.asyncIterator](): AsyncIterableIterator<E> {
     let index = 0
+    let done = false
+    let pending: (() => void) | undefined
     const stream = this
     return {
       [Symbol.asyncIterator]() {
         return this
       },
       next(): Promise<IteratorResult<E>> {
+        if (done) return Promise.resolve({ value: undefined, done: true })
         if (index < stream.buffer.length) {
           return Promise.resolve({ value: stream.buffer[index++]!, done: false })
         }
         if (stream.closed) return Promise.resolve({ value: undefined, done: true })
         return new Promise(resolve => {
-          stream.waiters.push(() => {
-            if (index < stream.buffer.length) resolve({ value: stream.buffer[index++]!, done: false })
-            else resolve({ value: undefined, done: true })
-          })
+          const wake = (): void => {
+            pending = undefined
+            if (done || index >= stream.buffer.length) resolve({ value: undefined, done: true })
+            else resolve({ value: stream.buffer[index++]!, done: false })
+          }
+          pending = wake
+          stream.waiters.push(wake)
         })
+      },
+      // Cancel this iterator (e.g. an SSE client disconnected): drop its waiter so
+      // it does not linger in `waiters` until the next push, and settle any pending
+      // `next()`. Without this, a disconnected consumer leaks until the stream ends.
+      return(): Promise<IteratorResult<E>> {
+        done = true
+        if (pending) {
+          const i = stream.waiters.indexOf(pending)
+          if (i >= 0) stream.waiters.splice(i, 1)
+          const wake = pending
+          pending = undefined
+          wake()
+        }
+        return Promise.resolve({ value: undefined, done: true })
       },
     }
   }

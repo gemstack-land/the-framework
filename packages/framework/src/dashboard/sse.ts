@@ -22,10 +22,11 @@ export function serveSSE(
   })
   clients.add(res)
 
+  const iterator = stream[Symbol.asyncIterator]()
   const send = (event: FrameworkEvent) => res.write(`data: ${JSON.stringify(event)}\n\n`)
   void (async () => {
     try {
-      for await (const event of stream[Symbol.asyncIterator]()) send(event)
+      for await (const event of iterator) send(event)
     } catch {
       // client went away
     } finally {
@@ -34,8 +35,11 @@ export function serveSSE(
     }
   })()
 
+  // On disconnect, cancel the iterator so its waiter is released immediately
+  // instead of lingering on the stream until the next event (which may never come).
   req.on('close', () => {
     clients.delete(res)
     res.end()
+    void iterator.return?.()
   })
 }

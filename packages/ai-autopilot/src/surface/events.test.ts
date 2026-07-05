@@ -61,6 +61,23 @@ describe('EventStream async iteration', () => {
     assert.deepEqual(await a, ['plan', 'dispatch-result'])
     assert.deepEqual(await b, ['plan', 'dispatch-result'])
   })
+
+  it('return() cancels a waiting iterator so it does not linger (SSE disconnect)', async () => {
+    const s = new EventStream()
+    const it = s[Symbol.asyncIterator]()
+    const pending = it.next() // no buffered events yet → waits on the stream
+    await Promise.resolve()
+    const ended = await it.return!() // consumer disconnected
+    assert.deepEqual(ended, { value: undefined, done: true })
+    assert.deepEqual(await pending, { value: undefined, done: true }) // the waiting next() settled, not leaked
+    // A later push must not resurrect the cancelled iterator; a fresh one still works.
+    s.push({ type: 'plan', task: 't', subtasks: [] })
+    assert.deepEqual(await it.next(), { value: undefined, done: true })
+    s.close()
+    const fresh: string[] = []
+    for await (const e of s) fresh.push(e.type)
+    assert.deepEqual(fresh, ['plan'])
+  })
 })
 
 describe('formatEvent', () => {
