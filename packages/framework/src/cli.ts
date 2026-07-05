@@ -490,8 +490,31 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
   const fromFile = describeConfigSource(opts, fileConfig)
   if (fromFile) io.out(`◆ the-framework.yml: ${fromFile}`)
 
-  // Fail early and clearly if a live run's prerequisites are missing — before any
-  // preset work, since auto-select and the run both need the wrapped agent.
+  // Resolve which Open Loop domain preset (+ modes + build event) to run under.
+  // Precedence: an explicit --preset / the-framework.yml wins; else, on a live run,
+  // AI meta-select infers the best fit from the intent + workspace (#204). CLI mode
+  // flags still OR in on top of an inferred preset; --no-auto-preset / --fake skip it.
+  const merged = mergeRunConfig(opts, fileConfig)
+  let presetName = merged.presetName
+  let modeList = activeModes(merged)
+  let buildEvent = merged.buildEvent
+  let domainPreset: DomainPreset | undefined
+
+  // An explicit --preset / the-framework.yml preset is validated up front — a bad
+  // name is a usage error, independent of the environment, so it fails the same way
+  // whether or not the agent is installed (before preflight).
+  if (presetName) {
+    const resolved = await resolveDomainPreset(presetName, modeList)
+    if (resolved.error) {
+      io.err(resolved.error)
+      io.err('Run `framework --help` for usage.')
+      return 2
+    }
+    domainPreset = resolved.preset
+  }
+
+  // Fail early and clearly if a live run's prerequisites are missing — before
+  // auto-select and the run, which both need the wrapped agent.
   if (!fake && !opts.skipPreflight) {
     const pre = await preflight()
     if (!pre.ok) {
@@ -509,20 +532,15 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
   // dashboard Stop button aborts it once wired below.
   const controller = new AbortController()
 
-  // Resolve which Open Loop domain preset (+ modes + build event) to run under.
-  // Precedence: an explicit --preset / the-framework.yml wins; else, on a live run,
-  // AI meta-select infers the best fit from the intent + workspace (#204). CLI mode
-  // flags still OR in on top of an inferred preset; --no-auto-preset / --fake skip it.
-  const merged = mergeRunConfig(opts, fileConfig)
-  let presetName = merged.presetName
-  let modeList = activeModes(merged)
-  let buildEvent = merged.buildEvent
+  // AI meta-select: with no preset chosen explicitly, infer the best fit (+ modes +
+  // build event) from the intent + workspace, then resolve it with the active modes.
   if (!fake && opts.autoPreset && !presetName) {
     const selection = await autoSelectPreset({ intent, cwd, signals, claudeOpts, signal: controller.signal, io })
     if (selection?.preset) {
       presetName = selection.preset
       modeList = [...new Set([...modeList, ...selection.modes])]
       buildEvent = buildEvent ?? selection.buildEvent
+      domainPreset = (await resolveDomainPreset(presetName, modeList)).preset
       const modeNote = modeList.length ? ` (modes: ${modeList.join(', ')})` : ''
       const kindNote = selection.buildEvent && !merged.buildEvent ? `, ${selection.buildEvent}` : ''
       io.out(`◆ auto-selected preset: ${presetName}${modeNote}${kindNote}${selection.why ? ` — ${selection.why}` : ''}`)
@@ -531,14 +549,7 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
     }
   }
 
-  // A bad --preset name is a usage error; the mode/kind notes fire when they have
-  // no preset to act on (a flag/file value given without one).
-  const { preset: domainPreset, error: presetError } = await resolveDomainPreset(presetName, modeList)
-  if (presetError) {
-    io.err(presetError)
-    io.err('Run `framework --help` for usage.')
-    return 2
-  }
+  // A mode/kind given with no preset in effect has nothing to act on: note it.
   if (modeList.length && !domainPreset) {
     io.err(`note: ${modeList.join(' + ')} mode(s) have no effect without a preset.`)
   }
