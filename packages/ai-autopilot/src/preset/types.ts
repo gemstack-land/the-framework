@@ -29,6 +29,11 @@ export interface DomainPreset {
   readonly title: string
   /** One-line summary of the domain this preset covers. */
   readonly description: string
+  /**
+   * The loop event kind a run dispatches for this preset by default (e.g.
+   * `bug-fix`). A run may override it; absent means `major-change`.
+   */
+  readonly defaultEvent?: string
   /** The meta prompts: event-kind to prompt-chain mappings. */
   readonly loops: readonly Loop[]
   /** The prompt bodies the loops dispatch by id. */
@@ -42,6 +47,7 @@ export interface DomainPresetSpec {
   name: string
   title?: string
   description?: string
+  defaultEvent?: string
   loops?: readonly Loop[]
   prompts?: readonly Prompt[]
   skills?: readonly Skill[]

@@ -109,6 +109,14 @@ export interface RunFrameworkOptions {
    */
   modes?: readonly string[]
   /**
+   * The loop event kind the review phase dispatches (#265) — this is what makes a
+   * run a bug fix vs a feature: `bug-fix` fires the preset's bug-fix loop, the
+   * default `major-change` fires its major-change loop. Overrides the preset's own
+   * `defaultEvent`. A kind the preset has no loop for falls back to the built-in
+   * checklist, so a run is never left unreviewed. No-op without a preset.
+   */
+  buildEvent?: string
+  /**
    * Opt the built-in capability extensions in (auth, data, rbac, crud, shell) so
    * a from-scratch build is framed to compose them instead of hand-rolling
    * auth/data/UI. Vike-only: the built-in composers resolve inside the vike-data
@@ -325,10 +333,18 @@ export async function runFramework(opts: RunFrameworkOptions): Promise<RunFramew
   // domain preset, its loop *replaces* the checklist (#252) — each pass fires the
   // preset's review chain through the driver — falling back to the built-in when
   // the preset has no loop for the build event, so a run is never left unreviewed.
+  // The build event kind: an explicit run choice wins, else the preset's own
+  // default, else `major-change`. This is how a `bug-fix` run reaches the preset's
+  // bug-fix loop (#265).
+  const buildEvent = opts.buildEvent ?? domainPreset?.defaultEvent ?? 'major-change'
   const reviewChecklist = loop
-    ? domainLoopChecklist(loop, { fallback: driverChecklist(session) })
+    ? domainLoopChecklist(loop, { kind: buildEvent, fallback: driverChecklist(session) })
     : driverChecklist(session)
-  if (loop) emit({ kind: 'log', message: `Review policy: the ${domainPreset!.title} loop drives the production-grade checks` })
+  if (loop)
+    emit({
+      kind: 'log',
+      message: `Review policy: the ${domainPreset!.title} loop drives the ${buildEvent} review`,
+    })
 
   // Boot-and-serve gate: adopt the agent's workspace so the checklist can gate
   // on the app actually running (mergeChecklists unions the review with a real

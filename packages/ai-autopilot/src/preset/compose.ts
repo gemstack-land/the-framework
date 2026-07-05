@@ -19,6 +19,8 @@ export function composeDomainPresets(meta: DomainPresetMeta, ...presets: DomainP
   const prompts = new Map<string, Prompt>()
   const skills = new Map<string, Skill>()
   const loops = presets.flatMap(p => [...p.loops])
+  // Carry the default build event kind; a later preset that declares one wins.
+  const defaultEvent = presets.reduce<string | undefined>((acc, p) => p.defaultEvent ?? acc, undefined)
 
   for (const preset of presets) {
     for (const prompt of preset.prompts) prompts.set(prompt.id, prompt)
@@ -27,6 +29,7 @@ export function composeDomainPresets(meta: DomainPresetMeta, ...presets: DomainP
 
   return defineDomainPreset({
     ...meta,
+    ...(defaultEvent ? { defaultEvent } : {}),
     loops,
     prompts: [...prompts.values()].sort((a, b) => a.id.localeCompare(b.id)),
     skills: [...skills.values()].sort((a, b) => a.name.localeCompare(b.name)),

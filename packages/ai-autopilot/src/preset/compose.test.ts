@@ -47,6 +47,15 @@ describe('composeDomainPresets', () => {
     assert.equal(grand.prompts.length, parent.prompts.length)
     assert.equal(grand.name, 'grand')
   })
+
+  it('carries the last declared defaultEvent through composition', () => {
+    const triage = defineDomainPreset({ name: 'triage', defaultEvent: 'bug-fix' })
+    assert.equal(composeDomainPresets({ name: 'p' }, base, triage).defaultEvent, 'bug-fix')
+    // a later preset without one does not clear an earlier default
+    assert.equal(composeDomainPresets({ name: 'p' }, triage, overlay).defaultEvent, 'bug-fix')
+    // none declared -> absent
+    assert.equal('defaultEvent' in composeDomainPresets({ name: 'p' }, base, overlay), false)
+  })
 })
 
 describe('selectPreset', () => {

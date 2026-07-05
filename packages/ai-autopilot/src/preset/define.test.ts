@@ -40,4 +40,10 @@ describe('defineDomainPreset', () => {
     assert.throws(() => defineDomainPreset({ name: '' }), DomainPresetError)
     assert.throws(() => defineDomainPreset({ name: 'Software Dev' }), DomainPresetError)
   })
+
+  it('carries an optional defaultEvent, omitting it when blank', () => {
+    assert.equal(defineDomainPreset({ name: 'triage', defaultEvent: 'bug-fix' }).defaultEvent, 'bug-fix')
+    assert.equal('defaultEvent' in defineDomainPreset({ name: 'sw-dev' }), false)
+    assert.equal('defaultEvent' in defineDomainPreset({ name: 'sw-dev', defaultEvent: '  ' }), false)
+  })
 })

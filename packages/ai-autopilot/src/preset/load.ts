@@ -47,6 +47,7 @@ export async function loadDomainPreset(dir: string, opts: LoadPresetOptions = {}
   }
   const { manifest } = parseSkillManifest(raw, manifestPath)
   const title = str(manifest.metadata, 'title')
+  const event = str(manifest.metadata, 'event')
 
   const [loops, prompts, skills] = await Promise.all([
     loadLoopsFrom(join(dir, 'loops'), { modes }),
@@ -57,6 +58,7 @@ export async function loadDomainPreset(dir: string, opts: LoadPresetOptions = {}
   return defineDomainPreset({
     name: manifest.name,
     ...(title ? { title } : {}),
+    ...(event ? { defaultEvent: event } : {}),
     description: manifest.description,
     loops,
     prompts,

@@ -20,10 +20,13 @@ export function defineDomainPreset(spec: DomainPresetSpec): DomainPreset {
   if (!name) throw new DomainPresetError('preset name is required')
   if (!KEBAB.test(name)) throw new DomainPresetError(`preset name must be kebab-case: ${JSON.stringify(spec.name)}`)
 
+  const defaultEvent = spec.defaultEvent?.trim()
+
   return Object.freeze({
     name,
     title: spec.title?.trim() || name,
     description: spec.description?.trim() ?? '',
+    ...(defaultEvent ? { defaultEvent } : {}),
     loops: Object.freeze([...(spec.loops ?? [])]),
     prompts: Object.freeze([...(spec.prompts ?? [])]),
     skills: Object.freeze([...(spec.skills ?? [])]),
