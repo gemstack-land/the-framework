@@ -11,6 +11,8 @@ export { defineDomainPreset, DomainPresetError } from './define.js'
 export { composeDomainPresets, selectPreset } from './compose.js'
 export {
   loadDomainPreset,
+  loadDomainPresetsFrom,
+  builtinDomainPresets,
   loadLoopsFrom,
   loadSkillsFrom,
   builtinPresetsDir,

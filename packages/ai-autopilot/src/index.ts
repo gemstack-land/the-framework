@@ -102,6 +102,7 @@
  *
  * - {@link defineDomainPreset} / {@link loadDomainPreset} — author, or load from a directory
  * - {@link composeDomainPresets} — merge presets into one (later wins on prompt/skill id)
+ * - {@link builtinDomainPresets} / {@link loadDomainPresetsFrom} — enumerate a set (the picker primitive)
  * - {@link selectPreset} — pick the user's chosen domain by name
  * - {@link softwareDevelopmentPreset} — the shipped, stack-agnostic built-in
  * - {@link loadDomainPreset} `{ modes }` — activate Autopilot/Technical variants
@@ -337,6 +338,8 @@ export {
   composeDomainPresets,
   selectPreset,
   loadDomainPreset,
+  loadDomainPresetsFrom,
+  builtinDomainPresets,
   loadLoopsFrom,
   loadSkillsFrom,
   builtinPresetsDir,

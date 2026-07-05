@@ -1,4 +1,4 @@
-import { readFile, readdir } from 'node:fs/promises'
+import { access, readFile, readdir } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import { join } from 'node:path'
 import { parseSkillManifest } from '@gemstack/ai-skills'
@@ -75,6 +75,41 @@ export function softwareDevelopmentPreset(opts: LoadPresetOptions = {}): Promise
   return loadDomainPreset(join(builtinPresetsDir(), 'software-development'), opts)
 }
 
+/**
+ * Load every domain preset shipped with the package (under `presets/`) — the set
+ * the CLI/UI picker enumerates. Today that is just "Software Development" (#243),
+ * but new built-ins are discovered automatically as their directories land. Use
+ * {@link selectPreset} to pick one by name.
+ */
+export function builtinDomainPresets(opts: LoadPresetOptions = {}): Promise<DomainPreset[]> {
+  return loadDomainPresetsFrom(builtinPresetsDir(), opts)
+}
+
+/**
+ * Load every domain preset under a directory: each immediate subdirectory that
+ * holds a `preset.md` is loaded with {@link loadDomainPreset}. Subdirectories
+ * without a manifest are skipped, and a missing `dir` yields `[]`. The result is
+ * sorted by directory name for a stable order.
+ */
+export async function loadDomainPresetsFrom(dir: string, opts: LoadPresetOptions = {}): Promise<DomainPreset[]> {
+  let names: string[]
+  try {
+    names = (await readdir(dir, { withFileTypes: true }))
+      .filter(e => e.isDirectory())
+      .map(e => e.name)
+      .sort()
+  } catch {
+    return []
+  }
+  const loaded = await Promise.all(
+    names.map(async name => {
+      const sub = join(dir, name)
+      return (await hasManifest(sub)) ? loadDomainPreset(sub, opts) : undefined
+    }),
+  )
+  return loaded.filter((p): p is DomainPreset => p !== undefined)
+}
+
 /** Load the loop files in a directory, applying mode overrides (a missing directory yields `[]`). */
 export async function loadLoopsFrom(dir: string, opts: LoadPresetOptions = {}): Promise<Loop[]> {
   const winners = selectWinners(await manifestEntries(dir), opts.modes ?? [])
@@ -136,6 +171,16 @@ async function manifestEntries(dir: string): Promise<Entry[]> {
       return { stem: stemOf(f), conditions: readConditions(manifest.metadata), path, raw, manifest }
     }),
   )
+}
+
+/** True when a directory holds a `preset.md` manifest (i.e. is a domain preset). */
+async function hasManifest(dir: string): Promise<boolean> {
+  try {
+    await access(join(dir, 'preset.md'))
+    return true
+  } catch {
+    return false
+  }
 }
 
 function str(meta: Record<string, unknown> | undefined, key: string): string | undefined {
