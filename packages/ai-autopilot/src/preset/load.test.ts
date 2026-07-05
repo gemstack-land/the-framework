@@ -91,3 +91,22 @@ describe('loadLoopsFrom / loadSkillsFrom', () => {
     assert.deepEqual(await loadSkillsFrom(join(tmpdir(), 'no-such-skills-dir-xyz')), [])
   })
 })
+
+describe('loadDomainPreset defaultEvent', () => {
+  it('reads metadata.event from preset.md, absent when unset', async () => {
+    const withEvent = await mkdtemp(join(tmpdir(), 'domain-preset-event-'))
+    const without = await mkdtemp(join(tmpdir(), 'domain-preset-noevent-'))
+    try {
+      await writeFile(
+        join(withEvent, 'preset.md'),
+        `---\nname: bug-triage\ndescription: Fix bugs.\nmetadata:\n  event: bug-fix\n---\nA triage preset.\n`,
+      )
+      await writeFile(join(without, 'preset.md'), `---\nname: sw-dev\ndescription: Build software.\n---\nA preset.\n`)
+      assert.equal((await loadDomainPreset(withEvent)).defaultEvent, 'bug-fix')
+      assert.equal('defaultEvent' in (await loadDomainPreset(without)), false)
+    } finally {
+      await rm(withEvent, { recursive: true, force: true })
+      await rm(without, { recursive: true, force: true })
+    }
+  })
+})

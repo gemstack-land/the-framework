@@ -4,7 +4,7 @@ import { defineDomainPreset, defineFrameworkExtension, defineLoop, definePersona
 import type { Prompt } from '@gemstack/ai-autopilot'
 import { DEFAULT_MAX_PASSES, runFramework } from './run.js'
 import { FAKE_DEPLOY, FAKE_INTENT, FAKE_SIGNALS, fakeDriver } from './fake-script.js'
-import { FakeDriver, type Driver } from './driver/index.js'
+import { FakeDriver, type Driver, type DriverSession } from './driver/index.js'
 import type { FrameworkEvent } from './events.js'
 
 /** A driver that records the `system` framing it is started with, delegating the run to the fake. */
@@ -281,6 +281,102 @@ test('the domain review loop blocks, improve runs, then it clears (#252)', async
   })
   assert.equal(result.passes, 2) // blocked once, improved, cleared — the domain loop drove both passes
   assert.equal(result.productionGrade, true)
+})
+
+/** A preset with both a major-change and a bug-fix loop, each running a sentinel-tagged prompt. */
+function dualLoopPreset(opts: { defaultEvent?: string } = {}) {
+  const prompt = (id: string, sentinel: string): Prompt => ({
+    id,
+    name: id,
+    title: id,
+    description: '',
+    instructions: `${sentinel} — review and end with a { blockers } verdict.`,
+    passes: 1,
+    appliesTo: [],
+  })
+  return defineDomainPreset({
+    name: 'test-domain',
+    title: 'Test Domain',
+    ...(opts.defaultEvent ? { defaultEvent: opts.defaultEvent } : {}),
+    loops: [
+      defineLoop({ on: 'major-change', run: ['major-review'] }),
+      defineLoop({ on: 'bug-fix', run: ['bug-review'] }),
+    ],
+    prompts: [prompt('major-review', 'MAJOR-SENTINEL'), prompt('bug-review', 'BUGFIX-SENTINEL')],
+    skills: [],
+  })
+}
+
+/** A fake driver that records every prompt text it is sent, so a test can see which loop fired. */
+function promptRecordingDriver(): { driver: Driver; prompts: () => string[] } {
+  const sent: string[] = []
+  const inner = new FakeDriver({
+    turns: [
+      { text: '```json\n{"stack":"X","narration":"n","decisions":[]}\n```' }, // architect
+      { text: 'Built the app.' }, // build
+      { text: 'Reviewed.\n```json\n{"blockers":[]}\n```' }, // review, clean
+    ],
+    sessionId: 'test',
+  })
+  const driver: Driver = {
+    name: 'fake',
+    start: async opts => {
+      const session = await inner.start(opts)
+      const wrapped: DriverSession = {
+        id: session.id,
+        cwd: session.cwd,
+        prompt: (text, o) => {
+          sent.push(text)
+          return session.prompt(text, o)
+        },
+        dispose: () => session.dispose(),
+      }
+      return wrapped
+    },
+  }
+  return { driver, prompts: () => sent }
+}
+
+test('a bug-fix build event fires the preset bug-fix loop, not major-change (#265)', async () => {
+  const events: FrameworkEvent[] = []
+  const { driver, prompts } = promptRecordingDriver()
+  await runFramework({
+    intent: FAKE_INTENT,
+    driver,
+    cwd: '/tmp/ws',
+    signals: FAKE_SIGNALS,
+    preset: dualLoopPreset(),
+    buildEvent: 'bug-fix',
+    onEvent: e => events.push(e),
+  })
+  assert.ok(events.some(e => e.kind === 'log' && /Test Domain loop drives the bug-fix review/.test(e.message)))
+  assert.ok(prompts().some(p => p.includes('BUGFIX-SENTINEL'))) // the bug-fix chain ran...
+  assert.ok(!prompts().some(p => p.includes('MAJOR-SENTINEL'))) // ...and the major-change chain did not
+})
+
+test('a preset defaultEvent selects the loop; an explicit buildEvent overrides it (#265)', async () => {
+  const byDefault = promptRecordingDriver()
+  await runFramework({
+    intent: FAKE_INTENT,
+    driver: byDefault.driver,
+    cwd: '/tmp/ws',
+    signals: FAKE_SIGNALS,
+    preset: dualLoopPreset({ defaultEvent: 'bug-fix' }),
+    onEvent: () => {},
+  })
+  assert.ok(byDefault.prompts().some(p => p.includes('BUGFIX-SENTINEL'))) // preset default alone reaches bug-fix
+
+  const overridden = promptRecordingDriver()
+  await runFramework({
+    intent: FAKE_INTENT,
+    driver: overridden.driver,
+    cwd: '/tmp/ws',
+    signals: FAKE_SIGNALS,
+    preset: dualLoopPreset({ defaultEvent: 'bug-fix' }),
+    buildEvent: 'major-change',
+    onEvent: () => {},
+  })
+  assert.ok(overridden.prompts().some(p => p.includes('MAJOR-SENTINEL'))) // run choice wins over the preset default
 })
 
 test('a registered extension auto-activates by its signal, no opt-in needed (#190)', async () => {

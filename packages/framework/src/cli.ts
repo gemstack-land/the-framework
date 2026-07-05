@@ -78,6 +78,9 @@ Options:
   --technical            Activate the preset's Technical mode variants.
                          (--preset / --autopilot / --technical can also be set per
                           repo in the-framework.yml; these flags override it.)
+  --kind <name>          Build event kind the preset's review loop fires for, e.g.
+                         bug-fix or major-change (default: the preset's own, else
+                         major-change). Selects which review chain gates the run.
   --compose-extensions   Opt the built-in capability extensions in (auth, data,
                          rbac, crud, shell) so the agent composes them instead of
                          hand-rolling. Vike-only; installed framework-* extensions
@@ -131,6 +134,7 @@ export interface CliOptions {
   preset?: string | undefined
   autopilot: boolean
   technical: boolean
+  buildEvent?: string | undefined
   maxPasses?: number
   deploy?: string | undefined
   cfProject?: string | undefined
@@ -200,6 +204,9 @@ export function parseArgs(argv: string[]): CliOptions {
         break
       case '--technical':
         opts.technical = true
+        break
+      case '--kind':
+        opts.buildEvent = argv[++i]
         break
       case '--resume':
         opts.resume = true
@@ -425,6 +432,9 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
   if (modes.length && !domainPreset) {
     io.err(`note: ${modes.join(' + ')} mode(s) have no effect without a preset.`)
   }
+  if (opts.buildEvent && !domainPreset) {
+    io.err(`note: --kind ${opts.buildEvent} has no effect without a preset.`)
+  }
 
   // Fail early and clearly if a live run's prerequisites are missing.
   if (!fake && !opts.skipPreflight) {
@@ -544,6 +554,7 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
     ...(discovered ? { extensions: discovered } : {}),
     ...(opts.composeExtensions ? { composeExtensions: true } : {}),
     ...(domainPreset ? { preset: domainPreset, ...(modes.length ? { modes } : {}) } : {}),
+    ...(opts.buildEvent ? { buildEvent: opts.buildEvent } : {}),
     ...(memory.length ? { memory } : {}),
     ...((): { sessionLink?: string } => {
       const link = chooseSessionLink(opts, fake)

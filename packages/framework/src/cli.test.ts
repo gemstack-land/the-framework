@@ -72,6 +72,11 @@ test('parseArgs reads --preset and the mode flags (#256)', () => {
   assert.equal(dflt.technical, false)
 })
 
+test('parseArgs reads --kind as the build event (#265)', () => {
+  assert.equal(parseArgs(['--kind', 'bug-fix', 'x']).buildEvent, 'bug-fix')
+  assert.equal(parseArgs(['x']).buildEvent, undefined)
+})
+
 test('activeModes maps the mode flags to Open Loop mode names', () => {
   assert.deepEqual(activeModes({ autopilot: false, technical: false }), [])
   assert.deepEqual(activeModes({ autopilot: true, technical: false }), ['autopilot'])
@@ -125,6 +130,13 @@ test('runCli notes mode flags given without a preset', async () => {
   const code = await runCli(['--fake', '--no-dashboard', '--autopilot'], io)
   assert.equal(code, 0)
   assert.ok(err.some(l => /have no effect without a preset/.test(l)))
+})
+
+test('runCli notes --kind given without a preset (#265)', async () => {
+  const { io, err } = capture()
+  const code = await runCli(['--fake', '--no-dashboard', '--kind', 'bug-fix'], io)
+  assert.equal(code, 0)
+  assert.ok(err.some(l => /--kind bug-fix has no effect without a preset/.test(l)))
 })
 
 test('chooseSessionLink defaults a live run to the claude.ai/code session list (#212)', () => {
