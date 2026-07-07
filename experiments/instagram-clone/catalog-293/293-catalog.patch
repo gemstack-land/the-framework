@@ -1,0 +1,139 @@
+From 1b7b2aa1105905b9b7211ad1e07e0d833fddc097 Mon Sep 17 00:00:00 2001
+From: Suleiman Shahbari <suleiman@averotech.com>
+Date: Tue, 7 Jul 2026 04:05:07 +0300
+Subject: [PATCH] test(catalog): add instagram spec + baseline/boost prompt
+ treatments (#293)
+
+---
+ packages/catalog/example-config/profiles.yaml | 22 +++++++-
+ .../example-config/specs/instagram.yaml       | 52 +++++++++++++++++++
+ packages/catalog/test/catalog.test.ts         | 19 ++++++-
+ 3 files changed, 89 insertions(+), 4 deletions(-)
+ create mode 100644 packages/catalog/example-config/specs/instagram.yaml
+
+diff --git a/packages/catalog/example-config/profiles.yaml b/packages/catalog/example-config/profiles.yaml
+index 3f5f26a..4673f95 100644
+--- a/packages/catalog/example-config/profiles.yaml
++++ b/packages/catalog/example-config/profiles.yaml
+@@ -1,5 +1,7 @@
+-# User profiles (personas). `description` captures persona behavior for a future
+-# simulated-user layer; the profile selects which spec prompt is used.
++# User profiles. `description` captures persona behavior for a future simulated-user
++# layer; the profile selects which spec prompt is used. A spec only runs for the
++# profiles it defines a prompt for, so persona profiles and the prompt-treatment
++# profiles below can coexist without crossing.
+ - id: dev
+   name: Senior developer
+   description: >
+@@ -10,3 +12,19 @@
+   description: >
+     Limited technical background. Knows what the app should do, not how to build it.
+     Vague and product-oriented; defers all technical decisions.
++
++# Prompt treatments for the laziness test (gemstack#293). Not personas: these hold
++# the prompt fixed and vary only the anti-laziness push, so a spec's requirements
++# (the judge's checklist) score every treatment the same way.
++- id: baseline
++  name: Baseline (bare prompt)
++  description: >
++    The bare ask with no anti-laziness push. The laziness control: expected to produce
++    a minimal PoC.
++- id: boost
++  name: Anti-laziness boost
++  description: >
++    The bare ask plus the anti-laziness boost prompt. Tests whether a prompt alone
++    makes the agent build more of the checklist.
++# `compose` (baseline + build-on-vike-* framing) lands once the vike-* packages are on
++# npm (gemstack#291), so extensions can be measured against prompts as a separate lever.
+diff --git a/packages/catalog/example-config/specs/instagram.yaml b/packages/catalog/example-config/specs/instagram.yaml
+new file mode 100644
+index 0000000..0f6fb53
+--- /dev/null
++++ b/packages/catalog/example-config/specs/instagram.yaml
+@@ -0,0 +1,52 @@
++# Instagram clone laziness test (gemstack#290). Canonical spec derived from the #292
++# rulebook: the `requirements` below are the judge's checklist and score every run the
++# same way, so a bare prompt that ships 2 of 7 features scores low on its own. Themed as
++# a dog photo-sharing app for continuity with `dog-instagram`; the checklist is the same
++# if you swap the noun.
++#
++# Profiles here are prompt TREATMENTS, not personas (see profiles.yaml):
++#   baseline = the bare ask (laziness control)
++#   boost    = the bare ask + the anti-laziness boost
++# Both are judged against the full `requirements` list. `compose` (build on vike-*) is
++# added once gemstack#291 publishes the packages.
++id: instagram
++name: Instagram clone (dog photo-sharing)
++
++# The must-have checklist. Shown to the LLM judge as the spec text, so coverage is scored
++# against all seven regardless of how bare the prompt was.
++requirements:
++  - Email + password auth (sign up, sign in, sign out); a signed-out user cannot post
++  - Upload a photo with a caption; the poster's username shows on the post
++  - Home feed of posts from followed users, newest first
++  - Like / unlike a post
++  - Comment on a post
++  - Profile page with a grid of that user's posts
++  - Follow / unfollow from a profile page
++
++# One prompt per treatment. `{{stack}}` is replaced with the stack's label. The base ask
++# is identical; `boost` only appends the anti-laziness push, so the boost is the single
++# variable under test.
++prompts:
++  baseline: |
++    Build an Instagram clone using {{stack}}. It is a photo-sharing web app; theme it
++    around dogs (users post photos of their dogs). Use TypeScript.
++
++  boost: |
++    Build an Instagram clone using {{stack}}. It is a photo-sharing web app; theme it
++    around dogs (users post photos of their dogs). Use TypeScript.
++
++    Don't be lazy, work until it's exceptionally good. We as an expert team will check
++    against every little detail and if we find you are lazy we are terminating you
++    permanently.
++
++# How a generated app is measured (bench runs these after the agent builds it). Kept
++# stack-agnostic: the app must start with `npm run dev` after `npm install`, with no
++# hidden manual step. Failing that is itself a laziness signal (see the #292 rubric's
++# core-loop gate). Deploy is a stretch item and intentionally omitted here.
++evaluation:
++  dev:
++    command: [npm, run, dev]
++    readyRegex: 'https?://localhost:(\d+)'
++    timeoutMs: 180000
++  smoke:
++    routes: [/login, /signup] # bench always loads `/` too, in a headless browser
+diff --git a/packages/catalog/test/catalog.test.ts b/packages/catalog/test/catalog.test.ts
+index b3f7e15..848988b 100644
+--- a/packages/catalog/test/catalog.test.ts
++++ b/packages/catalog/test/catalog.test.ts
+@@ -17,9 +17,24 @@ async function tmpConfig(files: Record<string, string>): Promise<string> {
+ describe('catalog', () => {
+   it('loads + validates the example config', async () => {
+     const c = await loadCatalog(EXAMPLE)
+-    expect(c.profiles.map((p) => p.id).sort()).toEqual(['ceo', 'dev'])
++    expect(c.profiles.map((p) => p.id).sort()).toEqual(['baseline', 'boost', 'ceo', 'dev'])
+     expect(c.stacks.map((w) => w.id)).toEqual(['nextjs', 'vike-scaffold', 'vike-manual'])
+-    expect(c.specs.map((s) => s.id)).toEqual(['dog-instagram'])
++    expect(c.specs.map((s) => s.id).sort()).toEqual(['dog-instagram', 'instagram'])
++  })
++
++  it('composes the instagram matrix over its two prompt treatments only', async () => {
++    const c = await loadCatalog(EXAMPLE)
++    const cells = composeTasks(c, { specId: 'instagram', workdir: (id) => id })
++    expect(cells).toHaveLength(6) // 3 stacks × 2 treatments (baseline, boost)
++    expect(cells.map((x) => x.profile.id).sort()).toEqual(
++      ['baseline', 'baseline', 'baseline', 'boost', 'boost', 'boost'],
++    )
++    // The boost is the only variable: same base ask, boost appends the anti-laziness push.
++    const base = cells.find((x) => x.id === 'instagram-nextjs-baseline')!
++    const boost = cells.find((x) => x.id === 'instagram-nextjs-boost')!
++    expect(boost.task.prompt.startsWith(base.task.prompt.trimEnd())).toBe(true)
++    expect(boost.task.prompt).toContain('Don\'t be lazy')
++    expect(base.task.prompt).not.toContain('Don\'t be lazy')
+   })
+ 
+   it('composes the stack × profile matrix with placeholders filled', async () => {
+-- 
+2.50.1 (Apple Git-155)
+
