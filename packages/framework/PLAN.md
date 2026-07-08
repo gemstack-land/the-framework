@@ -31,7 +31,7 @@ Selected: implement now-ish.
 
 Candidates: implement soon? Maybe even now-ish?
 
-- Anti-laziness pill
+- Anti-lazy-pill
   - VALUE-HIGH
   - https://github.com/gemstack-land/gemstack/issues/297#issuecomment-4913683778 (the `PLAN.md` + `TODO.md` trick)
   - TODO: install it as system prompt injected to *all* prompts (let's see if it's somtimes counterproductive)
