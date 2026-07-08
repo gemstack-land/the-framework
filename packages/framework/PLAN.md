@@ -11,7 +11,8 @@ Selected: implement now-ish.
   - VALUE-HIGH
   - Queues: global queues of prompts to be fired whenever there's capacity
   - Cron jobs to max-out daily usage limits (fires queues + maintenance prompts)
-  - TODO: can we access Claude's usage limits?
+  - Implementation
+    - Accessing usage limits: https://github.com/gemstack-land/gemstack/pull/300#issuecomment-4918256151
   - Marketing
     - Very easy sell (very sexy feature, massive added value)
     - Unique USP (since Claude has no interest to implement this)
