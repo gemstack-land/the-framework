@@ -133,6 +133,21 @@ export {
   type VersionProbe,
 } from './preflight.js'
 export {
+  ensureDaemon,
+  runDaemon,
+  stopDaemon,
+  daemonStatus,
+  readDaemonState,
+  isProcessAlive,
+  EventTailer,
+  DAEMON_STATE_FILE,
+  DEFAULT_DAEMON_PORT,
+  type DaemonState,
+  type EnsureResult,
+  type EnsureDaemonOptions,
+  type RunDaemonOptions,
+} from './daemon.js'
+export {
   fakeDriver,
   FAKE_INTENT,
   FAKE_SIGNALS,

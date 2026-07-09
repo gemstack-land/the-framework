@@ -38,6 +38,7 @@ import { loadRepoMemory } from './memory.js'
 import { loadUserSystemPrompt, SYSTEM_PROMPT_FILE } from './system-prompt.js'
 import { preflight } from './preflight.js'
 import { RunStore } from './store/index.js'
+import { ensureDaemon, runDaemon, stopDaemon, DEFAULT_DAEMON_PORT } from './daemon.js'
 
 /**
  * The default link shown for a live run: the generic Claude Code entry point,
@@ -74,7 +75,9 @@ const VERSION = '0.0.0'
 const HELP = `The Framework — turnkey AI orchestration that wraps a coding agent (Claude Code).
 
 Usage:
+  framework                       Ensure the background dashboard is running; print commands.
   framework [intent...]           Build what you describe, from scratch.
+  framework stop                  Stop the background dashboard for this workspace.
   framework --fake                Run the offline demo (no CLI, no model, deterministic).
   framework doctor                Check prerequisites (Claude Code installed, etc.).
   framework relay                 Host a run relay so teammates can watch a run (#230).
@@ -178,6 +181,10 @@ export interface CliOptions {
   skipPermissions: boolean
   resume: boolean
   persist: boolean
+  /** Run the persistent dashboard daemon body (internal; the spawned child sets this). */
+  daemon: boolean
+  /** `framework stop`: stop the background daemon for this workspace. */
+  stop: boolean
   error?: string
 }
 
@@ -200,6 +207,8 @@ export function parseArgs(argv: string[]): CliOptions {
     skipPermissions: false,
     resume: false,
     persist: true,
+    daemon: false,
+    stop: false,
   }
   const PERMISSION_MODES: PermissionMode[] = ['default', 'acceptEdits', 'bypassPermissions', 'plan']
   const words: string[] = []
@@ -240,6 +249,9 @@ export function parseArgs(argv: string[]): CliOptions {
         break
       case '--resume':
         opts.resume = true
+        break
+      case '--daemon':
+        opts.daemon = true
         break
       case '--no-persist':
         opts.persist = false
@@ -330,12 +342,15 @@ export function parseArgs(argv: string[]): CliOptions {
         else words.push(arg)
     }
   }
-  // `framework doctor` / `framework relay` are subcommands, not an intent.
+  // `framework doctor` / `framework relay` / `framework stop` are subcommands, not an intent.
   if (words[0] === 'doctor') {
     opts.doctor = true
     words.shift()
   } else if (words[0] === 'relay') {
     opts.relayServe = true
+    words.shift()
+  } else if (words[0] === 'stop') {
+    opts.stop = true
     words.shift()
   }
   opts.intent = words.join(' ').trim()
@@ -501,12 +516,21 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
   // the dashboard rehydrates exactly as it looked, then leave it up read-only.
   if (opts.resume) return resumeRun(opts, io)
 
+  // `--daemon` is the detached child's own entry: it *is* the persistent dashboard,
+  // tailing .framework/ until signalled. Never invoked by hand (#302).
+  if (opts.daemon) {
+    await runDaemon(opts.cwd ?? process.cwd(), opts.port !== undefined ? { port: opts.port } : {})
+    return 0
+  }
+
+  // `framework stop` stops this workspace's background dashboard.
+  if (opts.stop) return stopDaemonCmd(opts, io)
+
   const fake = opts.fake
   const intent = opts.intent || (fake ? FAKE_INTENT : '')
-  if (!intent) {
-    io.err('Describe what to build, e.g. `framework "a blog with comments"` (or try `framework --fake`).')
-    return 2
-  }
+  // Bare `framework` (no prompt): ensure the persistent dashboard is running and
+  // print the convenience commands + version (#299/#302). A prompt still builds.
+  if (!intent && !fake) return ensureDaemonCmd(opts, io)
 
   const cwd = opts.cwd ?? (fake ? join(tmpdir(), 'framework-fake-workspace') : process.cwd())
 
@@ -559,6 +583,27 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
   // One controller for the whole run (and the auto-select turn before it): the
   // dashboard Stop button aborts it once wired below.
   const controller = new AbortController()
+
+  // Ctrl+C / SIGTERM during a live run must abort the run — not let default
+  // signal termination kill the framework while its spawned Claude Code tree
+  // keeps running (the orphaned-process leak). Aborting drives the driver to
+  // group-kill its child; a second signal force-quits. Removed once the run
+  // settles so the post-run dashboard wait keeps its own Ctrl+C handling.
+  let interrupts = 0
+  const onInterrupt = () => {
+    if (++interrupts === 1) {
+      io.err('\n■ Interrupt: stopping the run (Ctrl+C again to force-quit)…')
+      controller.abort()
+    } else {
+      process.exit(130)
+    }
+  }
+  const clearInterrupt = () => {
+    process.off('SIGINT', onInterrupt)
+    process.off('SIGTERM', onInterrupt)
+  }
+  process.on('SIGINT', onInterrupt)
+  process.on('SIGTERM', onInterrupt)
 
   // AI meta-select: with no preset chosen explicitly, infer the best fit (+ modes +
   // build event) from the intent + workspace, then resolve it with the active modes.
@@ -722,6 +767,8 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
 
   try {
     const { result, preview, ledger } = await runFramework(runOpts)
+    // Run settled: hand Ctrl+C back to the post-run dashboard/app wait below.
+    clearInterrupt()
     io.out(
       result.productionGrade
         ? `\n✓ production-grade in ${result.passes} pass(es).`
@@ -742,6 +789,7 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
     }
     return 0
   } catch (err) {
+    clearInterrupt()
     await store?.close()
     // A user stop (the dashboard Stop button aborted the signal) is not a failure:
     // report it cleanly, keep the dashboard up so the stopped state is visible, and
@@ -759,6 +807,7 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
     await dashboard?.close()
     return 1
   } finally {
+    clearInterrupt()
     // Make sure every event (including the final `end`) reached the relay before exit.
     if (publisher) await publisher.flush()
   }
@@ -770,6 +819,41 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
  * history replay. Runs until interrupted. Unauthenticated by design — anyone with
  * a run URL can watch; accounts/teams/steering come later.
  */
+/**
+ * `framework` (no prompt): ensure the persistent background dashboard is running
+ * for this workspace, then print the URL, the convenience commands, and the
+ * version (#299/#302). Idempotent — a second call just re-reports the live one.
+ */
+async function ensureDaemonCmd(opts: CliOptions, io: CliIO): Promise<number> {
+  const cwd = opts.cwd ?? process.cwd()
+  const port = opts.port ?? DEFAULT_DAEMON_PORT
+  let result
+  try {
+    result = await ensureDaemon(cwd, { port })
+  } catch (err) {
+    io.err(`could not start the dashboard daemon (${err instanceof Error ? err.message : String(err)}).`)
+    return 1
+  }
+  const { state, alreadyRunning } = result
+  io.out(`◆ dashboard ${alreadyRunning ? 'already running' : 'started'}: ${state.url}`)
+  io.out('')
+  io.out('Commands:')
+  io.out('  framework "<what to build>"   Build (streams to the dashboard)')
+  io.out('  framework stop                Stop the background dashboard')
+  io.out('  framework --help              All options')
+  io.out('')
+  io.out(`The Framework v${VERSION}`)
+  return 0
+}
+
+/** `framework stop`: stop this workspace's background dashboard, if any. */
+async function stopDaemonCmd(opts: CliOptions, io: CliIO): Promise<number> {
+  const cwd = opts.cwd ?? process.cwd()
+  const stopped = await stopDaemon(cwd)
+  io.out(stopped ? '◆ dashboard stopped.' : 'No background dashboard was running.')
+  return 0
+}
+
 async function runRelayServer(opts: CliOptions, io: CliIO): Promise<number> {
   const relay = await startRelay(opts.port !== undefined ? { port: opts.port } : {})
   io.out(`◆ relay listening at ${relay.url}`)

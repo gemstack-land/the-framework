@@ -2,7 +2,11 @@ import { spawn as nodeSpawn } from 'node:child_process'
 import { createInterface } from 'node:readline'
 import { readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
+import { killTree, registerChild, unregisterChild } from './child-registry.js'
 import type { Driver, DriverEvent, DriverPromptOptions, DriverSession, DriverStartOptions, DriverTurn } from './types.js'
+
+/** Grace between SIGTERM and the SIGKILL that forces a hung agent tree down. */
+const TERMINATE_GRACE_MS = 5000
 
 /** Claude Code permission modes we pass through to the CLI. */
 export type PermissionMode = 'default' | 'acceptEdits' | 'bypassPermissions' | 'plan'
@@ -11,11 +15,13 @@ export type PermissionMode = 'default' | 'acceptEdits' | 'bypassPermissions' | '
 export type SpawnLike = (
   command: string,
   args: readonly string[],
-  options: { cwd: string; env: NodeJS.ProcessEnv },
+  options: { cwd: string; env: NodeJS.ProcessEnv; detached?: boolean },
 ) => SpawnedProcess
 
 /** The slice of a spawned process this driver reads. */
 export interface SpawnedProcess {
+  /** OS pid; present for a real child, absent for in-memory test fakes. */
+  pid?: number | undefined
   stdout: NodeJS.ReadableStream | null
   stderr: NodeJS.ReadableStream | null
   stdin: NodeJS.WritableStream | null
@@ -147,10 +153,35 @@ export function runClaude(opts: RunClaudeOptions): Promise<DriverTurn> {
     }
 
     opts.emit({ type: 'start', prompt: opts.prompt })
-    const child = opts.spawn(opts.bin, opts.args, { cwd: opts.cwd, env: opts.env })
+    // `detached` makes the child its own process-group leader so we can kill the
+    // whole agent subtree (claude + node workers + tool calls) at once, not just
+    // the top process — otherwise an interrupt orphans the tree (the leak).
+    const child = opts.spawn(opts.bin, opts.args, { cwd: opts.cwd, env: opts.env, detached: true })
+    const pid = child.pid
+    if (pid != null) registerChild(pid)
     const parser = new StreamJsonParser()
     let settled = false
+    let hardKillTimer: ReturnType<typeof setTimeout> | undefined
     const stderrChunks: string[] = []
+
+    // Kill the agent's whole process group: SIGTERM to let it flush, then a
+    // SIGKILL after a grace window in case it ignores the term (mid tool-call).
+    const terminate = () => {
+      if (pid != null) killTree(pid, 'SIGTERM')
+      else child.kill('SIGTERM')
+      hardKillTimer = setTimeout(() => {
+        if (pid != null) killTree(pid, 'SIGKILL')
+        else child.kill('SIGKILL')
+      }, TERMINATE_GRACE_MS)
+      hardKillTimer.unref?.()
+    }
+
+    // Runs exactly once the process is done with (closed, errored, or killed):
+    // stop tracking it and cancel any pending hard-kill.
+    const cleanup = () => {
+      if (pid != null) unregisterChild(pid)
+      if (hardKillTimer) clearTimeout(hardKillTimer)
+    }
 
     const finish = (fn: () => void) => {
       if (settled) return
@@ -161,14 +192,18 @@ export function runClaude(opts: RunClaudeOptions): Promise<DriverTurn> {
 
     const aborts = opts.signals.map(signal => {
       const handler = () => {
-        child.kill('SIGTERM')
+        if (settled) return
+        terminate()
         finish(() => rejectPromise(new Error('[framework] claude-code prompt aborted')))
       }
       signal.addEventListener('abort', handler)
       return { signal, handler }
     })
 
-    child.on('error', err => finish(() => rejectPromise(err)))
+    child.on('error', err => {
+      cleanup()
+      finish(() => rejectPromise(err))
+    })
 
     if (child.stdout) {
       const rl = createInterface({ input: child.stdout })
@@ -181,6 +216,7 @@ export function runClaude(opts: RunClaudeOptions): Promise<DriverTurn> {
     }
 
     child.on('close', code => {
+      cleanup()
       const turn = parser.result()
       // A non-zero exit is a failed turn even when the agent streamed some text
       // first: the loop gates on the outcome, so a crash mid-build must not pass

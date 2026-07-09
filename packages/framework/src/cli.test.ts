@@ -32,6 +32,16 @@ test('parseArgs reads flags and the intent words', () => {
   assert.equal(opts.intent, 'a blog app')
 })
 
+test('parseArgs reads the stop subcommand and the internal --daemon flag', () => {
+  const stop = parseArgs(['stop'])
+  assert.equal(stop.stop, true)
+  assert.equal(stop.intent, '') // "stop" is a command, not build intent
+  const daemon = parseArgs(['--daemon', '--port', '4477'])
+  assert.equal(daemon.daemon, true)
+  assert.equal(daemon.port, 4477)
+  assert.equal(parseArgs([]).stop, false) // bare invocation is not stop
+})
+
 test('parseArgs flags unknown options and bad values', () => {
   assert.match(parseArgs(['--nope']).error!, /unknown option/)
   assert.match(parseArgs(['--scope', 'huge']).error!, /invalid --scope/)
@@ -244,7 +254,22 @@ test('runCli --help prints usage and exits 0', async () => {
 test('runCli usage error exits 2', async () => {
   const { io } = capture()
   assert.equal(await runCli(['--bogus'], io), 2)
-  assert.equal(await runCli([], io), 2) // no intent, not fake
+})
+
+test('runCli with no prompt ensures the background dashboard, not a usage error (#302)', async () => {
+  const { io, err } = capture()
+  const cwd = await mkdtemp(join(tmpdir(), 'framework-bare-'))
+  try {
+    // Bare `framework` routes to ensureDaemonCmd, not the old "describe what to build"
+    // usage error. The daemon spawn is refused from a test entry (it would re-exec this
+    // test file and fork-bomb), so it degrades to exit 1 — the point is it never spawns
+    // and is no longer exit 2.
+    const code = await runCli(['--cwd', cwd], io)
+    assert.notEqual(code, 2)
+    assert.ok(err.some(l => /dashboard daemon/.test(l)))
+  } finally {
+    await rm(cwd, { recursive: true, force: true })
+  }
 })
 
 test('buildDeployTarget builds cloudflare, requires dokploy config, ignores unknown', () => {
