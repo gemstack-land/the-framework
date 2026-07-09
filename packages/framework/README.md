@@ -125,6 +125,15 @@ as it looked, without running the agent again. Add `--cwd <dir>` to resume a run
 from another workspace. Pass `--no-persist` to skip writing state. We do not
 persist the agent's transcript; Claude Code owns that.
 
+### Run history
+
+Each finished run is archived under `.framework/runs/<id>.jsonl` (its log) and
+`.framework/runs/<id>.json` (its snapshot). The dashboard's left sidebar lists a
+project's past runs (intent, status, session link); clicking one replays that
+run's projection in the main view, and **Back to live** returns to the current
+run. The list is served by `GET /api/runs`, a single run by `GET /api/runs/<id>`
+(#303). A crash that skips the final flush is still archived on the next run.
+
 ### Watching the session, and steering it live
 
 Every run surfaces the current Claude Code **session id** on the dashboard (and in

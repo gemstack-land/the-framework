@@ -2,6 +2,7 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import type { AddressInfo } from 'node:net'
 import { EventStream } from '@gemstack/ai-autopilot'
 import type { FrameworkEvent } from '../events.js'
+import { listRuns, loadRunEvents } from '../store/index.js'
 import { dashboardHtml } from './page.js'
 import { serveSSE } from './sse.js'
 
@@ -19,6 +20,12 @@ export interface DashboardOptions {
    * the page hides the button when the server reports no stop handler.
    */
   onStop?: () => void
+  /**
+   * The workspace whose `.framework/runs/` archive backs the run-history sidebar
+   * (#303): `GET /api/runs` lists it, `GET /api/runs/<id>` replays one run. Omit
+   * to disable history (the endpoints report an empty list).
+   */
+  cwd?: string
 }
 
 /** A running localhost dashboard. Push {@link FrameworkEvent}s; it renders them live. */
@@ -48,10 +55,11 @@ export function startDashboard(opts: DashboardOptions = {}): Promise<Dashboard> 
   const port = opts.port ?? 4477
   const title = opts.title ?? 'The Framework'
   const onStop = opts.onStop
+  const cwd = opts.cwd
   const stream = new EventStream<FrameworkEvent>()
   const clients = new Set<ServerResponse>()
 
-  const server = createServer((req, res) => handle(req, res, stream, clients, title, onStop))
+  const server = createServer((req, res) => handle(req, res, stream, clients, title, onStop, cwd))
 
   return new Promise<Dashboard>((resolvePromise, rejectPromise) => {
     server.once('error', rejectPromise)
@@ -76,6 +84,7 @@ function handle(
   clients: Set<ServerResponse>,
   title: string,
   onStop: (() => void) | undefined,
+  cwd: string | undefined,
 ): void {
   const url = req.url ?? '/'
   if (url === '/' || url.startsWith('/?')) {
@@ -85,6 +94,16 @@ function handle(
   }
   if (url === '/events') {
     serveSSE(req, res, stream, clients)
+    return
+  }
+  // Run history (#303). The list feeds the second sidebar; a single run's log is
+  // replayed client-side into the same projection the live stream drives.
+  if (url === '/api/runs') {
+    void serveRunList(res, cwd)
+    return
+  }
+  if (url.startsWith('/api/runs/')) {
+    void serveRun(res, cwd, decodeURIComponent(url.slice('/api/runs/'.length)))
     return
   }
   if (url === '/stop') {
@@ -108,6 +127,26 @@ function handle(
   }
   res.writeHead(404, { 'content-type': 'text/plain' })
   res.end('not found')
+}
+
+/** `GET /api/runs` — the project's archived runs, most-recent first (or `[]`). */
+async function serveRunList(res: ServerResponse, cwd: string | undefined): Promise<void> {
+  const runs = cwd ? await listRuns(cwd).catch(() => []) : []
+  res.writeHead(200, { 'content-type': 'application/json' })
+  res.end(JSON.stringify({ runs }))
+}
+
+/** `GET /api/runs/<id>` — one archived run's meta + event log for replay. */
+async function serveRun(res: ServerResponse, cwd: string | undefined, id: string): Promise<void> {
+  const events = cwd ? await loadRunEvents(cwd, id).catch(() => undefined) : undefined
+  if (!events) {
+    res.writeHead(404, { 'content-type': 'application/json' })
+    res.end('{"error":"run not found"}')
+    return
+  }
+  const meta = cwd ? (await listRuns(cwd).catch(() => [])).find(r => r.id === id) : undefined
+  res.writeHead(200, { 'content-type': 'application/json' })
+  res.end(JSON.stringify({ id, meta, events }))
 }
 
 function closeServer(

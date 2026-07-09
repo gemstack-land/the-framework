@@ -39,6 +39,30 @@ export function dashboardHtml(title: string, stoppable = false): string {
   #app-banner .dot { color: #67d98f; }
   #app-banner a { color: #67d98f; font-weight: 600; }
   #app-banner .run { color: #6f8a79; font-size: 12px; }
+  #layout { display: flex; align-items: stretch; }
+  #sidebar { flex: 0 0 240px; width: 240px; border-right: 1px solid #1c2230; padding: 14px 10px;
+    overflow-y: auto; max-height: calc(100vh - 57px); }
+  #sidebar h2 { margin: 0 0 8px; padding: 0 6px; font-size: 12px; text-transform: uppercase;
+    letter-spacing: .8px; color: #7b8496; font-weight: 600; }
+  #runs li { padding: 8px; border-bottom: 1px solid #161b26; cursor: pointer; border-radius: 6px; }
+  #runs li:hover { background: #141a24; }
+  #runs li.active { background: #17212f; }
+  #runs .r-intent { color: #d7dce5; font-size: 13px; white-space: nowrap; overflow: hidden;
+    text-overflow: ellipsis; }
+  #runs .r-meta { color: #7b8496; font-size: 11px; margin-top: 3px; display: flex; align-items: center; gap: 6px; }
+  #runs .dot { font-size: 9px; }
+  #runs .st-done { color: #67d98f; }
+  #runs .st-failed { color: #e2686a; }
+  #runs .st-stopped { color: #f0a35e; }
+  #runs .st-running { color: #6ea8fe; }
+  #runs .empty { color: #5c657a; font-size: 12px; padding: 6px; cursor: default; }
+  #runs .empty:hover { background: none; }
+  #viewing { display: none; align-items: center; gap: 8px; padding: 8px 20px; font-size: 12px;
+    background: #16202e; border-bottom: 1px solid #24344a; color: #9db4d6; }
+  #viewing.on { display: flex; }
+  #viewing button { font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; color: #6ea8fe;
+    background: #0f1722; border: 1px solid #24344a; border-radius: 6px; padding: 3px 10px; }
+  #content { flex: 1; min-width: 0; }
   main { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; padding: 18px 20px; max-width: 1100px; }
   section { background: #10141d; border: 1px solid #1c2230; border-radius: 10px; padding: 14px 16px; }
   section h2 { margin: 0 0 10px; font-size: 12px; text-transform: uppercase;
@@ -82,6 +106,16 @@ export function dashboardHtml(title: string, stoppable = false): string {
   <span id="status">●</span>
   <button id="stop" hidden>■ Stop</button>
 </header>
+<div id="layout">
+<aside id="sidebar">
+  <h2>Runs</h2>
+  <ul id="runs"><li class="empty">loading…</li></ul>
+</aside>
+<div id="content">
+<div id="viewing">
+  <span>Viewing a past run (read-only).</span>
+  <button id="back-live">● Back to live</button>
+</div>
 <div id="app-banner" hidden>
   <span class="dot">▶</span>
   <span>Your app is running at <a id="app-link" href="#" target="_blank" rel="noopener">…</a></span>
@@ -116,6 +150,8 @@ export function dashboardHtml(title: string, stoppable = false): string {
     <div id="log"></div>
   </section>
 </main>
+</div>
+</div>
 <script>
 ${clientScript(stoppable)}
 </script>
@@ -233,13 +269,13 @@ function setSessionLink(sessionId, sessionLink) {
     el.innerHTML = 'session <code>' + esc(sessionId) + '</code>';
   }
 }
-function onEvent(fe) {
+function render(fe) {
   if (fe.kind === 'session') {
     let s = fe.fake ? 'fake driver' : fe.driver;
     s += '  in  ' + fe.workspace;
     $('session').textContent = s;
     if (fe.sessionLink) setSessionLink(undefined, fe.sessionLink);
-    if (STOPPABLE && !ended) $('stop').hidden = false;
+    if (STOPPABLE && !ended && mode === 'live') $('stop').hidden = false;
   } else if (fe.kind === 'session-update') setSessionLink(fe.sessionId, fe.sessionLink);
   else if (fe.kind === 'preview') {
     const a = $('app-link');
@@ -252,9 +288,8 @@ function onEvent(fe) {
   else if (fe.kind === 'modes') renderModes(fe.all, fe.active);
   else if (fe.kind === 'log') log(fe.message);
   else if (fe.kind === 'end') {
-    ended = true;
+    if (mode === 'live') { ended = true; $('stop').hidden = true; }
     $('status').textContent = fe.ok ? '\\u25cf finished' : fe.stopped ? '\\u25a0 stopped' : '\\u25cf failed';
-    $('stop').hidden = true;
   }
 }
 function stopRun() {
@@ -264,10 +299,98 @@ function stopRun() {
   fetch('stop', { method: 'POST' }).catch(() => {});
 }
 function esc(s) { const d = document.createElement('div'); d.textContent = String(s); return d.innerHTML; }
+
+// Run history (#303): the live stream is one run; past runs come from /api/runs and
+// replay through the very same render() into the panels. We keep every live event so
+// "Back to live" can rebuild the current run without reconnecting.
+let mode = 'live';
+let activeRunId = null;
+const liveEvents = [];
+
+function resetPanels() {
+  $('session').textContent = 'connecting\\u2026';
+  $('session-link').innerHTML = '';
+  $('status').textContent = '\\u25cf';
+  $('stop').hidden = true;
+  $('app-banner').hidden = true;
+  $('stack').textContent = 'deciding\\u2026'; $('stack').classList.add('muted');
+  $('decisions').innerHTML = ''; $('rationale').innerHTML = '';
+  $('grade').textContent = 'building\\u2026'; $('grade').classList.add('muted');
+  $('passes').innerHTML = '';
+  $('modes-panel').hidden = true; $('modes').innerHTML = '';
+  $('deploy').textContent = 'not decided yet'; $('deploy').classList.add('muted');
+  $('ledger').innerHTML = '';
+  $('log').textContent = '';
+}
+
+function project(events) {
+  resetPanels();
+  for (const e of events) { try { render(e); } catch {} }
+}
+
+function showLive() {
+  mode = 'live'; activeRunId = null;
+  $('viewing').classList.remove('on');
+  project(liveEvents);
+  markActive();
+}
+
+function showRun(id) {
+  fetch('api/runs/' + encodeURIComponent(id)).then(r => r.ok ? r.json() : null).then(data => {
+    if (!data) return;
+    mode = 'history'; activeRunId = id;
+    $('viewing').classList.add('on');
+    project(data.events || []);
+    markActive();
+  }).catch(() => {});
+}
+
+function statusClass(s) {
+  return s === 'done' ? 'st-done' : s === 'failed' ? 'st-failed'
+    : s === 'stopped' ? 'st-stopped' : 'st-running';
+}
+
+function markActive() {
+  for (const li of $('runs').children) li.classList.toggle('active', li.dataset && li.dataset.id === activeRunId);
+}
+
+function renderRuns(runs) {
+  const ul = $('runs'); ul.innerHTML = '';
+  if (!runs.length) { ul.innerHTML = '<li class="empty">No past runs yet.</li>'; return; }
+  for (const r of runs) {
+    const li = document.createElement('li');
+    li.dataset.id = r.id;
+    const when = new Date(r.startedAt).toLocaleString();
+    const link = r.sessionLink ? ' \\u00b7 <a href="' + esc(r.sessionLink) + '" target="_blank" rel="noopener">session</a>' : '';
+    li.innerHTML = '<div class="r-intent">' + esc(r.intent || 'untitled run') + '</div>' +
+      '<div class="r-meta"><span class="dot ' + statusClass(r.status) + '">\\u25cf</span>' +
+      '<span>' + esc(r.status) + '</span><span>\\u00b7 ' + esc(when) + '</span>' + link + '</div>';
+    li.addEventListener('click', ev => {
+      if (ev.target.tagName === 'A') return; // let the session link open
+      showRun(r.id);
+    });
+    ul.appendChild(li);
+  }
+  markActive();
+}
+
+function loadRuns() {
+  fetch('api/runs').then(r => r.ok ? r.json() : { runs: [] }).then(d => renderRuns(d.runs || [])).catch(() => {});
+}
+
 $('stop').addEventListener('click', stopRun);
+$('back-live').addEventListener('click', showLive);
 const src = new EventSource('events');
-src.onmessage = ev => { try { onEvent(JSON.parse(ev.data)); } catch {} };
-src.onerror = () => { $('status').textContent = '\\u25cb offline'; };
+src.onmessage = ev => {
+  let fe; try { fe = JSON.parse(ev.data); } catch { return; }
+  liveEvents.push(fe);
+  if (mode === 'live') render(fe);
+  // A finished run has just been archived; refresh the list so it appears.
+  if (fe.kind === 'end') setTimeout(loadRuns, 1500);
+};
+src.onerror = () => { if (mode === 'live') $('status').textContent = '\\u25cb offline'; };
+loadRuns();
+setInterval(loadRuns, 10000);
 `
 }
 
