@@ -1,6 +1,9 @@
 import { strict as assert } from 'node:assert'
 import { test } from 'node:test'
 import { get, request } from 'node:http'
+import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { startDashboard } from './server.js'
 import type { FrameworkEvent } from '../events.js'
 
@@ -118,6 +121,57 @@ test('POST /stop invokes onStop and the page renders the Stop button (#218)', as
     const page = await fetchText(dash.url + '/')
     assert.match(page.body, /id="stop"/)
     assert.match(page.body, /STOPPABLE = true/)
+  } finally {
+    await dash.close()
+  }
+})
+
+test('/api/runs lists the workspace archive and /api/runs/<id> replays a run (#303)', async () => {
+  const cwd = await mkdtemp(join(tmpdir(), 'fw-hist-'))
+  const runs = join(cwd, '.framework', 'runs')
+  await mkdir(runs, { recursive: true })
+  const events: FrameworkEvent[] = [
+    { kind: 'session', driver: 'fake', workspace: cwd, fake: true },
+    { kind: 'bootstrap', event: { type: 'scope', scope: 'full', intent: 'a blog' } },
+    { kind: 'end', ok: true },
+  ]
+  const id = '2026-07-04T00-00-00-000Z'
+  await writeFile(join(runs, `${id}.jsonl`), events.map(e => JSON.stringify(e)).join('\n') + '\n')
+  await writeFile(
+    join(runs, `${id}.json`),
+    JSON.stringify({ version: 1, id, status: 'done', startedAt: '2026-07-04T00:00:00.000Z', updatedAt: '', passes: 1, intent: 'a blog' }),
+  )
+
+  const dash = await startDashboard({ port: 0, cwd })
+  try {
+    const list = await fetchText(dash.url + '/api/runs')
+    assert.equal(list.status, 200)
+    const parsed = JSON.parse(list.body) as { runs: { id: string; intent: string; status: string }[] }
+    assert.equal(parsed.runs.length, 1)
+    assert.equal(parsed.runs[0]!.intent, 'a blog')
+    assert.equal(parsed.runs[0]!.status, 'done')
+
+    const one = await fetchText(dash.url + '/api/runs/' + id)
+    assert.equal(one.status, 200)
+    const run = JSON.parse(one.body) as { id: string; events: FrameworkEvent[]; meta: { intent: string } }
+    assert.equal(run.id, id)
+    assert.equal(run.events.length, 3)
+    assert.equal(run.meta.intent, 'a blog')
+
+    assert.equal((await fetchText(dash.url + '/api/runs/does-not-exist')).status, 404)
+  } finally {
+    await dash.close()
+    await rm(cwd, { recursive: true, force: true })
+  }
+})
+
+test('/api/runs is an empty list when no workspace is wired', async () => {
+  const dash = await startDashboard({ port: 0 })
+  try {
+    const list = await fetchText(dash.url + '/api/runs')
+    assert.equal(list.status, 200)
+    assert.deepEqual(JSON.parse(list.body), { runs: [] })
+    assert.equal((await fetchText(dash.url + '/api/runs/anything')).status, 404)
   } finally {
     await dash.close()
   }

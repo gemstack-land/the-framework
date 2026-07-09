@@ -20,6 +20,26 @@ export const EVENTS_FILE = 'events.jsonl'
 /** A small snapshot for cheap status reads without replaying the whole log. */
 export const META_FILE = 'run.json'
 
+/**
+ * Where finished runs are archived, so the dashboard can list a project's run
+ * history (#303). The live run stays at `events.jsonl`/`run.json` (the daemon
+ * tails it); on {@link RunStore.close} a copy lands here as `<id>.jsonl` +
+ * `<id>.json`, giving the history sidebar a per-run log to replay.
+ */
+export const RUNS_DIR = 'runs'
+
+/** Filesystem-safe, lexicographically-sortable run id from an ISO start time. */
+export function runIdFromStartedAt(startedAt: string): string {
+  // ISO is fixed-width, so replacing the `:`/`.` separators keeps lexical order
+  // in step with chronological order — the history list sorts by id alone.
+  return startedAt.replace(/[:.]/g, '-')
+}
+
+/** A run id is path-safe: no separators or traversal, only our own charset. */
+export function isSafeRunId(id: string): boolean {
+  return /^[A-Za-z0-9_-]+$/.test(id)
+}
+
 /** Bumped when the on-disk shape changes, so a reader can detect an old file. */
 export const RUN_META_VERSION = 1
 
@@ -33,6 +53,8 @@ export type RunStatus = 'running' | 'done' | 'stopped' | 'failed'
 export interface RunMeta {
   version: number
   status: RunStatus
+  /** Stable, path-safe id for this run (derived from {@link startedAt}). */
+  id: string
   /** ISO timestamp the store was opened (run start). */
   startedAt: string
   /** ISO timestamp of the last event written. */
@@ -63,6 +85,8 @@ export interface StoreFs {
   append(path: string, contents: string): Promise<void>
   exists(path: string): Promise<boolean>
   mkdir(path: string): Promise<void>
+  /** List a directory's entries (names only). Missing dir yields `[]`. */
+  readdir(path: string): Promise<string[]>
 }
 
 /** Options for {@link RunStore.open}. */
@@ -118,7 +142,14 @@ export function applyEventToMeta(meta: RunMeta, event: FrameworkEvent, at: strin
 
 /** Rebuild {@link RunMeta} from a full event log (used when resuming). */
 export function metaFromEvents(events: readonly FrameworkEvent[], startedAt: string): RunMeta {
-  let meta: RunMeta = { version: RUN_META_VERSION, status: 'running', startedAt, updatedAt: startedAt, passes: 0 }
+  let meta: RunMeta = {
+    version: RUN_META_VERSION,
+    status: 'running',
+    id: runIdFromStartedAt(startedAt),
+    startedAt,
+    updatedAt: startedAt,
+    passes: 0,
+  }
   for (const event of events) meta = applyEventToMeta(meta, event, startedAt)
   return meta
 }
@@ -165,11 +196,15 @@ export class RunStore {
     const store = new RunStore(fs, dir, now, {
       version: RUN_META_VERSION,
       status: 'running',
+      id: runIdFromStartedAt(now),
       startedAt: now,
       updatedAt: now,
       passes: 0,
     })
     if (opts.fresh) {
+      // A new run truncates the live log. First rescue the prior run if it never
+      // got archived (e.g. a crash exited before close), so no history is lost.
+      await archivePriorRun(fs, dir).catch(() => {})
       await fs.write(store.eventsPath, '')
       await store.writeMeta()
     }
@@ -192,9 +227,18 @@ export class RunStore {
     return this.tail
   }
 
-  /** Flush any queued writes. Call before exit so the log is complete on disk. */
+  /**
+   * Flush any queued writes, then archive this run into `runs/` so it shows up in
+   * the dashboard's history (#303). Both best-effort: persistence must never break
+   * a run, so an archive failure is logged, not thrown.
+   */
   async close(): Promise<void> {
     await this.tail
+    try {
+      await archiveRun(this.fs, this.dir, this.meta, this.eventsPath)
+    } catch (err) {
+      console.error('[framework] failed to archive run history:', err)
+    }
   }
 
   /** The current derived snapshot. */
@@ -239,6 +283,91 @@ export class RunStore {
   }
 }
 
+/** Paths of a run's archived log + meta under `.framework/runs/`. */
+function archivePaths(dir: string, id: string): { events: string; meta: string } {
+  const runs = join(dir, RUNS_DIR)
+  return { events: join(runs, `${id}.jsonl`), meta: join(runs, `${id}.json`) }
+}
+
+/**
+ * Copy a run's live log + meta into `runs/<id>.jsonl` / `runs/<id>.json`. The live
+ * files stay put (the daemon keeps tailing them until the next run); this is a
+ * durable snapshot for the history list. Idempotent per id.
+ */
+async function archiveRun(fs: StoreFs, dir: string, meta: RunMeta, eventsPath: string): Promise<void> {
+  if (!isSafeRunId(meta.id)) return
+  await fs.mkdir(join(dir, RUNS_DIR))
+  const out = archivePaths(dir, meta.id)
+  const events = (await fs.exists(eventsPath)) ? await fs.read(eventsPath) : ''
+  await fs.write(out.events, events)
+  await fs.write(out.meta, JSON.stringify(meta, null, 2) + '\n')
+}
+
+/**
+ * Archive the run currently sitting in the live files, unless it is already in
+ * `runs/`. Used at the start of a fresh run so a crash that skipped
+ * {@link RunStore.close} still leaves its history behind.
+ */
+async function archivePriorRun(fs: StoreFs, dir: string): Promise<void> {
+  const metaPath = join(dir, META_FILE)
+  if (!(await fs.exists(metaPath))) return
+  let meta: RunMeta
+  try {
+    meta = JSON.parse(await fs.read(metaPath)) as RunMeta
+  } catch {
+    return
+  }
+  if (!meta?.id || !isSafeRunId(meta.id)) return
+  if (await fs.exists(archivePaths(dir, meta.id).meta)) return
+  await archiveRun(fs, dir, meta, join(dir, EVENTS_FILE))
+}
+
+/**
+ * List a project's archived runs, most-recent first. Reads every `runs/*.json`
+ * meta; the id sorts chronologically so no timestamp parse is needed. Missing or
+ * unreadable dir/entries are skipped, never thrown.
+ */
+export async function listRuns(cwd: string, fs: StoreFs = nodeStoreFs()): Promise<RunMeta[]> {
+  const runsDir = join(cwd, FRAMEWORK_DIR, RUNS_DIR)
+  const entries = await fs.readdir(runsDir)
+  const metas: RunMeta[] = []
+  for (const name of entries) {
+    if (!name.endsWith('.json')) continue
+    try {
+      metas.push(JSON.parse(await fs.read(join(runsDir, name))) as RunMeta)
+    } catch {
+      // skip a torn/half-written meta
+    }
+  }
+  return metas.sort((a, b) => (a.id < b.id ? 1 : a.id > b.id ? -1 : 0))
+}
+
+/**
+ * Read one archived run's event log for replay. Returns `undefined` for an
+ * unknown or unsafe id; a torn trailing line is dropped (same rule as the live
+ * {@link RunStore.loadEvents}).
+ */
+export async function loadRunEvents(
+  cwd: string,
+  id: string,
+  fs: StoreFs = nodeStoreFs(),
+): Promise<FrameworkEvent[] | undefined> {
+  if (!isSafeRunId(id)) return undefined
+  const path = archivePaths(join(cwd, FRAMEWORK_DIR), id).events
+  if (!(await fs.exists(path))) return undefined
+  const events: FrameworkEvent[] = []
+  for (const line of (await fs.read(path)).split('\n')) {
+    const trimmed = line.trim()
+    if (!trimmed) continue
+    try {
+      events.push(JSON.parse(trimmed) as FrameworkEvent)
+    } catch {
+      break
+    }
+  }
+  return events
+}
+
 /**
  * A {@link StoreFs} backed by `node:fs/promises`. The import is dynamic so the
  * store core stays free of a hard `node:fs` dependency — same convention as
@@ -269,6 +398,14 @@ export function nodeStoreFs(): StoreFs {
     async mkdir(path) {
       const { mkdir } = await import('node:fs/promises')
       await mkdir(path, { recursive: true })
+    },
+    async readdir(path) {
+      const { readdir } = await import('node:fs/promises')
+      try {
+        return await readdir(path)
+      } catch {
+        return []
+      }
     },
   }
 }

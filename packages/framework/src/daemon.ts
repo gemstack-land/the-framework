@@ -244,7 +244,7 @@ export interface RunDaemonOptions {
  */
 export async function runDaemon(cwd: string, opts: RunDaemonOptions = {}): Promise<void> {
   const port = opts.port ?? DEFAULT_DAEMON_PORT
-  const dashboard: Dashboard = await startDashboard({ port })
+  const dashboard: Dashboard = await startDashboard({ port, cwd })
   const eventsPath = join(daemonDir(cwd), EVENTS_FILE)
   const tailer = new EventTailer(eventsPath, event => dashboard.push(event))
 

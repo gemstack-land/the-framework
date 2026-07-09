@@ -679,6 +679,7 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
       dashboard = await startDashboard({
         ...(opts.port !== undefined ? { port: opts.port } : {}),
         onStop: () => controller.abort(),
+        cwd,
       })
       io.out(`◆ dashboard: ${dashboard.url}`)
     } catch (err) {
@@ -888,7 +889,7 @@ async function resumeRun(opts: CliOptions, io: CliIO): Promise<number> {
   let dashboard: Dashboard | undefined
   if (opts.dashboard) {
     try {
-      dashboard = await startDashboard(opts.port !== undefined ? { port: opts.port } : {})
+      dashboard = await startDashboard({ ...(opts.port !== undefined ? { port: opts.port } : {}), cwd })
       io.out(`◆ dashboard (resumed): ${dashboard.url}`)
     } catch (err) {
       io.err(`could not start dashboard (${err instanceof Error ? err.message : String(err)}); replaying to terminal only`)

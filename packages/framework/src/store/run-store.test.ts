@@ -1,7 +1,16 @@
 import { strict as assert } from 'node:assert'
 import { test } from 'node:test'
 import { join } from 'node:path'
-import { RunStore, applyEventToMeta, metaFromEvents, RUN_META_VERSION, type StoreFs, type RunMeta } from './run-store.js'
+import {
+  RunStore,
+  applyEventToMeta,
+  metaFromEvents,
+  listRuns,
+  loadRunEvents,
+  RUN_META_VERSION,
+  type StoreFs,
+  type RunMeta,
+} from './run-store.js'
 import type { FrameworkEvent } from '../events.js'
 
 /** An in-memory {@link StoreFs} so the store logic is tested without touching disk. */
@@ -25,6 +34,17 @@ function memFs(seed: Record<string, string> = {}): StoreFs & { files: Map<string
     },
     async mkdir() {
       // no-op: the memory fs has no directories
+    },
+    async readdir(dir) {
+      // Derive children from the flat path map: basenames whose dirname is `dir`.
+      const prefix = dir.endsWith('/') ? dir : dir + '/'
+      const names = new Set<string>()
+      for (const p of files.keys()) {
+        if (!p.startsWith(prefix)) continue
+        const rest = p.slice(prefix.length)
+        if (!rest.includes('/')) names.add(rest)
+      }
+      return [...names]
     },
   }
 }
@@ -121,4 +141,60 @@ test('applyEventToMeta marks a user-stopped run as stopped, not failed (#218)', 
   const base = metaFromEvents(RUN.slice(0, 4), AT)
   const stopped = applyEventToMeta(base, { kind: 'end', ok: false, stopped: true }, AT)
   assert.equal(stopped.status, 'stopped')
+})
+
+test('close archives the run into runs/<id>.json + .jsonl for history (#303)', async () => {
+  const fs = memFs()
+  const store = await RunStore.open(CWD, { fs, fresh: true, now: AT })
+  for (const event of RUN) await store.append(event)
+  await store.close()
+
+  const id = store.snapshot().id
+  const archivedMeta = fs.files.get(join(CWD, '.framework', 'runs', `${id}.json`))
+  const archivedLog = fs.files.get(join(CWD, '.framework', 'runs', `${id}.jsonl`))
+  assert.ok(archivedMeta, 'meta archived')
+  assert.ok(archivedLog, 'log archived')
+  assert.equal((JSON.parse(archivedMeta!) as RunMeta).intent, 'a blog with comments')
+  assert.equal(archivedLog!.trim().split('\n').length, RUN.length)
+})
+
+test('listRuns returns archived runs newest-first with intent + status (#303)', async () => {
+  const fs = memFs()
+  const a = await RunStore.open(CWD, { fs, fresh: true, now: '2026-07-04T00:00:00.000Z' })
+  for (const e of RUN) await a.append(e)
+  await a.close()
+  const b = await RunStore.open(CWD, { fs, fresh: true, now: '2026-07-05T00:00:00.000Z' })
+  await b.append({ kind: 'bootstrap', event: { type: 'scope', scope: 'full', intent: 'a todo app' } })
+  await b.close()
+
+  const runs = await listRuns(CWD, fs)
+  assert.equal(runs.length, 2)
+  assert.equal(runs[0]!.intent, 'a todo app') // newest first
+  assert.equal(runs[1]!.intent, 'a blog with comments')
+  assert.equal(runs[1]!.status, 'done')
+  assert.equal(runs[1]!.sessionLink, 'https://ex.com/s/sess-123')
+})
+
+test('loadRunEvents replays an archived run, and rejects unknown/unsafe ids (#303)', async () => {
+  const fs = memFs()
+  const store = await RunStore.open(CWD, { fs, fresh: true, now: AT })
+  for (const e of RUN) await store.append(e)
+  await store.close()
+  const id = store.snapshot().id
+
+  assert.deepEqual(await loadRunEvents(CWD, id, fs), RUN)
+  assert.equal(await loadRunEvents(CWD, 'nope', fs), undefined)
+  assert.equal(await loadRunEvents(CWD, '../escape', fs), undefined)
+})
+
+test('a fresh run archives a prior run that never got closed (crash safety) (#303)', async () => {
+  const fs = memFs()
+  const crashed = await RunStore.open(CWD, { fs, fresh: true, now: '2026-07-04T00:00:00.000Z' })
+  for (const e of RUN) await crashed.append(e)
+  // no close() — simulate a crash. Now a new run opens fresh over the live files.
+  await RunStore.open(CWD, { fs, fresh: true, now: '2026-07-05T00:00:00.000Z' })
+
+  const runs = await listRuns(CWD, fs)
+  assert.equal(runs.length, 1)
+  assert.equal(runs[0]!.intent, 'a blog with comments')
 })
