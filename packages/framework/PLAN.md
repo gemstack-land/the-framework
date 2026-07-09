@@ -7,10 +7,18 @@
 
 Selected: implement now-ish.
 
+- Bootstrap mode
+  - VALUE-HIGH (potentially groundbreaking, if we manage to make AI autonomously create advanced apps)
+  - The `PLAN.md` + `TODO.md` trick: https://github.com/gemstack-land/gemstack/issues/297#issuecomment-4913683778
+    - Try: also install it as system prompt injected to *all* prompts (not only when boostraping, let's see if it's sometimes counterproductive)
+  - Ideas/brainstorming (don't implement yet)
+    - PM system prompts:
+      - "When it isn't clear, ask what the ultimate goal is (success startup, just a prototype, a project for a client, ...)
+      - Make AI lead some product management discussions (no clue yet how exactly this would look like)
 - Queue
   - VALUE-HIGH
   - A global queue of prompts to be fired whenever there's capacity
-  - Required for boostraping + maintenance
+  - Required for boostraping
   - Technically, it's just a `TODO.md` file (git repo, no database)
 - Usage limit maxing
   - VALUE-HIGH
@@ -25,20 +33,21 @@ Selected: implement now-ish.
   - Ideas/brainstorming (don't implement yet)
     - `Auto`-model chooser (use cheap model to analyze prompt and select the right model)
     - Allow user to select max quota budget (in %) per prompt
-- Don't reapeat yourself
-  - VALUE-HIGH
-  - AI-human seam files: `KNOWLEDGE_BASE.md`, `DECISIONS.md`
-    - TODO: maybe develop system prompts to ensure these are maintained?
 - Dashboard
 
 ## Candidates
 
-Candidates: implement soon? Maybe even now-ish?
+Candidates: implement soon/now?
 
-- Anti-lazy-pill
+- Don't reapeat yourself
   - VALUE-HIGH
-  - The `PLAN.md` + `TODO.md` trick: https://github.com/gemstack-land/gemstack/issues/297#issuecomment-4913683778
-  - Try: install it as system prompt injected to *all* prompts (let's see if it's somtimes counterproductive)
+  - AI-human seam files: `KNOWLEDGE_BASE.md`, `DECISIONS.md`
+    - TODO: maybe develop system prompts to ensure these are maintained?
+
+## Later
+
+Nice, but let's implement later.
+
 - Auto triggers
   - VALUE-HIGH
   - GitHub CI red => trigger agent
@@ -77,12 +86,6 @@ Postponed: don't implement yet.
       - Let's break this prompt in two: one for maintainability (e.g. DRY), and a second one for readability (so that humans can easily read the code)
         - Try the readability prompt on brand-the-framework (it has lots of potential for top-down code structure refactoring)
     - Security audit (TODO: develop scurity audit prompt)
-- Bootstrap mode
-  - Ideas:
-    - System prompts
-      - "When it isn't clear, ask what the ultimate goal is (success startup, just a prototype, a project for a client, ...)
-      - Product management discussions (no clue yet how exactly this would look like)
-  - VALUE-HIGH (potentially groundbreaking, if we manage to make AI autonomously create advanced apps)
 
 ## Untriaged
 
