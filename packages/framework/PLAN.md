@@ -1,22 +1,26 @@
 # Roadmap 🚀
 
 > [!NOTE]
-> - Also includes brainstorming ideas (listed at [Untriaged](#untriaged) and [Low prio](#low-prio)).
+> - Also includes brainstorming ideas
 
-## High prio
+## TODO
 
 Selected: implement now-ish.
 
+- Queue
+  - VALUE-HIGH
+  - A global queue of prompts to be fired whenever there's capacity
+  - Required for boostraping + maintenance
+  - Technically, it's just a `TODO.md` file (git repo, no database)
 - Usage limit maxing
   - VALUE-HIGH
-  - Queues: global queues of prompts to be fired whenever there's capacity
-  - Cron jobs to max-out daily usage limits (fires queues + maintenance prompts)
+  - Cron jobs to max-out daily usage limits (fires queue)
   - Implementation
     - Accessing usage limits: https://github.com/gemstack-land/gemstack/pull/300#issuecomment-4918256151
   - Marketing
-    - Very easy sell (very sexy feature, massive added value)
+    - Easy sell (sexy feature, clear added value)
     - Unique USP (since Claude has no interest to implement this)
-    - Attracts very prolific AI users (more likely to be early adopters of The Framework)
+    - Attracts prolific AI users (more likely to be early adopters of The Framework)
     - Landing page illustration idea: progress bar "used AI daily budget" (without The Framework => red bar, with The Framework => green bar, a "candy" progress bar that looks like a skills progress bar in MMORPG video games)
   - Ideas/brainstorming (don't implement yet)
     - `Auto`-model chooser (use cheap model to analyze prompt and select the right model)
@@ -27,16 +31,14 @@ Selected: implement now-ish.
     - TODO: maybe develop system prompts to ensure these are maintained?
 - Dashboard
 
-## Medium prio
+## Candidates
 
 Candidates: implement soon? Maybe even now-ish?
 
 - Anti-lazy-pill
   - VALUE-HIGH
-  - https://github.com/gemstack-land/gemstack/issues/297#issuecomment-4913683778 (the `PLAN.md` + `TODO.md` trick)
-  - TODO: install it as system prompt injected to *all* prompts (let's see if it's somtimes counterproductive)
-- Bootstrap mode
-  - VALUE-HIGH (potentially groundbreaking, if we manage to make AI autonomously create advanced apps)
+  - The `PLAN.md` + `TODO.md` trick: https://github.com/gemstack-land/gemstack/issues/297#issuecomment-4913683778
+  - Try: install it as system prompt injected to *all* prompts (let's see if it's somtimes counterproductive)
 - Auto triggers
   - VALUE-HIGH
   - GitHub CI red => trigger agent
@@ -45,7 +47,7 @@ Candidates: implement soon? Maybe even now-ish?
   - Implementation
     - Bad: requires integrations with many providers (not every company uses GitHub)
 
-## Low prio
+## Postponed
 
 Postponed: don't implement yet.
 
@@ -54,16 +56,37 @@ Postponed: don't implement yet.
 - Scaling
   - For large codebases: `CODEBASE_OVERVIEW.md`
   - VALUE-LOW
+- Sandbox
+  - VALUE-HIGH
+  - IMPLEMENTATION-COMPLEX
+    - Not sure how secrets (e.g. production env vars) can sandboxed from AI
+    - Ideally sandboxing happens on a directory-level (spanning over multiple repositories), so that AI can access multiple repos at once.
 
 ## To research
 
 - Product manager agent
   - VALUE-?? (no clue how much value, but potentially massive value — to be tested. Because AI is bad at writing documentation, I suspect it's going to be bad at being a product manager, but let's see.)
   - Bunch of `.md` files as seam between AI and humans? `BRAINSTORMING.md`, `FEATURE_REQUEST.md`
+- Maintenance
+  - VALUE-MEDIUM
+  - Root `MAINTENANCE.md`: lists all files (the file structure)
+  - A `.maintenance.md` per file: lists all functions
+  - Three ratings: maintainability, human readability, security
+  - High-quality prompts:
+    - [Highly-effective code refactoring prompt](https://gist.github.com/brillout/8abfd310bad5df422ae56c5c9066ffc5)
+      - Let's break this prompt in two: one for maintainability (e.g. DRY), and a second one for readability (so that humans can easily read the code)
+        - Try the readability prompt on brand-the-framework (it has lots of potential for top-down code structure refactoring)
+    - Security audit (TODO: develop scurity audit prompt)
+- Bootstrap mode
+  - Ideas:
+    - System prompts
+      - "When it isn't clear, ask what the ultimate goal is (success startup, just a prototype, a project for a client, ...)
+      - Product management discussions (no clue yet how exactly this would look like)
+  - VALUE-HIGH (potentially groundbreaking, if we manage to make AI autonomously create advanced apps)
 
 ## Untriaged
 
-TODO: sort the following in high/medium/low prio
+TODO: triage the following.
 
 - Autopilot mode: minimum intervention, automatic code refactoring (for maintainability), automatic security audit, automatic new feature requests (related: product manager agent), automatic feature request implementation
   - VALUE-HIGH (potentially groundbreaking)
@@ -72,17 +95,11 @@ TODO: sort the following in high/medium/low prio
   - Highly polished PRs:
     - Nice three-level PR overview: TLDR, summary, and details
     - Minimal changes in PR (clean refactoring in susbsequent PR)
-- Maintenance
-  - VALUE-MEDIUM
-  - High-quality prompts:
-    - [Highly-effective code refactoring prompt](https://gist.github.com/brillout/8abfd310bad5df422ae56c5c9066ffc5)
-      - Let's break this prompt in two: one for maintainability (e.g. DRY), and a second one for readability (so that humans can easily read the code)
-        - Try the readability prompt on brand-the-framework (it has lots of potential for top-down code structure refactoring)
-    - Security audit (TODO: develop scurity audit prompt)
 - TLDR thinking out loud
   - VALUE-MEDIUM
   - Show TLDR of the model's thinking (=> nice overview of all the thinking done during this session)
   - Also show live thinking (same thinking-out-loud as Claude Code => just forward the Claude Code CLI output)
+  - Show used skills, opened URLs, commands ran
 - Notifications
   - VALUE-MEDIUM
 - Give AI access to GitHub issues/discussions
