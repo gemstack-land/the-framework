@@ -455,10 +455,15 @@ export async function autoSelectPreset(opts: {
   io: CliIO
   /** The driver to route the pick through. Defaults to a Claude Code driver; injected in tests. */
   driver?: Driver
+  /** Narrate the routing turn to the dashboard + terminal (#310), so it isn't a blank while the pick runs. */
+  onEvent?: (event: FrameworkEvent) => void
 }): Promise<MetaSelection | undefined> {
   const catalog = presetCatalog(await builtinDomainPresets())
   if (catalog.length === 0) return undefined
   const driver = opts.driver ?? new ClaudeCodeDriver(opts.claudeOpts)
+  // The routing turn is a real Claude turn that emits no run events, so without
+  // this the dashboard sits blank for its first few seconds (#310).
+  opts.onEvent?.({ kind: 'log', message: '◆ auto-selecting the best-fit preset from your prompt + workspace…' })
   let session: DriverSession | undefined
   try {
     session = await driver.start({
@@ -605,74 +610,11 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
   process.on('SIGINT', onInterrupt)
   process.on('SIGTERM', onInterrupt)
 
-  // AI meta-select: with no preset chosen explicitly, infer the best fit (+ modes +
-  // build event) from the intent + workspace, then resolve it with the active modes.
-  if (!fake && opts.autoPreset && !presetName) {
-    const selection = await autoSelectPreset({ intent, cwd, signals, claudeOpts, signal: controller.signal, io })
-    if (selection?.preset) {
-      presetName = selection.preset
-      modeList = [...new Set([...modeList, ...selection.modes])]
-      buildEvent = buildEvent ?? selection.buildEvent
-      domainPreset = (await resolveDomainPreset(presetName, modeList)).preset
-      const modeNote = modeList.length ? ` (modes: ${modeList.join(', ')})` : ''
-      const kindNote = selection.buildEvent && !merged.buildEvent ? `, ${selection.buildEvent}` : ''
-      io.out(`◆ auto-selected preset: ${presetName}${modeNote}${kindNote}${selection.why ? ` — ${selection.why}` : ''}`)
-    } else {
-      io.out(`◆ auto-select: no preset fits${selection?.why ? ` (${selection.why})` : ''}; using the plain framework flow.`)
-    }
-  }
-
-  // A mode/kind given with no preset in effect has nothing to act on: note it.
-  if (modeList.length && !domainPreset) {
-    io.err(`note: ${modeList.join(' + ')} mode(s) have no effect without a preset.`)
-  }
-  if (buildEvent && !domainPreset) {
-    io.err(`note: build event "${buildEvent}" has no effect without a preset.`)
-  }
-  // The sandbox only wraps the serve verification, so it is a no-op without --serve.
-  if (opts.sandbox === 'docker' && !opts.serve) {
-    io.err(`note: --sandbox docker has no effect without --serve.`)
-  }
-
-  const driver: Driver = fake ? fakeDriver() : new ClaudeCodeDriver(claudeOpts)
-  // The fake demo defaults to a Cloudflare deploy decision so the flow ends with
-  // a deploy phase; a live run only narrates deploy when asked.
-  const deploy: DeployDecision | undefined = opts.deploy
-    ? { render: 'ssr', target: opts.deploy, reason: `deploy to ${opts.deploy}` }
-    : fake
-      ? FAKE_DEPLOY
-      : undefined
-
-  // A real deploy target actually ships the app. Only for live runs against a
-  // known target; --fake stays plan-only and deterministic. An unknown target
-  // just narrates the decision. Real targets never throw on missing creds.
-  let deployTarget: DeployTarget | undefined
-  if (!fake && opts.deploy) {
-    const built = buildDeployTarget(opts.deploy, opts, cwd)
-    if (built.error) {
-      io.err(built.error)
-      io.err('Run `framework --help` for usage.')
-      return 2
-    }
-    deployTarget = built.target
-  }
-
-  const serve: ServeConfig | undefined = opts.serve
-    ? {
-        command: opts.serve,
-        // The CLI keeps the dashboard (and app) up until Ctrl+C, so leave the app
-        // serving with a preview link once the run succeeds.
-        keepAlive: true,
-        ...(opts.serveInstall ? { install: opts.serveInstall } : {}),
-        ...(opts.serveBuild ? { build: opts.serveBuild } : {}),
-        ...(opts.servePort !== undefined ? { port: opts.servePort } : {}),
-        ...(opts.servePath ? { healthPath: opts.servePath } : {}),
-      }
-    : undefined
-
   // The dashboard Stop button aborts the run-wide controller created above.
   // runFramework checks the signal between phases and the driver kills its current
-  // turn on it, so a stop takes effect promptly.
+  // turn on it, so a stop takes effect promptly. Started here — before the AI
+  // meta-select turn — so that routing turn narrates into a live dashboard instead
+  // of leaving it blank for its first few seconds (#310).
   //
   // Interactive choices (#304): the run's requestChoice handler parks a resolver
   // here keyed by the choice id; the dashboard's Accept / autopilot POSTs the pick
@@ -733,6 +675,72 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
     void store?.append(event)
     publisher?.publish(event)
   }
+
+  // AI meta-select: with no preset chosen explicitly, infer the best fit (+ modes +
+  // build event) from the intent + workspace, then resolve it with the active modes.
+  // Narrates through onEvent so the routing turn is visible on the dashboard (#310).
+  if (!fake && opts.autoPreset && !presetName) {
+    const selection = await autoSelectPreset({ intent, cwd, signals, claudeOpts, signal: controller.signal, io, onEvent })
+    if (selection?.preset) {
+      presetName = selection.preset
+      modeList = [...new Set([...modeList, ...selection.modes])]
+      buildEvent = buildEvent ?? selection.buildEvent
+      domainPreset = (await resolveDomainPreset(presetName, modeList)).preset
+      const modeNote = modeList.length ? ` (modes: ${modeList.join(', ')})` : ''
+      const kindNote = selection.buildEvent && !merged.buildEvent ? `, ${selection.buildEvent}` : ''
+      onEvent({ kind: 'log', message: `◆ auto-selected preset: ${presetName}${modeNote}${kindNote}${selection.why ? ` — ${selection.why}` : ''}` })
+    } else {
+      onEvent({ kind: 'log', message: `◆ auto-select: no preset fits${selection?.why ? ` (${selection.why})` : ''}; using the plain framework flow.` })
+    }
+  }
+
+  // A mode/kind given with no preset in effect has nothing to act on: note it.
+  if (modeList.length && !domainPreset) {
+    io.err(`note: ${modeList.join(' + ')} mode(s) have no effect without a preset.`)
+  }
+  if (buildEvent && !domainPreset) {
+    io.err(`note: build event "${buildEvent}" has no effect without a preset.`)
+  }
+  // The sandbox only wraps the serve verification, so it is a no-op without --serve.
+  if (opts.sandbox === 'docker' && !opts.serve) {
+    io.err(`note: --sandbox docker has no effect without --serve.`)
+  }
+
+  const driver: Driver = fake ? fakeDriver() : new ClaudeCodeDriver(claudeOpts)
+  // The fake demo defaults to a Cloudflare deploy decision so the flow ends with
+  // a deploy phase; a live run only narrates deploy when asked.
+  const deploy: DeployDecision | undefined = opts.deploy
+    ? { render: 'ssr', target: opts.deploy, reason: `deploy to ${opts.deploy}` }
+    : fake
+      ? FAKE_DEPLOY
+      : undefined
+
+  // A real deploy target actually ships the app. Only for live runs against a
+  // known target; --fake stays plan-only and deterministic. An unknown target
+  // just narrates the decision. Real targets never throw on missing creds.
+  let deployTarget: DeployTarget | undefined
+  if (!fake && opts.deploy) {
+    const built = buildDeployTarget(opts.deploy, opts, cwd)
+    if (built.error) {
+      io.err(built.error)
+      io.err('Run `framework --help` for usage.')
+      return 2
+    }
+    deployTarget = built.target
+  }
+
+  const serve: ServeConfig | undefined = opts.serve
+    ? {
+        command: opts.serve,
+        // The CLI keeps the dashboard (and app) up until Ctrl+C, so leave the app
+        // serving with a preview link once the run succeeds.
+        keepAlive: true,
+        ...(opts.serveInstall ? { install: opts.serveInstall } : {}),
+        ...(opts.serveBuild ? { build: opts.serveBuild } : {}),
+        ...(opts.servePort !== undefined ? { port: opts.servePort } : {}),
+        ...(opts.servePath ? { healthPath: opts.servePath } : {}),
+      }
+    : undefined
 
   // Discover installed `framework-*` capability packages (#190) from the signals
   // read above and register them; each still activates by signal or the
