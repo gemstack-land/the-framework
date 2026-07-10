@@ -38,6 +38,7 @@ import { memoryFraming, type LoadedMemory } from './memory.js'
 import { systemPromptBlock } from './system-prompt.js'
 import { decideDeploy, deployWith, domainLoopChecklist, driverArchitect, driverBuild, driverChecklist, driverImprove, driverLoopPrompts, reArchitect } from './steps.js'
 import { hasSessionIdPlaceholder, OPEN_LOOP_MODES, resolveSessionLink, type ChoiceOption, type ChoicePick, type ChoiceRequest, type FrameworkEvent } from './events.js'
+import { UsageMeter } from './usage.js'
 
 /**
  * The framework's default full-fledged pass budget. Higher than ai-autopilot's
@@ -200,6 +201,14 @@ export interface RunFrameworkOptions {
    * wires this to the dashboard's Accept button + autopilot countdown.
    */
   requestChoice?: (req: ChoiceRequest) => Promise<ChoicePick>
+  /**
+   * Stop the run once cumulative agent cost reaches this many USD (budget cap,
+   * #322). Checked after each turn that reports usage: the turn that crosses the
+   * cap finishes, then the run stops itself (a clean stop, not a failure). Omit
+   * for no cap. The framework infers spend from what the agent reports, since the
+   * account's usage *limit* is not retrievable under subscription auth.
+   */
+  budgetUsd?: number
   /** Observe the unified event stream. */
   onEvent?: (event: FrameworkEvent) => void
 }
@@ -343,17 +352,37 @@ export async function runFramework(opts: RunFrameworkOptions): Promise<RunFramew
     emit({ kind: 'modes', all: OPEN_LOOP_MODES, active: opts.modes ?? [] })
   }
 
+  // Compose the caller's signal with a budget-triggered abort (#322) so the run can
+  // stop *itself* once it has spent too much, without the caller having to watch
+  // usage. Everything downstream aborts on `runSignal`; only the budget path (or a
+  // caller abort) trips it. With no caller signal this is just the budget signal.
+  const budgetController = new AbortController()
+  const runSignal = opts.signal ? AbortSignal.any([opts.signal, budgetController.signal]) : budgetController.signal
+
   // Watch the black box for its real session id (the {type:'result'} event) and
   // surface it as `session-update` once known — that is the honest handle a UI
   // links to. Re-emit when it changes, since each Claude Code prompt is a fresh
-  // session; the dashboard just updates the link in place.
+  // session; the dashboard just updates the link in place. The same result event
+  // carries this turn's usage, which we fold into the run total and gate on (#322).
   let lastSessionId: string | undefined
+  const usage = new UsageMeter()
   const onDriverEvent = (event: DriverEvent) => {
     emit({ kind: 'driver', event })
-    if (event.type === 'result' && event.sessionId && event.sessionId !== lastSessionId) {
+    if (event.type !== 'result') return
+    if (event.sessionId && event.sessionId !== lastSessionId) {
       lastSessionId = event.sessionId
       const link = linkTemplate ? resolveSessionLink(linkTemplate, event.sessionId) : undefined
       emit({ kind: 'session-update', sessionId: event.sessionId, ...(link ? { sessionLink: link } : {}) })
+    }
+    if (!event.usage) return
+    usage.add(event.usage)
+    const totals = usage.totals()
+    emit({ kind: 'usage', ...totals, ...(opts.budgetUsd != null ? { budgetUsd: opts.budgetUsd } : {}) })
+    // The turn that crosses the cap has already run (its cost is spent); stop the
+    // run before the next one. Signalled once — the next phase's check ends it.
+    if (opts.budgetUsd != null && totals.costUsd >= opts.budgetUsd && !budgetController.signal.aborted) {
+      emit({ kind: 'log', message: `Budget reached: $${totals.costUsd.toFixed(4)} of $${opts.budgetUsd} — stopping the run.` })
+      budgetController.abort(new Error('[framework] budget reached'))
     }
   }
 
@@ -362,7 +391,7 @@ export async function runFramework(opts: RunFrameworkOptions): Promise<RunFramew
     cwd: opts.cwd,
     system,
     ...(opts.model ? { model: opts.model } : {}),
-    ...(opts.signal ? { signal: opts.signal } : {}),
+    signal: runSignal,
     onEvent: onDriverEvent,
   })
 
@@ -376,7 +405,7 @@ export async function runFramework(opts: RunFrameworkOptions): Promise<RunFramew
         loops: [...domainPreset.loops],
         prompts: driverLoopPrompts(session, domainPreset.prompts, {
           ledger,
-          ...(opts.signal ? { signal: opts.signal } : {}),
+          signal: runSignal,
         }),
       })
     : undefined
@@ -436,13 +465,14 @@ export async function runFramework(opts: RunFrameworkOptions): Promise<RunFramew
     const bootstrap = new Bootstrap({
       ledger,
       maxPasses: opts.maxPasses ?? DEFAULT_MAX_PASSES,
-      ...(opts.signal ? { signal: opts.signal } : {}),
+      signal: runSignal,
       onEvent: (event: BootstrapEvent) => emit({ kind: 'bootstrap', event }),
       steps: {
         scope: () => ({ scope: opts.scope ?? 'full', intent: opts.intent }),
         architect: planApprovalGate(driverArchitect(session), session, {
           ...(opts.requestChoice ? { requestChoice: opts.requestChoice } : {}),
           emit,
+          signal: runSignal,
         }),
         build: driverBuild(session, workspaceOpt),
         checklist,
@@ -466,10 +496,13 @@ export async function runFramework(opts: RunFrameworkOptions): Promise<RunFramew
     emit({ kind: 'end', ok: true })
     return { result, detection, events, ledger, ...(preview ? { preview } : {}), ...(loop ? { loop } : {}) }
   } catch (err) {
-    // A user interrupt (the dashboard Stop button / Ctrl+C aborts the signal) is a
-    // clean stop, not a failure — mark it so surfaces show "stopped".
-    const stopped = opts.signal?.aborted === true
-    emit({ kind: 'end', ok: false, ...(stopped ? { stopped: true } : {}), detail: err instanceof Error ? err.message : String(err) })
+    // A user interrupt (the dashboard Stop button / Ctrl+C) or a budget cap (#322)
+    // is a clean stop, not a failure — mark it so surfaces show "stopped". Budget is
+    // its own signal, so it trips when the caller's signal did not.
+    const budgetStopped = budgetController.signal.aborted && opts.signal?.aborted !== true
+    const stopped = opts.signal?.aborted === true || budgetController.signal.aborted
+    const detail = budgetStopped ? `budget reached ($${opts.budgetUsd})` : err instanceof Error ? err.message : String(err)
+    emit({ kind: 'end', ok: false, ...(stopped ? { stopped: true } : {}), detail })
     throw err
   } finally {
     await session.dispose()
@@ -493,6 +526,8 @@ function planApprovalGate(
   deps: {
     requestChoice?: (req: ChoiceRequest) => Promise<ChoicePick>
     emit: (event: FrameworkEvent) => void
+    /** The run signal; a gate parked for a pick unblocks (proceed) if the run aborts. */
+    signal?: AbortSignal
   },
 ): (ctx: ArchitectContext) => Promise<ArchitectPlan> {
   return async ctx => {
@@ -512,14 +547,10 @@ function planApprovalGate(
     const req: ChoiceRequest = { id: 'plan-approval', title: 'Approve this plan?', options, recommended: 'proceed' }
     emit({ kind: 'choice', ...req })
 
-    // A handler that rejects (or a run aborted mid-await) must not hang the gate:
-    // fall back to the recommended option so the next phase's signal check ends it.
-    let pick: ChoicePick
-    try {
-      pick = await requestChoice(req)
-    } catch {
-      pick = { picked: 'proceed', by: 'auto' }
-    }
+    // A handler that rejects, or a run aborted mid-await (user stop / budget cap
+    // #322), must not hang the gate: fall back to the recommended option so the
+    // next phase's signal check ends the run.
+    const pick = await raceChoiceOrAbort(requestChoice(req), deps.signal)
     emit({ kind: 'choice-resolved', id: req.id, picked: pick.picked, by: pick.by ?? 'user' })
 
     const altMatch = /^alt:(\d+)$/.exec(pick.picked)
@@ -528,6 +559,28 @@ function planApprovalGate(
     emit({ kind: 'log', message: `Re-architecting around your choice: ${chosen.option}` })
     return reArchitect(session, ctx, plan.stack, chosen.option)
   }
+}
+
+/** The recommended fallback pick when a gate cannot get a real answer. */
+const PROCEED: ChoicePick = { picked: 'proceed', by: 'auto' }
+
+/**
+ * Resolve with the human's pick, or fall back to proceed if the pick rejects or
+ * the run aborts first (user stop / budget cap #322) — so a gate parked for input
+ * never hangs. Never rejects. Cleans up its abort listener either way.
+ */
+function raceChoiceOrAbort(pick: Promise<ChoicePick>, signal?: AbortSignal): Promise<ChoicePick> {
+  if (!signal) return pick.catch(() => PROCEED)
+  if (signal.aborted) return Promise.resolve(PROCEED)
+  return new Promise<ChoicePick>(resolve => {
+    const onAbort = () => resolve(PROCEED)
+    signal.addEventListener('abort', onAbort, { once: true })
+    const done = (value: ChoicePick) => {
+      signal.removeEventListener('abort', onAbort)
+      resolve(value)
+    }
+    pick.then(done, () => done(PROCEED))
+  })
 }
 
 /**

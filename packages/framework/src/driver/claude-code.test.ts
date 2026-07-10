@@ -22,6 +22,31 @@ test('StreamJsonParser surfaces assistant text + tool names, keeps the result', 
   assert.deepEqual(p.result(), { text: 'All done', sessionId: 'sess-1' })
 })
 
+test('StreamJsonParser pulls token + cost usage off the result line (#322)', () => {
+  const p = new StreamJsonParser()
+  p.push(
+    JSON.stringify({
+      type: 'result',
+      subtype: 'success',
+      result: 'done',
+      session_id: 's',
+      total_cost_usd: 0.1234,
+      usage: { input_tokens: 100, output_tokens: 40, cache_read_input_tokens: 900, cache_creation_input_tokens: 50 },
+    }),
+  )
+  assert.deepEqual(p.result(), {
+    text: 'done',
+    sessionId: 's',
+    usage: { costUsd: 0.1234, inputTokens: 100, outputTokens: 40, cacheReadTokens: 900, cacheCreationTokens: 50 },
+  })
+})
+
+test('StreamJsonParser leaves usage off when the result line reports none (#322)', () => {
+  const p = new StreamJsonParser()
+  p.push(JSON.stringify({ type: 'result', subtype: 'success', result: 'done', session_id: 's' }))
+  assert.deepEqual(p.result(), { text: 'done', sessionId: 's' })
+})
+
 test('StreamJsonParser ignores non-JSON noise and falls back to assistant text', () => {
   const p = new StreamJsonParser()
   assert.deepEqual(p.push('some banner line'), [])

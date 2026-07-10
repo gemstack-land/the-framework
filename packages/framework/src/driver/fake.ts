@@ -1,4 +1,4 @@
-import type { Driver, DriverEvent, DriverPromptOptions, DriverSession, DriverStartOptions, DriverTurn } from './types.js'
+import type { Driver, DriverEvent, DriverPromptOptions, DriverSession, DriverStartOptions, DriverTurn, DriverUsage } from './types.js'
 
 /** One scripted turn the {@link FakeDriver} replays. */
 export interface FakeTurn {
@@ -6,6 +6,8 @@ export interface FakeTurn {
   text: string
   /** Tool names to emit as `action` events before the result (visual only). */
   actions?: string[]
+  /** Token + cost accounting to report for this turn (#322). Omitted = no usage. */
+  usage?: DriverUsage
 }
 
 /** Options for {@link FakeDriver}. */
@@ -71,9 +73,9 @@ export class FakeDriverSession implements DriverSession {
     this.emit({ type: 'start', prompt: text })
     for (const label of turn.actions ?? []) this.emit({ type: 'action', label })
     if (turn.text) this.emit({ type: 'text', text: turn.text })
-    this.emit({ type: 'result', text: turn.text, sessionId: this.id })
+    this.emit({ type: 'result', text: turn.text, sessionId: this.id, ...(turn.usage ? { usage: turn.usage } : {}) })
 
-    return Promise.resolve({ text: turn.text, sessionId: this.id })
+    return Promise.resolve({ text: turn.text, sessionId: this.id, ...(turn.usage ? { usage: turn.usage } : {}) })
   }
 
   readCode(path: string): Promise<string> {

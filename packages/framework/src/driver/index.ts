@@ -5,6 +5,7 @@ export type {
   DriverPromptOptions,
   DriverTurn,
   DriverEvent,
+  DriverUsage,
 } from './types.js'
 export { FakeDriver, FakeDriverSession, type FakeTurn, type FakeDriverOptions } from './fake.js'
 export {

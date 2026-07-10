@@ -91,6 +91,19 @@ test('page ships opt-in browser notifications for run-end and choice gates (#309
   }
 })
 
+test('page ships a live spend readout fed by usage events (#322)', async () => {
+  const dash = await startDashboard({ port: 0 })
+  try {
+    const { body } = await fetchText(dash.url + '/')
+    // Header element + its updater, dispatched from a usage event.
+    assert.match(body, /id="spend"/)
+    assert.match(body, /function updateSpend\(fe\)/)
+    assert.match(body, /fe\.kind === 'usage'/)
+  } finally {
+    await dash.close()
+  }
+})
+
 test('page ships the document sidebar with a dependency-free markdown renderer (#319)', async () => {
   const dash = await startDashboard({ port: 0 })
   try {

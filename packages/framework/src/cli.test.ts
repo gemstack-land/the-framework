@@ -47,7 +47,14 @@ test('parseArgs flags unknown options and bad values', () => {
   assert.match(parseArgs(['--nope']).error!, /unknown option/)
   assert.match(parseArgs(['--scope', 'huge']).error!, /invalid --scope/)
   assert.match(parseArgs(['--max-passes', '0']).error!, /max-passes/)
+  assert.match(parseArgs(['--max-cost', '0']).error!, /max-cost/)
+  assert.match(parseArgs(['--max-cost', 'abc']).error!, /max-cost/)
   assert.match(parseArgs(['--permission-mode', 'wat']).error!, /permission-mode/)
+})
+
+test('parseArgs reads --max-cost as a positive USD budget (#322)', () => {
+  assert.equal(parseArgs(['--max-cost', '2.5', 'x']).maxCost, 2.5)
+  assert.equal(parseArgs(['x']).maxCost, undefined)
 })
 
 test('parseArgs reads permission-mode and skip-permissions', () => {

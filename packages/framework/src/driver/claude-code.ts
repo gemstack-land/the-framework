@@ -3,7 +3,7 @@ import { createInterface } from 'node:readline'
 import { readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { killTree, registerChild, unregisterChild } from './child-registry.js'
-import type { Driver, DriverEvent, DriverPromptOptions, DriverSession, DriverStartOptions, DriverTurn } from './types.js'
+import type { Driver, DriverEvent, DriverPromptOptions, DriverSession, DriverStartOptions, DriverTurn, DriverUsage } from './types.js'
 
 /** Grace between SIGTERM and the SIGKILL that forces a hung agent tree down. */
 const TERMINATE_GRACE_MS = 5000
@@ -227,7 +227,12 @@ export function runClaude(opts: RunClaudeOptions): Promise<DriverTurn> {
         finish(() => rejectPromise(new Error(`[framework] claude-code exited (${code ?? 'null'}): ${detail}`)))
         return
       }
-      opts.emit({ type: 'result', text: turn.text, ...(turn.sessionId ? { sessionId: turn.sessionId } : {}) })
+      opts.emit({
+        type: 'result',
+        text: turn.text,
+        ...(turn.sessionId ? { sessionId: turn.sessionId } : {}),
+        ...(turn.usage ? { usage: turn.usage } : {}),
+      })
       finish(() => resolvePromise(turn))
     })
 
@@ -249,6 +254,7 @@ export class StreamJsonParser {
   private finalText = ''
   private assistantText = ''
   private sessionId?: string
+  private usage?: DriverUsage
 
   /** Feed one line; returns the events it produced (may be empty). */
   push(line: string): DriverEvent[] {
@@ -268,6 +274,8 @@ export class StreamJsonParser {
     if (type === 'result') {
       const result = obj['result']
       if (typeof result === 'string') this.finalText = result
+      const usage = parseUsage(obj)
+      if (usage) this.usage = usage
       return [] // The `result` event is emitted by the runner after `close`.
     }
     return []
@@ -295,6 +303,31 @@ export class StreamJsonParser {
   /** The final turn: the `result` text, falling back to accumulated assistant text. */
   result(): DriverTurn {
     const text = this.finalText || this.assistantText
-    return { text, ...(this.sessionId ? { sessionId: this.sessionId } : {}) }
+    return {
+      text,
+      ...(this.sessionId ? { sessionId: this.sessionId } : {}),
+      ...(this.usage ? { usage: this.usage } : {}),
+    }
+  }
+}
+
+/**
+ * Pull token + cost accounting off Claude Code's `result` line (#322):
+ * `total_cost_usd` plus a `usage` object of token counts. Returns undefined when
+ * the line carries neither, so a driver/agent that omits usage stays usage-free.
+ */
+function parseUsage(obj: Record<string, unknown>): DriverUsage | undefined {
+  const cost = obj['total_cost_usd']
+  const raw = obj['usage']
+  const hasUsage = typeof raw === 'object' && raw !== null
+  if (typeof cost !== 'number' && !hasUsage) return undefined
+  const usage = (hasUsage ? raw : {}) as Record<string, unknown>
+  const num = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) ? v : 0)
+  return {
+    costUsd: typeof cost === 'number' && Number.isFinite(cost) ? cost : 0,
+    inputTokens: num(usage['input_tokens']),
+    outputTokens: num(usage['output_tokens']),
+    cacheReadTokens: num(usage['cache_read_input_tokens']),
+    cacheCreationTokens: num(usage['cache_creation_input_tokens']),
   }
 }
