@@ -1,4 +1,4 @@
-# Roadmap 🚀
+# Vision: high-level roadmap 🚀
 
 > [!NOTE]
 > - Also includes brainstorming ideas
