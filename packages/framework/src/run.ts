@@ -531,35 +531,51 @@ function planApprovalGate(
   },
 ): (ctx: ArchitectContext) => Promise<ArchitectPlan> {
   return async ctx => {
-    const plan = await base(ctx)
     const { requestChoice, emit } = deps
+    let plan = await base(ctx)
     if (!requestChoice) return plan
 
-    const alternatives = plan.alternatives ?? []
-    const options: ChoiceOption[] = [
-      { id: 'proceed', label: `Proceed: ${plan.stack}` },
-      ...alternatives.map((a, i) => ({
-        id: `alt:${i}`,
-        label: `Use ${a.option} instead`,
-        ...(a.whyNot ? { detail: a.whyNot } : {}),
-      })),
-    ]
-    const req: ChoiceRequest = { id: 'plan-approval', title: 'Approve this plan?', options, recommended: 'proceed' }
-    emit({ kind: 'choice', ...req })
+    // Re-fire the gate after each re-architect so the user approves the FINAL plan,
+    // not just the first (#324): a picked alternative can differ a lot from what was
+    // rejected, and an autopilot run should still get one look at it. Bounded so a
+    // run of alt-picks can't loop forever.
+    for (let round = 0; round < MAX_PLAN_ROUNDS; round++) {
+      const alternatives = plan.alternatives ?? []
+      const options: ChoiceOption[] = [
+        { id: 'proceed', label: `Proceed: ${plan.stack}` },
+        ...alternatives.map((a, i) => ({
+          id: `alt:${i}`,
+          label: `Use ${a.option} instead`,
+          ...(a.whyNot ? { detail: a.whyNot } : {}),
+        })),
+      ]
+      // Round 0 keeps the stable `plan-approval` id; later rounds get a unique id so
+      // a dashboard never confuses a re-approval with the pick it just resolved.
+      const id = round === 0 ? 'plan-approval' : `plan-approval-${round}`
+      const req: ChoiceRequest = { id, title: 'Approve this plan?', options, recommended: 'proceed' }
+      emit({ kind: 'choice', ...req })
 
-    // A handler that rejects, or a run aborted mid-await (user stop / budget cap
-    // #322), must not hang the gate: fall back to the recommended option so the
-    // next phase's signal check ends the run.
-    const pick = await raceChoiceOrAbort(requestChoice(req), deps.signal)
-    emit({ kind: 'choice-resolved', id: req.id, picked: pick.picked, by: pick.by ?? 'user' })
+      // A handler that rejects, or a run aborted mid-await (user stop / budget cap
+      // #322), must not hang the gate: fall back to the recommended option so the
+      // next phase's signal check ends the run.
+      const pick = await raceChoiceOrAbort(requestChoice(req), deps.signal)
+      emit({ kind: 'choice-resolved', id: req.id, picked: pick.picked, by: pick.by ?? 'user' })
 
-    const altMatch = /^alt:(\d+)$/.exec(pick.picked)
-    const chosen = altMatch ? alternatives[Number(altMatch[1])] : undefined
-    if (!chosen) return plan
-    emit({ kind: 'log', message: `Re-architecting around your choice: ${chosen.option}` })
-    return reArchitect(session, ctx, plan.stack, chosen.option)
+      const altMatch = /^alt:(\d+)$/.exec(pick.picked)
+      const chosen = altMatch ? alternatives[Number(altMatch[1])] : undefined
+      if (!chosen) return plan // proceed (or an unknown pick) approves the current plan
+      emit({ kind: 'log', message: `Re-architecting around your choice: ${chosen.option}` })
+      plan = await reArchitect(session, ctx, plan.stack, chosen.option)
+    }
+    // Ran out of rounds still picking alternatives: proceed with the latest plan
+    // rather than loop forever.
+    emit({ kind: 'log', message: 'Proceeding with the latest plan (re-architect limit reached).' })
+    return plan
   }
 }
+
+/** How many times a run may re-architect at the plan-approval gate before proceeding (#324). */
+const MAX_PLAN_ROUNDS = 5
 
 /** The recommended fallback pick when a gate cannot get a real answer. */
 const PROCEED: ChoicePick = { picked: 'proceed', by: 'auto' }
