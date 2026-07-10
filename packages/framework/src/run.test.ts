@@ -600,3 +600,51 @@ test('picking an alternative re-architects the run around it (#304)', async () =
   assert.match(architect.event.stack, /Next\.js \+ Postgres/)
   assert.equal(result.productionGrade, true)
 })
+
+test('the gate re-fires to approve the re-architected plan (#324)', async () => {
+  const first = {
+    stack: 'Vike + Prisma',
+    narration: 'first plan',
+    decisions: [{ choice: 'SSR', why: 'per-request data' }],
+    alternatives: [{ option: 'Next.js', whyNot: 'edge deploy is more constrained' }],
+  }
+  const second = {
+    stack: 'Next.js + Postgres',
+    narration: 'second plan',
+    decisions: [{ choice: 'App Router', why: 'the user chose it' }],
+    alternatives: [{ option: 'Remix', whyNot: 'smaller ecosystem' }],
+  }
+  const driver = new FakeDriver({
+    respond: (prompt: string): string => {
+      if (/You are the architect/.test(prompt) && /prefers Next\.js/.test(prompt))
+        return '```json\n' + JSON.stringify(second) + '\n```'
+      if (/You are the architect/.test(prompt)) return '```json\n' + JSON.stringify(first) + '\n```'
+      if (/production-grade checklist/.test(prompt)) return 'Reviewed.\n```json\n{ "blockers": [] }\n```'
+      return 'done'
+    },
+    sessionId: 'refire',
+  })
+
+  const events: FrameworkEvent[] = []
+  // Round 0: pick the alternative (Next.js). Round 1: approve the re-architected plan.
+  const picks = ['alt:0', 'proceed']
+  let round = 0
+  const { result } = await runFramework({
+    intent: FAKE_INTENT,
+    driver,
+    cwd: '/tmp/ws',
+    signals: FAKE_SIGNALS,
+    onEvent: e => events.push(e),
+    requestChoice: async () => ({ picked: picks[round++] ?? 'proceed', by: 'user' as const }),
+  })
+
+  // The gate fired twice: once on the initial plan, once on the re-architected one.
+  const choices = events.filter(e => e.kind === 'choice')
+  assert.equal(choices.length, 2)
+  assert.equal(choices[0]!.kind === 'choice' && choices[0]!.id, 'plan-approval')
+  assert.equal(choices[1]!.kind === 'choice' && choices[1]!.id, 'plan-approval-1')
+  // The second gate offered the re-architected (Next.js) plan for approval.
+  assert.ok(choices[1]!.kind === 'choice' && /Next\.js \+ Postgres/.test(choices[1]!.options[0]!.label))
+  assert.ok(events.some(e => e.kind === 'log' && /Re-architecting around your choice: Next\.js/.test(e.message)))
+  assert.equal(result.productionGrade, true)
+})
