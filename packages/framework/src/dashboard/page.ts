@@ -34,6 +34,11 @@ export function dashboardHtml(title: string, stoppable = false, choiceable = fal
   #stop:hover { background: #2f2118; border-color: #6a4a2e; }
   #stop:disabled { opacity: .5; cursor: default; }
   #stop[hidden] { display: none; }
+  #notify { margin-left: 12px; font: inherit; font-size: 13px; cursor: pointer; line-height: 1;
+    color: #b7c0d0; background: #141a24; border: 1px solid #24344a; border-radius: 6px; padding: 4px 8px; }
+  #notify:hover { background: #17212f; }
+  #notify.on { border-color: #2f6f4a; background: #12241a; }
+  #notify.denied { opacity: .5; cursor: not-allowed; }
   #app-banner { display: flex; align-items: center; gap: 8px; padding: 10px 20px;
     background: #0f2417; border-bottom: 1px solid #1c3a28; font-size: 13px; }
   #app-banner .dot { color: #67d98f; }
@@ -124,6 +129,7 @@ export function dashboardHtml(title: string, stoppable = false, choiceable = fal
   <span class="sub" id="session">connecting…</span>
   <span id="session-link"></span>
   <span id="status">●</span>
+  <button id="notify" title="Notify me when a run finishes or needs my input">🔕</button>
   <button id="stop" hidden>■ Stop</button>
 </header>
 <div id="layout">
@@ -325,6 +331,9 @@ function render(fe) {
     if (mode === 'live') { ended = true; $('stop').hidden = true; }
     closeChoice();
     $('status').textContent = fe.ok ? '\\u25cf finished' : fe.stopped ? '\\u25a0 stopped' : '\\u25cf failed';
+    notify(
+      fe.ok ? '\\u2713 Run finished' : fe.stopped ? '\\u25a0 Run stopped' : '\\u2717 Run failed',
+      fe.ok ? 'Your build is ready on the dashboard.' : fe.detail || '');
   }
 }
 function stopRun() {
@@ -365,6 +374,7 @@ function showChoice(req) {
   $('autopilot-toggle').checked = autopilotOn();
   $('choice-panel').hidden = false;
   startCountdown();
+  notify('The run needs your input', req.title || 'A choice is waiting for you.');
 }
 function selectedChoice() {
   const el = document.querySelector('input[name="choice-opt"]:checked');
@@ -484,6 +494,47 @@ function renderRuns(runs) {
 function loadRuns() {
   fetch('api/runs').then(r => r.ok ? r.json() : { runs: [] }).then(d => renderRuns(d.runs || [])).catch(() => {});
 }
+
+// Browser notifications (#309): tell the human when a run finishes or reaches a
+// point that needs them (a <Choices> gate, e.g. a PLAN.md approval) while the tab
+// is backgrounded. Opt-in via the header bell; the choice is remembered. Fully
+// client-side and best-effort — a browser without the API just hides the bell.
+const notifyBtn = $('notify');
+const notifySupported = () => 'Notification' in window;
+const notifyEnabled = () => localStorage.getItem('framework:notify') === '1';
+function syncNotifyBtn() {
+  if (!notifySupported()) { notifyBtn.hidden = true; return; }
+  const denied = Notification.permission === 'denied';
+  const on = notifyEnabled() && Notification.permission === 'granted';
+  notifyBtn.classList.toggle('on', on);
+  notifyBtn.classList.toggle('denied', denied);
+  notifyBtn.textContent = on ? '\\uD83D\\uDD14' : '\\uD83D\\uDD15';
+  notifyBtn.title = denied ? 'Notifications are blocked in your browser settings'
+    : on ? 'Notifications on \\u2014 click to mute'
+    : 'Notify me when a run finishes or needs my input';
+}
+async function toggleNotify() {
+  if (!notifySupported() || Notification.permission === 'denied') return;
+  if (notifyEnabled() && Notification.permission === 'granted') {
+    localStorage.setItem('framework:notify', '0');
+  } else {
+    const perm = Notification.permission === 'granted' ? 'granted' : await Notification.requestPermission();
+    localStorage.setItem('framework:notify', perm === 'granted' ? '1' : '0');
+  }
+  syncNotifyBtn();
+}
+function notify(title, body) {
+  // Live run only, opt-in + permitted, and only when the tab is backgrounded: if
+  // the user is already looking at the dashboard the panels say it all.
+  if (mode !== 'live' || !notifyEnabled() || !notifySupported()) return;
+  if (Notification.permission !== 'granted' || !document.hidden) return;
+  try {
+    const n = new Notification(title, { body: body || '', tag: 'framework-run' });
+    n.onclick = () => { window.focus(); n.close(); };
+  } catch {}
+}
+notifyBtn.addEventListener('click', toggleNotify);
+syncNotifyBtn();
 
 $('stop').addEventListener('click', stopRun);
 $('back-live').addEventListener('click', showLive);
