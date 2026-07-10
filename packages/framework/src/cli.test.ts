@@ -18,6 +18,7 @@ import {
   type CliIO,
 } from './cli.js'
 import { FakeDriver } from './driver/index.js'
+import type { FrameworkEvent } from './events.js'
 
 function capture(): { io: CliIO; out: string[]; err: string[] } {
   const out: string[] = []
@@ -140,6 +141,22 @@ test('autoSelectPreset routes the pick through an injected driver and returns th
     const { io } = capture()
     const selection = await autoSelectPreset({ intent: 'fix a crash', cwd: empty, signals: {}, claudeOpts: {}, io, driver })
     assert.deepEqual(selection, { preset: 'software-development', modes: ['technical'], buildEvent: 'bug-fix', why: 'a fix' })
+  } finally {
+    await rm(empty, { recursive: true, force: true })
+  }
+})
+
+test('autoSelectPreset narrates the routing turn through onEvent so the dashboard is not blank (#310)', async () => {
+  const empty = await mkdtemp(join(tmpdir(), 'framework-ws-'))
+  try {
+    const driver = new FakeDriver({
+      turns: [{ text: '```json\n{ "preset": "none", "modes": [], "why": "n/a" }\n```' }],
+    })
+    const { io } = capture()
+    const events: FrameworkEvent[] = []
+    await autoSelectPreset({ intent: 'anything', cwd: empty, signals: {}, claudeOpts: {}, io, driver, onEvent: e => events.push(e) })
+    // Emitted before the routing turn resolves, so the dashboard shows activity during it.
+    assert.ok(events.some(e => e.kind === 'log' && /auto-selecting the best-fit preset/.test(e.message)))
   } finally {
     await rm(empty, { recursive: true, force: true })
   }
