@@ -155,6 +155,7 @@ export function dashboardHtml(title: string, stoppable = false, choiceable = fal
   <h1>${escapeHtml(title)}</h1>
   <span class="sub" id="session">connecting…</span>
   <span id="session-link"></span>
+  <span class="sub" id="spend" title="Cumulative agent spend for this run" hidden></span>
   <span id="status">●</span>
   <button id="notify" title="Notify me when a run finishes or needs my input">🔕</button>
   <button id="stop" hidden>■ Stop</button>
@@ -358,6 +359,7 @@ function render(fe) {
   else if (fe.kind === 'choice') showChoice(fe);
   else if (fe.kind === 'choice-resolved') resolveChoice(fe);
   else if (fe.kind === 'log') log(fe.message);
+  else if (fe.kind === 'usage') updateSpend(fe);
   else if (fe.kind === 'end') {
     if (mode === 'live') { ended = true; $('stop').hidden = true; }
     closeChoice();
@@ -366,6 +368,13 @@ function render(fe) {
       fe.ok ? '\\u2713 Run finished' : fe.stopped ? '\\u25a0 Run stopped' : '\\u2717 Run failed',
       fe.ok ? 'Your build is ready on the dashboard.' : fe.detail || '');
   }
+}
+function updateSpend(fe) {
+  const el = $('spend');
+  let s = 'spend $' + fe.costUsd.toFixed(4);
+  if (fe.budgetUsd) s += ' / $' + fe.budgetUsd;
+  el.textContent = s;
+  el.hidden = false;
 }
 function stopRun() {
   const btn = $('stop');

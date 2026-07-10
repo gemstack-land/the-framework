@@ -106,6 +106,7 @@ Options:
                          hand-rolling. Vike-only; installed framework-* extensions
                          auto-activate either way (default: off, hand-rolled + Prisma).
   --max-passes <n>       Full-fledged loop pass budget (default: 5).
+  --max-cost <usd>       Stop the run once it has spent this much (USD).
   --permission-mode <mode>   Claude Code permission mode: default | acceptEdits |
                              bypassPermissions | plan (default: bypassPermissions,
                              so the headless loop can run installs/builds/tests).
@@ -161,6 +162,7 @@ export interface CliOptions {
   technical: boolean
   buildEvent?: string | undefined
   maxPasses?: number
+  maxCost?: number
   deploy?: string | undefined
   cfProject?: string | undefined
   dokployUrl?: string | undefined
@@ -329,6 +331,12 @@ export function parseArgs(argv: string[]): CliOptions {
         const n = Number(argv[++i])
         if (!Number.isInteger(n) || n < 1) opts.error = `invalid --max-passes: must be a positive integer`
         else opts.maxPasses = n
+        break
+      }
+      case '--max-cost': {
+        const n = Number(argv[++i])
+        if (!Number.isFinite(n) || n <= 0) opts.error = `invalid --max-cost: must be a positive number (USD)`
+        else opts.maxCost = n
         break
       }
       case '--port': {
@@ -669,7 +677,12 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
     io.out(`◆ shared run: ${publisher.url}`)
   }
 
+  // The framework's own verdict that the run stopped cleanly rather than failed —
+  // set by a user interrupt or a budget cap (#322). Trusted over which signal
+  // aborted, since a budget stop trips an internal signal the CLI never sees.
+  let stoppedCleanly = false
   const onEvent = (event: FrameworkEvent) => {
+    if (event.kind === 'end' && event.stopped) stoppedCleanly = true
     io.out(formatFrameworkEvent(event))
     dashboard?.push(event)
     void store?.append(event)
@@ -782,6 +795,7 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
       : {}),
     ...(opts.model ? { model: opts.model } : {}),
     ...(opts.maxPasses ? { maxPasses: opts.maxPasses } : {}),
+    ...(opts.maxCost ? { budgetUsd: opts.maxCost } : {}),
     ...(deploy ? { deploy } : {}),
     ...(deployTarget ? { deployTarget } : {}),
     ...(serve ? { serve } : {}),
@@ -825,10 +839,10 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
   } catch (err) {
     clearInterrupt()
     await store?.close()
-    // A user stop (the dashboard Stop button aborted the signal) is not a failure:
-    // report it cleanly, keep the dashboard up so the stopped state is visible, and
-    // exit 0.
-    if (controller.signal.aborted) {
+    // A clean stop (dashboard Stop button, Ctrl+C, or a budget cap #322) is not a
+    // failure: report it cleanly, keep the dashboard up so the stopped state is
+    // visible, and exit 0.
+    if (controller.signal.aborted || stoppedCleanly) {
       io.out('\n■ Stopped.')
       if (dashboard) {
         io.out(`\nDashboard still live at ${dashboard.url}. Press Ctrl+C to exit.`)

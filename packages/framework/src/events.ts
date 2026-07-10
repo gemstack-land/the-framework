@@ -70,6 +70,22 @@ export type FrameworkEvent =
   /** A framework-level log line. */
   | { kind: 'log'; message: string }
   /**
+   * Cumulative token + cost usage for the run so far (#322). Emitted after each
+   * agent turn that reports usage; the dashboard renders a live spend readout and
+   * the run stops itself once `costUsd` reaches the budget cap, if one is set.
+   */
+  | {
+      kind: 'usage'
+      costUsd: number
+      inputTokens: number
+      outputTokens: number
+      cacheReadTokens: number
+      cacheCreationTokens: number
+      turns: number
+      /** The budget cap in USD this run is gated on, when one was set. */
+      budgetUsd?: number
+    }
+  /**
    * The run's active Open Loop modes (#272), emitted once when a domain preset is
    * in effect. `all` is every mode the run knows about (stable order); `active` is
    * the subset switched on for this run. The dashboard renders them as read-only
@@ -104,6 +120,10 @@ export function formatFrameworkEvent(event: FrameworkEvent): string {
       return `▶ your app is running at ${event.url}`
     case 'log':
       return `  ${event.message}`
+    case 'usage':
+      return `  spend: $${event.costUsd.toFixed(4)}${
+        event.budgetUsd ? ` / $${event.budgetUsd}` : ''
+      } over ${event.turns} turn${event.turns === 1 ? '' : 's'}`
     case 'modes': {
       const shown = event.all.map(m => `${event.active.includes(m) ? '[x]' : '[ ]'} ${m}`).join('  ')
       return `  modes: ${shown}`

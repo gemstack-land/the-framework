@@ -52,3 +52,9 @@ test('formatFrameworkEvent distinguishes finished / stopped / failed (#218)', ()
   assert.equal(formatFrameworkEvent({ kind: 'end', ok: false, stopped: true }), '■ stopped')
   assert.equal(formatFrameworkEvent({ kind: 'end', ok: false, detail: 'boom' }), '✗ failed: boom')
 })
+
+test('formatFrameworkEvent renders a usage spend line, with the cap when set (#322)', () => {
+  const base = { kind: 'usage' as const, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0 }
+  assert.equal(formatFrameworkEvent({ ...base, costUsd: 0.04, turns: 2 }), '  spend: $0.0400 over 2 turns')
+  assert.equal(formatFrameworkEvent({ ...base, costUsd: 0.02, turns: 1, budgetUsd: 5 }), '  spend: $0.0200 / $5 over 1 turn')
+})

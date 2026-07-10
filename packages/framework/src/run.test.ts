@@ -98,6 +98,81 @@ test('runFramework resolves a {sessionId} link template once the id is known', a
   assert.equal(update.sessionLink, 'https://code.example.com/s/fake-orders-app')
 })
 
+test('runFramework accumulates per-turn usage and emits a running total (#322)', async () => {
+  const events: FrameworkEvent[] = []
+  await runFramework({
+    intent: FAKE_INTENT,
+    driver: fakeDriver(), // every scripted turn reports $0.02 usage
+    cwd: '/tmp/ws',
+    signals: FAKE_SIGNALS,
+    onEvent: e => events.push(e),
+  })
+
+  const usage = events.filter(e => e.kind === 'usage')
+  assert.ok(usage.length >= 1)
+  const last = usage.at(-1)!
+  assert.equal(last.kind, 'usage')
+  if (last.kind !== 'usage') return
+  // One usage event per turn that reported usage; totals grow monotonically.
+  assert.equal(last.turns, usage.length)
+  assert.ok(Math.abs(last.costUsd - last.turns * 0.02) < 1e-9)
+  assert.ok(last.cacheReadTokens > 0)
+  // No cap was set, so the total carries no budget and the run finished cleanly.
+  assert.equal(last.budgetUsd, undefined)
+  const end = events.at(-1)!
+  assert.equal(end.kind === 'end' && end.ok, true)
+})
+
+test('runFramework stops itself once the budget cap is reached (#322)', async () => {
+  const events: FrameworkEvent[] = []
+  // $0.01 cap trips on the very first $0.02 turn (the architect).
+  await assert.rejects(
+    runFramework({
+      intent: FAKE_INTENT,
+      driver: fakeDriver(),
+      cwd: '/tmp/ws',
+      signals: FAKE_SIGNALS,
+      budgetUsd: 0.01,
+      onEvent: e => events.push(e),
+    }),
+  )
+
+  const usage = events.filter(e => e.kind === 'usage')
+  assert.ok(usage.length >= 1)
+  assert.equal(usage[0]!.kind === 'usage' && usage[0]!.budgetUsd, 0.01)
+  assert.ok(events.some(e => e.kind === 'log' && e.message.startsWith('Budget reached:')))
+
+  const end = events.at(-1)!
+  assert.equal(end.kind, 'end')
+  if (end.kind !== 'end') return
+  // A budget stop is a clean stop, not a failure.
+  assert.equal(end.ok, false)
+  assert.equal(end.stopped, true)
+  assert.match(end.detail ?? '', /budget reached/)
+  // The run stopped early: it never reached the deploy/production-grade tail.
+  assert.ok(!events.some(e => e.kind === 'bootstrap' && e.event.type === 'done'))
+})
+
+test('a plan-approval gate parked for a pick unblocks when the budget trips (#322)', async () => {
+  const events: FrameworkEvent[] = []
+  // The gate awaits a pick that never arrives; the budget cap trips on the first
+  // (architect) turn and must unblock it rather than hang the run.
+  await assert.rejects(
+    runFramework({
+      intent: FAKE_INTENT,
+      driver: fakeDriver(),
+      cwd: '/tmp/ws',
+      signals: FAKE_SIGNALS,
+      budgetUsd: 0.01,
+      requestChoice: () => new Promise<never>(() => {}),
+      onEvent: e => events.push(e),
+    }),
+  )
+  assert.ok(events.some(e => e.kind === 'choice'))
+  const end = events.at(-1)!
+  assert.equal(end.kind === 'end' && end.stopped, true)
+})
+
 test('runFramework shows a literal session link immediately (no template)', async () => {
   const events: FrameworkEvent[] = []
   await runFramework({

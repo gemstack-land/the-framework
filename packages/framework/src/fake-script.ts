@@ -41,18 +41,23 @@ const ARCHITECT = {
   alternatives: [{ option: 'Next.js', whyNot: 'more constrained Cloudflare/edge deploy for the per-request data path' }],
 }
 
+// A small, plausible per-turn usage so the demo shows spend accumulating (#322).
+const FAKE_USAGE = { costUsd: 0.02, inputTokens: 1800, outputTokens: 600, cacheReadTokens: 12000, cacheCreationTokens: 800 }
+
 const TURNS: FakeTurn[] = [
-  { text: '```json\n' + JSON.stringify(ARCHITECT) + '\n```', actions: ['Read'] },
+  { text: '```json\n' + JSON.stringify(ARCHITECT) + '\n```', actions: ['Read'], usage: FAKE_USAGE },
   {
     text: 'Built the orders app: an orders schema and migration, a paginated /orders page, and a sign-in stub.',
     actions: ['Write', 'Write', 'Bash'],
+    usage: FAKE_USAGE,
   },
   {
     text: 'Reviewed the app.\n```json\n{ "blockers": ["No authentication on the orders page yet"] }\n```',
     actions: ['Read', 'Grep'],
+    usage: FAKE_USAGE,
   },
-  { text: 'Added a +guard to the orders page (vike-auth) so it requires a signed-in user.', actions: ['Edit'] },
-  { text: 'Reviewed again.\n```json\n{ "blockers": [] }\n```', actions: ['Read'] },
+  { text: 'Added a +guard to the orders page (vike-auth) so it requires a signed-in user.', actions: ['Edit'], usage: FAKE_USAGE },
+  { text: 'Reviewed again.\n```json\n{ "blockers": [] }\n```', actions: ['Read'], usage: FAKE_USAGE },
 ]
 
 /** Build the scripted {@link FakeDriver} for the demo. */

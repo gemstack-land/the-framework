@@ -87,6 +87,26 @@ export interface DriverTurn {
    * keep our own store (#165), so this is the handle a UI links to.
    */
   sessionId?: string
+  /** Token + cost accounting for this turn, when the agent reports it (#322). */
+  usage?: DriverUsage
+}
+
+/**
+ * Token and cost accounting for one turn, as reported by the wrapped agent (#322).
+ * Claude Code emits this on its final `result` line; drivers that cannot report
+ * it simply omit it. Costs are whatever the agent computed, in USD.
+ */
+export interface DriverUsage {
+  /** Cost of the turn in USD, as reported by the agent. */
+  costUsd: number
+  /** Non-cached input tokens. */
+  inputTokens: number
+  /** Output tokens. */
+  outputTokens: number
+  /** Tokens read from the prompt cache. */
+  cacheReadTokens: number
+  /** Tokens written to the prompt cache. */
+  cacheCreationTokens: number
 }
 
 /**
@@ -102,6 +122,6 @@ export type DriverEvent =
   /** The agent used a tool. We surface the name only, not the arguments. */
   | { type: 'action'; label: string }
   /** The turn settled with this final text. */
-  | { type: 'result'; text: string; sessionId?: string }
+  | { type: 'result'; text: string; sessionId?: string; usage?: DriverUsage }
   /** The agent (or its transport) errored. */
   | { type: 'error'; message: string }
