@@ -136,6 +136,15 @@ export {
   type SystemPromptOptions,
 } from './system-prompt.js'
 export {
+  extractParamNames,
+  renderPresetPrompt,
+  unfilledParams,
+  PresetParamError,
+  PARAM_PATTERN,
+  type PresetParam,
+  type PresetParamOptions,
+} from './preset-params.js'
+export {
   preflight,
   type PreflightResult,
   type PreflightCheck,
