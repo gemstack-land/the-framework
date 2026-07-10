@@ -22,6 +22,7 @@ import type {
   Verdict,
 } from '@gemstack/ai-autopilot'
 import type { DriverSession } from './driver/index.js'
+import { parseChoicesGate } from './turn-gate.js'
 
 /**
  * Driver-backed {@link https://github.com/gemstack-land/gemstack | Bootstrap} steps.
@@ -212,6 +213,29 @@ export function reArchitect(
 }
 
 /**
+ * Resume the build after the agent stopped to ask (#337): the turn-boundary choice
+ * gate re-prompts the driver with the user's pick so it continues from the decision
+ * rather than deciding for itself. A fresh turn (option A), so the agent re-reads the
+ * workspace and the pick frames what to do next. Returns a {@link SupervisorRun} in
+ * the same shape as {@link driverBuild} so the gate can hand it straight back.
+ */
+export function continueAfterChoice(
+  session: DriverSession,
+  ctx: BuildContext,
+  question: string,
+  answer: string,
+): Promise<SupervisorRun> {
+  const prompt = `You paused to ask: "${question}". The user chose: ${answer}. Continue building "${ctx.intent}" with that decision, and do not ask again unless a genuinely new choice comes up.`
+  return session
+    .prompt(prompt, { ...(ctx.signal ? { signal: ctx.signal } : {}) })
+    .then(turn => {
+      const subtask: PlannedSubtask = { id: 'build-resume', description: 'Continue after the user picked' }
+      const result: SubtaskResult = { subtask, text: turn.text, ok: true, usage: ZERO_USAGE }
+      return { text: turn.text, plan: [subtask], results: [result], usage: ZERO_USAGE, stoppedEarly: false }
+    })
+}
+
+/**
  * The build step: prompt the driver to build the app and let its own loop run.
  * Emits synthetic Supervisor events so the bootstrap narration still shows a
  * build phase, and returns a {@link SupervisorRun} carrying the driver's summary.
@@ -260,7 +284,10 @@ export function driverBuild(
     // #182: the build must actually produce an app. If nothing landed on disk,
     // the agent stalled (e.g. sanity-checking the stack) — re-prompt once with a
     // hard "create it from scratch" directive so an empty-dir run starts building.
-    if (opts.verifyWorkspace && isWorkspaceEmpty(session.cwd)) {
+    // Exception (#337): an empty workspace plus an `await-choices` block means the
+    // agent stopped *on purpose* to ask; the choice gate handles it, so don't clobber
+    // the question with a scaffold directive.
+    if (opts.verifyWorkspace && isWorkspaceEmpty(session.cwd) && !parseChoicesGate(turn.text)) {
       const retry: PlannedSubtask = { id: 'build-2', description: 'Scaffold the app from scratch (workspace was empty)' }
       ctx.onEvent({ type: 'dispatch-start', subtask: retry })
       turn = await session.prompt(scaffoldPrompt(ctx.plan, ctx.intent), { ...promptOpts, ...signalOpt })

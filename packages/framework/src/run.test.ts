@@ -714,6 +714,71 @@ test('requestMultiSelect can resolve to an empty set when the user checks nothin
   assert.deepEqual(selected, [])
 })
 
+test('a build turn that stops to ask fires a live gate and resumes on the pick (#337)', async () => {
+  const plan = {
+    stack: 'Vike + Prisma',
+    narration: 'a plan',
+    decisions: [{ choice: 'SSR', why: 'per-request data' }],
+    alternatives: [],
+  }
+  const awaitBlock =
+    'I need a decision first.\n```await-choices\n' +
+    '{ "title": "Which data store?", "options": [{ "id": "sqlite", "label": "SQLite" }, { "id": "pg", "label": "Postgres" }], "recommended": "sqlite" }\n' +
+    '```'
+  const driver = new FakeDriver({
+    respond: (prompt: string): string => {
+      if (/You are the architect/.test(prompt)) return '```json\n' + JSON.stringify(plan) + '\n```'
+      if (/Build this app end to end/.test(prompt)) return awaitBlock // the build stops to ask
+      if (/You paused to ask/.test(prompt)) return 'Built it with Postgres. Done.' // the resume
+      if (/production-grade checklist/.test(prompt)) return 'Reviewed.\n```json\n{ "blockers": [] }\n```'
+      return 'done'
+    },
+    sessionId: 'gate337',
+  })
+
+  const events: FrameworkEvent[] = []
+  const prompts: string[] = []
+  const { result } = await runFramework({
+    intent: FAKE_INTENT,
+    driver,
+    cwd: '/tmp/ws',
+    signals: FAKE_SIGNALS,
+    onEvent: e => {
+      events.push(e)
+      if (e.kind === 'driver' && e.event.type === 'start') prompts.push(e.event.prompt)
+    },
+    requestChoice: async () => ({ picked: 'pg', by: 'user' }),
+  })
+
+  // The agent-authored choice surfaced as a live gate with the offered options.
+  // (The architect plan-approval gate #304 also fires first; find ours by id.)
+  const choice = events.find(e => e.kind === 'choice' && e.id === 'await-choices')
+  assert.ok(choice && choice.kind === 'choice')
+  assert.equal(choice.title, 'Which data store?')
+  assert.ok(choice.options.some(o => o.id === 'pg' && o.label === 'Postgres'))
+  // The pick was narrated and the driver was re-prompted to continue from it.
+  assert.ok(events.some(e => e.kind === 'log' && /Continuing with your choice: Postgres/.test(e.message)))
+  assert.ok(prompts.some(p => /You paused to ask.*Which data store.*chose: Postgres/s.test(p)))
+  assert.equal(result.productionGrade, true)
+})
+
+test('without a requestChoice handler a build that asks is not gated (#337 headless)', async () => {
+  const plan = { stack: 'Vike', narration: 'p', decisions: [{ choice: 'x', why: 'y' }], alternatives: [] }
+  const driver = new FakeDriver({
+    respond: (prompt: string): string => {
+      if (/You are the architect/.test(prompt)) return '```json\n' + JSON.stringify(plan) + '\n```'
+      if (/Build this app end to end/.test(prompt)) return 'built it\n```await-choices\n{ "options": [{ "label": "A" }] }\n```'
+      if (/production-grade checklist/.test(prompt)) return 'Reviewed.\n```json\n{ "blockers": [] }\n```'
+      return 'done'
+    },
+    sessionId: 'headless337',
+  })
+  const events: FrameworkEvent[] = []
+  await runFramework({ intent: FAKE_INTENT, driver, cwd: '/tmp/ws', signals: FAKE_SIGNALS, onEvent: e => events.push(e) })
+  assert.equal(events.some(e => e.kind === 'choice'), false)
+  assert.equal(events.some(e => e.kind === 'choice-resolved'), false)
+})
+
 const CH_OPTS: ChoicesOption[] = [
   { id: 'a', label: 'Interpretation A' },
   { id: 'b', label: 'Interpretation B', detail: 'less likely' },

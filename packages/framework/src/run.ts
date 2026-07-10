@@ -23,6 +23,7 @@ import {
   type BootstrapResult,
   type BootstrapScope,
   type BootstrapSteps,
+  type BuildContext,
   type DeployTarget,
   type DomainPreset,
   type FrameworkDetection,
@@ -30,13 +31,15 @@ import {
   type FrameworkSignals,
   type LoopPassContext,
   type RunnerSession,
+  type SupervisorRun,
   type Verdict,
 } from '@gemstack/ai-autopilot'
 import { snapshotWorkspace } from './sandbox.js'
 import type { Driver, DriverEvent, DriverSession } from './driver/index.js'
 import { memoryFraming, type LoadedMemory } from './memory.js'
 import { systemPromptBlock } from './system-prompt.js'
-import { decideDeploy, deployWith, domainLoopChecklist, driverArchitect, driverBuild, driverChecklist, driverImprove, driverLoopPrompts, reArchitect } from './steps.js'
+import { AWAIT_PROTOCOL, parseChoicesGate } from './turn-gate.js'
+import { continueAfterChoice, decideDeploy, deployWith, domainLoopChecklist, driverArchitect, driverBuild, driverChecklist, driverImprove, driverLoopPrompts, reArchitect } from './steps.js'
 import { hasSessionIdPlaceholder, OPEN_LOOP_MODES, pickedIds, resolveSessionLink, type ChoicePick, type ChoiceRequest, type FrameworkEvent } from './events.js'
 import { UsageMeter } from './usage.js'
 
@@ -316,8 +319,10 @@ export async function runFramework(opts: RunFrameworkOptions): Promise<RunFramew
   // The anti-lazy-pill + any user SYSTEM.md lead the system prompt so its working
   // agreement frames every prompt before the role/skill/memory context (#301).
   const promptBlock = systemPromptBlock({ antiLazyPill: opts.antiLazyPill, user: opts.systemPrompt })
+  // The await protocol (#337) concretizes the pill's showChoices()/AWAIT macros into a
+  // signal the turn-boundary gate can detect, so it rides along with the pill.
   const system = [
-    ...(promptBlock ? [promptBlock] : []),
+    ...(promptBlock ? [promptBlock, AWAIT_PROTOCOL] : []),
     ...personas.map(personaInstructions),
     ...skills.map(skillInstructions),
     ...(memoryBlock ? [memoryBlock] : []),
@@ -474,7 +479,11 @@ export async function runFramework(opts: RunFrameworkOptions): Promise<RunFramew
           emit,
           signal: runSignal,
         }),
-        build: driverBuild(session, workspaceOpt),
+        build: agentChoiceGate(driverBuild(session, workspaceOpt), session, {
+          ...(opts.requestChoice ? { requestChoice: opts.requestChoice } : {}),
+          emit,
+          signal: runSignal,
+        }),
         checklist,
         improve: driverImprove(session, workspaceOpt),
         ...(opts.deploy
@@ -579,6 +588,59 @@ function planApprovalGate(
 
 /** How many times a run may re-architect at the plan-approval gate before proceeding (#324). */
 const MAX_PLAN_ROUNDS = 5
+
+/** How many times a build may stop to ask (and be resumed) before it just proceeds (#337). */
+const MAX_AWAIT_ROUNDS = 5
+
+/**
+ * The agent-authored choice gate (#337): the turn-boundary counterpart to the
+ * framework-emitted plan-approval gate (#304). When a build turn ends by asking the
+ * user — an `await-choices` block per {@link AWAIT_PROTOCOL}, e.g. the #326 unclear-scope
+ * or alternatives flow — rather than finishing, show the choice, wait for the pick, and
+ * re-prompt the driver to continue from that decision. A no-op unless a
+ * {@link RunFrameworkOptions.requestChoice} handler is wired (headless byte-identical),
+ * and unless the agent actually stopped to ask (the common case returns straight through).
+ * Bounded so an agent that keeps asking can't loop forever.
+ */
+function agentChoiceGate(
+  base: (ctx: BuildContext) => Promise<SupervisorRun>,
+  session: DriverSession,
+  deps: {
+    requestChoice?: (req: ChoiceRequest) => Promise<ChoicePick>
+    emit: (event: FrameworkEvent) => void
+    /** The run signal; a gate parked for a pick unblocks (proceed) if the run aborts. */
+    signal?: AbortSignal
+  },
+): (ctx: BuildContext) => Promise<SupervisorRun> {
+  return async ctx => {
+    const { requestChoice, emit } = deps
+    let run = await base(ctx)
+    if (!requestChoice) return run
+
+    for (let round = 0; round < MAX_AWAIT_ROUNDS; round++) {
+      const gate = parseChoicesGate(run.text)
+      if (!gate) return run // the agent finished instead of asking — the common case
+      // Round 0 keeps the stable `await-choices` id; later rounds get a unique one so a
+      // dashboard never confuses a re-ask with the pick it just resolved.
+      const id = round === 0 ? 'await-choices' : `await-choices-${round}`
+      const picked = await requestChoices({
+        id,
+        title: gate.title,
+        options: gate.options,
+        ...(gate.recommended ? { recommended: gate.recommended } : {}),
+        requestChoice,
+        emit,
+        ...(deps.signal ? { signal: deps.signal } : {}),
+      })
+      const chosen = gate.options.find(o => o.id === picked)
+      emit({ kind: 'log', message: `Continuing with your choice: ${chosen?.label ?? picked}` })
+      run = await continueAfterChoice(session, ctx, gate.title, chosen?.label ?? picked)
+    }
+    // The agent kept asking past the limit: proceed with the latest turn rather than loop.
+    emit({ kind: 'log', message: 'Proceeding with the build (await limit reached).' })
+    return run
+  }
+}
 
 /** The recommended fallback pick when a single-select gate cannot get a real answer. */
 const PROCEED: ChoicePick = { picked: 'proceed', by: 'auto' }
