@@ -1,10 +1,10 @@
 ## CLI
 
 I suggest that running `$ framework` does the following:
-- Ensures the background process is running
-  - The background process runs the local dashboard (e.g. `localhost:4200`), and [background jobs](https://github.com/gemstack-land/gemstack/issues/298)
-- Prints the list of commands (just convenience commands like `framework run [prompt]`, `framework logs`, ... — not important since the UI already implements all features)
-- Prints the CLI version
+- [x] Ensure The background process that runs the localhost dashboard (e.g. `localhost:4200`) is running
+- [ ] Runs [background jobs](https://github.com/gemstack-land/gemstack/issues/298)
+- [x] Prints the list of commands (just convenience commands like `framework run [prompt]`, `framework logs`, ... — not important since the UI already implements all features)
+- [ ] Prints the CLI version
   - [Only if trivial to implement] Show whether the version is up-to-date (by using `$ npm info`).
     - Should be async (show static info first, then await npm server and show "up-to-date" label)
     - The CLI regularly auto-updates itself
