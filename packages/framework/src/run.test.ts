@@ -2,7 +2,7 @@ import { strict as assert } from 'node:assert'
 import { test } from 'node:test'
 import { defineDomainPreset, defineFrameworkExtension, defineLoop, definePersona, defineSkill } from '@gemstack/ai-autopilot'
 import type { Prompt } from '@gemstack/ai-autopilot'
-import { DEFAULT_MAX_PASSES, requestMultiSelect, runFramework, type MultiSelectOption } from './run.js'
+import { DEFAULT_MAX_PASSES, requestChoices, requestMultiSelect, runFramework, type ChoicesOption, type MultiSelectOption } from './run.js'
 import { FAKE_DEPLOY, FAKE_INTENT, FAKE_SIGNALS, fakeDriver } from './fake-script.js'
 import { FakeDriver, type Driver, type DriverSession } from './driver/index.js'
 import type { ChoiceRequest, FrameworkEvent } from './events.js'
@@ -712,4 +712,74 @@ test('requestMultiSelect can resolve to an empty set when the user checks nothin
     requestChoice: async () => ({ picked: [], by: 'user' }),
   })
   assert.deepEqual(selected, [])
+})
+
+const CH_OPTS: ChoicesOption[] = [
+  { id: 'a', label: 'Interpretation A' },
+  { id: 'b', label: 'Interpretation B', detail: 'less likely' },
+]
+
+test('requestChoices headless: auto-accepts the recommended option (#335)', async () => {
+  const events: FrameworkEvent[] = []
+  const picked = await requestChoices({
+    id: 'ch',
+    title: 'Which interpretation?',
+    options: CH_OPTS,
+    recommended: 'b',
+    emit: e => events.push(e),
+  })
+  assert.equal(picked, 'b')
+  const choice = events.find(e => e.kind === 'choice')
+  assert.ok(choice && choice.kind === 'choice' && choice.multi === undefined && choice.recommended === 'b')
+  const resolved = events.find(e => e.kind === 'choice-resolved')
+  assert.ok(resolved && resolved.kind === 'choice-resolved')
+  assert.equal((resolved as { picked: unknown }).picked, 'b')
+  assert.equal((resolved as { by: string }).by, 'auto')
+})
+
+test('requestChoices defaults the recommended option to the first when none is given (#335)', async () => {
+  const events: FrameworkEvent[] = []
+  const picked = await requestChoices({ id: 'ch', title: 'Pick one', options: CH_OPTS, emit: e => events.push(e) })
+  assert.equal(picked, 'a')
+  const choice = events.find(e => e.kind === 'choice')
+  assert.ok(choice && choice.kind === 'choice' && choice.recommended === 'a')
+})
+
+test('requestChoices returns the user pick, falling back to recommended for an invalid id (#335)', async () => {
+  const good = await requestChoices({
+    id: 'ch',
+    title: 'Pick one',
+    options: CH_OPTS,
+    recommended: 'a',
+    emit: () => {},
+    requestChoice: async () => ({ picked: 'b', by: 'user' }),
+  })
+  assert.equal(good, 'b')
+  const bogus = await requestChoices({
+    id: 'ch',
+    title: 'Pick one',
+    options: CH_OPTS,
+    recommended: 'a',
+    emit: () => {},
+    requestChoice: async () => ({ picked: 'nope', by: 'user' }),
+  })
+  assert.equal(bogus, 'a') // an unknown id falls back to the recommended option
+})
+
+test('requestChoices resolves to the recommended option if the run aborts while parked (#335)', async () => {
+  const ac = new AbortController()
+  const picked = await requestChoices({
+    id: 'ch',
+    title: 'Pick one',
+    options: CH_OPTS,
+    recommended: 'b',
+    emit: () => {},
+    signal: ac.signal,
+    // Never resolves on its own; the abort must unblock it.
+    requestChoice: () => {
+      ac.abort()
+      return new Promise(() => {})
+    },
+  })
+  assert.equal(picked, 'b') // fell back to the recommended option, not a hang
 })

@@ -52,12 +52,15 @@ export {
 } from './steps.js'
 export {
   runFramework,
+  requestChoices,
   requestMultiSelect,
   type RunFrameworkOptions,
   type RunFrameworkResult,
   type DeployDecision,
   type ServeConfig,
   type AppPreview,
+  type ChoicesOption,
+  type ChoicesDeps,
   type MultiSelectOption,
   type MultiSelectDeps,
 } from './run.js'

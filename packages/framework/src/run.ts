@@ -37,7 +37,7 @@ import type { Driver, DriverEvent, DriverSession } from './driver/index.js'
 import { memoryFraming, type LoadedMemory } from './memory.js'
 import { systemPromptBlock } from './system-prompt.js'
 import { decideDeploy, deployWith, domainLoopChecklist, driverArchitect, driverBuild, driverChecklist, driverImprove, driverLoopPrompts, reArchitect } from './steps.js'
-import { hasSessionIdPlaceholder, OPEN_LOOP_MODES, pickedIds, resolveSessionLink, type ChoiceOption, type ChoicePick, type ChoiceRequest, type FrameworkEvent } from './events.js'
+import { hasSessionIdPlaceholder, OPEN_LOOP_MODES, pickedIds, resolveSessionLink, type ChoicePick, type ChoiceRequest, type FrameworkEvent } from './events.js'
 import { UsageMeter } from './usage.js'
 
 /**
@@ -541,7 +541,7 @@ function planApprovalGate(
     // run of alt-picks can't loop forever.
     for (let round = 0; round < MAX_PLAN_ROUNDS; round++) {
       const alternatives = plan.alternatives ?? []
-      const options: ChoiceOption[] = [
+      const options: ChoicesOption[] = [
         { id: 'proceed', label: `Proceed: ${plan.stack}` },
         ...alternatives.map((a, i) => ({
           id: `alt:${i}`,
@@ -552,17 +552,18 @@ function planApprovalGate(
       // Round 0 keeps the stable `plan-approval` id; later rounds get a unique id so
       // a dashboard never confuses a re-approval with the pick it just resolved.
       const id = round === 0 ? 'plan-approval' : `plan-approval-${round}`
-      const req: ChoiceRequest = { id, title: 'Approve this plan?', options, recommended: 'proceed' }
-      emit({ kind: 'choice', ...req })
-
-      // A handler that rejects, or a run aborted mid-await (user stop / budget cap
-      // #322), must not hang the gate: fall back to the recommended option so the
-      // next phase's signal check ends the run.
-      const pick = await raceChoiceOrAbort(requestChoice(req), deps.signal)
-      emit({ kind: 'choice-resolved', id: req.id, picked: pick.picked, by: pick.by ?? 'user' })
-
-      // Single-select gate: the pick is one id.
-      const picked = typeof pick.picked === 'string' ? pick.picked : pick.picked[0] ?? ''
+      // The shared single-select gate (#335): emits `choice`, parks for the pick, and
+      // falls back to the recommended `proceed` if the handler rejects or the run aborts
+      // (user stop / budget cap #322), so the gate never hangs.
+      const picked = await requestChoices({
+        id,
+        title: 'Approve this plan?',
+        options,
+        recommended: 'proceed',
+        requestChoice,
+        emit,
+        ...(deps.signal ? { signal: deps.signal } : {}),
+      })
       const altMatch = /^alt:(\d+)$/.exec(picked)
       const chosen = altMatch ? alternatives[Number(altMatch[1])] : undefined
       if (!chosen) return plan // proceed (or an unknown pick) approves the current plan
@@ -604,6 +605,65 @@ function raceChoiceOrAbort(
     }
     pick.then(done, () => done(fallback))
   })
+}
+
+/** One option of a {@link requestChoices} single-select gate (#304). */
+export interface ChoicesOption {
+  /** Stable id returned when this option is picked. */
+  id: string
+  /** The label shown next to the option. */
+  label: string
+  /** Optional one-line detail under the label. */
+  detail?: string
+}
+
+/** Inputs to {@link requestChoices}. */
+export interface ChoicesDeps {
+  /** Stable id for the gate; the pick is posted back against it. */
+  id: string
+  /** The prompt shown above the options. */
+  title: string
+  /** The options to choose between (pick one). */
+  options: readonly ChoicesOption[]
+  /** The option id pre-selected (autopilot auto-accepts it) and used as the headless/abort fallback. Default = the first option. */
+  recommended?: string
+  /** The interactive handler (the CLI wires it to the dashboard); omit for a headless run. */
+  requestChoice?: (req: ChoiceRequest) => Promise<ChoicePick>
+  /** Emit the `choice` / `choice-resolved` events onto the run stream. */
+  emit: (event: FrameworkEvent) => void
+  /** The run signal; a gate parked for a pick unblocks (to the recommended option) if the run aborts. */
+  signal?: AbortSignal
+}
+
+/**
+ * The single-select gate (#304): show the options with the recommended one
+ * pre-selected, pause, and resolve to the *one* option id the user picked. The twin
+ * of {@link requestMultiSelect} for "pick one" — the agent-facing `showChoices()`
+ * from the #326 system prompt and the [Research] preset (#331) both build on it.
+ * A headless run (no `requestChoice`), or one aborted mid-await, falls back to the
+ * recommended option without hanging, so a programmatic run stays deterministic.
+ */
+export async function requestChoices(deps: ChoicesDeps): Promise<string> {
+  const { options, requestChoice, emit } = deps
+  const recommended = deps.recommended ?? options[0]?.id ?? ''
+  const req: ChoiceRequest = {
+    id: deps.id,
+    title: deps.title,
+    options: options.map(o => ({ id: o.id, label: o.label, ...(o.detail ? { detail: o.detail } : {}) })),
+    ...(recommended ? { recommended } : {}),
+  }
+  emit({ kind: 'choice', ...req })
+
+  const validIds = new Set(options.map(o => o.id))
+  const fallback: ChoicePick = { picked: recommended, by: 'auto' }
+  // Headless: no one to ask, so accept the recommended option.
+  const pick = requestChoice
+    ? await raceChoiceOrAbort(requestChoice(req), deps.signal, fallback)
+    : fallback
+  const picked = pickedIds(pick.picked)[0] ?? ''
+  const resolved = validIds.has(picked) ? picked : recommended
+  emit({ kind: 'choice-resolved', id: req.id, picked: resolved, by: pick.by ?? 'user' })
+  return resolved
 }
 
 /** One option of a {@link requestMultiSelect} checklist (#332). */
