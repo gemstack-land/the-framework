@@ -2,19 +2,6 @@
 
 > [!WARN] This includes brainstorming (the long-term vision). **Most of this is out-of-scope for the MVP:** we can only implement the parts that are relevant for the MVP.
 
-- Checkboxes
-  - [] Autopilot (whether to auto-accept)
-  - [] Technical control (expose technical details, e.g. <Choices> for tech stack)
-  - [] Eco (fine-grain control over system prompt to save resources)
-    - [] Auto planning
-    - [] Auto research
-    - [] Auto maintenance
-  - [] Vanilla (remove all system prompts, fully transparent, same as directly using Claude Code)
-- Dropdowns
-  - Context selector (a list of selected directories)
-    - This just adds one line to the system prompt: `Context: [list-of-dirs]`
-    - AI always has *access* to all repos (doesn't mean it should actually read all repos, we therefore need a context selector)
-      - When adding repos: "Do you trust this repository? ("You must trust it, otherwise high risk of [prompt injection](link-that-explains-the-problem).")
 - Sidebars:
   1. First sidebar (on the left):
      - Three sections: `Overview`, `Projects`, `Queue`
@@ -40,6 +27,19 @@
   - Click green button `Accept` (or shortcut `Ctrl + Enter`) => accepts (picks the recommended choices)
   - If `[x] autopilot` => auto-accepts after 10 seconds (while the UI says "move mouse to abort countdown")
   - All choices are shown *at once* in the right sidebar (no pagination, scroll instead, with sticky top nav to quick-jump between choices)
+- Checkboxes
+  - [] Autopilot (whether to auto-accept)
+  - [] Technical control (expose technical details, e.g. <Choices> for tech stack)
+  - [] Eco (fine-grain control over system prompt to save resources)
+    - [] Auto planning
+    - [] Auto research
+    - [] Auto maintenance
+  - [] Vanilla (remove all system prompts, fully transparent, same as directly using Claude Code)
+- Dropdowns
+  - Context selector (a list of selected directories)
+    - This just adds one line to the system prompt: `Context: [list-of-dirs]`
+    - AI always has *access* to all repos (doesn't mean it should actually read all repos, we therefore need a context selector)
+      - When adding repos: "Do you trust this repository? ("You must trust it, otherwise high risk of [prompt injection](link-that-explains-the-problem).")
 
 
 ## Marketing
