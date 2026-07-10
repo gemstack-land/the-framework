@@ -91,6 +91,46 @@ test('page ships opt-in browser notifications for run-end and choice gates (#309
   }
 })
 
+test('page ships the document sidebar with a dependency-free markdown renderer (#319)', async () => {
+  const dash = await startDashboard({ port: 0 })
+  try {
+    const { body } = await fetchText(dash.url + '/')
+    assert.match(body, /id="docs"/)
+    assert.match(body, /id="docs-nav"/)
+    assert.match(body, /function renderMarkdown/)
+    assert.match(body, /fetch\('api\/docs'\)/)
+  } finally {
+    await dash.close()
+  }
+})
+
+test('GET /api/docs serves the workspace PLAN.md / TODO.md, or [] without a cwd (#319)', async () => {
+  const cwd = await mkdtemp(join(tmpdir(), 'framework-docs-'))
+  try {
+    await writeFile(join(cwd, 'PLAN.md'), '# Plan\n\nBuild it.\n')
+    const withCwd = await startDashboard({ port: 0, cwd })
+    try {
+      const { status, body } = await fetchText(withCwd.url + '/api/docs')
+      assert.equal(status, 200)
+      const parsed = JSON.parse(body)
+      assert.equal(parsed.docs.length, 1)
+      assert.equal(parsed.docs[0].name, 'PLAN.md')
+      assert.match(parsed.docs[0].content, /Build it\./)
+    } finally {
+      await withCwd.close()
+    }
+    // No cwd wired -> empty list, never an error.
+    const noCwd = await startDashboard({ port: 0 })
+    try {
+      assert.deepEqual(JSON.parse((await fetchText(noCwd.url + '/api/docs')).body), { docs: [] })
+    } finally {
+      await noCwd.close()
+    }
+  } finally {
+    await rm(cwd, { recursive: true, force: true })
+  }
+})
+
 test('dashboard replays buffered events and streams them over SSE', async () => {
   const dash = await startDashboard({ port: 0 })
   try {
