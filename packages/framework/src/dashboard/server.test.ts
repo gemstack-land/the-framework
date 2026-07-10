@@ -73,6 +73,24 @@ test('dashboard serves the HTML page with the title', async () => {
   }
 })
 
+test('page ships opt-in browser notifications for run-end and choice gates (#309)', async () => {
+  const dash = await startDashboard({ port: 0 })
+  try {
+    const { body } = await fetchText(dash.url + '/')
+    // The header bell + its permission-gated notify helper ship in the page.
+    assert.match(body, /id="notify"/)
+    assert.match(body, /function notify\(title, body\)/)
+    assert.match(body, /Notification\.requestPermission/)
+    // Fired on a run end and when a choice gate needs the human.
+    assert.match(body, /Run finished/)
+    assert.match(body, /The run needs your input/)
+    // Only nudges when the tab is backgrounded, so a watched run stays quiet.
+    assert.match(body, /document\.hidden/)
+  } finally {
+    await dash.close()
+  }
+})
+
 test('dashboard replays buffered events and streams them over SSE', async () => {
   const dash = await startDashboard({ port: 0 })
   try {
