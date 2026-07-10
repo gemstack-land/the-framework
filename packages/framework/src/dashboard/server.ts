@@ -3,6 +3,7 @@ import type { AddressInfo } from 'node:net'
 import { EventStream } from '@gemstack/ai-autopilot'
 import type { ChoiceBy, FrameworkEvent } from '../events.js'
 import { listRuns, loadRunEvents } from '../store/index.js'
+import { readDocs } from './docs.js'
 import { dashboardHtml } from './page.js'
 import { serveSSE } from './sse.js'
 
@@ -116,6 +117,12 @@ function handle(
     void serveRun(res, cwd, decodeURIComponent(url.slice('/api/runs/'.length)))
     return
   }
+  // Document sidebar (#319): the PLAN.md / TODO.md the agent writes at the
+  // workspace root, so the human can read the plan + backlog beside the run.
+  if (url === '/api/docs') {
+    void serveDocs(res, cwd)
+    return
+  }
   if (url === '/stop') {
     // The Stop button. Idempotent: a stop after the run has ended just aborts an
     // already-aborted signal (a no-op). 405 for a non-POST so a stray GET can't
@@ -199,6 +206,13 @@ async function serveRun(res: ServerResponse, cwd: string | undefined, id: string
   const meta = cwd ? (await listRuns(cwd).catch(() => [])).find(r => r.id === id) : undefined
   res.writeHead(200, { 'content-type': 'application/json' })
   res.end(JSON.stringify({ id, meta, events }))
+}
+
+/** `GET /api/docs` — the surfaced workspace documents (PLAN.md, TODO.md), or `[]`. */
+async function serveDocs(res: ServerResponse, cwd: string | undefined): Promise<void> {
+  const docs = cwd ? await readDocs(cwd).catch(() => []) : []
+  res.writeHead(200, { 'content-type': 'application/json' })
+  res.end(JSON.stringify({ docs }))
 }
 
 function closeServer(

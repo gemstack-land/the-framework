@@ -121,6 +121,33 @@ export function dashboardHtml(title: string, stoppable = false, choiceable = fal
   #log { font: 12px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace; color: #96a0b3;
     max-height: 320px; overflow-y: auto; white-space: pre-wrap; }
   .muted { color: #5c657a; }
+  /* Document sidebar (#319): the PLAN.md / TODO.md the agent writes, rendered
+     beside the run with a sticky tab nav. Hidden until a doc exists. */
+  #docs { flex: 0 0 340px; width: 340px; border-left: 1px solid #1c2230;
+    overflow-y: auto; max-height: calc(100vh - 57px); }
+  #docs[hidden] { display: none; }
+  #docs-nav { position: sticky; top: 0; display: flex; gap: 4px; padding: 10px 12px;
+    background: #0b0e14; border-bottom: 1px solid #1c2230; }
+  .doc-tab { font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; color: #7b8496;
+    background: #10141d; border: 1px solid #1c2230; border-radius: 6px; padding: 4px 10px; }
+  .doc-tab:hover { color: #b7c0d0; }
+  .doc-tab.active { color: #e8ecf3; background: #17212f; border-color: #24344a; }
+  #docs-body { padding: 4px 16px 24px; font-size: 13px; color: #c3cad6; line-height: 1.6; }
+  #docs-body h1, #docs-body h2, #docs-body h3, #docs-body h4 { color: #e8ecf3; line-height: 1.3;
+    margin: 16px 0 8px; }
+  #docs-body h1 { font-size: 17px; } #docs-body h2 { font-size: 15px; } #docs-body h3 { font-size: 13px; }
+  #docs-body p { margin: 8px 0; }
+  #docs-body ul, #docs-body ol { margin: 8px 0; padding-left: 20px; list-style: revert; }
+  #docs-body li { padding: 2px 0; border-bottom: 0; }
+  #docs-body li.task { list-style: none; margin-left: -20px; }
+  #docs-body li.task input { margin-right: 6px; }
+  #docs-body code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px;
+    background: #161b26; color: #b7c0d0; padding: 1px 5px; border-radius: 4px; }
+  #docs-body pre { background: #0f141d; border: 1px solid #1c2230; border-radius: 8px;
+    padding: 10px 12px; overflow-x: auto; }
+  #docs-body pre code { background: none; padding: 0; color: #96a0b3; }
+  #docs-body a { color: #6ea8fe; text-decoration: none; }
+  #docs-body a:hover { text-decoration: underline; }
 </style>
 </head>
 <body>
@@ -187,6 +214,10 @@ export function dashboardHtml(title: string, stoppable = false, choiceable = fal
   </section>
 </main>
 </div>
+<aside id="docs" hidden>
+  <div id="docs-nav"></div>
+  <div id="docs-body"></div>
+</aside>
 </div>
 <script>
 ${clientScript(stoppable, choiceable)}
@@ -495,6 +526,88 @@ function loadRuns() {
   fetch('api/runs').then(r => r.ok ? r.json() : { runs: [] }).then(d => renderRuns(d.runs || [])).catch(() => {});
 }
 
+// Document sidebar (#319): render the PLAN.md / TODO.md the agent writes at the
+// workspace root, with a sticky tab nav to jump between them. Minimal, dependency-
+// free markdown so the page stays a single self-contained file.
+function mdInline(s) {
+  // s is already HTML-escaped; add inline spans and safe (http/relative) links only.
+  return s
+    .replace(/\`([^\`]+)\`/g, '<code>$1</code>')
+    .replace(/\\*\\*([^*]+)\\*\\*/g, '<strong>$1</strong>')
+    .replace(/\\*([^*]+)\\*/g, '<em>$1</em>')
+    .replace(/\\[([^\\]]+)\\]\\(([^)\\s"]+)\\)/g, function (m, t, u) {
+      return /^(https?:|\\/|#)/.test(u) ? '<a href="' + u + '" target="_blank" rel="noopener">' + t + '</a>' : t;
+    });
+}
+function renderMarkdown(md) {
+  const lines = String(md).replace(/\\r\\n/g, '\\n').split('\\n');
+  let html = '', i = 0, inList = false, listTag = '';
+  const closeList = function () { if (inList) { html += '</' + listTag + '>'; inList = false; } };
+  while (i < lines.length) {
+    const line = lines[i];
+    if (/^\`\`\`/.test(line)) {
+      closeList(); i++;
+      let code = '';
+      while (i < lines.length && !/^\`\`\`/.test(lines[i])) { code += lines[i] + '\\n'; i++; }
+      i++; // closing fence
+      html += '<pre><code>' + esc(code) + '</code></pre>';
+      continue;
+    }
+    const h = line.match(/^(#{1,6})\\s+(.*)$/);
+    if (h) { closeList(); const n = h[1].length; html += '<h' + n + '>' + mdInline(esc(h[2])) + '</h' + n + '>'; i++; continue; }
+    const li = line.match(/^\\s*[-*]\\s+(.*)$/);
+    if (li) {
+      if (!inList || listTag !== 'ul') { closeList(); html += '<ul>'; inList = true; listTag = 'ul'; }
+      const task = li[1].match(/^\\[([ xX])\\]\\s+(.*)$/);
+      if (task) {
+        const on = task[1].toLowerCase() === 'x';
+        html += '<li class="task"><input type="checkbox" disabled' + (on ? ' checked' : '') + '>' + mdInline(esc(task[2])) + '</li>';
+      } else html += '<li>' + mdInline(esc(li[1])) + '</li>';
+      i++; continue;
+    }
+    const oli = line.match(/^\\s*\\d+\\.\\s+(.*)$/);
+    if (oli) {
+      if (!inList || listTag !== 'ol') { closeList(); html += '<ol>'; inList = true; listTag = 'ol'; }
+      html += '<li>' + mdInline(esc(oli[1])) + '</li>';
+      i++; continue;
+    }
+    if (!line.trim()) { closeList(); i++; continue; }
+    closeList();
+    html += '<p>' + mdInline(esc(line)) + '</p>';
+    i++;
+  }
+  closeList();
+  return html;
+}
+let docs = [];
+let activeDoc = null;
+function showDoc(name) {
+  const doc = docs.find(function (d) { return d.name === name; });
+  if (!doc) return;
+  activeDoc = name;
+  $('docs-body').innerHTML = renderMarkdown(doc.content);
+  for (const b of $('docs-nav').children) b.classList.toggle('active', b.dataset && b.dataset.name === name);
+}
+function renderDocs(list) {
+  docs = list || [];
+  const aside = $('docs');
+  if (!docs.length) { aside.hidden = true; activeDoc = null; $('docs-nav').innerHTML = ''; $('docs-body').innerHTML = ''; return; }
+  const nav = $('docs-nav'); nav.innerHTML = '';
+  for (const d of docs) {
+    const b = document.createElement('button');
+    b.className = 'doc-tab'; b.dataset.name = d.name; b.textContent = d.name;
+    b.addEventListener('click', function () { showDoc(d.name); });
+    nav.appendChild(b);
+  }
+  aside.hidden = false;
+  // Keep the open tab if it still exists, else fall back to the first doc.
+  showDoc(docs.some(function (d) { return d.name === activeDoc; }) ? activeDoc : docs[0].name);
+}
+function loadDocs() {
+  fetch('api/docs').then(function (r) { return r.ok ? r.json() : { docs: [] }; })
+    .then(function (d) { renderDocs(d.docs || []); }).catch(function () {});
+}
+
 // Browser notifications (#309): tell the human when a run finishes or reaches a
 // point that needs them (a <Choices> gate, e.g. a PLAN.md approval) while the tab
 // is backgrounded. Opt-in via the header bell; the choice is remembered. Fully
@@ -555,10 +668,15 @@ src.onmessage = ev => {
   if (mode === 'live') render(fe);
   // A finished run has just been archived; refresh the list so it appears.
   if (fe.kind === 'end') setTimeout(loadRuns, 1500);
+  // A plan/backlog is usually written right before a choice gate or at run end;
+  // refresh the doc sidebar promptly so PLAN.md / TODO.md appear without waiting.
+  if (fe.kind === 'choice' || fe.kind === 'end') setTimeout(loadDocs, 500);
 };
 src.onerror = () => { if (mode === 'live') $('status').textContent = '\\u25cb offline'; };
 loadRuns();
 setInterval(loadRuns, 10000);
+loadDocs();
+setInterval(loadDocs, 4000);
 `
 }
 
