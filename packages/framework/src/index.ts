@@ -35,6 +35,7 @@
 export * from './driver/index.js'
 export {
   driverArchitect,
+  reArchitect,
   driverBuild,
   driverChecklist,
   driverImprove,
@@ -73,6 +74,10 @@ export {
 export { hostExecutor, type HostExecutorOptions } from './host-exec.js'
 export {
   type FrameworkEvent,
+  type ChoiceOption,
+  type ChoiceRequest,
+  type ChoicePick,
+  type ChoiceBy,
   formatFrameworkEvent,
   resolveSessionLink,
   hasSessionIdPlaceholder,

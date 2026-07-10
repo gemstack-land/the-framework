@@ -193,3 +193,50 @@ test('/stop is 405 for a non-POST and 404 when stopping is not wired (#218)', as
     await noStop.close()
   }
 })
+
+function postJson(url: string, body: unknown): Promise<{ status: number; body: string }> {
+  return new Promise((resolvePromise, rejectPromise) => {
+    const payload = JSON.stringify(body)
+    const req = request(url, { method: 'POST', headers: { 'content-type': 'application/json' } }, res => {
+      let out = ''
+      res.on('data', c => (out += c))
+      res.on('end', () => resolvePromise({ status: res.statusCode ?? 0, body: out }))
+    })
+    req.on('error', rejectPromise)
+    req.end(payload)
+  })
+}
+
+test('POST /choice invokes onChoice with the pick and the page reports it is choiceable (#304)', async () => {
+  const picks: Array<{ id: string; pick: string; by: string }> = []
+  const dash = await startDashboard({ port: 0, onChoice: (id, pick, by) => picks.push({ id, pick, by }) })
+  try {
+    const { status } = await postJson(dash.url + '/choice', { id: 'plan-approval', pick: 'alt:0', by: 'autopilot' })
+    assert.equal(status, 202)
+    assert.deepEqual(picks, [{ id: 'plan-approval', pick: 'alt:0', by: 'autopilot' }])
+    // An unknown `by` is normalized to 'user'.
+    await postJson(dash.url + '/choice', { id: 'plan-approval', pick: 'proceed' })
+    assert.equal(picks[1]!.by, 'user')
+    const page = await fetchText(dash.url + '/')
+    assert.match(page.body, /CHOICEABLE = true/)
+  } finally {
+    await dash.close()
+  }
+})
+
+test('/choice is 405 for a non-POST and 404 when choices are not wired (#304)', async () => {
+  const withChoice = await startDashboard({ port: 0, onChoice: () => {} })
+  try {
+    assert.equal((await send(withChoice.url + '/choice', 'GET')).status, 405)
+  } finally {
+    await withChoice.close()
+  }
+  const noChoice = await startDashboard({ port: 0 })
+  try {
+    assert.equal((await postJson(noChoice.url + '/choice', { id: 'x', pick: 'y' })).status, 404)
+    const page = await fetchText(noChoice.url + '/')
+    assert.match(page.body, /CHOICEABLE = false/)
+  } finally {
+    await noChoice.close()
+  }
+})

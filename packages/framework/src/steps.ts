@@ -37,11 +37,17 @@ import type { DriverSession } from './driver/index.js'
 
 const ZERO_USAGE = { promptTokens: 0, completionTokens: 0, totalTokens: 0 }
 
-/** Compose the architect prompt for an intent. Exported so callers can override. */
-export function architectPrompt(intent: string): string {
+/**
+ * Compose the architect prompt for an intent. Exported so callers can override.
+ * `steer` is an optional extra constraint (e.g. the user overrode the stack at the
+ * plan-approval gate, #304), inserted right after the intent so it frames the whole
+ * decision.
+ */
+export function architectPrompt(intent: string, steer?: string): string {
   return [
     'You are the architect for a new app. Decide the stack and the key architectural choices.',
     `What the user wants: ${intent}`,
+    ...(steer ? [steer] : []),
     'Prefer a modern, well-supported stack. Keep the choices minimal and justified.',
     'Justify the stack honestly: give its real PROS and its CONS, and name the main',
     'alternative you rejected and why it lost. This is shown to the user as the rationale.',
@@ -186,6 +192,23 @@ export function driverArchitect(
     })
     return parseArchitectPlan(turn.text, ctx.intent)
   }
+}
+
+/**
+ * Re-run the architect after the user overrode the stack at the plan-approval gate
+ * (#304): same intent, same app goal, but steered to build around the alternative
+ * they picked instead of the stack originally chosen. Returns a fresh plan.
+ */
+export function reArchitect(
+  session: DriverSession,
+  ctx: ArchitectContext,
+  fromStack: string,
+  toOption: string,
+): Promise<ArchitectPlan> {
+  const steer = `The user reviewed your first choice (${fromStack}) and prefers ${toOption}. Re-decide the stack around ${toOption}, keeping the same app goal.`
+  return session
+    .prompt(architectPrompt(ctx.intent, steer), { ...(ctx.signal ? { signal: ctx.signal } : {}) })
+    .then(turn => parseArchitectPlan(turn.text, ctx.intent))
 }
 
 /**

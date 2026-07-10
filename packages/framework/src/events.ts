@@ -1,6 +1,45 @@
 import type { BootstrapEvent } from '@gemstack/ai-autopilot'
 import type { DriverEvent } from './driver/index.js'
 
+/** One selectable option in an interactive {@link ChoiceRequest} (#304). */
+export interface ChoiceOption {
+  /** Stable id posted back when this option is picked. */
+  id: string
+  /** The option shown to the user. */
+  label: string
+  /** Optional one-line detail under the label (e.g. why an alternative lost). */
+  detail?: string
+}
+
+/**
+ * An interactive choice the run pauses on until a pick arrives (#304). Emitted as
+ * a `choice` {@link FrameworkEvent}; the dashboard renders it in a panel and posts
+ * the pick back. The recommended option is the default the autopilot auto-accepts.
+ */
+export interface ChoiceRequest {
+  /** Unique id for this pending choice; the pick is posted back against it. */
+  id: string
+  /** The question shown above the options (e.g. "Approve this plan?"). */
+  title: string
+  /** The options to choose between (at least one). */
+  options: readonly ChoiceOption[]
+  /** The option id pre-selected as the default (autopilot auto-accepts it). */
+  recommended: string
+  /** Auto-accept the recommended option after this many ms when autopilot is on. Default 10000. */
+  autoAcceptMs?: number
+}
+
+/** Who resolved a {@link ChoiceRequest}: a human, the autopilot countdown, or a headless auto-accept. */
+export type ChoiceBy = 'user' | 'autopilot' | 'auto'
+
+/** What a {@link import('./run.js').RunFrameworkOptions.requestChoice} handler resolves with. */
+export interface ChoicePick {
+  /** The picked option id. */
+  picked: string
+  /** Who picked it. Default `'user'`. */
+  by?: ChoiceBy
+}
+
 /**
  * The single event type the whole run streams over. It unifies three sources so
  * the dashboard (and terminal) render one timeline: bootstrap-phase narration
@@ -38,6 +77,14 @@ export type FrameworkEvent =
    */
   | { kind: 'modes'; all: readonly string[]; active: readonly string[] }
   /**
+   * The run paused on an interactive choice (#304) and is awaiting a pick. The
+   * dashboard renders the options with the recommended default pre-selected and
+   * posts the pick back; a headless run auto-accepts the recommended option.
+   */
+  | ({ kind: 'choice' } & ChoiceRequest)
+  /** A pending {@link ChoiceRequest} was resolved — the run continues on `picked`. */
+  | { kind: 'choice-resolved'; id: string; picked: string; by: ChoiceBy }
+  /**
    * The run finished. `ok` is false when it threw. `stopped` marks the common,
    * non-error case where the user interrupted it (the dashboard Stop button /
    * Ctrl+C), so a surface can show "stopped" rather than "failed".
@@ -61,6 +108,14 @@ export function formatFrameworkEvent(event: FrameworkEvent): string {
       const shown = event.all.map(m => `${event.active.includes(m) ? '[x]' : '[ ]'} ${m}`).join('  ')
       return `  modes: ${shown}`
     }
+    case 'choice': {
+      const opts = event.options
+        .map(o => `    ${o.id === event.recommended ? '●' : '○'} ${o.label}`)
+        .join('\n')
+      return `? ${event.title}\n${opts}`
+    }
+    case 'choice-resolved':
+      return `  ✓ chose ${event.picked} (${event.by})`
     case 'driver':
       return formatDriverEvent(event.event)
     case 'bootstrap':

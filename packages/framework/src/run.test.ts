@@ -5,7 +5,7 @@ import type { Prompt } from '@gemstack/ai-autopilot'
 import { DEFAULT_MAX_PASSES, runFramework } from './run.js'
 import { FAKE_DEPLOY, FAKE_INTENT, FAKE_SIGNALS, fakeDriver } from './fake-script.js'
 import { FakeDriver, type Driver, type DriverSession } from './driver/index.js'
-import type { FrameworkEvent } from './events.js'
+import type { ChoiceRequest, FrameworkEvent } from './events.js'
 
 /** A driver that records the `system` framing it is started with, delegating the run to the fake. */
 function recordingDriver(): { driver: Driver; system: () => string } {
@@ -426,4 +426,102 @@ test('runFramework prototype scope skips the full-fledged loop', async () => {
   })
   assert.equal(result.passes, 0)
   assert.equal(result.productionGrade, false)
+})
+
+test('the plan-approval gate (#304) pauses on a choice, proceeds, and keeps the plan', async () => {
+  const events: FrameworkEvent[] = []
+  const seen: ChoiceRequest[] = []
+  const { result } = await runFramework({
+    intent: FAKE_INTENT,
+    driver: fakeDriver(),
+    cwd: '/tmp/ws',
+    signals: FAKE_SIGNALS,
+    deploy: FAKE_DEPLOY,
+    onEvent: e => events.push(e),
+    requestChoice: async req => {
+      seen.push(req)
+      return { picked: 'proceed', by: 'user' }
+    },
+  })
+
+  // The gate emitted one choice, offering "proceed" (recommended) plus the
+  // architect's alternative as "Use Next.js instead".
+  assert.equal(seen.length, 1)
+  const choice = events.find(e => e.kind === 'choice')
+  assert.ok(choice && choice.kind === 'choice')
+  assert.equal(choice.recommended, 'proceed')
+  assert.ok(choice.options.some(o => o.id === 'proceed'))
+  assert.ok(choice.options.some(o => o.id === 'alt:0' && /Next\.js/.test(o.label)))
+
+  // It resolved to the pick, and the choice came before the architect narration.
+  const resolved = events.find(e => e.kind === 'choice-resolved')
+  assert.ok(resolved && resolved.kind === 'choice-resolved')
+  assert.equal(resolved.picked, 'proceed')
+  assert.equal(resolved.by, 'user')
+  const ci = events.findIndex(e => e.kind === 'choice')
+  const ai = events.findIndex(e => e.kind === 'bootstrap' && e.event.type === 'architect')
+  assert.ok(ci >= 0 && ai > ci)
+
+  // Proceeding kept the original stack and still reached production-grade.
+  const architect = events.find(e => e.kind === 'bootstrap' && e.event.type === 'architect')
+  assert.ok(architect && architect.kind === 'bootstrap' && architect.event.type === 'architect')
+  assert.match(architect.event.stack, /Vike \+ Prisma/)
+  assert.equal(result.productionGrade, true)
+})
+
+test('without a requestChoice handler no choice events are emitted (#304)', async () => {
+  const events: FrameworkEvent[] = []
+  await runFramework({
+    intent: FAKE_INTENT,
+    driver: fakeDriver(),
+    cwd: '/tmp/ws',
+    signals: FAKE_SIGNALS,
+    onEvent: e => events.push(e),
+  })
+  assert.equal(events.some(e => e.kind === 'choice'), false)
+  assert.equal(events.some(e => e.kind === 'choice-resolved'), false)
+})
+
+test('picking an alternative re-architects the run around it (#304)', async () => {
+  const first = {
+    stack: 'Vike + Prisma',
+    narration: 'first plan',
+    decisions: [{ choice: 'SSR', why: 'per-request data' }],
+    alternatives: [{ option: 'Next.js', whyNot: 'edge deploy is more constrained' }],
+  }
+  const second = {
+    stack: 'Next.js + Postgres',
+    narration: 'second plan',
+    decisions: [{ choice: 'App Router', why: 'the user chose it' }],
+    alternatives: [],
+  }
+  // A driver that answers by prompt: the steered re-architect returns the Next.js
+  // plan, the first architect the Vike plan, the checklist passes clean.
+  const driver = new FakeDriver({
+    respond: (prompt: string): string => {
+      if (/You are the architect/.test(prompt) && /prefers Next\.js/.test(prompt))
+        return '```json\n' + JSON.stringify(second) + '\n```'
+      if (/You are the architect/.test(prompt)) return '```json\n' + JSON.stringify(first) + '\n```'
+      if (/production-grade checklist/.test(prompt)) return 'Reviewed.\n```json\n{ "blockers": [] }\n```'
+      return 'done'
+    },
+    sessionId: 'fake-realt',
+  })
+
+  const events: FrameworkEvent[] = []
+  const { result } = await runFramework({
+    intent: FAKE_INTENT,
+    driver,
+    cwd: '/tmp/ws',
+    signals: FAKE_SIGNALS,
+    onEvent: e => events.push(e),
+    requestChoice: async () => ({ picked: 'alt:0', by: 'user' }),
+  })
+
+  // Re-architecting was narrated, and the final narrated stack is the alternative.
+  assert.ok(events.some(e => e.kind === 'log' && /Re-architecting around your choice: Next\.js/.test(e.message)))
+  const architect = events.find(e => e.kind === 'bootstrap' && e.event.type === 'architect')
+  assert.ok(architect && architect.kind === 'bootstrap' && architect.event.type === 'architect')
+  assert.match(architect.event.stack, /Next\.js \+ Postgres/)
+  assert.equal(result.productionGrade, true)
 })

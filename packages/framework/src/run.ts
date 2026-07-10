@@ -17,6 +17,8 @@ import {
   serveCheck,
   skillInstructions,
   skillPersonas,
+  type ArchitectContext,
+  type ArchitectPlan,
   type BootstrapEvent,
   type BootstrapResult,
   type BootstrapScope,
@@ -34,8 +36,8 @@ import { snapshotWorkspace } from './sandbox.js'
 import type { Driver, DriverEvent, DriverSession } from './driver/index.js'
 import { memoryFraming, type LoadedMemory } from './memory.js'
 import { systemPromptBlock } from './system-prompt.js'
-import { decideDeploy, deployWith, domainLoopChecklist, driverArchitect, driverBuild, driverChecklist, driverImprove, driverLoopPrompts } from './steps.js'
-import { hasSessionIdPlaceholder, OPEN_LOOP_MODES, resolveSessionLink, type FrameworkEvent } from './events.js'
+import { decideDeploy, deployWith, domainLoopChecklist, driverArchitect, driverBuild, driverChecklist, driverImprove, driverLoopPrompts, reArchitect } from './steps.js'
+import { hasSessionIdPlaceholder, OPEN_LOOP_MODES, resolveSessionLink, type ChoiceOption, type ChoicePick, type ChoiceRequest, type FrameworkEvent } from './events.js'
 
 /**
  * The framework's default full-fledged pass budget. Higher than ai-autopilot's
@@ -189,6 +191,15 @@ export interface RunFrameworkOptions {
   sessionLink?: string
   /** Interrupt the run between phases. */
   signal?: AbortSignal
+  /**
+   * Pause the run on an interactive choice and await a pick (#304). Called at the
+   * plan-approval gate right after the architect decides the stack: the run emits a
+   * `choice` event, calls this, and resumes on the returned option — proceeding as
+   * planned, or re-architecting around a picked alternative. Omit for a headless
+   * run: the gate then auto-accepts the recommended option without pausing. The CLI
+   * wires this to the dashboard's Accept button + autopilot countdown.
+   */
+  requestChoice?: (req: ChoiceRequest) => Promise<ChoicePick>
   /** Observe the unified event stream. */
   onEvent?: (event: FrameworkEvent) => void
 }
@@ -429,7 +440,10 @@ export async function runFramework(opts: RunFrameworkOptions): Promise<RunFramew
       onEvent: (event: BootstrapEvent) => emit({ kind: 'bootstrap', event }),
       steps: {
         scope: () => ({ scope: opts.scope ?? 'full', intent: opts.intent }),
-        architect: driverArchitect(session),
+        architect: planApprovalGate(driverArchitect(session), session, {
+          ...(opts.requestChoice ? { requestChoice: opts.requestChoice } : {}),
+          emit,
+        }),
         build: driverBuild(session, workspaceOpt),
         checklist,
         improve: driverImprove(session, workspaceOpt),
@@ -461,6 +475,58 @@ export async function runFramework(opts: RunFrameworkOptions): Promise<RunFramew
     await session.dispose()
     // Keep the runner alive only when it owns a live preview handed to the caller.
     if (runner && !preview) await runner.dispose()
+  }
+}
+
+/**
+ * The plan-approval gate (#304): the AWAIT point of Rom's plan-then-AWAIT flow.
+ * Wraps the architect step so that once the stack is decided, the run pauses on a
+ * `choice` — "Approve this plan?", recommended = proceed, plus each architect
+ * alternative as "Use <X> instead" — and resumes on the pick. Picking an
+ * alternative re-architects around it (a fresh, coherent plan, not just a swapped
+ * name). A no-op unless a {@link RunFrameworkOptions.requestChoice} handler is
+ * wired, so a headless / programmatic run is byte-identical to before.
+ */
+function planApprovalGate(
+  base: (ctx: ArchitectContext) => Promise<ArchitectPlan>,
+  session: DriverSession,
+  deps: {
+    requestChoice?: (req: ChoiceRequest) => Promise<ChoicePick>
+    emit: (event: FrameworkEvent) => void
+  },
+): (ctx: ArchitectContext) => Promise<ArchitectPlan> {
+  return async ctx => {
+    const plan = await base(ctx)
+    const { requestChoice, emit } = deps
+    if (!requestChoice) return plan
+
+    const alternatives = plan.alternatives ?? []
+    const options: ChoiceOption[] = [
+      { id: 'proceed', label: `Proceed: ${plan.stack}` },
+      ...alternatives.map((a, i) => ({
+        id: `alt:${i}`,
+        label: `Use ${a.option} instead`,
+        ...(a.whyNot ? { detail: a.whyNot } : {}),
+      })),
+    ]
+    const req: ChoiceRequest = { id: 'plan-approval', title: 'Approve this plan?', options, recommended: 'proceed' }
+    emit({ kind: 'choice', ...req })
+
+    // A handler that rejects (or a run aborted mid-await) must not hang the gate:
+    // fall back to the recommended option so the next phase's signal check ends it.
+    let pick: ChoicePick
+    try {
+      pick = await requestChoice(req)
+    } catch {
+      pick = { picked: 'proceed', by: 'auto' }
+    }
+    emit({ kind: 'choice-resolved', id: req.id, picked: pick.picked, by: pick.by ?? 'user' })
+
+    const altMatch = /^alt:(\d+)$/.exec(pick.picked)
+    const chosen = altMatch ? alternatives[Number(altMatch[1])] : undefined
+    if (!chosen) return plan
+    emit({ kind: 'log', message: `Re-architecting around your choice: ${chosen.option}` })
+    return reArchitect(session, ctx, plan.stack, chosen.option)
   }
 }
 

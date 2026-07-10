@@ -16,7 +16,7 @@ import { hostExecutor } from './host-exec.js'
 import { startDashboard, type Dashboard } from './dashboard/index.js'
 import { startRelay, relayPublisher, type RelayPublisher } from './relay.js'
 import { randomUUID } from 'node:crypto'
-import { formatFrameworkEvent, CLAUDE_CODE_SESSION_LINK, type FrameworkEvent } from './events.js'
+import { formatFrameworkEvent, CLAUDE_CODE_SESSION_LINK, type ChoicePick, type ChoiceRequest, type FrameworkEvent } from './events.js'
 import {
   runFramework,
   type DeployDecision,
@@ -673,12 +673,29 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
   // The dashboard Stop button aborts the run-wide controller created above.
   // runFramework checks the signal between phases and the driver kills its current
   // turn on it, so a stop takes effect promptly.
+  //
+  // Interactive choices (#304): the run's requestChoice handler parks a resolver
+  // here keyed by the choice id; the dashboard's Accept / autopilot POSTs the pick
+  // to /choice, which resolves it. Aborting the run resolves any pending choice
+  // (proceed) so the gate never hangs a stopped run.
+  const pendingChoices = new Map<string, (pick: ChoicePick) => void>()
+  controller.signal.addEventListener('abort', () => {
+    for (const resolve of pendingChoices.values()) resolve({ picked: 'proceed', by: 'auto' })
+    pendingChoices.clear()
+  })
   let dashboard: Dashboard | undefined
   if (opts.dashboard) {
     try {
       dashboard = await startDashboard({
         ...(opts.port !== undefined ? { port: opts.port } : {}),
         onStop: () => controller.abort(),
+        onChoice: (id, pick, by) => {
+          const resolve = pendingChoices.get(id)
+          if (resolve) {
+            pendingChoices.delete(id)
+            resolve({ picked: pick, by })
+          }
+        },
         cwd,
       })
       io.out(`◆ dashboard: ${dashboard.url}`)
@@ -747,6 +764,14 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
     onEvent,
     signals,
     signal: controller.signal,
+    // Pause the plan-approval gate on the dashboard when one is live to accept the
+    // pick; without a dashboard the gate auto-accepts the recommended plan (#304).
+    ...(dashboard
+      ? {
+          requestChoice: (req: ChoiceRequest) =>
+            new Promise<ChoicePick>(resolve => pendingChoices.set(req.id, resolve)),
+        }
+      : {}),
     ...(opts.model ? { model: opts.model } : {}),
     ...(opts.maxPasses ? { maxPasses: opts.maxPasses } : {}),
     ...(deploy ? { deploy } : {}),

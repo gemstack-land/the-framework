@@ -7,7 +7,7 @@ import { CLAUDE_CODE_SESSION_LINK } from '../events.js'
  * that foreground the orchestration (stack rationale, loop status, decisions)
  * beside a tail of the wrapped agent's own activity.
  */
-export function dashboardHtml(title: string, stoppable = false): string {
+export function dashboardHtml(title: string, stoppable = false, choiceable = false): string {
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -92,6 +92,26 @@ export function dashboardHtml(title: string, stoppable = false): string {
   #modes .box { color: #6ea8fe; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
   #modes li.off { color: #5c657a; }
   #modes li.off .box { color: #3a4256; }
+  /* Interactive plan-approval / choice panel (#304): full-width, accented so it
+     reads as the one thing awaiting the human. */
+  #choice-panel { grid-column: 1 / -1; background: #131a2a; border: 1px solid #2b3b5c;
+    border-left: 3px solid #6ea8fe; border-radius: 10px; padding: 14px 18px; }
+  #choice-panel[hidden] { display: none; }
+  #choice-panel h2 { color: #9db4d6; }
+  #choice-title { font-size: 15px; font-weight: 600; color: #e8ecf3; margin: 2px 0 10px; }
+  #choice-options { margin-bottom: 12px; }
+  #choice-options li { border-bottom: 0; padding: 4px 0; }
+  #choice-options label { display: flex; align-items: baseline; gap: 8px; cursor: pointer; }
+  #choice-options .opt-label { color: #e8ecf3; }
+  #choice-options .opt-detail { color: #8b93a3; font-size: 12px; }
+  #choice-actions { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+  #choice-accept { font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; color: #0b0e14;
+    background: #6ea8fe; border: 0; border-radius: 6px; padding: 6px 16px; }
+  #choice-accept:hover { background: #8bbaff; }
+  #autopilot-row { display: flex; align-items: center; gap: 6px; color: #b7c0d0; font-size: 13px; cursor: pointer; }
+  #choice-count { color: #6ea8fe; font-size: 12px; }
+  .kbd { color: #26324a; background: #aebfe0; border-radius: 4px; padding: 0 5px; font-size: 10px;
+    font-weight: 700; margin-left: 4px; }
   #activity { grid-column: 1 / -1; }
   #log { font: 12px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace; color: #96a0b3;
     max-height: 320px; overflow-y: auto; white-space: pre-wrap; }
@@ -122,6 +142,16 @@ export function dashboardHtml(title: string, stoppable = false): string {
   <span class="run">live until you stop the run</span>
 </div>
 <main>
+  <section id="choice-panel" hidden>
+    <h2>Your call</h2>
+    <div id="choice-title"></div>
+    <ul id="choice-options"></ul>
+    <div id="choice-actions">
+      <button id="choice-accept">Accept<span class="kbd">Ctrl+Enter</span></button>
+      <label id="autopilot-row"><input type="checkbox" id="autopilot-toggle" /> autopilot</label>
+      <span id="choice-count"></span>
+    </div>
+  </section>
   <section id="stack-panel">
     <h2>Stack &amp; rationale</h2>
     <div class="stack muted" id="stack">deciding…</div>
@@ -153,16 +183,18 @@ export function dashboardHtml(title: string, stoppable = false): string {
 </div>
 </div>
 <script>
-${clientScript(stoppable)}
+${clientScript(stoppable, choiceable)}
 </script>
 </body>
 </html>`
 }
 
-function clientScript(stoppable: boolean): string {
+function clientScript(stoppable: boolean, choiceable: boolean): string {
   // Runs in the browser. Keep it dependency-free.
   return `
 const STOPPABLE = ${stoppable ? 'true' : 'false'};
+const CHOICEABLE = ${choiceable ? 'true' : 'false'};
+const AUTO_ACCEPT_MS = 10000;
 const GENERIC_SESSION_LINK = ${JSON.stringify(CLAUDE_CODE_SESSION_LINK)};
 let ended = false;
 const $ = id => document.getElementById(id);
@@ -286,9 +318,12 @@ function render(fe) {
   else if (fe.kind === 'bootstrap') bootstrap(fe.event);
   else if (fe.kind === 'driver') driver(fe.event);
   else if (fe.kind === 'modes') renderModes(fe.all, fe.active);
+  else if (fe.kind === 'choice') showChoice(fe);
+  else if (fe.kind === 'choice-resolved') resolveChoice(fe);
   else if (fe.kind === 'log') log(fe.message);
   else if (fe.kind === 'end') {
     if (mode === 'live') { ended = true; $('stop').hidden = true; }
+    closeChoice();
     $('status').textContent = fe.ok ? '\\u25cf finished' : fe.stopped ? '\\u25a0 stopped' : '\\u25cf failed';
   }
 }
@@ -299,6 +334,77 @@ function stopRun() {
   fetch('stop', { method: 'POST' }).catch(() => {});
 }
 function esc(s) { const d = document.createElement('div'); d.textContent = String(s); return d.innerHTML; }
+
+// Interactive plan-approval / choice panel (#304). The run pauses on a 'choice'
+// event; we render the options with the recommended one pre-selected, accept on
+// click / Ctrl+Enter, and (when autopilot is on) auto-accept the recommended
+// after a countdown that any mouse movement cancels. The pick is POSTed to
+// /choice, which resolves the run; the run echoes a 'choice-resolved' back.
+let activeChoice = null;
+let choiceTimer = null;
+let choiceLeft = 0;
+function autopilotOn() {
+  const v = localStorage.getItem('framework:autopilot');
+  return v === null ? true : v === '1'; // default on, per the demo default
+}
+function showChoice(req) {
+  // Live only: a past run's choices are already resolved (read-only history), and
+  // if the server can't take a pick there is nothing to accept into.
+  if (!CHOICEABLE || mode !== 'live') return;
+  activeChoice = req;
+  $('choice-title').textContent = req.title || 'Your call';
+  const ul = $('choice-options'); ul.innerHTML = '';
+  for (const o of (req.options || [])) {
+    const li = document.createElement('li');
+    const checked = o.id === req.recommended ? ' checked' : '';
+    li.innerHTML = '<label><input type="radio" name="choice-opt" value="' + esc(o.id) + '"' + checked + '>' +
+      '<span class="opt-label">' + esc(o.label) + '</span>' +
+      (o.detail ? '<span class="opt-detail">' + esc(o.detail) + '</span>' : '') + '</label>';
+    ul.appendChild(li);
+  }
+  $('autopilot-toggle').checked = autopilotOn();
+  $('choice-panel').hidden = false;
+  startCountdown();
+}
+function selectedChoice() {
+  const el = document.querySelector('input[name="choice-opt"]:checked');
+  return el ? el.value : (activeChoice ? activeChoice.recommended : null);
+}
+function renderCount() {
+  $('choice-count').textContent = '\\u25cf autopilot accepting in ' + choiceLeft + 's \\u2014 move the mouse to cancel';
+}
+function startCountdown() {
+  stopCountdown();
+  if (!autopilotOn() || !activeChoice) { $('choice-count').textContent = ''; return; }
+  choiceLeft = Math.ceil((activeChoice.autoAcceptMs || AUTO_ACCEPT_MS) / 1000);
+  renderCount();
+  choiceTimer = setInterval(() => {
+    choiceLeft -= 1;
+    if (choiceLeft <= 0) { stopCountdown(); acceptChoice('autopilot'); }
+    else renderCount();
+  }, 1000);
+}
+function stopCountdown() { if (choiceTimer) { clearInterval(choiceTimer); choiceTimer = null; } }
+function cancelAutopilot() {
+  if (choiceTimer) { stopCountdown(); $('choice-count').textContent = 'autopilot canceled \\u2014 pick manually'; }
+}
+function acceptChoice(by) {
+  if (!activeChoice) return;
+  const id = activeChoice.id;
+  const pick = selectedChoice();
+  stopCountdown();
+  activeChoice = null;
+  $('choice-panel').hidden = true;
+  fetch('choice', { method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ id: id, pick: pick, by: by }) }).catch(() => {});
+}
+function resolveChoice(fe) {
+  if (activeChoice && activeChoice.id === fe.id) {
+    stopCountdown(); activeChoice = null; $('choice-panel').hidden = true;
+  }
+  log('\\u2713 chose ' + fe.picked + ' (' + fe.by + ')');
+}
+function closeChoice() { stopCountdown(); activeChoice = null; $('choice-panel').hidden = true; }
 
 // Run history (#303): the live stream is one run; past runs come from /api/runs and
 // replay through the very same render() into the panels. We keep every live event so
@@ -318,6 +424,7 @@ function resetPanels() {
   $('grade').textContent = 'building\\u2026'; $('grade').classList.add('muted');
   $('passes').innerHTML = '';
   $('modes-panel').hidden = true; $('modes').innerHTML = '';
+  closeChoice();
   $('deploy').textContent = 'not decided yet'; $('deploy').classList.add('muted');
   $('ledger').innerHTML = '';
   $('log').textContent = '';
@@ -380,6 +487,16 @@ function loadRuns() {
 
 $('stop').addEventListener('click', stopRun);
 $('back-live').addEventListener('click', showLive);
+$('choice-accept').addEventListener('click', () => acceptChoice('user'));
+$('autopilot-toggle').addEventListener('change', ev => {
+  localStorage.setItem('framework:autopilot', ev.target.checked ? '1' : '0');
+  if (ev.target.checked) startCountdown(); else { stopCountdown(); $('choice-count').textContent = 'autopilot off'; }
+});
+// Any mouse movement cancels the running autopilot countdown (cheap no-op once cleared).
+document.addEventListener('mousemove', cancelAutopilot);
+document.addEventListener('keydown', ev => {
+  if (activeChoice && (ev.ctrlKey || ev.metaKey) && ev.key === 'Enter') { ev.preventDefault(); acceptChoice('user'); }
+});
 const src = new EventSource('events');
 src.onmessage = ev => {
   let fe; try { fe = JSON.parse(ev.data); } catch { return; }
