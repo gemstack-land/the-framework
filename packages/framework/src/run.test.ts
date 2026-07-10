@@ -2,7 +2,7 @@ import { strict as assert } from 'node:assert'
 import { test } from 'node:test'
 import { defineDomainPreset, defineFrameworkExtension, defineLoop, definePersona, defineSkill } from '@gemstack/ai-autopilot'
 import type { Prompt } from '@gemstack/ai-autopilot'
-import { DEFAULT_MAX_PASSES, runFramework } from './run.js'
+import { DEFAULT_MAX_PASSES, requestMultiSelect, runFramework, type MultiSelectOption } from './run.js'
 import { FAKE_DEPLOY, FAKE_INTENT, FAKE_SIGNALS, fakeDriver } from './fake-script.js'
 import { FakeDriver, type Driver, type DriverSession } from './driver/index.js'
 import type { ChoiceRequest, FrameworkEvent } from './events.js'
@@ -647,4 +647,69 @@ test('the gate re-fires to approve the re-architected plan (#324)', async () => 
   assert.ok(choices[1]!.kind === 'choice' && /Next\.js \+ Postgres/.test(choices[1]!.options[0]!.label))
   assert.ok(events.some(e => e.kind === 'log' && /Re-architecting around your choice: Next\.js/.test(e.message)))
   assert.equal(result.productionGrade, true)
+})
+
+const MS_OPTS: MultiSelectOption[] = [
+  { id: 'p0', label: 'auth flow', default: true },
+  { id: 'p1', label: 'routing' },
+  { id: 'p2', label: 'data layer', detail: 'rated 2/10', default: true },
+]
+
+test('requestMultiSelect headless: auto-accepts the default-checked set (#332)', async () => {
+  const events: FrameworkEvent[] = []
+  const selected = await requestMultiSelect({
+    id: 'ms',
+    title: 'Pick problems',
+    options: MS_OPTS,
+    emit: e => events.push(e),
+  })
+  assert.deepEqual(selected, ['p0', 'p2']) // the two defaults
+  const choice = events.find(e => e.kind === 'choice')
+  assert.ok(choice && choice.kind === 'choice' && choice.multi === true && choice.recommended === undefined)
+  const resolved = events.find(e => e.kind === 'choice-resolved')
+  assert.ok(resolved && resolved.kind === 'choice-resolved')
+  assert.deepEqual((resolved as { picked: unknown }).picked, ['p0', 'p2'])
+  assert.equal((resolved as { by: string }).by, 'auto')
+})
+
+test('requestMultiSelect returns the user-picked subset, filtered to valid ids (#332)', async () => {
+  const events: FrameworkEvent[] = []
+  const selected = await requestMultiSelect({
+    id: 'ms',
+    title: 'Pick problems',
+    options: MS_OPTS,
+    emit: e => events.push(e),
+    // The user unchecks a default (p0), keeps p1, and a stray id is dropped.
+    requestChoice: async () => ({ picked: ['p1', 'p2', 'bogus'], by: 'user' }),
+  })
+  assert.deepEqual(selected, ['p1', 'p2'])
+})
+
+test('requestMultiSelect resolves to the defaults if the run aborts while parked (#332)', async () => {
+  const events: FrameworkEvent[] = []
+  const ac = new AbortController()
+  const selected = await requestMultiSelect({
+    id: 'ms',
+    title: 'Pick problems',
+    options: MS_OPTS,
+    emit: e => events.push(e),
+    signal: ac.signal,
+    // Never resolves on its own; the abort must unblock it.
+    requestChoice: () => {
+      ac.abort()
+      return new Promise(() => {})
+    },
+  })
+  assert.deepEqual(selected, ['p0', 'p2']) // fell back to the defaults, not a hang
+})
+
+test('requestMultiSelect can resolve to an empty set when the user checks nothing (#332)', async () => {
+  const selected = await requestMultiSelect({
+    id: 'ms',
+    title: 'Pick problems',
+    options: MS_OPTS,
+    emit: () => {},
+    requestChoice: async () => ({ picked: [], by: 'user' }),
+  })
+  assert.deepEqual(selected, [])
 })

@@ -5,12 +5,63 @@ import {
   SESSION_ID_PLACEHOLDER,
   formatFrameworkEvent,
   hasSessionIdPlaceholder,
+  pickedIds,
   resolveSessionLink,
 } from './events.js'
 
 test('hasSessionIdPlaceholder distinguishes templates from literal URLs', () => {
   assert.equal(hasSessionIdPlaceholder(`https://x.dev/s/${SESSION_ID_PLACEHOLDER}`), true)
   assert.equal(hasSessionIdPlaceholder('https://x.dev/live'), false)
+})
+
+test('pickedIds normalizes a single id or a subset to a list (#332)', () => {
+  assert.deepEqual(pickedIds('proceed'), ['proceed'])
+  assert.deepEqual(pickedIds(['p0', 'p2']), ['p0', 'p2'])
+  assert.deepEqual(pickedIds([]), [])
+  assert.deepEqual(pickedIds(''), [])
+})
+
+test('formatFrameworkEvent renders a multi-select choice as a checklist (#332)', () => {
+  const line = formatFrameworkEvent({
+    kind: 'choice',
+    id: 'ms',
+    title: 'Pick problems to deep-dive',
+    multi: true,
+    options: [
+      { id: 'p0', label: 'auth flow', default: true },
+      { id: 'p1', label: 'routing' },
+    ],
+  })
+  assert.equal(line, '? Pick problems to deep-dive\n    [x] auth flow\n    [ ] routing')
+})
+
+test('formatFrameworkEvent renders a single-select choice with the recommended mark (#304)', () => {
+  const line = formatFrameworkEvent({
+    kind: 'choice',
+    id: 'plan',
+    title: 'Approve this plan?',
+    recommended: 'proceed',
+    options: [
+      { id: 'proceed', label: 'Proceed: Vike' },
+      { id: 'alt:0', label: 'Use Next.js instead' },
+    ],
+  })
+  assert.equal(line, '? Approve this plan?\n    ● Proceed: Vike\n    ○ Use Next.js instead')
+})
+
+test('formatFrameworkEvent renders a resolved subset, and (none) when empty (#332)', () => {
+  assert.equal(
+    formatFrameworkEvent({ kind: 'choice-resolved', id: 'ms', picked: ['p0', 'p2'], by: 'user' }),
+    '  ✓ chose p0, p2 (user)',
+  )
+  assert.equal(
+    formatFrameworkEvent({ kind: 'choice-resolved', id: 'ms', picked: [], by: 'auto' }),
+    '  ✓ chose (none) (auto)',
+  )
+  assert.equal(
+    formatFrameworkEvent({ kind: 'choice-resolved', id: 'plan', picked: 'proceed', by: 'user' }),
+    '  ✓ chose proceed (user)',
+  )
 })
 
 test('resolveSessionLink fills the placeholder and is a no-op for a literal', () => {

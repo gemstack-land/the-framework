@@ -59,7 +59,7 @@ function installClock(window: { [k: string]: unknown }) {
 
 interface Pick {
   id: string
-  pick: string
+  pick: string | string[]
   by: string
 }
 
@@ -70,6 +70,10 @@ interface Harness {
   el: (id: string) => { hidden: boolean; textContent: string }
   dispatch: (type: 'mousemove' | 'keydown', init?: Record<string, unknown>) => void
   window: Record<string, unknown>
+  /** Toggle a rendered option checkbox/radio by its value (multi-select interaction). */
+  setChecked: (value: string, checked: boolean) => void
+  /** Click a button by id (e.g. the Accept button). */
+  click: (id: string) => void
 }
 
 // Boot the real dashboard page in jsdom with stubbed EventSource/fetch and the
@@ -120,6 +124,16 @@ function boot(): Harness {
     dispatch(type, init) {
       const Ctor = type === 'mousemove' ? dom.window.MouseEvent : dom.window.KeyboardEvent
       doc.dispatchEvent(new Ctor(type, init as never))
+    },
+    setChecked(value, checked) {
+      const input = doc.querySelector(`#choice-options input[value="${value}"]`) as HTMLInputElement | null
+      assert.ok(input, `option ${value} exists`)
+      input.checked = checked
+    },
+    click(id) {
+      const node = doc.getElementById(id)
+      assert.ok(node, `#${id} exists`)
+      ;(node as unknown as { click: () => void }).click()
     },
     window,
   }
@@ -175,4 +189,47 @@ test('Ctrl+Enter accepts the choice as the user and stops the countdown (#311)',
   // The countdown was cleared, so no stray autopilot accept follows.
   h.tick(30000)
   assert.equal(h.picks.length, 1)
+})
+
+const MULTI = {
+  kind: 'choice',
+  id: 'ms',
+  title: 'Pick problems to deep-dive',
+  multi: true,
+  options: [
+    { id: 'p0', label: 'auth flow', default: true },
+    { id: 'p1', label: 'routing' },
+    { id: 'p2', label: 'data layer', default: true },
+  ],
+  autoAcceptMs: 10000,
+}
+
+test('a multi-select renders checkboxes and Accept posts the checked subset (#332)', () => {
+  const h = boot()
+  h.fire(MULTI)
+  assert.equal(h.el('choice-panel').hidden, false)
+  // The user unchecks a pre-checked default and checks a non-default one, so the
+  // posted subset differs from the defaults ['p0','p2'].
+  h.setChecked('p0', false)
+  h.setChecked('p1', true)
+  h.click('choice-accept')
+  assert.deepEqual(h.picks, [{ id: 'ms', pick: ['p1', 'p2'], by: 'user' }])
+  assert.equal(h.el('choice-panel').hidden, true)
+})
+
+test('a multi-select autopilot accept posts the default-checked subset (#332)', () => {
+  const h = boot()
+  h.fire(MULTI)
+  // Leave the pre-checked defaults; the countdown auto-accepts them.
+  h.tick(10000)
+  assert.deepEqual(h.picks, [{ id: 'ms', pick: ['p0', 'p2'], by: 'autopilot' }])
+})
+
+test('a multi-select can post an empty subset when the user unchecks everything (#332)', () => {
+  const h = boot()
+  h.fire(MULTI)
+  h.setChecked('p0', false)
+  h.setChecked('p2', false)
+  h.click('choice-accept')
+  assert.deepEqual(h.picks, [{ id: 'ms', pick: [], by: 'user' }])
 })

@@ -52,11 +52,14 @@ export {
 } from './steps.js'
 export {
   runFramework,
+  requestMultiSelect,
   type RunFrameworkOptions,
   type RunFrameworkResult,
   type DeployDecision,
   type ServeConfig,
   type AppPreview,
+  type MultiSelectOption,
+  type MultiSelectDeps,
 } from './run.js'
 export { snapshotWorkspace, SANDBOX_IGNORE, type SnapshotOptions } from './sandbox.js'
 export {
@@ -78,6 +81,7 @@ export {
   type ChoiceRequest,
   type ChoicePick,
   type ChoiceBy,
+  pickedIds,
   formatFrameworkEvent,
   resolveSessionLink,
   hasSessionIdPlaceholder,

@@ -9,6 +9,8 @@ export interface ChoiceOption {
   label: string
   /** Optional one-line detail under the label (e.g. why an alternative lost). */
   detail?: string
+  /** In a multi-select ({@link ChoiceRequest.multi}), whether this option starts checked. Ignored for single-select. */
+  default?: boolean
 }
 
 /**
@@ -23,8 +25,18 @@ export interface ChoiceRequest {
   title: string
   /** The options to choose between (at least one). */
   options: readonly ChoiceOption[]
-  /** The option id pre-selected as the default (autopilot auto-accepts it). */
-  recommended: string
+  /**
+   * The option id pre-selected as the default (autopilot auto-accepts it). Required
+   * for a single-select; omitted for a {@link multi} select, where each option's own
+   * {@link ChoiceOption.default} drives the pre-checked set instead.
+   */
+  recommended?: string
+  /**
+   * Render as a multi-select checklist (#332): each option is a checkbox pre-checked
+   * per its {@link ChoiceOption.default}, and the pick resolves to the selected
+   * *subset* of ids rather than one. Absent = the single-select gate (#304).
+   */
+  multi?: boolean
   /** Auto-accept the recommended option after this many ms when autopilot is on. Default 10000. */
   autoAcceptMs?: number
 }
@@ -34,10 +46,15 @@ export type ChoiceBy = 'user' | 'autopilot' | 'auto'
 
 /** What a {@link import('./run.js').RunFrameworkOptions.requestChoice} handler resolves with. */
 export interface ChoicePick {
-  /** The picked option id. */
-  picked: string
+  /** The picked option id, or (for a {@link ChoiceRequest.multi} select) the selected subset of ids. */
+  picked: string | readonly string[]
   /** Who picked it. Default `'user'`. */
   by?: ChoiceBy
+}
+
+/** Normalize a {@link ChoicePick} (single id or subset) to a list of picked ids. */
+export function pickedIds(picked: string | readonly string[]): string[] {
+  return Array.isArray(picked) ? [...picked] : picked ? [picked as string] : []
 }
 
 /**
@@ -98,8 +115,8 @@ export type FrameworkEvent =
    * posts the pick back; a headless run auto-accepts the recommended option.
    */
   | ({ kind: 'choice' } & ChoiceRequest)
-  /** A pending {@link ChoiceRequest} was resolved — the run continues on `picked`. */
-  | { kind: 'choice-resolved'; id: string; picked: string; by: ChoiceBy }
+  /** A pending {@link ChoiceRequest} was resolved — the run continues on `picked` (one id, or the selected subset). */
+  | { kind: 'choice-resolved'; id: string; picked: string | readonly string[]; by: ChoiceBy }
   /**
    * The run finished. `ok` is false when it threw. `stopped` marks the common,
    * non-error case where the user interrupted it (the dashboard Stop button /
@@ -129,13 +146,13 @@ export function formatFrameworkEvent(event: FrameworkEvent): string {
       return `  modes: ${shown}`
     }
     case 'choice': {
-      const opts = event.options
-        .map(o => `    ${o.id === event.recommended ? '●' : '○'} ${o.label}`)
-        .join('\n')
+      const mark = (o: ChoiceOption) =>
+        event.multi ? (o.default ? '[x]' : '[ ]') : o.id === event.recommended ? '●' : '○'
+      const opts = event.options.map(o => `    ${mark(o)} ${o.label}`).join('\n')
       return `? ${event.title}\n${opts}`
     }
     case 'choice-resolved':
-      return `  ✓ chose ${event.picked} (${event.by})`
+      return `  ✓ chose ${pickedIds(event.picked).join(', ') || '(none)'} (${event.by})`
     case 'driver':
       return formatDriverEvent(event.event)
     case 'bootstrap':

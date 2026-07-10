@@ -28,7 +28,7 @@ export interface DashboardOptions {
    * disable interactive choices; the page still renders them but the route reports
    * no handler (404).
    */
-  onChoice?: (id: string, pick: string, by: ChoiceBy) => void
+  onChoice?: (id: string, pick: string | string[], by: ChoiceBy) => void
   /**
    * The workspace whose `.framework/runs/` archive backs the run-history sidebar
    * (#303): `GET /api/runs` lists it, `GET /api/runs/<id>` replays one run. Omit
@@ -94,7 +94,7 @@ function handle(
   clients: Set<ServerResponse>,
   title: string,
   onStop: (() => void) | undefined,
-  onChoice: ((id: string, pick: string, by: ChoiceBy) => void) | undefined,
+  onChoice: ((id: string, pick: string | string[], by: ChoiceBy) => void) | undefined,
   cwd: string | undefined,
 ): void {
   const url = req.url ?? '/'
@@ -157,9 +157,16 @@ function handle(
     }
     readJsonBody(req, body => {
       const id = typeof body['id'] === 'string' ? body['id'] : ''
-      const pick = typeof body['pick'] === 'string' ? body['pick'] : ''
+      const raw = body['pick']
+      // A single-select posts one id (string); a multi-select (#332) posts the
+      // selected subset (array), which may legitimately be empty (nothing checked).
+      const pick: string | string[] = typeof raw === 'string'
+        ? raw
+        : Array.isArray(raw)
+          ? raw.filter((x): x is string => typeof x === 'string')
+          : ''
       const by: ChoiceBy = body['by'] === 'autopilot' ? 'autopilot' : body['by'] === 'auto' ? 'auto' : 'user'
-      if (id && pick) onChoice(id, pick, by)
+      if (id && (Array.isArray(pick) || pick)) onChoice(id, pick, by)
       res.writeHead(202, { 'content-type': 'application/json' })
       res.end('{"ok":true}')
     })
