@@ -37,7 +37,7 @@ import type { Driver, DriverEvent, DriverSession } from './driver/index.js'
 import { memoryFraming, type LoadedMemory } from './memory.js'
 import { systemPromptBlock } from './system-prompt.js'
 import { decideDeploy, deployWith, domainLoopChecklist, driverArchitect, driverBuild, driverChecklist, driverImprove, driverLoopPrompts, reArchitect } from './steps.js'
-import { hasSessionIdPlaceholder, OPEN_LOOP_MODES, resolveSessionLink, type ChoiceOption, type ChoicePick, type ChoiceRequest, type FrameworkEvent } from './events.js'
+import { hasSessionIdPlaceholder, OPEN_LOOP_MODES, pickedIds, resolveSessionLink, type ChoiceOption, type ChoicePick, type ChoiceRequest, type FrameworkEvent } from './events.js'
 import { UsageMeter } from './usage.js'
 
 /**
@@ -561,7 +561,9 @@ function planApprovalGate(
       const pick = await raceChoiceOrAbort(requestChoice(req), deps.signal)
       emit({ kind: 'choice-resolved', id: req.id, picked: pick.picked, by: pick.by ?? 'user' })
 
-      const altMatch = /^alt:(\d+)$/.exec(pick.picked)
+      // Single-select gate: the pick is one id.
+      const picked = typeof pick.picked === 'string' ? pick.picked : pick.picked[0] ?? ''
+      const altMatch = /^alt:(\d+)$/.exec(picked)
       const chosen = altMatch ? alternatives[Number(altMatch[1])] : undefined
       if (!chosen) return plan // proceed (or an unknown pick) approves the current plan
       emit({ kind: 'log', message: `Re-architecting around your choice: ${chosen.option}` })
@@ -577,26 +579,95 @@ function planApprovalGate(
 /** How many times a run may re-architect at the plan-approval gate before proceeding (#324). */
 const MAX_PLAN_ROUNDS = 5
 
-/** The recommended fallback pick when a gate cannot get a real answer. */
+/** The recommended fallback pick when a single-select gate cannot get a real answer. */
 const PROCEED: ChoicePick = { picked: 'proceed', by: 'auto' }
 
 /**
- * Resolve with the human's pick, or fall back to proceed if the pick rejects or
+ * Resolve with the human's pick, or fall back to `fallback` if the pick rejects or
  * the run aborts first (user stop / budget cap #322) — so a gate parked for input
- * never hangs. Never rejects. Cleans up its abort listener either way.
+ * never hangs. Never rejects. Cleans up its abort listener either way. The fallback
+ * is the single-select `proceed` by default; a multi-select passes its default set.
  */
-function raceChoiceOrAbort(pick: Promise<ChoicePick>, signal?: AbortSignal): Promise<ChoicePick> {
-  if (!signal) return pick.catch(() => PROCEED)
-  if (signal.aborted) return Promise.resolve(PROCEED)
+function raceChoiceOrAbort(
+  pick: Promise<ChoicePick>,
+  signal?: AbortSignal,
+  fallback: ChoicePick = PROCEED,
+): Promise<ChoicePick> {
+  if (!signal) return pick.catch(() => fallback)
+  if (signal.aborted) return Promise.resolve(fallback)
   return new Promise<ChoicePick>(resolve => {
-    const onAbort = () => resolve(PROCEED)
+    const onAbort = () => resolve(fallback)
     signal.addEventListener('abort', onAbort, { once: true })
     const done = (value: ChoicePick) => {
       signal.removeEventListener('abort', onAbort)
       resolve(value)
     }
-    pick.then(done, () => done(PROCEED))
+    pick.then(done, () => done(fallback))
   })
+}
+
+/** One option of a {@link requestMultiSelect} checklist (#332). */
+export interface MultiSelectOption {
+  /** Stable id returned when this option is checked. */
+  id: string
+  /** The label shown next to the checkbox. */
+  label: string
+  /** Optional one-line detail under the label. */
+  detail?: string
+  /** Whether this option starts checked (e.g. a low-rated problem in the [Research] preset #331). */
+  default?: boolean
+}
+
+/** Inputs to {@link requestMultiSelect}. */
+export interface MultiSelectDeps {
+  /** Stable id for the gate; the pick is posted back against it. */
+  id: string
+  /** The prompt shown above the checklist. */
+  title: string
+  /** The options to choose from (checkboxes). */
+  options: readonly MultiSelectOption[]
+  /** The interactive handler (the CLI wires it to the dashboard); omit for a headless run. */
+  requestChoice?: (req: ChoiceRequest) => Promise<ChoicePick>
+  /** Emit the `choice` / `choice-resolved` events onto the run stream. */
+  emit: (event: FrameworkEvent) => void
+  /** The run signal; a gate parked for a pick unblocks (to the defaults) if the run aborts. */
+  signal?: AbortSignal
+}
+
+/**
+ * The multi-select gate (#332): show a checklist with the default-checked options
+ * pre-selected, pause, and resolve to the *subset* of option ids the user kept
+ * checked. Built on the same `choice` gate + POST-back resolver as the single-select
+ * plan-approval gate (#304), just in checklist mode. A headless run (no
+ * `requestChoice`) auto-accepts the default set without pausing, so a programmatic
+ * run stays deterministic. This is the primitive the [Research] preset (#331) uses
+ * to let the user pick which problems to deep-dive.
+ */
+export async function requestMultiSelect(deps: MultiSelectDeps): Promise<string[]> {
+  const { options, requestChoice, emit } = deps
+  const defaults = options.filter(o => o.default).map(o => o.id)
+  const req: ChoiceRequest = {
+    id: deps.id,
+    title: deps.title,
+    multi: true,
+    options: options.map(o => ({
+      id: o.id,
+      label: o.label,
+      ...(o.detail ? { detail: o.detail } : {}),
+      ...(o.default ? { default: true } : {}),
+    })),
+  }
+  emit({ kind: 'choice', ...req })
+
+  const validIds = new Set(options.map(o => o.id))
+  const asDefaults: ChoicePick = { picked: defaults, by: 'auto' }
+  // Headless: no one to ask, so accept the defaults (the recommended set).
+  const pick = requestChoice
+    ? await raceChoiceOrAbort(requestChoice(req), deps.signal, asDefaults)
+    : asDefaults
+  const selected = pickedIds(pick.picked).filter(id => validIds.has(id))
+  emit({ kind: 'choice-resolved', id: req.id, picked: selected, by: pick.by ?? 'user' })
+  return selected
 }
 
 /**

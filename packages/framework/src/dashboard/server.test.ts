@@ -279,7 +279,7 @@ function postJson(url: string, body: unknown): Promise<{ status: number; body: s
 }
 
 test('POST /choice invokes onChoice with the pick and the page reports it is choiceable (#304)', async () => {
-  const picks: Array<{ id: string; pick: string; by: string }> = []
+  const picks: Array<{ id: string; pick: string | string[]; by: string }> = []
   const dash = await startDashboard({ port: 0, onChoice: (id, pick, by) => picks.push({ id, pick, by }) })
   try {
     const { status } = await postJson(dash.url + '/choice', { id: 'plan-approval', pick: 'alt:0', by: 'autopilot' })
@@ -290,6 +290,25 @@ test('POST /choice invokes onChoice with the pick and the page reports it is cho
     assert.equal(picks[1]!.by, 'user')
     const page = await fetchText(dash.url + '/')
     assert.match(page.body, /CHOICEABLE = true/)
+  } finally {
+    await dash.close()
+  }
+})
+
+test('POST /choice forwards a multi-select subset (array pick), including an empty set (#332)', async () => {
+  const picks: Array<{ id: string; pick: string | string[] }> = []
+  const dash = await startDashboard({ port: 0, onChoice: (id, pick) => picks.push({ id, pick }) })
+  try {
+    await postJson(dash.url + '/choice', { id: 'ms', pick: ['p0', 'p2'], by: 'user' })
+    // An empty subset (nothing checked) is still a valid resolution, not dropped.
+    await postJson(dash.url + '/choice', { id: 'ms', pick: [], by: 'user' })
+    // Non-string array members are filtered out.
+    await postJson(dash.url + '/choice', { id: 'ms', pick: ['p1', 3, null], by: 'user' })
+    assert.deepEqual(picks, [
+      { id: 'ms', pick: ['p0', 'p2'] },
+      { id: 'ms', pick: [] },
+      { id: 'ms', pick: ['p1'] },
+    ])
   } finally {
     await dash.close()
   }

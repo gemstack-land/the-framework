@@ -403,10 +403,15 @@ function showChoice(req) {
   activeChoice = req;
   $('choice-title').textContent = req.title || 'Your call';
   const ul = $('choice-options'); ul.innerHTML = '';
+  // A multi-select (#332) renders checkboxes pre-checked per option default; a
+  // single-select renders radios with the recommended option pre-selected (#304).
+  const multi = !!req.multi;
   for (const o of (req.options || [])) {
     const li = document.createElement('li');
-    const checked = o.id === req.recommended ? ' checked' : '';
-    li.innerHTML = '<label><input type="radio" name="choice-opt" value="' + esc(o.id) + '"' + checked + '>' +
+    const type = multi ? 'checkbox' : 'radio';
+    const nameAttr = multi ? '' : ' name="choice-opt"';
+    const checked = (multi ? o.default : o.id === req.recommended) ? ' checked' : '';
+    li.innerHTML = '<label><input type="' + type + '"' + nameAttr + ' class="choice-opt" value="' + esc(o.id) + '"' + checked + '>' +
       '<span class="opt-label">' + esc(o.label) + '</span>' +
       (o.detail ? '<span class="opt-detail">' + esc(o.detail) + '</span>' : '') + '</label>';
     ul.appendChild(li);
@@ -417,6 +422,11 @@ function showChoice(req) {
   notify('The run needs your input', req.title || 'A choice is waiting for you.');
 }
 function selectedChoice() {
+  // Multi-select: the picked SUBSET (may be empty). Single-select: one id, falling
+  // back to the recommended default if somehow nothing is checked.
+  if (activeChoice && activeChoice.multi) {
+    return [].slice.call(document.querySelectorAll('#choice-options input:checked')).map(function (e) { return e.value; });
+  }
   const el = document.querySelector('input[name="choice-opt"]:checked');
   return el ? el.value : (activeChoice ? activeChoice.recommended : null);
 }
@@ -452,7 +462,8 @@ function resolveChoice(fe) {
   if (activeChoice && activeChoice.id === fe.id) {
     stopCountdown(); activeChoice = null; $('choice-panel').hidden = true;
   }
-  log('\\u2713 chose ' + fe.picked + ' (' + fe.by + ')');
+  const picked = Array.isArray(fe.picked) ? (fe.picked.join(', ') || '(none)') : fe.picked;
+  log('\\u2713 chose ' + picked + ' (' + fe.by + ')');
 }
 function closeChoice() { stopCountdown(); activeChoice = null; $('choice-panel').hidden = true; }
 
