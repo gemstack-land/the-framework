@@ -1,5 +1,7 @@
+import { readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import {
   builtinDomainPresets,
   cloudflareTarget,
@@ -74,7 +76,24 @@ const defaultIO: CliIO = {
   err: line => process.stderr.write(line + '\n'),
 }
 
-const VERSION = '0.0.0'
+/**
+ * The CLI version, read from the package's own `package.json` at runtime (#312).
+ * The compiled entry lives one level under the package root (`dist/` or
+ * `dist-test/`), so its `package.json` is always `../package.json`. Cached after
+ * the first read; falls back to `0.0.0` if the file is somehow unreadable.
+ */
+let cachedVersion: string | undefined
+export function frameworkVersion(): string {
+  if (cachedVersion !== undefined) return cachedVersion
+  try {
+    const pkgPath = join(dirname(fileURLToPath(import.meta.url)), '..', 'package.json')
+    const pkg = JSON.parse(readFileSync(pkgPath, 'utf8')) as { version?: string }
+    cachedVersion = pkg.version ?? '0.0.0'
+  } catch {
+    cachedVersion = '0.0.0'
+  }
+  return cachedVersion
+}
 
 const HELP = `The Framework — turnkey AI orchestration that wraps a coding agent (Claude Code).
 
@@ -617,7 +636,7 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
     return 0
   }
   if (opts.version) {
-    io.out(VERSION)
+    io.out(frameworkVersion())
     return 0
   }
   if (opts.doctor) {
@@ -1141,7 +1160,7 @@ async function ensureDaemonCmd(opts: CliOptions, io: CliIO): Promise<number> {
   io.out('  framework stop                Stop the background dashboard')
   io.out('  framework --help              All options')
   io.out('')
-  io.out(`The Framework v${VERSION}`)
+  io.out(`The Framework v${frameworkVersion()}`)
   return 0
 }
 
