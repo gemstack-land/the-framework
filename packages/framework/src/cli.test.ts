@@ -36,6 +36,15 @@ test('parseArgs reads flags and the intent words', () => {
   assert.equal(opts.intent, 'a blog app')
 })
 
+test('parseArgs reads the backlog-loop flags (#323)', () => {
+  const dflt = parseArgs(['x'])
+  assert.equal(dflt.todoLoop, true)
+  assert.equal(dflt.todoMaxItems, undefined)
+  assert.equal(parseArgs(['--no-todo-loop', 'x']).todoLoop, false)
+  assert.equal(parseArgs(['--max-todo-items', '5', 'x']).todoMaxItems, 5)
+  assert.match(parseArgs(['--max-todo-items', '0', 'x']).error!, /max-todo-items/)
+})
+
 test('parseArgs reads the research subcommand with its optional what (#331)', () => {
   const bare = parseArgs(['research'])
   assert.equal(bare.research, true)

@@ -38,7 +38,10 @@ import { snapshotWorkspace } from './sandbox.js'
 import type { Driver, DriverEvent, DriverSession } from './driver/index.js'
 import { memoryFraming, type LoadedMemory } from './memory.js'
 import { systemPromptBlock } from './system-prompt.js'
-import { AWAIT_PROTOCOL, parseAwaitGate } from './turn-gate.js'
+import { AWAIT_PROTOCOL, parseAwaitGate, type ParsedAwaitGate } from './turn-gate.js'
+// Value import from todo-loop.js is a benign cycle: todo-loop.js only calls
+// run.js's hoisted function declarations (requestChoices / resolveAwaitGate).
+import { runTodoLoop, type TodoLoopResult } from './todo-loop.js'
 import { continueAfterChoice, decideDeploy, deployWith, domainLoopChecklist, driverArchitect, driverBuild, driverChecklist, driverImprove, driverLoopPrompts, reArchitect } from './steps.js'
 import { hasSessionIdPlaceholder, OPEN_LOOP_MODES, pickedIds, resolveSessionLink, type ChoicePick, type ChoiceRequest, type FrameworkEvent } from './events.js'
 import { UsageMeter } from './usage.js'
@@ -212,6 +215,16 @@ export interface RunFrameworkOptions {
    * account's usage *limit* is not retrievable under subscription auth.
    */
   budgetUsd?: number
+  /**
+   * Run the backlog loop (#323) after the build settles: consume the agent's own
+   * `TODO_<slug>.agent.md` / `TODO.md` one entry per turn until empty, gating
+   * before each entry when {@link requestChoice} is wired. Default: on for real
+   * drivers, off for the fake one (its scripted demo writes no backlog and must
+   * stay deterministic). Set explicitly to force either way.
+   */
+  todoLoop?: boolean
+  /** Per-run cap on backlog entries worked (#323). Default 25. */
+  todoMaxItems?: number
   /** Observe the unified event stream. */
   onEvent?: (event: FrameworkEvent) => void
 }
@@ -250,6 +263,8 @@ export interface RunFrameworkResult {
    * `major-change` event through it, so its chain replaces the built-in checklist.
    */
   loop?: LoopEngine
+  /** How the backlog loop (#323) ended, when it ran. */
+  todo?: TodoLoopResult
 }
 
 /**
@@ -496,6 +511,22 @@ export async function runFramework(opts: RunFrameworkOptions): Promise<RunFramew
       },
     })
     const result = await bootstrap.run()
+    // The backlog loop (#323): with the build settled, consume the agent's own
+    // TODO backlog one gated entry per turn until it is empty. Default on for
+    // real drivers (the fake demo writes no backlog and must stay deterministic;
+    // its reused tmp workspace could also carry stale files). The run signal
+    // (Stop / budget cap #322) and the item cap bound it for unattended runs.
+    let todo: TodoLoopResult | undefined
+    if (opts.todoLoop ?? opts.driver.name !== 'fake') {
+      todo = await runTodoLoop({
+        session,
+        cwd: opts.cwd,
+        emit,
+        requestChoice: opts.requestChoice,
+        signal: runSignal,
+        maxItems: opts.todoMaxItems,
+      })
+    }
     // The serve gate boots the app only to check it, then stops it. When the
     // caller opts in (keepAlive), boot it once more after success and leave it up
     // so the user can open it; the caller owns tearing it down (Ctrl+C). Failure
@@ -503,7 +534,7 @@ export async function runFramework(opts: RunFrameworkOptions): Promise<RunFramew
     // process a caller that ignores `preview` would never stop.
     if (runner && s?.keepAlive) preview = await startAppPreview(runner, s, emit)
     emit({ kind: 'end', ok: true })
-    return { result, detection, events, ledger, ...(preview ? { preview } : {}), ...(loop ? { loop } : {}) }
+    return { result, detection, events, ledger, ...(preview ? { preview } : {}), ...(loop ? { loop } : {}), ...(todo ? { todo } : {}) }
   } catch (err) {
     // A user interrupt (the dashboard Stop button / Ctrl+C) or a budget cap (#322)
     // is a clean stop, not a failure — mark it so surfaces show "stopped". Budget is
@@ -615,34 +646,13 @@ function agentAwaitGate(
 ): (ctx: BuildContext) => Promise<SupervisorRun> {
   return async ctx => {
     const { requestChoice, emit } = deps
-    const signalOpt = deps.signal ? { signal: deps.signal } : {}
     let run = await base(ctx)
     if (!requestChoice) return run
 
     for (let round = 0; round < MAX_AWAIT_ROUNDS; round++) {
       const gate = parseAwaitGate(run.text)
       if (!gate) return run // the agent finished instead of asking — the common case
-      // Round 0 keeps a stable id; later rounds get a unique one so a dashboard never
-      // confuses a re-ask with the answer it just resolved.
-      const base = gate.kind === 'multi' ? 'await-multiselect' : 'await-choices'
-      const id = round === 0 ? base : `${base}-${round}`
-      let answer: string
-      if (gate.kind === 'multi') {
-        const picked = await requestMultiSelect({ id, title: gate.title, options: gate.options, requestChoice, emit, ...signalOpt })
-        const labels = gate.options.filter(o => picked.includes(o.id)).map(o => o.label)
-        answer = labels.length ? labels.join(', ') : '(none)'
-      } else {
-        const pickedId = await requestChoices({
-          id,
-          title: gate.title,
-          options: gate.options,
-          ...(gate.recommended ? { recommended: gate.recommended } : {}),
-          requestChoice,
-          emit,
-          ...signalOpt,
-        })
-        answer = gate.options.find(o => o.id === pickedId)?.label ?? pickedId
-      }
+      const answer = await resolveAwaitGate(gate, round, deps)
       emit({ kind: 'log', message: `Continuing with your choice: ${answer}` })
       run = await continueAfterChoice(session, ctx, gate.title, answer)
     }
@@ -650,6 +660,44 @@ function agentAwaitGate(
     emit({ kind: 'log', message: 'Proceeding with the build (await limit reached).' })
     return run
   }
+}
+
+/**
+ * Resolve one parsed await gate (#337/#339) to the user's answer text, ready to
+ * seed the continuation prompt: emits the `choice`, parks for the pick (or the
+ * headless/abort fallback), and maps the picked id(s) back to label(s). Round 0
+ * keeps a stable gate id; later rounds get a unique one so a dashboard never
+ * confuses a re-ask with the answer it just resolved. Shared by the build's
+ * {@link agentAwaitGate}, the direct prompt path, and the backlog loop (#323).
+ */
+export async function resolveAwaitGate(
+  gate: ParsedAwaitGate,
+  round: number,
+  deps: {
+    requestChoice?: ((req: ChoiceRequest) => Promise<ChoicePick>) | undefined
+    emit: (event: FrameworkEvent) => void
+    signal?: AbortSignal | undefined
+  },
+): Promise<string> {
+  const signalOpt = deps.signal ? { signal: deps.signal } : {}
+  const choiceOpt = deps.requestChoice ? { requestChoice: deps.requestChoice } : {}
+  const baseId = gate.kind === 'multi' ? 'await-multiselect' : 'await-choices'
+  const id = round === 0 ? baseId : `${baseId}-${round}`
+  if (gate.kind === 'multi') {
+    const picked = await requestMultiSelect({ id, title: gate.title, options: gate.options, emit: deps.emit, ...choiceOpt, ...signalOpt })
+    const labels = gate.options.filter(o => picked.includes(o.id)).map(o => o.label)
+    return labels.length ? labels.join(', ') : '(none)'
+  }
+  const pickedId = await requestChoices({
+    id,
+    title: gate.title,
+    options: gate.options,
+    ...(gate.recommended ? { recommended: gate.recommended } : {}),
+    emit: deps.emit,
+    ...choiceOpt,
+    ...signalOpt,
+  })
+  return gate.options.find(o => o.id === pickedId)?.label ?? pickedId
 }
 
 /** The recommended fallback pick when a single-select gate cannot get a real answer. */
