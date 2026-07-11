@@ -177,6 +177,99 @@ test('runDaemon comes up on a fresh workspace with no .framework yet', async () 
   }
 })
 
+test('POST /api/start spawns the run child (prompt, --no-dashboard, --cwd) one at a time (#345)', async () => {
+  const cwd = await tmpWorkspace()
+  // A stub CLI standing in for the framework bin: it records its argv, then
+  // stays alive briefly so the one-run-at-a-time guard has a window to trip.
+  const stub = join(cwd, 'stub-cli.cjs')
+  await writeFile(
+    stub,
+    `const fs = require('node:fs'), path = require('node:path')
+const args = process.argv.slice(2)
+fs.appendFileSync(path.join(args[args.indexOf('--cwd') + 1], 'started.log'), JSON.stringify(args) + '\\n')
+setTimeout(() => {}, 600)
+`,
+  )
+  const ac = new AbortController()
+  try {
+    const done = runDaemon(cwd, { port: 0, pollMs: 50, signal: ac.signal, binPath: stub })
+    let state = await readDaemonState(cwd)
+    for (let i = 0; i < 100 && !state; i++) {
+      await new Promise(r => setTimeout(r, 20))
+      state = await readDaemonState(cwd)
+    }
+    assert.ok(state, 'daemon wrote its state file')
+
+    const startUrl = `${state!.url}/api/start`
+    const post = (prompt: string) =>
+      fetch(startUrl, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ prompt }),
+      })
+
+    const first = await post('a blog')
+    assert.equal(first.status, 202)
+
+    // The child got the prompt as one word plus the headless + workspace flags.
+    let lines: string[] = []
+    for (let i = 0; i < 100 && lines.length < 1; i++) {
+      await new Promise(r => setTimeout(r, 20))
+      lines = await readFile(join(cwd, 'started.log'), 'utf8').then(
+        s => s.split('\n').filter(Boolean),
+        () => [],
+      )
+    }
+    assert.deepEqual(JSON.parse(lines[0]!), ['a blog', '--no-dashboard', '--cwd', cwd])
+
+    // While that child is alive, a second Start is refused (#322 runaway concern).
+    const busy = await post('another app')
+    assert.equal(busy.status, 409)
+    assert.match(await busy.text(), /already active/)
+
+    // Once the child exits, the guard resets and Start works again.
+    let again = busy
+    for (let i = 0; i < 100 && again.status !== 202; i++) {
+      await new Promise(r => setTimeout(r, 50))
+      again = await post('a second run')
+    }
+    assert.equal(again.status, 202)
+
+    ac.abort()
+    await done
+  } finally {
+    ac.abort()
+    await rm(cwd, { recursive: true, force: true })
+  }
+})
+
+test('/api/start refuses to re-exec a test entry as the run (#345)', async () => {
+  const cwd = await tmpWorkspace()
+  const ac = new AbortController()
+  try {
+    // No binPath: argv[1] here is this test file — the fork-bomb guard must trip.
+    const done = runDaemon(cwd, { port: 0, pollMs: 50, signal: ac.signal })
+    let state = await readDaemonState(cwd)
+    for (let i = 0; i < 100 && !state; i++) {
+      await new Promise(r => setTimeout(r, 20))
+      state = await readDaemonState(cwd)
+    }
+    assert.ok(state, 'daemon wrote its state file')
+    const res = await fetch(`${state!.url}/api/start`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ prompt: 'a blog' }),
+    })
+    assert.equal(res.status, 500)
+    assert.match(await res.text(), /test entry/)
+    ac.abort()
+    await done
+  } finally {
+    ac.abort()
+    await rm(cwd, { recursive: true, force: true })
+  }
+})
+
 test('runDaemon steers through the control log: /stop and /choice POSTs append entries (#344)', async () => {
   const cwd = await tmpWorkspace()
   const ac = new AbortController()

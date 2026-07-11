@@ -913,7 +913,7 @@ async function ensureDaemonCmd(opts: CliOptions, io: CliIO): Promise<number> {
   const { state, alreadyRunning } = result
   io.out(`◆ dashboard ${alreadyRunning ? 'already running' : 'started'}: ${state.url}`)
   io.out('')
-  io.out('Commands:')
+  io.out('Type a prompt on the dashboard to start a run, or use:')
   io.out('  framework "<what to build>"   Build (streams to the dashboard)')
   io.out('  framework stop                Stop the background dashboard')
   io.out('  framework --help              All options')

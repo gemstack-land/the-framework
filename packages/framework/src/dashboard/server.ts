@@ -35,7 +35,19 @@ export interface DashboardOptions {
    * to disable history (the endpoints report an empty list).
    */
   cwd?: string
+  /**
+   * Called when the browser posts a new-run prompt (#345): `POST /api/start`
+   * with a JSON `{ prompt }` body. Wire this to spawn the run (the daemon
+   * does); return `busy: true` to refuse because a run is already active (409).
+   * Omit to disable starting; the page hides the prompt panel.
+   */
+  onStart?: (prompt: string) => StartRunResult
 }
+
+/** The outcome of an {@link DashboardOptions.onStart} attempt (#345). */
+export type StartRunResult =
+  | { ok: true }
+  | { ok: false; busy?: boolean; error: string }
 
 /** A running localhost dashboard. Push {@link FrameworkEvent}s; it renders them live. */
 export interface Dashboard {
@@ -65,11 +77,12 @@ export function startDashboard(opts: DashboardOptions = {}): Promise<Dashboard> 
   const title = opts.title ?? 'The Framework'
   const onStop = opts.onStop
   const onChoice = opts.onChoice
+  const onStart = opts.onStart
   const cwd = opts.cwd
   const stream = new EventStream<FrameworkEvent>()
   const clients = new Set<ServerResponse>()
 
-  const server = createServer((req, res) => handle(req, res, stream, clients, title, onStop, onChoice, cwd))
+  const server = createServer((req, res) => handle(req, res, stream, clients, title, onStop, onChoice, onStart, cwd))
 
   return new Promise<Dashboard>((resolvePromise, rejectPromise) => {
     server.once('error', rejectPromise)
@@ -95,12 +108,13 @@ function handle(
   title: string,
   onStop: (() => void) | undefined,
   onChoice: ((id: string, pick: string | string[], by: ChoiceBy) => void) | undefined,
+  onStart: ((prompt: string) => StartRunResult) | undefined,
   cwd: string | undefined,
 ): void {
   const url = req.url ?? '/'
   if (url === '/' || url.startsWith('/?')) {
     res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' })
-    res.end(dashboardHtml(title, Boolean(onStop), Boolean(onChoice)))
+    res.end(dashboardHtml(title, Boolean(onStop), Boolean(onChoice), Boolean(onStart)))
     return
   }
   if (url === '/events') {
@@ -167,6 +181,38 @@ function handle(
           : ''
       const by: ChoiceBy = body['by'] === 'autopilot' ? 'autopilot' : body['by'] === 'auto' ? 'auto' : 'user'
       if (id && (Array.isArray(pick) || pick)) onChoice(id, pick, by)
+      res.writeHead(202, { 'content-type': 'application/json' })
+      res.end('{"ok":true}')
+    })
+    return
+  }
+  if (url === '/api/start') {
+    // Start a new run from the dashboard (#345). Same guards as /stop: POST-only
+    // so a stray GET can never spawn a run, 404 when no handler is wired (the
+    // per-run dashboard and the relay never start runs). 409 = a run is active.
+    if (req.method !== 'POST') {
+      res.writeHead(405, { 'content-type': 'text/plain', allow: 'POST' })
+      res.end('method not allowed')
+      return
+    }
+    if (!onStart) {
+      res.writeHead(404, { 'content-type': 'text/plain' })
+      res.end('starting not enabled')
+      return
+    }
+    readJsonBody(req, body => {
+      const prompt = typeof body['prompt'] === 'string' ? body['prompt'].trim() : ''
+      if (!prompt) {
+        res.writeHead(400, { 'content-type': 'application/json' })
+        res.end('{"error":"a non-empty prompt is required"}')
+        return
+      }
+      const result = onStart(prompt)
+      if (!result.ok) {
+        res.writeHead(result.busy ? 409 : 500, { 'content-type': 'application/json' })
+        res.end(JSON.stringify({ error: result.error }))
+        return
+      }
       res.writeHead(202, { 'content-type': 'application/json' })
       res.end('{"ok":true}')
     })
