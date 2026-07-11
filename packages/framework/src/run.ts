@@ -42,7 +42,7 @@ import { AWAIT_PROTOCOL, parseAwaitGate, type ParsedAwaitGate } from './turn-gat
 // Value import from todo-loop.js is a benign cycle: todo-loop.js only calls
 // run.js's hoisted function declarations (requestChoices / resolveAwaitGate).
 import { runTodoLoop, type TodoLoopResult } from './todo-loop.js'
-import { continueAfterChoice, decideDeploy, deployWith, domainLoopChecklist, driverArchitect, driverBuild, driverChecklist, driverImprove, driverLoopPrompts, reArchitect } from './steps.js'
+import { continueAfterChoice, decideDeploy, deployWith, domainLoopChecklist, driverArchitect, driverBuild, driverChecklist, driverImprove, driverLoopPrompts, reArchitect, type AwaitResolver } from './steps.js'
 import { hasSessionIdPlaceholder, OPEN_LOOP_MODES, pickedIds, resolveSessionLink, type ChoicePick, type ChoiceRequest, type FrameworkEvent } from './events.js'
 import { UsageMeter } from './usage.js'
 
@@ -488,6 +488,23 @@ export async function runFramework(opts: RunFrameworkOptions): Promise<RunFramew
   const verifyWorkspace = opts.driver.name !== 'fake'
   const workspaceOpt = verifyWorkspace ? { verifyWorkspace: true } : {}
 
+  // The shared deps of every agent-facing gate, plus the architect-side await
+  // resolver (#356) built on them when an interactive handler is wired.
+  const gateDeps = {
+    ...(opts.requestChoice ? { requestChoice: opts.requestChoice } : {}),
+    emit,
+    signal: runSignal,
+  }
+  const architectAwait: { resolveAwait?: AwaitResolver } = opts.requestChoice
+    ? {
+        resolveAwait: async (gate, round) => {
+          const answer = await resolveAwaitGate(gate, round, gateDeps)
+          emit({ kind: 'log', message: `Continuing with your choice: ${answer}` })
+          return answer
+        },
+      }
+    : {}
+
   let preview: AppPreview | undefined
   try {
     const bootstrap = new Bootstrap({
@@ -497,16 +514,15 @@ export async function runFramework(opts: RunFrameworkOptions): Promise<RunFramew
       onEvent: (event: BootstrapEvent) => emit({ kind: 'bootstrap', event }),
       steps: {
         scope: () => ({ scope: opts.scope ?? 'full', intent: opts.intent }),
-        architect: planApprovalGate(driverArchitect(session), session, {
-          ...(opts.requestChoice ? { requestChoice: opts.requestChoice } : {}),
-          emit,
-          signal: runSignal,
+        // An architect turn may itself stop to ask (#356, e.g. the #326
+        // unclear-scope flow): resolve it through the same gates instead of
+        // letting the stub-plan fallback swallow the question. Only when someone
+        // can answer, so a headless run stays byte-identical.
+        architect: planApprovalGate(driverArchitect(session, architectAwait), session, {
+          ...gateDeps,
+          ...architectAwait,
         }),
-        build: agentAwaitGate(driverBuild(session, workspaceOpt), session, {
-          ...(opts.requestChoice ? { requestChoice: opts.requestChoice } : {}),
-          emit,
-          signal: runSignal,
-        }),
+        build: agentAwaitGate(driverBuild(session, workspaceOpt), session, gateDeps),
         checklist,
         improve: driverImprove(session, workspaceOpt),
         ...(opts.deploy
@@ -576,6 +592,8 @@ function planApprovalGate(
     emit: (event: FrameworkEvent) => void
     /** The run signal; a gate parked for a pick unblocks (proceed) if the run aborts. */
     signal?: AbortSignal
+    /** Resolver for a re-architect turn that stops to ask (#356). */
+    resolveAwait?: AwaitResolver
   },
 ): (ctx: ArchitectContext) => Promise<ArchitectPlan> {
   return async ctx => {
@@ -616,7 +634,7 @@ function planApprovalGate(
       const chosen = altMatch ? alternatives[Number(altMatch[1])] : undefined
       if (!chosen) return plan // proceed (or an unknown pick) approves the current plan
       emit({ kind: 'log', message: `Re-architecting around your choice: ${chosen.option}` })
-      plan = await reArchitect(session, ctx, plan.stack, chosen.option)
+      plan = await reArchitect(session, ctx, plan.stack, chosen.option, deps.resolveAwait ? { resolveAwait: deps.resolveAwait } : {})
     }
     // Ran out of rounds still picking alternatives: proceed with the latest plan
     // rather than loop forever.

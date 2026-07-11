@@ -22,7 +22,7 @@ import type {
   Verdict,
 } from '@gemstack/ai-autopilot'
 import type { DriverSession } from './driver/index.js'
-import { parseAwaitGate } from './turn-gate.js'
+import { parseAwaitGate, type ParsedAwaitGate } from './turn-gate.js'
 
 /**
  * Driver-backed {@link https://github.com/gemstack-land/gemstack | Bootstrap} steps.
@@ -53,9 +53,57 @@ export function architectPrompt(intent: string, steer?: string): string {
     'Justify the stack honestly: give its real PROS and its CONS, and name the main',
     'alternative you rejected and why it lost. This is shown to the user as the rationale.',
     STACK_TRADEOFFS,
-    'Respond with ONLY a fenced ```json block of the shape:',
-    '{ "stack": "<one line>", "narration": "<what you are building and why>", "decisions": [{ "choice": "<one line>", "why": "<one line>" }], "pros": ["<upside>"], "cons": ["<downside>"], "alternatives": [{ "option": "<rejected stack>", "whyNot": "<one line>" }] }',
+    ARCHITECT_JSON_SHAPE,
   ].join('\n')
+}
+
+/** The architect's answer contract, restated on every architect (re-)prompt. */
+const ARCHITECT_JSON_SHAPE = [
+  'Respond with ONLY a fenced ```json block of the shape:',
+  '{ "stack": "<one line>", "narration": "<what you are building and why>", "decisions": [{ "choice": "<one line>", "why": "<one line>" }], "pros": ["<upside>"], "cons": ["<downside>"], "alternatives": [{ "option": "<rejected stack>", "whyNot": "<one line>" }] }',
+].join('\n')
+
+/**
+ * Resolve an agent-authored await gate (#337/#339) to the user's answer text.
+ * Wired by the run (see `resolveAwaitGate` there); absent on a headless run.
+ */
+export type AwaitResolver = (gate: ParsedAwaitGate, round: number) => Promise<string>
+
+/** How many times an architect turn may stop to ask before its latest text is parsed as-is. */
+const MAX_ARCHITECT_AWAIT_ROUNDS = 5
+
+/**
+ * Run an architect prompt, honoring agent-authored await gates (#356): an
+ * architect turn that stops to ask (e.g. the #326 unclear-scope flow) is resolved
+ * through `resolveAwait` and re-prompted with the answer, instead of the question
+ * being swallowed into a stub plan by {@link parseArchitectPlan}'s fallbacks.
+ * Without a resolver (headless) the first turn's text is returned unchanged.
+ */
+async function architectTurns(
+  session: DriverSession,
+  firstPrompt: string,
+  opts: { system?: string | undefined; signal?: AbortSignal | undefined; resolveAwait?: AwaitResolver | undefined },
+): Promise<string> {
+  const promptOpts = {
+    ...(opts.system ? { system: opts.system } : {}),
+    ...(opts.signal ? { signal: opts.signal } : {}),
+  }
+  let turn = await session.prompt(firstPrompt, promptOpts)
+  if (!opts.resolveAwait) return turn.text
+  for (let round = 0; round < MAX_ARCHITECT_AWAIT_ROUNDS; round++) {
+    const gate = parseAwaitGate(turn.text)
+    if (!gate) return turn.text
+    const answer = await opts.resolveAwait(gate, round)
+    turn = await session.prompt(
+      [
+        `You paused to ask: "${gate.title}". The user chose: ${answer}.`,
+        'Continue the architect decision with that answer, and do not ask again unless a genuinely new choice comes up.',
+        ARCHITECT_JSON_SHAPE,
+      ].join('\n'),
+      promptOpts,
+    )
+  }
+  return turn.text
 }
 
 /** Compose the build prompt from the architect's plan. */
@@ -183,15 +231,16 @@ export interface DriverStepOptions {
  */
 export function driverArchitect(
   session: DriverSession,
-  opts: { prompt?: (intent: string) => string } & DriverStepOptions = {},
+  opts: { prompt?: (intent: string) => string; resolveAwait?: AwaitResolver } & DriverStepOptions = {},
 ): (ctx: ArchitectContext) => Promise<ArchitectPlan> {
   const compose = opts.prompt ?? architectPrompt
   return async ctx => {
-    const turn = await session.prompt(compose(ctx.intent), {
-      ...(opts.system ? { system: opts.system } : {}),
-      ...(ctx.signal ? { signal: ctx.signal } : {}),
+    const text = await architectTurns(session, compose(ctx.intent), {
+      system: opts.system,
+      signal: ctx.signal,
+      resolveAwait: opts.resolveAwait,
     })
-    return parseArchitectPlan(turn.text, ctx.intent)
+    return parseArchitectPlan(text, ctx.intent)
   }
 }
 
@@ -200,16 +249,19 @@ export function driverArchitect(
  * (#304): same intent, same app goal, but steered to build around the alternative
  * they picked instead of the stack originally chosen. Returns a fresh plan.
  */
-export function reArchitect(
+export async function reArchitect(
   session: DriverSession,
   ctx: ArchitectContext,
   fromStack: string,
   toOption: string,
+  opts: { resolveAwait?: AwaitResolver } = {},
 ): Promise<ArchitectPlan> {
   const steer = `The user reviewed your first choice (${fromStack}) and prefers ${toOption}. Re-decide the stack around ${toOption}, keeping the same app goal.`
-  return session
-    .prompt(architectPrompt(ctx.intent, steer), { ...(ctx.signal ? { signal: ctx.signal } : {}) })
-    .then(turn => parseArchitectPlan(turn.text, ctx.intent))
+  const text = await architectTurns(session, architectPrompt(ctx.intent, steer), {
+    signal: ctx.signal,
+    resolveAwait: opts.resolveAwait,
+  })
+  return parseArchitectPlan(text, ctx.intent)
 }
 
 /**

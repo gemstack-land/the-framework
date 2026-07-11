@@ -802,6 +802,56 @@ test('a build turn that stops to showMultiSelect fires a checklist gate and resu
   assert.ok(prompts.some(p => /You paused to ask.*chose: routing/s.test(p)))
 })
 
+test('a re-architect turn that stops to ask fires a live gate instead of a stub plan (#356)', async () => {
+  const first = {
+    stack: 'Vike + Prisma',
+    narration: 'first plan',
+    decisions: [{ choice: 'SSR', why: 'data' }],
+    alternatives: [{ option: 'Next.js', whyNot: 'coupling' }],
+  }
+  const steered = { stack: 'Next.js + Postgres', narration: 'steered plan', decisions: [{ choice: 'RSC', why: 'fits' }], alternatives: [] }
+  const awaitBlock =
+    'One call before I re-decide.\n```await-choices\n' +
+    '{ "title": "Server components?", "options": [{ "id": "yes", "label": "Yes" }, { "id": "no", "label": "No" }], "recommended": "yes" }\n' +
+    '```'
+  const driver = new FakeDriver({
+    respond: (prompt: string): string => {
+      // Order matters: the re-architect prompt also matches "You are the architect".
+      if (/You paused to ask/.test(prompt)) return '```json\n' + JSON.stringify(steered) + '\n```'
+      if (/The user reviewed your first choice/.test(prompt)) return awaitBlock // re-architect stops to ask
+      if (/You are the architect/.test(prompt)) return '```json\n' + JSON.stringify(first) + '\n```'
+      if (/Build this app end to end/.test(prompt)) return 'built'
+      if (/production-grade checklist/.test(prompt)) return 'ok\n```json\n{ "blockers": [] }\n```'
+      return 'done'
+    },
+    sessionId: 'rearch356',
+  })
+
+  const events: FrameworkEvent[] = []
+  await runFramework({
+    intent: FAKE_INTENT,
+    driver,
+    cwd: '/tmp/ws',
+    signals: FAKE_SIGNALS,
+    onEvent: e => events.push(e),
+    requestChoice: async req => {
+      if (req.id === 'plan-approval') return { picked: 'alt:0', by: 'user' } // steer to Next.js -> reArchitect
+      if (req.id === 'await-choices') return { picked: 'no', by: 'user' } // answer the agent's question
+      return { picked: 'proceed', by: 'user' } // approve the re-architected plan
+    },
+  })
+
+  // The agent's mid-re-architect question surfaced as a live gate...
+  const gate = events.find(e => e.kind === 'choice' && e.id === 'await-choices')
+  assert.ok(gate && gate.kind === 'choice')
+  assert.equal(gate.title, 'Server components?')
+  assert.ok(events.some(e => e.kind === 'log' && /Continuing with your choice: No/.test(e.message)))
+  // ...and the re-approval gate (#324) offered the REAL steered plan, not the stub fallback.
+  const reApproval = events.find(e => e.kind === 'choice' && e.id === 'plan-approval-1')
+  assert.ok(reApproval && reApproval.kind === 'choice')
+  assert.ok(reApproval.options.some(o => o.label === 'Proceed: Next.js + Postgres'))
+})
+
 test('without a requestChoice handler a build that asks is not gated (#337 headless)', async () => {
   const plan = { stack: 'Vike', narration: 'p', decisions: [{ choice: 'x', why: 'y' }], alternatives: [] }
   const driver = new FakeDriver({

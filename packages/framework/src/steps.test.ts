@@ -17,6 +17,7 @@ import {
   isWorkspaceEmpty,
   MISSING_VERDICT_BLOCKER,
   parseArchitectPlan,
+  reArchitect,
   verdictFromLoopRun,
 } from './steps.js'
 
@@ -125,6 +126,69 @@ test('driverArchitect returns the parsed plan from the driver turn', async () =>
   }).start({ cwd: '/ws' })
   const plan = await driverArchitect(session)({ intent: 'x', scope: 'full', ledger: new DecisionLedger() })
   assert.equal(plan.stack, 'Next.js')
+})
+
+const ARCHITECT_AWAIT_BLOCK =
+  'I need to know what you meant.\n```await-choices\n' +
+  '{ "title": "Which did you mean?", "options": [{ "id": "blog", "label": "A blog" }, { "id": "shop", "label": "A shop" }] }\n' +
+  '```'
+
+test('driverArchitect resolves an await gate and re-prompts before parsing (#356)', async () => {
+  const session = await new FakeDriver({
+    respond: (prompt: string) =>
+      /You paused to ask/.test(prompt)
+        ? '```json\n' + JSON.stringify(PLAN) + '\n```'
+        : ARCHITECT_AWAIT_BLOCK, // the architect stops to ask first
+  }).start({ cwd: '/ws' })
+  const asked: string[] = []
+  const plan = await driverArchitect(session, {
+    resolveAwait: async gate => {
+      asked.push(gate.title)
+      return 'A shop'
+    },
+  })({ intent: 'x', scope: 'full', ledger: new DecisionLedger() })
+  assert.deepEqual(asked, ['Which did you mean?'])
+  assert.equal(plan.stack, PLAN.stack) // the real plan, not the stub fallback
+})
+
+test('driverArchitect without a resolver keeps the stub fallback (headless, #356)', async () => {
+  const session = await new FakeDriver({ turns: [{ text: ARCHITECT_AWAIT_BLOCK }] }).start({ cwd: '/ws' })
+  const plan = await driverArchitect(session)({ intent: 'a shop', scope: 'full', ledger: new DecisionLedger() })
+  assert.equal(plan.stack, 'A sensible stack for: a shop')
+})
+
+test('reArchitect resolves an await gate and re-prompts before parsing (#356)', async () => {
+  const steered = { stack: 'Next.js + Postgres', narration: 'steered', decisions: [] }
+  const prompts: string[] = []
+  const session = await new FakeDriver({
+    respond: (prompt: string) => {
+      prompts.push(prompt)
+      return /You paused to ask/.test(prompt) ? '```json\n' + JSON.stringify(steered) + '\n```' : ARCHITECT_AWAIT_BLOCK
+    },
+  }).start({ cwd: '/ws' })
+  const plan = await reArchitect(
+    session,
+    { intent: 'x', scope: 'full', ledger: new DecisionLedger() },
+    'Vike',
+    'Next.js',
+    { resolveAwait: async () => 'A shop' },
+  )
+  assert.equal(plan.stack, 'Next.js + Postgres')
+  // The continuation restates the answer contract so the reply is parseable.
+  assert.ok(prompts.some(p => /You paused to ask.*chose: A shop[\s\S]*ONLY a fenced/.test(p)))
+})
+
+test('an architect that keeps asking past the round limit falls back to the latest text (#356)', async () => {
+  const session = await new FakeDriver({ respond: () => ARCHITECT_AWAIT_BLOCK }).start({ cwd: '/ws' })
+  let rounds = 0
+  const plan = await driverArchitect(session, {
+    resolveAwait: async () => {
+      rounds++
+      return 'A shop'
+    },
+  })({ intent: 'a shop', scope: 'full', ledger: new DecisionLedger() })
+  assert.equal(rounds, 5) // bounded, no infinite loop
+  assert.equal(plan.stack, 'A sensible stack for: a shop')
 })
 
 test('driverBuild emits supervisor events and returns the driver summary', async () => {
