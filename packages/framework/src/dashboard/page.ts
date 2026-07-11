@@ -24,7 +24,7 @@ export function dashboardHtml(title: string, stoppable = false, choiceable = fal
   body { margin: 0; font: 14px/1.5 ui-sans-serif, system-ui, -apple-system, sans-serif;
     background: #0b0e14; color: #d7dce5; }
   header { display: flex; align-items: baseline; gap: 12px; padding: 16px 20px;
-    border-bottom: 1px solid #1c2230; }
+    border-bottom: 1px solid #1c2230; position: sticky; top: 0; z-index: 10; background: #0b0e14; }
   header h1 { margin: 0; font-size: 16px; font-weight: 600; letter-spacing: .2px; }
   header .sub { color: #7b8496; font-size: 12px; }
   header a { color: #6ea8fe; text-decoration: none; }
@@ -44,7 +44,7 @@ export function dashboardHtml(title: string, stoppable = false, choiceable = fal
   #notify.on { border-color: #2f6f4a; background: #12241a; }
   #notify.denied { opacity: .5; cursor: not-allowed; }
   #app-banner { display: flex; align-items: center; gap: 8px; padding: 10px 20px;
-    background: #0f2417; border-bottom: 1px solid #1c3a28; font-size: 13px; }
+    background: #0f2417; border-bottom: 1px solid #1c3a28; font-size: 13px; position: sticky; top: 57px; }
   #app-banner .dot { color: #67d98f; }
   #app-banner a { color: #67d98f; font-weight: 600; }
   #app-banner .run { color: #6f8a79; font-size: 12px; }
@@ -52,7 +52,7 @@ export function dashboardHtml(title: string, stoppable = false, choiceable = fal
      even when the content is short. */
   #layout { display: flex; align-items: stretch; min-height: calc(100vh - 57px); }
   #sidebar { flex: 0 0 240px; width: 240px; border-right: 1px solid #1c2230; padding: 14px 10px;
-    overflow-y: auto; max-height: calc(100vh - 57px); }
+    overflow-y: auto; max-height: calc(100vh - 57px); position: sticky; top: 57px; }
   #sidebar h2 { margin: 0 0 8px; padding: 0 6px; font-size: 12px; text-transform: uppercase;
     letter-spacing: .8px; color: #7b8496; font-weight: 600; }
   #runs li { padding: 8px; border-bottom: 1px solid #161b26; cursor: pointer; border-radius: 6px; }

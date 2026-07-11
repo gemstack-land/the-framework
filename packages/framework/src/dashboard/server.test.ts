@@ -73,6 +73,10 @@ test('dashboard serves the HTML page with the title', async () => {
     assert.match(body, /main \{[^}]*max-width: 1100px; margin: 0 auto;/)
     // The layout fills the viewport below the header, so the sidebar border runs full-height.
     assert.match(body, /#layout \{[^}]*min-height: calc\(100vh - 57px\);/)
+    // The header and sidebar stay in view while the content scrolls (sticky).
+    assert.match(body, /header \{[^}]*position: sticky; top: 0;[^}]*background: #0b0e14;/)
+    assert.match(body, /#sidebar \{[^}]*position: sticky; top: 57px;/)
+    assert.match(body, /#app-banner \{[^}]*position: sticky; top: 57px;/)
   } finally {
     await dash.close()
   }
