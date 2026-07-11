@@ -55,6 +55,27 @@ test('parseArgs reads the research subcommand with its optional what (#331)', ()
   assert.equal(parseArgs(['build', 'a', 'blog']).research, false)
 })
 
+test('parseArgs reads the prompt subcommand with its verbatim text (#353)', () => {
+  const p = parseArgs(['prompt', 'review', 'the', 'auth', 'flow'])
+  assert.equal(p.directPrompt, true)
+  assert.equal(p.intent, 'review the auth flow')
+  assert.equal(parseArgs(['build', 'a', 'blog']).directPrompt, false)
+})
+
+test('runCli errors on a bare `framework prompt` (nothing to run, #353)', async () => {
+  const { io, err } = capture()
+  const code = await runCli(['prompt'], io)
+  assert.equal(code, 2)
+  assert.ok(err.some(l => /needs the prompt text/.test(l)))
+})
+
+test('runCli prompt runs the text through the direct path (#353)', async () => {
+  const { io, out } = capture()
+  const code = await runCli(['prompt', 'say hi', '--fake', '--no-dashboard'], io)
+  assert.equal(code, 0)
+  assert.ok(out.some(l => /prompt run done/.test(l)))
+})
+
 test('parseArgs reads the stop subcommand and the internal --daemon flag', () => {
   const stop = parseArgs(['stop'])
   assert.equal(stop.stop, true)

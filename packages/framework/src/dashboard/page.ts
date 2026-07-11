@@ -1,4 +1,5 @@
 import { CLAUDE_CODE_SESSION_LINK } from '../events.js'
+import { renderResearchPrompt } from '../research-preset.js'
 
 /**
  * The single self-contained dashboard page: HTML + inline CSS + inline JS, no
@@ -198,7 +199,7 @@ export function dashboardHtml(title: string, stoppable = false, choiceable = fal
     <textarea id="start-prompt" rows="3" placeholder="What should the agent build?"></textarea>
     <div id="start-actions">
       <button id="start-run">&#9654; Start<span class="kbd">Ctrl+Enter</span></button>
-      <button id="start-research" title="Rate the problem variability of the prompt above (default: this PR), then pick which problems to deep-dive">&#128269; Research</button>
+      <button id="start-research" title="Prefill the Research preset prompt (rates problem variability, picks deep-dives); review or edit it, then Start">&#128269; Research</button>
       <span id="start-note"></span>
     </div>
   </section>
@@ -259,6 +260,7 @@ function clientScript(stoppable: boolean, choiceable: boolean, startable: boolea
 const STOPPABLE = ${stoppable ? 'true' : 'false'};
 const CHOICEABLE = ${choiceable ? 'true' : 'false'};
 const STARTABLE = ${startable ? 'true' : 'false'};
+const RESEARCH_PROMPT = ${JSON.stringify(renderResearchPrompt())};
 const AUTO_ACCEPT_MS = 10000;
 const GENERIC_SESSION_LINK = ${JSON.stringify(CLAUDE_CODE_SESSION_LINK)};
 let ended = false;
@@ -698,32 +700,45 @@ syncNotifyBtn();
 
 // Start a run (#345): POST the prompt to /api/start; the daemon spawns the run
 // and its events stream in over the same SSE feed. A 409 means one is active.
-// kind 'research' (#331) runs the Research preset on the prompt instead of
-// building it; its empty prompt is fine (the "what" defaults to "this PR").
-function startNewRun(kind) {
+// Presets only PREFILL the textarea (#353): the [Research] button loads the full
+// preset prompt for review/editing and flips startKind to 'prompt' (run the text
+// verbatim); nothing is sent until Start / Ctrl+Enter. Clearing the box reverts
+// to a normal 'build' run.
+let startKind = 'build';
+function startNewRun() {
   if (!STARTABLE) return;
   const note = $('start-note');
   const prompt = $('start-prompt').value.trim();
-  if (!prompt && kind !== 'research') { note.textContent = 'type what to build first'; return; }
+  if (!prompt) { note.textContent = startKind === 'build' ? 'type what to build first' : 'the prompt is empty'; return; }
   const buttons = [$('start-run'), $('start-research')];
   for (const b of buttons) b.disabled = true;
   note.textContent = 'starting\\u2026';
   fetch('api/start', { method: 'POST', headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ prompt: prompt, kind: kind }) })
+    body: JSON.stringify({ prompt: prompt, kind: startKind }) })
     .then(async r => {
       for (const b of buttons) b.disabled = false;
-      if (r.ok) { note.textContent = ''; $('start-prompt').value = ''; showLive(); return; }
+      if (r.ok) { note.textContent = ''; $('start-prompt').value = ''; startKind = 'build'; showLive(); return; }
       let msg = 'could not start (' + r.status + ')';
       try { const b = await r.json(); if (b && b.error) msg = b.error; } catch {}
       note.textContent = msg;
     })
     .catch(() => { for (const b of buttons) b.disabled = false; note.textContent = 'could not reach the dashboard server'; });
 }
-$('start-run').addEventListener('click', () => startNewRun('build'));
-$('start-research').addEventListener('click', () => startNewRun('research'));
+$('start-run').addEventListener('click', startNewRun);
+$('start-research').addEventListener('click', () => {
+  const box = $('start-prompt');
+  box.value = RESEARCH_PROMPT;
+  startKind = 'prompt';
+  $('start-note').textContent = 'research preset loaded \\u2014 review or edit, then Start';
+  box.focus();
+});
+$('start-prompt').addEventListener('input', () => {
+  // An emptied box is a fresh start: back to a normal build run.
+  if (!$('start-prompt').value.trim() && startKind !== 'build') { startKind = 'build'; $('start-note').textContent = ''; }
+});
 $('start-prompt').addEventListener('keydown', ev => {
   // stopPropagation so the document-level Ctrl+Enter never accepts a choice too.
-  if ((ev.ctrlKey || ev.metaKey) && ev.key === 'Enter') { ev.preventDefault(); ev.stopPropagation(); startNewRun('build'); }
+  if ((ev.ctrlKey || ev.metaKey) && ev.key === 'Enter') { ev.preventDefault(); ev.stopPropagation(); startNewRun(); }
 });
 
 $('stop').addEventListener('click', stopRun);

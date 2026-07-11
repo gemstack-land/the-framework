@@ -84,6 +84,9 @@ Usage:
   framework research [what]      Rate the "problem variability" of <what> (default:
                                  this PR), then pick which problems to deep-dive.
                                  A direct review prompt on existing code — no build.
+  framework prompt <text>         Run one prompt verbatim through the agent, honoring
+                                 its await gates — no scaffold/build pipeline. This is
+                                 what a dashboard preset sends after you edit it.
   framework --fake                Run the offline demo (no CLI, no model, deterministic).
   framework doctor                Check prerequisites (Claude Code installed, etc.).
   framework relay                 Host a run relay so teammates can watch a run (#230).
@@ -201,6 +204,8 @@ export interface CliOptions {
   stop: boolean
   /** `framework research [what]`: run the Research preset as a direct prompt (#331). */
   research: boolean
+  /** `framework prompt <text>`: run one prompt verbatim through the direct path (#353). */
+  directPrompt: boolean
   error?: string
 }
 
@@ -226,6 +231,7 @@ export function parseArgs(argv: string[]): CliOptions {
     daemon: false,
     stop: false,
     research: false,
+    directPrompt: false,
     todoLoop: true,
   }
   const PERMISSION_MODES: PermissionMode[] = ['default', 'acceptEdits', 'bypassPermissions', 'plan']
@@ -388,6 +394,9 @@ export function parseArgs(argv: string[]): CliOptions {
   } else if (words[0] === 'research') {
     opts.research = true
     words.shift() // the remaining words are the "what" param (may be empty -> default)
+  } else if (words[0] === 'prompt') {
+    opts.directPrompt = true
+    words.shift() // the remaining words are the prompt text, run verbatim (#353)
   }
   opts.intent = words.join(' ').trim()
   return opts
@@ -571,6 +580,12 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
   const intent = opts.intent || (fake ? FAKE_INTENT : '')
   // Bare `framework` (no prompt): ensure the persistent dashboard is running and
   // print the convenience commands + version (#299/#302). A prompt still builds.
+  // A bare `framework prompt` has nothing to run — verbatim text is required.
+  if (opts.directPrompt && !intent) {
+    io.err('framework prompt needs the prompt text, e.g. `framework prompt "review the auth flow"`.')
+    io.err('Run `framework --help` for usage.')
+    return 2
+  }
   // A bare `framework research` is a real run — its "what" defaults to `this PR`.
   if (!intent && !fake && !opts.research) return ensureDaemonCmd(opts, io)
 
@@ -746,7 +761,7 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
   // AI meta-select: with no preset chosen explicitly, infer the best fit (+ modes +
   // build event) from the intent + workspace, then resolve it with the active modes.
   // Narrates through onEvent so the routing turn is visible on the dashboard (#310).
-  if (!fake && opts.autoPreset && !presetName && !opts.research) {
+  if (!fake && opts.autoPreset && !presetName && !opts.research && !opts.directPrompt) {
     const selection = await autoSelectPreset({ intent, cwd, signals, claudeOpts, signal: controller.signal, io, onEvent })
     if (selection?.preset) {
       presetName = selection.preset
@@ -778,17 +793,20 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
 
   const driver: Driver = fake ? fakeDriver() : new ClaudeCodeDriver(claudeOpts)
 
-  // `framework research [what]` (#331): the direct prompt path — render the
-  // Research preset prompt and run it through runPrompt, which honors its gates
+  // `framework research [what]` (#331) and `framework prompt <text>` (#353): the
+  // direct prompt path — run one prompt through runPrompt, which honors its gates
   // (#337/#339) but skips the scope -> architect -> build scaffolding entirely.
+  // Research renders its preset template around the "what"; prompt runs the text
+  // verbatim (it may already BE an edited preset, so it must not be re-rendered).
   // Shares all the wiring above (dashboard, store, control channel, budget).
-  if (opts.research) {
+  if (opts.research || opts.directPrompt) {
+    const kindLabel = opts.directPrompt ? 'prompt run' : 'research'
     const userSystemPrompt = await loadUserSystemPrompt(cwd)
     if (userSystemPrompt) io.out(`◆ system prompt: ${SYSTEM_PROMPT_FILE}`)
     if (fileConfig.antiLazyPill === false) io.out('◆ anti-lazy-pill: off (the-framework.yml)')
     try {
       await runPrompt({
-        prompt: renderResearchPrompt(intent),
+        prompt: opts.directPrompt ? intent : renderResearchPrompt(intent),
         driver,
         cwd,
         onEvent,
@@ -810,7 +828,11 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
         })(),
       })
       clearInterrupt()
-      io.out('\n✓ research done: see the REVIEW-PROBLEMS / TODO files it wrote.')
+      io.out(
+        opts.directPrompt
+          ? '\n✓ prompt run done.'
+          : '\n✓ research done: see the REVIEW-PROBLEMS / TODO files it wrote.',
+      )
       await store?.close()
       if (dashboard) {
         io.out(`\nDashboard still live at ${dashboard.url}. Press Ctrl+C to exit.`)
@@ -830,7 +852,7 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
         }
         return 0
       }
-      io.err(`\n✗ research failed: ${err instanceof Error ? err.message : String(err)}`)
+      io.err(`\n✗ ${kindLabel} failed: ${err instanceof Error ? err.message : String(err)}`)
       await dashboard?.close()
       return 1
     } finally {

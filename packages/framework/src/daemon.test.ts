@@ -294,6 +294,21 @@ fs.appendFileSync(path.join(args[args.indexOf('--cwd') + 1], 'started.log'), JSO
     }
     assert.deepEqual(JSON.parse(lines[1]!), ['research', '--no-dashboard', '--cwd', cwd])
 
+    // kind=prompt (#353): a preset the user reviewed in the textarea runs verbatim
+    // through the `prompt` subcommand, never re-rendered.
+    const verbatim = 'Measure "problem variability" of this PR\n- List all high-level flows'
+    let third = await post({ prompt: verbatim, kind: 'prompt' })
+    for (let i = 0; i < 100 && third.status !== 202; i++) {
+      await new Promise(r => setTimeout(r, 50))
+      third = await post({ prompt: verbatim, kind: 'prompt' })
+    }
+    assert.equal(third.status, 202)
+    for (let i = 0; i < 100 && lines.length < 3; i++) {
+      await new Promise(r => setTimeout(r, 20))
+      lines = (await readFile(join(cwd, 'started.log'), 'utf8')).split('\n').filter(Boolean)
+    }
+    assert.deepEqual(JSON.parse(lines[2]!), ['prompt', verbatim, '--no-dashboard', '--cwd', cwd])
+
     ac.abort()
     await done
   } finally {

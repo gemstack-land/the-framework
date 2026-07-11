@@ -371,10 +371,25 @@ test('/api/start passes the run kind through; a research start may omit the prom
       { prompt: 'the auth flow', kind: 'research' },
       { prompt: '', kind: 'research' },
     ])
-    // The page ships the [Research] button beside Start.
+    // The page ships the [Research] button beside Start, as a prefill (#353): the
+    // full preset text is baked in, and nothing is sent until Start / Ctrl+Enter.
     const page = await fetchText(dash.url + '/')
     assert.match(page.body, /id="start-research"/)
-    assert.match(page.body, /startNewRun\('research'\)/)
+    assert.match(page.body, /const RESEARCH_PROMPT = /)
+    assert.match(page.body, /research preset loaded/)
+  } finally {
+    await dash.close()
+  }
+})
+
+test('/api/start kind=prompt runs verbatim text and requires a prompt (#353)', async () => {
+  const calls: Array<{ prompt: string; kind: string }> = []
+  const dash = await startDashboard({ port: 0, onStart: (prompt, kind) => { calls.push({ prompt, kind }); return { ok: true } } })
+  try {
+    assert.equal((await postJson(dash.url + '/api/start', { prompt: 'Measure "problem variability" of the auth flow', kind: 'prompt' })).status, 202)
+    // A verbatim prompt run with no text has nothing to run.
+    assert.equal((await postJson(dash.url + '/api/start', { prompt: '   ', kind: 'prompt' })).status, 400)
+    assert.deepEqual(calls, [{ prompt: 'Measure "problem variability" of the auth flow', kind: 'prompt' }])
   } finally {
     await dash.close()
   }

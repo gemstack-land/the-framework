@@ -226,8 +226,14 @@ export async function runDaemon(cwd: string, opts: RunDaemonOptions = {}): Promi
       return { ok: false, error: 'refusing to spawn a run from a test entry; pass an explicit binPath' }
     }
     // [Research] (#331) runs the research subcommand; its empty prompt is fine
-    // (the "what" defaults to `this PR` in the CLI).
-    const runArgs = kind === 'research' ? ['research', ...(prompt ? [prompt] : [])] : [prompt]
+    // (the "what" defaults to `this PR` in the CLI). A `prompt` kind (#353) is a
+    // preset the user reviewed in the textarea: run it verbatim, never re-render.
+    const runArgs =
+      kind === 'research'
+        ? ['research', ...(prompt ? [prompt] : [])]
+        : kind === 'prompt'
+          ? ['prompt', prompt]
+          : [prompt]
     const child = spawn(process.execPath, [binPath, ...runArgs, '--no-dashboard', '--cwd', cwd], {
       detached: true,
       stdio: 'ignore',
@@ -244,9 +250,17 @@ export async function runDaemon(cwd: string, opts: RunDaemonOptions = {}): Promi
       if (code) dashboard.push({ kind: 'log', message: `✗ run exited with code ${code}` })
     })
     activeRunPid = child.pid
+    // A verbatim prompt can be a whole preset document: narrate its first line only.
+    const firstLine = prompt.split('\n', 1)[0] ?? ''
+    const brief = firstLine.length > 80 ? `${firstLine.slice(0, 80)}…` : firstLine
     dashboard.push({
       kind: 'log',
-      message: kind === 'research' ? `▶ research started: ${prompt || 'this PR'}` : `▶ run started: ${prompt}`,
+      message:
+        kind === 'research'
+          ? `▶ research started: ${prompt || 'this PR'}`
+          : kind === 'prompt'
+            ? `▶ prompt run started: ${brief}`
+            : `▶ run started: ${prompt}`,
     })
     return { ok: true }
   }

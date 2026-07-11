@@ -45,11 +45,13 @@ export interface DashboardOptions {
 }
 
 /**
- * What a dashboard Start spawns (#345/#331): `build` is the normal framework
- * run; `research` is the [Research] preset as a direct prompt, whose empty
- * prompt is allowed (its "what" defaults to `this PR`).
+ * What a dashboard Start spawns (#345/#331/#353): `build` is the normal framework
+ * run; `prompt` runs the posted text verbatim through the direct path — what the
+ * page sends after a preset prefilled (and the user possibly edited) the textarea;
+ * `research` renders the [Research] preset around the posted "what" server-side
+ * (empty allowed, defaults to `this PR`) and remains for API callers.
  */
-export type StartRunKind = 'build' | 'research'
+export type StartRunKind = 'build' | 'research' | 'prompt'
 
 /** The outcome of an {@link DashboardOptions.onStart} attempt (#345). */
 export type StartRunResult =
@@ -209,9 +211,10 @@ function handle(
     }
     readJsonBody(req, body => {
       const prompt = typeof body['prompt'] === 'string' ? body['prompt'].trim() : ''
-      const kind: StartRunKind = body['kind'] === 'research' ? 'research' : 'build'
-      // A research run's "what" defaults server-side (`this PR`), so only a
-      // build needs a prompt.
+      const kind: StartRunKind =
+        body['kind'] === 'research' ? 'research' : body['kind'] === 'prompt' ? 'prompt' : 'build'
+      // A research run's "what" defaults server-side (`this PR`); a build or a
+      // verbatim prompt run has nothing to run without text.
       if (!prompt && kind !== 'research') {
         res.writeHead(400, { 'content-type': 'application/json' })
         res.end('{"error":"a non-empty prompt is required"}')
