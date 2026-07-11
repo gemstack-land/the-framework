@@ -112,6 +112,16 @@ export {
   type RunStatus,
   type OpenStoreOptions,
 } from './store/index.js'
+export {
+  logsPath,
+  renderLogEntry,
+  parseLogs,
+  appendLog,
+  readLogs,
+  THE_FRAMEWORK_DIR,
+  LOGS_FILE,
+  type LogEntry,
+} from './logs.js'
 export { runCli, parseArgs, buildDeployTarget, workspaceSummary, autoSelectPreset, type CliIO, type CliOptions } from './cli.js'
 export {
   metaSelect,
