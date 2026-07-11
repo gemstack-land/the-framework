@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { startDashboard, parseStartOptions, type StartRunOptions } from './server.js'
 import type { FrameworkEvent } from '../events.js'
+import type { ProjectsProvider, ProjectSummary } from './projects.js'
 import { appendLog } from '../logs.js'
 
 function fetchText(url: string): Promise<{ status: number; body: string }> {
@@ -187,6 +188,53 @@ test('GET /api/logs serves the .the-framework/LOGS.md entries newest-first, or [
       assert.deepEqual(JSON.parse((await fetchText(noCwd.url + '/api/logs')).body), { logs: [] })
     } finally {
       await noCwd.close()
+    }
+  } finally {
+    await rm(cwd, { recursive: true, force: true })
+  }
+})
+
+/** A fake provider so the multi-project routes are exercised without the real registry. */
+function fakeProjects(summaries: ProjectSummary[], paths: Record<string, string> = {}): ProjectsProvider {
+  return {
+    async list() {
+      return summaries
+    },
+    async resolvePath(id) {
+      return paths[id]
+    },
+  }
+}
+
+test('GET /api/projects lists the registered projects (#392)', async () => {
+  const summaries: ProjectSummary[] = [
+    { id: 'app-a-1', path: '/repos/app-a', name: 'app-a', activated: true, lastActivityAt: '2026-07-11T10:00:00.000Z' },
+    { id: 'app-b-2', path: '/repos/app-b', name: 'app-b', activated: false },
+  ]
+  const dash = await startDashboard({ port: 0, projects: fakeProjects(summaries) })
+  try {
+    const { status, body } = await fetchText(dash.url + '/api/projects')
+    assert.equal(status, 200)
+    assert.deepEqual(JSON.parse(body), { projects: summaries })
+  } finally {
+    await dash.close()
+  }
+})
+
+test('?project=<id> reads that project, an unknown id reads [] (#392)', async () => {
+  const cwd = await mkdtemp(join(tmpdir(), 'framework-proj-'))
+  try {
+    await appendLog(cwd, { at: '2026-07-10T10:00:00.000Z', kind: 'build', title: 'in project a', status: 'done' })
+    const dash = await startDashboard({ port: 0, projects: fakeProjects([], { 'a-1': cwd }) })
+    try {
+      // Known id resolves to the seeded workspace.
+      const known = JSON.parse((await fetchText(dash.url + '/api/logs?project=a-1')).body)
+      assert.equal(known.logs.length, 1)
+      assert.equal(known.logs[0].title, 'in project a')
+      // Unknown id resolves to nothing -> empty, never an error.
+      assert.deepEqual(JSON.parse((await fetchText(dash.url + '/api/logs?project=nope')).body), { logs: [] })
+    } finally {
+      await dash.close()
     }
   } finally {
     await rm(cwd, { recursive: true, force: true })

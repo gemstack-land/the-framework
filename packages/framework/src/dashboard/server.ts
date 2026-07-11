@@ -6,6 +6,7 @@ import type { EcoOptions } from '../system-prompt.js'
 import { listRuns, loadRunEvents } from '../store/index.js'
 import { readLogs } from '../logs.js'
 import { readDocs } from './docs.js'
+import { defaultProjectsProvider, type ProjectsProvider } from './projects.js'
 import { dashboardHtml } from './page.js'
 import { serveSSE } from './sse.js'
 
@@ -45,6 +46,14 @@ export interface DashboardOptions {
    * options (#314) ride along in `options`.
    */
   onStart?: (prompt: string, kind: StartRunKind, options: StartRunOptions) => StartRunResult
+  /**
+   * The multi-project registry read side (#392): `GET /api/projects` lists it, and
+   * `?project=<id>` on the read endpoints resolves to that project's path. Omit to
+   * use the real registry (the daemon does); tests pass a fake. The `cwd` above
+   * stays the default project when no `?project=` is given (single-project
+   * back-compat) and the target the live stream + run start/stop still follow (#393).
+   */
+  projects?: ProjectsProvider
 }
 
 /**
@@ -108,10 +117,11 @@ export function startDashboard(opts: DashboardOptions = {}): Promise<Dashboard> 
   const onChoice = opts.onChoice
   const onStart = opts.onStart
   const cwd = opts.cwd
+  const projects = opts.projects ?? defaultProjectsProvider()
   const stream = new EventStream<FrameworkEvent>()
   const clients = new Set<ServerResponse>()
 
-  const server = createServer((req, res) => handle(req, res, stream, clients, title, onStop, onChoice, onStart, cwd))
+  const server = createServer((req, res) => handle(req, res, stream, clients, title, onStop, onChoice, onStart, cwd, projects))
 
   return new Promise<Dashboard>((resolvePromise, rejectPromise) => {
     server.once('error', rejectPromise)
@@ -139,40 +149,53 @@ function handle(
   onChoice: ((id: string, pick: string | string[], by: ChoiceBy) => void) | undefined,
   onStart: ((prompt: string, kind: StartRunKind, options: StartRunOptions) => StartRunResult) | undefined,
   cwd: string | undefined,
+  projects: ProjectsProvider,
 ): void {
   const url = req.url ?? '/'
-  if (url === '/' || url.startsWith('/?')) {
+  // Parse once so a `?project=<id>` query never bleeds into the pathname match
+  // (and a run id in `/api/runs/<id>` is read from the pathname, not the query).
+  const { pathname, searchParams } = new URL(url, 'http://localhost')
+  const projectId = searchParams.get('project')
+  if (pathname === '/') {
     res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' })
     res.end(dashboardHtml(title, Boolean(onStop), Boolean(onChoice), Boolean(onStart)))
     return
   }
-  if (url === '/events') {
+  if (pathname === '/events') {
     serveSSE(req, res, stream, clients)
     return
   }
-  // Run history (#303). The list feeds the second sidebar; a single run's log is
-  // replayed client-side into the same projection the live stream drives.
-  if (url === '/api/runs') {
-    void serveRunList(res, cwd)
+  // The registered projects (#392): the Projects sidebar lists these, then reads
+  // one via `?project=<id>` on the endpoints below.
+  if (pathname === '/api/projects') {
+    void serveProjects(res, projects)
     return
   }
-  if (url.startsWith('/api/runs/')) {
-    void serveRun(res, cwd, decodeURIComponent(url.slice('/api/runs/'.length)))
+  // Run history (#303). The list feeds the second sidebar; a single run's log is
+  // replayed client-side into the same projection the live stream drives. A
+  // `?project=<id>` reads that project's archive; absent, the daemon's own cwd.
+  if (pathname === '/api/runs') {
+    void resolveCwd(projects, projectId, cwd).then(target => serveRunList(res, target))
+    return
+  }
+  if (pathname.startsWith('/api/runs/')) {
+    const runId = decodeURIComponent(pathname.slice('/api/runs/'.length))
+    void resolveCwd(projects, projectId, cwd).then(target => serveRun(res, target, runId))
     return
   }
   // Document sidebar (#319): the PLAN.md / TODO.md the agent writes at the
   // workspace root, so the human can read the plan + backlog beside the run.
-  if (url === '/api/docs') {
-    void serveDocs(res, cwd)
+  if (pathname === '/api/docs') {
+    void resolveCwd(projects, projectId, cwd).then(target => serveDocs(res, target))
     return
   }
   // Project log (#314): the committed `.the-framework/LOGS.md` history of every
-  // loop/prompt/build run in this workspace (#378/#379), newest-first.
-  if (url === '/api/logs') {
-    void serveLogs(res, cwd)
+  // loop/prompt/build run in a project (#378/#379), newest-first.
+  if (pathname === '/api/logs') {
+    void resolveCwd(projects, projectId, cwd).then(target => serveLogs(res, target))
     return
   }
-  if (url === '/stop') {
+  if (pathname === '/stop') {
     // The Stop button. Idempotent: a stop after the run has ended just aborts an
     // already-aborted signal (a no-op). 405 for a non-POST so a stray GET can't
     // interrupt a run. 404 when no handler was wired (stopping disabled).
@@ -196,7 +219,7 @@ function handle(
     res.end('{"ok":true}')
     return
   }
-  if (url === '/choice') {
+  if (pathname === '/choice') {
     // An interactive-choice pick (#304). Same guards as /stop: 405 for a non-POST
     // so a stray GET can't resolve a choice, 404 when no handler is wired.
     if (req.method !== 'POST') {
@@ -231,7 +254,7 @@ function handle(
     })
     return
   }
-  if (url === '/api/start') {
+  if (pathname === '/api/start') {
     // Start a new run from the dashboard (#345). Same guards as /stop: POST-only
     // so a stray GET can never spawn a run, 404 when no handler is wired (the
     // per-run dashboard and the relay never start runs). 409 = a run is active.
@@ -336,6 +359,27 @@ function readJsonBody(req: IncomingMessage, cb: (body: Record<string, unknown>) 
     cb(body && typeof body === 'object' ? (body as Record<string, unknown>) : {})
   })
   req.on('error', () => cb({}))
+}
+
+/** `GET /api/projects` — every registered project, summarized (or `[]`). */
+async function serveProjects(res: ServerResponse, projects: ProjectsProvider): Promise<void> {
+  const list = await projects.list().catch(() => [])
+  res.writeHead(200, { 'content-type': 'application/json' })
+  res.end(JSON.stringify({ projects: list }))
+}
+
+/**
+ * The workspace a read endpoint should serve: the project named by `?project=<id>`
+ * when present (its registry path, or `undefined` when the id is unknown, which
+ * the readers surface as empty), else the server's default `cwd`.
+ */
+async function resolveCwd(
+  projects: ProjectsProvider,
+  projectId: string | null,
+  fallback: string | undefined,
+): Promise<string | undefined> {
+  if (!projectId) return fallback
+  return projects.resolvePath(projectId)
 }
 
 /** `GET /api/runs` — the project's archived runs, most-recent first (or `[]`). */

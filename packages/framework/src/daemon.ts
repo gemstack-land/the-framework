@@ -6,6 +6,8 @@ import type { FrameworkEvent } from './events.js'
 import { EVENTS_FILE, FRAMEWORK_DIR } from './store/index.js'
 import { startDashboard, type Dashboard, type StartRunKind, type StartRunOptions, type StartRunResult } from './dashboard/index.js'
 import { appendControl } from './control.js'
+import { isActivated } from './project.js'
+import { addProject } from './registry.js'
 import { JsonlTailer } from './jsonl-tail.js'
 
 /**
@@ -222,6 +224,13 @@ export async function runDaemon(cwd: string, opts: RunDaemonOptions = {}): Promi
   // `.framework/` — create it up front so the daemon works as the very first
   // command in a fresh workspace (before any run made the dir).
   await mkdir(daemonDir(cwd), { recursive: true })
+
+  // Multi-project (#392): when the daemon starts in an activated repo, make sure
+  // it shows up in the Projects list. Best-effort and idempotent (addProject
+  // dedupes by path), so it never blocks the daemon coming up.
+  if (await isActivated(cwd).catch(() => false)) {
+    await addProject(cwd, new Date().toISOString()).catch(() => {})
+  }
 
   // Start-from-dashboard (#345): POST /api/start spawns `framework "<prompt>"
   // --no-dashboard` as a detached child — the same spawn pattern ensureDaemon
