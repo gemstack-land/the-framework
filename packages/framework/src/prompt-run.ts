@@ -1,7 +1,7 @@
 import type { Driver, DriverEvent, DriverSession } from './driver/index.js'
 import { hasSessionIdPlaceholder, resolveSessionLink, type ChoicePick, type ChoiceRequest, type FrameworkEvent } from './events.js'
 import { resolveAwaitGate } from './run.js'
-import { renderSystemPrompt, systemPromptBlock, type TfContext } from './system-prompt.js'
+import { renderSystemPrompt, systemPromptBlock, type EcoOptions, type TfContext } from './system-prompt.js'
 import { AWAIT_PROTOCOL, PLAN_DECLINED_MESSAGE, isDeclinedConfirmation, parseAwaitGate } from './turn-gate.js'
 import { UsageMeter } from './usage.js'
 
@@ -40,6 +40,8 @@ export interface RunPromptOptions {
   antiLazyPill?: boolean
   /** Whether autopilot mode is on: steers the #326 prompt's maintenance stance (#325). Default false. */
   autopilot?: boolean
+  /** Eco fine-grained control (#314): drop the enabled #326 sections to save tokens. */
+  eco?: EcoOptions
   /** Stop the run once the agent has spent this much, in USD (#322). */
   budgetUsd?: number
   /** Session link template for the dashboard, `{sessionId}` resolved when known. */
@@ -74,7 +76,10 @@ export async function runPrompt(opts: RunPromptOptions): Promise<RunPromptResult
   // The built-in #326 prompt + any user SYSTEM.md frame the session (#301). The
   // await protocol is always on — honoring the prompt's gates is the whole point
   // of this path.
-  const tf: TfContext = { prompt: opts.prompt, params: { autopilot: opts.autopilot === true } }
+  const tf: TfContext = {
+    prompt: opts.prompt,
+    params: { autopilot: opts.autopilot === true, ...(opts.eco ? { eco: opts.eco } : {}) },
+  }
   const promptBlock = systemPromptBlock({ antiLazyPill: opts.antiLazyPill, user: opts.systemPrompt, tf })
   const system = [...(promptBlock ? [promptBlock] : []), AWAIT_PROTOCOL].join('\n\n')
   // The template's `# User prompt` half carries the prompt (today it renders to

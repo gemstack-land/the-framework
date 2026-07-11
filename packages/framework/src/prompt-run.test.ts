@@ -59,6 +59,42 @@ test('runPrompt surfaces the system prompt (#343); the user prompt rides a drive
   if (start.event.type === 'start') assert.match(start.event.prompt, /refactor the auth flow/)
 })
 
+test('runPrompt honors eco flags in the emitted system prompt (#314)', async () => {
+  const events: FrameworkEvent[] = []
+  const driver = new FakeDriver({ turns: [{ text: 'done' }] })
+  await runPrompt({
+    prompt: 'tidy the code',
+    driver,
+    cwd: '/ws',
+    onEvent: e => events.push(e),
+    eco: { autoResearch: true, autoMaintenance: true },
+  })
+  const sys = events.find(e => e.kind === 'system-prompt') as { text: string } | undefined
+  assert.ok(sys)
+  // The dropped sections are gone; the surviving one stays.
+  assert.ok(!sys.text.includes('## Alternatives'))
+  assert.ok(!sys.text.includes('## Maintenance'))
+  assert.ok(sys.text.includes('## Large scope'))
+})
+
+test('runPrompt with antiLazyPill false emits no built-in prompt even with eco set (#314)', async () => {
+  const events: FrameworkEvent[] = []
+  const driver = new FakeDriver({ turns: [{ text: 'done' }] })
+  await runPrompt({
+    prompt: 'raw run',
+    driver,
+    cwd: '/ws',
+    onEvent: e => events.push(e),
+    antiLazyPill: false,
+    eco: { autoPlanning: true },
+  })
+  const sys = events.find(e => e.kind === 'system-prompt') as { text: string } | undefined
+  assert.ok(sys)
+  // Vanilla: no #326 block at all, only the always-on await protocol.
+  assert.ok(!sys.text.includes('# System prompt'))
+  assert.ok(!sys.text.includes('## Unclear scope'))
+})
+
 test('runPrompt pauses on a multi-select gate and continues with the pick (#331)', async () => {
   const events: FrameworkEvent[] = []
   const picks: ChoiceRequest[] = []

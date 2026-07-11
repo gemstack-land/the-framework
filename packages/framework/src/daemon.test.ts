@@ -12,9 +12,23 @@ import {
   stopDaemon,
   runDaemon,
   daemonStatePath,
+  startOptionFlags,
 } from './daemon.js'
 import { EVENTS_FILE, FRAMEWORK_DIR } from './store/index.js'
 import { controlPath } from './control.js'
+
+test('startOptionFlags maps only enabled Global options to CLI flags (#314)', () => {
+  assert.deepEqual(startOptionFlags({}), [])
+  assert.deepEqual(startOptionFlags({ autopilot: true, technical: true, vanilla: true }), [
+    '--autopilot',
+    '--technical',
+    '--vanilla',
+  ])
+  assert.deepEqual(startOptionFlags({ eco: { autoPlanning: true, autoMaintenance: true } }), [
+    '--eco-auto-planning',
+    '--eco-auto-maintenance',
+  ])
+})
 
 const logEvent = (message: string): FrameworkEvent => ({ kind: 'log', message })
 const line = (message: string): string => JSON.stringify(logEvent(message)) + '\n'

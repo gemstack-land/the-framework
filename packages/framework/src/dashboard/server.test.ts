@@ -4,7 +4,7 @@ import { get, request } from 'node:http'
 import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { startDashboard } from './server.js'
+import { startDashboard, parseStartOptions, type StartRunOptions } from './server.js'
 import type { FrameworkEvent } from '../events.js'
 
 function fetchText(url: string): Promise<{ status: number; body: string }> {
@@ -432,6 +432,40 @@ test('/api/start passes the run kind through; a research start may omit the prom
     assert.match(page.body, /id="start-maintainability-minimal"/)
     assert.match(page.body, /const MAINTAINABILITY_MINIMAL_PROMPT = /)
     assert.match(page.body, /wirePresetButton\('start-maintainability-minimal'/)
+  } finally {
+    await dash.close()
+  }
+})
+
+test('parseStartOptions keeps only known boolean fields (#314)', () => {
+  assert.deepEqual(parseStartOptions(undefined), {})
+  assert.deepEqual(parseStartOptions('nope'), {})
+  // Truthy-but-not-true values are ignored; only `=== true` survives.
+  assert.deepEqual(parseStartOptions({ autopilot: true, technical: 'yes', vanilla: 1, junk: true }), {
+    autopilot: true,
+  })
+  assert.deepEqual(
+    parseStartOptions({ eco: { autoPlanning: true, autoResearch: false, bogus: true } }),
+    { eco: { autoPlanning: true } },
+  )
+  // An eco object with nothing enabled drops out entirely.
+  assert.deepEqual(parseStartOptions({ eco: { autoResearch: false } }), {})
+})
+
+test('/api/start forwards the sanitized Global options to onStart (#314)', async () => {
+  const calls: StartRunOptions[] = []
+  const dash = await startDashboard({ port: 0, onStart: (_p, _k, options) => { calls.push(options); return { ok: true } } })
+  try {
+    await postJson(dash.url + '/api/start', {
+      prompt: 'a blog',
+      options: { autopilot: true, vanilla: true, eco: { autoMaintenance: true, junk: true }, junk: true },
+    })
+    // No options field at all -> the handler still gets an object (all-off).
+    await postJson(dash.url + '/api/start', { prompt: 'a blog' })
+    assert.deepEqual(calls, [
+      { autopilot: true, vanilla: true, eco: { autoMaintenance: true } },
+      {},
+    ])
   } finally {
     await dash.close()
   }

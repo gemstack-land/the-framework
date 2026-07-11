@@ -90,3 +90,56 @@ test('systemPromptBlock threads tf through to the template', () => {
   const block = systemPromptBlock({ tf: { prompt: 'x', params: { autopilot: true } } })
   assert.ok(block.includes('postpone a deep refactor'))
 })
+
+test('eco.autoPlanning drops only the Large scope section (#314)', () => {
+  const { system } = renderSystemPrompt({ prompt: 'x', params: { eco: { autoPlanning: true } } })
+  assert.ok(!system.includes('## Large scope'))
+  assert.ok(!system.includes('PLAN_<SESSION_NAME>'))
+  // The neighbours survive, and the block spacing is intact.
+  assert.ok(system.includes('## Unclear scope'))
+  assert.ok(system.includes('## Alternatives'))
+  assert.ok(system.includes('## Maintenance'))
+  assert.ok(!system.includes('\n\n\n'))
+})
+
+test('eco.autoResearch drops only the Alternatives section (#314)', () => {
+  const { system } = renderSystemPrompt({ prompt: 'x', params: { eco: { autoResearch: true } } })
+  assert.ok(!system.includes('## Alternatives'))
+  assert.ok(!system.includes('measure "variability"'))
+  assert.ok(system.includes('## Large scope'))
+  assert.ok(system.includes('## Maintenance'))
+})
+
+test('eco.autoMaintenance drops the trailing Maintenance section cleanly (#314)', () => {
+  const { system, user } = renderSystemPrompt({ prompt: 'ship it', params: { eco: { autoMaintenance: true } } })
+  assert.ok(!system.includes('## Maintenance'))
+  assert.ok(system.includes('## Alternatives'))
+  // The user half is untouched by eco, and no stray fragment survives the drop.
+  assert.equal(user, 'ship it')
+  assert.ok(!system.includes('${{'))
+})
+
+test('all three eco drops leave just the Unclear scope section (#314)', () => {
+  const { system } = renderSystemPrompt({
+    prompt: 'x',
+    params: { eco: { autoPlanning: true, autoResearch: true, autoMaintenance: true } },
+  })
+  assert.ok(system.includes('## Unclear scope'))
+  for (const gone of ['## Large scope', '## Alternatives', '## Maintenance']) {
+    assert.ok(!system.includes(gone), `${gone} should be dropped`)
+  }
+})
+
+test('no eco flags renders every section, and eco never touches the template', () => {
+  const { system } = renderSystemPrompt({ prompt: 'x', params: { eco: {} } })
+  for (const section of ['## Unclear scope', '## Large scope', '## Alternatives', '## Maintenance']) {
+    assert.ok(system.includes(section), `missing ${section}`)
+  }
+  // The living #326 doc stays byte-identical regardless of eco.
+  assert.ok(SYSTEM_PROMPT_TEMPLATE.includes('## Large scope'))
+})
+
+test('vanilla (antiLazyPill false) wins over eco: no built-in prompt at all (#314)', () => {
+  const block = systemPromptBlock({ antiLazyPill: false, tf: { prompt: 'x', params: { eco: { autoResearch: true } } } })
+  assert.equal(block, '')
+})

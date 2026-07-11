@@ -4,7 +4,7 @@ import { mkdir, readFile, writeFile, rm } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { FrameworkEvent } from './events.js'
 import { EVENTS_FILE, FRAMEWORK_DIR } from './store/index.js'
-import { startDashboard, type Dashboard, type StartRunKind, type StartRunResult } from './dashboard/index.js'
+import { startDashboard, type Dashboard, type StartRunKind, type StartRunOptions, type StartRunResult } from './dashboard/index.js'
 import { appendControl } from './control.js'
 import { JsonlTailer } from './jsonl-tail.js'
 
@@ -40,6 +40,22 @@ export interface DaemonState {
 /** The `.framework/` directory for a workspace. */
 export function daemonDir(cwd: string): string {
   return join(cwd, FRAMEWORK_DIR)
+}
+
+/**
+ * Translate the dashboard's Global options (#314) into CLI flags for the spawned
+ * run. Only enabled toggles emit a flag, so a default (all-off) start is
+ * byte-identical to before. `parseArgs` on the other side accepts every one.
+ */
+export function startOptionFlags(options: StartRunOptions): string[] {
+  const flags: string[] = []
+  if (options.autopilot) flags.push('--autopilot')
+  if (options.technical) flags.push('--technical')
+  if (options.vanilla) flags.push('--vanilla')
+  if (options.eco?.autoPlanning) flags.push('--eco-auto-planning')
+  if (options.eco?.autoResearch) flags.push('--eco-auto-research')
+  if (options.eco?.autoMaintenance) flags.push('--eco-auto-maintenance')
+  return flags
 }
 
 /** The daemon state file path for a workspace. */
@@ -214,7 +230,7 @@ export async function runDaemon(cwd: string, opts: RunDaemonOptions = {}): Promi
   // which the run wires whenever a daemon is live. One run at a time: while the
   // last child is alive, Start is refused (the #322 runaway concern).
   let activeRunPid: number | undefined
-  const startRun = (prompt: string, kind: StartRunKind): StartRunResult => {
+  const startRun = (prompt: string, kind: StartRunKind, options: StartRunOptions = {}): StartRunResult => {
     if (activeRunPid !== undefined && isProcessAlive(activeRunPid)) {
       return { ok: false, busy: true, error: 'a run is already active; stop it or wait for it to finish' }
     }
@@ -234,7 +250,7 @@ export async function runDaemon(cwd: string, opts: RunDaemonOptions = {}): Promi
         : kind === 'prompt'
           ? ['prompt', prompt]
           : [prompt]
-    const child = spawn(process.execPath, [binPath, ...runArgs, '--no-dashboard', '--cwd', cwd], {
+    const child = spawn(process.execPath, [binPath, ...runArgs, ...startOptionFlags(options), '--no-dashboard', '--cwd', cwd], {
       detached: true,
       stdio: 'ignore',
     })

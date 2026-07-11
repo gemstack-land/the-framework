@@ -59,12 +59,34 @@ Before starting to write code, measure "variability":
 
 \${{tf.prompt}}`
 
+/**
+ * Eco fine-grained control (#314): each flag drops one whole `##` section from the
+ * built-in #326 prompt to save tokens, letting the agent auto-handle that concern.
+ * The template itself stays byte-identical to Rom's #326 doc; the sections are
+ * removed after the split, so a dropped section never leaves a fragment behind.
+ */
+export interface EcoOptions {
+  /** Drop `## Large scope` (the PLAN-file planning section). */
+  autoPlanning?: boolean | undefined
+  /** Drop `## Alternatives` (the variability-rating research section). */
+  autoResearch?: boolean | undefined
+  /** Drop `## Maintenance` (the minimal-changes maintenance section). */
+  autoMaintenance?: boolean | undefined
+}
+
+/** Maps an {@link EcoOptions} flag to the `## ` heading it drops from the template. */
+const ECO_SECTION_HEADINGS: Record<keyof EcoOptions, string> = {
+  autoPlanning: '## Large scope',
+  autoResearch: '## Alternatives',
+  autoMaintenance: '## Maintenance',
+}
+
 /** The `tf` context the template's `${{...}}` fragments read (#326/#350). */
 export interface TfContext {
   /** The user's prompt (the run intent, or the typed prompt): fills `${{tf.prompt}}`. */
   prompt: string
-  /** Run parameters the template branches on (e.g. `autopilot`, #325's mode sense). */
-  params: { autopilot?: boolean } & Record<string, unknown>
+  /** Run parameters the template branches on (e.g. `autopilot`, #325's mode sense; `eco`, #314). */
+  params: { autopilot?: boolean; eco?: EcoOptions | undefined } & Record<string, unknown>
 }
 
 /** The neutral context used when a caller has none: empty prompt, no modes. */
@@ -81,14 +103,40 @@ export interface RenderedSystemPrompt {
 const USER_PROMPT_HEADING = '\n# User prompt\n'
 
 /**
+ * Drop a whole `## <heading>` section from a markdown block: everything from the
+ * heading up to (but not including) the next `## ` heading, or the end. The `\n\n`
+ * separator ahead of the section goes with it, so the surrounding blocks stay
+ * spaced exactly as before. A heading that isn't present is a no-op.
+ */
+function dropSection(md: string, heading: string): string {
+  const at = md.indexOf(`\n${heading}`)
+  if (at === -1) return md
+  const nextHeading = md.indexOf('\n## ', at + heading.length + 1)
+  const end = nextHeading === -1 ? md.length : nextHeading
+  return md.slice(0, at) + md.slice(end)
+}
+
+/** Remove each Eco-enabled section from the template's system half (#314). */
+function applyEco(systemHalf: string, eco: EcoOptions | undefined): string {
+  if (!eco) return systemHalf
+  let out = systemHalf
+  for (const key of Object.keys(ECO_SECTION_HEADINGS) as (keyof EcoOptions)[]) {
+    if (eco[key]) out = dropSection(out, ECO_SECTION_HEADINGS[key])
+  }
+  return out
+}
+
+/**
  * Render the built-in system prompt against a {@link TfContext} and split it at
  * the `# User prompt` heading. The split happens on the *template*, before
  * rendering, so a user prompt that itself contains the heading can never move
- * the boundary.
+ * the boundary. Eco flags (#314) drop their sections from the system half here,
+ * before rendering, so a dropped section's `${{...}}` fragments never evaluate.
  */
 export function renderSystemPrompt(tf: TfContext = DEFAULT_TF): RenderedSystemPrompt {
   const at = SYSTEM_PROMPT_TEMPLATE.indexOf(USER_PROMPT_HEADING)
-  const systemHalf = at === -1 ? SYSTEM_PROMPT_TEMPLATE : SYSTEM_PROMPT_TEMPLATE.slice(0, at)
+  const rawSystemHalf = at === -1 ? SYSTEM_PROMPT_TEMPLATE : SYSTEM_PROMPT_TEMPLATE.slice(0, at)
+  const systemHalf = applyEco(rawSystemHalf, tf.params.eco)
   const userHalf = at === -1 ? '${{tf.prompt}}' : SYSTEM_PROMPT_TEMPLATE.slice(at + USER_PROMPT_HEADING.length)
   return {
     system: renderTemplate(systemHalf, { tf }).trim(),

@@ -2,6 +2,7 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import type { AddressInfo } from 'node:net'
 import { EventStream } from '@gemstack/ai-autopilot'
 import type { ChoiceBy, FrameworkEvent } from '../events.js'
+import type { EcoOptions } from '../system-prompt.js'
 import { listRuns, loadRunEvents } from '../store/index.js'
 import { readDocs } from './docs.js'
 import { dashboardHtml } from './page.js'
@@ -37,11 +38,29 @@ export interface DashboardOptions {
   cwd?: string
   /**
    * Called when the browser posts a new-run prompt (#345): `POST /api/start`
-   * with a JSON `{ prompt, kind? }` body. Wire this to spawn the run (the
+   * with a JSON `{ prompt, kind?, options? }` body. Wire this to spawn the run (the
    * daemon does); return `busy: true` to refuse because a run is already active
-   * (409). Omit to disable starting; the page hides the prompt panel.
+   * (409). Omit to disable starting; the page hides the prompt panel. The Global
+   * options (#314) ride along in `options`.
    */
-  onStart?: (prompt: string, kind: StartRunKind) => StartRunResult
+  onStart?: (prompt: string, kind: StartRunKind, options: StartRunOptions) => StartRunResult
+}
+
+/**
+ * The dashboard's Global options (#314), posted alongside a Start. Each maps to a
+ * run flag: Autopilot + Technical to modes, Vanilla to removing the built-in
+ * system prompt, and Eco to the fine-grained #326 section drops. Absent fields
+ * default off, i.e. today's behavior.
+ */
+export interface StartRunOptions {
+  /** Auto-accept mode; also steers the #326 maintenance stance. */
+  autopilot?: boolean
+  /** Technical mode: expose technical detail (preset-scoped). */
+  technical?: boolean
+  /** Remove the built-in #326 system prompt entirely (raw Claude Code). */
+  vanilla?: boolean
+  /** Fine-grained #326 section drops to save tokens. */
+  eco?: EcoOptions
 }
 
 /**
@@ -117,7 +136,7 @@ function handle(
   title: string,
   onStop: (() => void) | undefined,
   onChoice: ((id: string, pick: string | string[], by: ChoiceBy) => void) | undefined,
-  onStart: ((prompt: string, kind: StartRunKind) => StartRunResult) | undefined,
+  onStart: ((prompt: string, kind: StartRunKind, options: StartRunOptions) => StartRunResult) | undefined,
   cwd: string | undefined,
 ): void {
   const url = req.url ?? '/'
@@ -235,7 +254,7 @@ function handle(
         res.end('{"error":"a non-empty prompt is required"}')
         return
       }
-      const result = onStart(prompt, kind)
+      const result = onStart(prompt, kind, parseStartOptions(body['options']))
       if (!result.ok) {
         res.writeHead(result.busy ? 409 : 500, { 'content-type': 'application/json' })
         res.end(JSON.stringify({ error: result.error }))
@@ -270,6 +289,27 @@ function isSameOriginRequest(req: IncomingMessage): boolean {
     return false // malformed Origin: treat as cross-origin
   }
   return hostname === 'localhost' || hostname === '::1' || hostname === '[::1]' || hostname.startsWith('127.')
+}
+
+/**
+ * Sanitize the posted Global options (#314) into a {@link StartRunOptions}. Only
+ * known boolean fields survive, so a malformed or hostile body can never smuggle
+ * anything into the run flags. An absent/non-object value yields all-off.
+ */
+export function parseStartOptions(raw: unknown): StartRunOptions {
+  const src = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {}
+  const ecoSrc = src['eco'] && typeof src['eco'] === 'object' ? (src['eco'] as Record<string, unknown>) : {}
+  const eco: EcoOptions = {
+    ...(ecoSrc['autoPlanning'] === true ? { autoPlanning: true } : {}),
+    ...(ecoSrc['autoResearch'] === true ? { autoResearch: true } : {}),
+    ...(ecoSrc['autoMaintenance'] === true ? { autoMaintenance: true } : {}),
+  }
+  return {
+    ...(src['autopilot'] === true ? { autopilot: true } : {}),
+    ...(src['technical'] === true ? { technical: true } : {}),
+    ...(src['vanilla'] === true ? { vanilla: true } : {}),
+    ...(Object.keys(eco).length ? { eco } : {}),
+  }
 }
 
 /** Read a small JSON request body, tolerant of malformed input (yields `{}`). */

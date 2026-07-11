@@ -35,7 +35,7 @@ import {
 import { isWorkspaceEmpty } from './steps.js'
 import { loadFrameworkConfig, type FrameworkFileConfig } from './config.js'
 import { loadRepoMemory } from './memory.js'
-import { loadUserSystemPrompt, SYSTEM_PROMPT_FILE } from './system-prompt.js'
+import { loadUserSystemPrompt, SYSTEM_PROMPT_FILE, type EcoOptions } from './system-prompt.js'
 import { preflight } from './preflight.js'
 import { RunStore } from './store/index.js'
 import { daemonStatus, ensureDaemon, runDaemon, stopDaemon, DEFAULT_DAEMON_PORT } from './daemon.js'
@@ -106,6 +106,13 @@ Options:
   --technical            Activate the preset's Technical mode variants.
                          (--preset / --autopilot / --technical / --kind can also be
                           set per repo in the-framework.yml; these flags override it.)
+  --vanilla              Remove the built-in system prompt entirely, so the agent
+                         runs as raw Claude Code (fully transparent). Overrides the
+                         Eco flags below (there is no built-in prompt left to trim).
+  --eco-auto-planning    Drop the built-in prompt's "Large scope" (planning) section.
+  --eco-auto-research    Drop the built-in prompt's "Alternatives" (research) section.
+  --eco-auto-maintenance Drop the built-in prompt's "Maintenance" section.
+                         (The --eco-* flags trim the #326 prompt to save tokens.)
   --kind <name>          Build event kind the preset's review loop fires for, e.g.
                          bug-fix or major-change (default: the-framework.yml's event,
                          else the preset's own, else major-change). Selects which
@@ -173,6 +180,10 @@ export interface CliOptions {
   autoPreset: boolean
   autopilot: boolean
   technical: boolean
+  /** `--vanilla`: remove the built-in #326 system prompt entirely (antiLazyPill off, #314). */
+  vanilla: boolean
+  /** `--eco-*`: fine-grained #326 section drops to save tokens (#314). */
+  eco: Required<EcoOptions>
   buildEvent?: string | undefined
   maxPasses?: number
   maxCost?: number
@@ -222,6 +233,8 @@ export function parseArgs(argv: string[]): CliOptions {
     autoPreset: true,
     autopilot: false,
     technical: false,
+    vanilla: false,
+    eco: { autoPlanning: false, autoResearch: false, autoMaintenance: false },
     dashboard: true,
     relayServe: false,
     composeExtensions: false,
@@ -267,6 +280,18 @@ export function parseArgs(argv: string[]): CliOptions {
         break
       case '--technical':
         opts.technical = true
+        break
+      case '--vanilla':
+        opts.vanilla = true
+        break
+      case '--eco-auto-planning':
+        opts.eco.autoPlanning = true
+        break
+      case '--eco-auto-research':
+        opts.eco.autoResearch = true
+        break
+      case '--eco-auto-maintenance':
+        opts.eco.autoMaintenance = true
         break
       case '--kind':
         opts.buildEvent = argv[++i]
@@ -423,6 +448,21 @@ export function activeModes(opts: Pick<CliOptions, 'autopilot' | 'technical'>): 
   if (opts.autopilot) modes.push('autopilot')
   if (opts.technical) modes.push('technical')
   return modes
+}
+
+/**
+ * Whether the built-in #326 system prompt is removed for this run (#314): the
+ * Vanilla toggle (`--vanilla`) or `the-framework.yml`'s `antiLazyPill: false`.
+ */
+export function antiLazyPillOff(opts: Pick<CliOptions, 'vanilla'>, file: FrameworkFileConfig): boolean {
+  return opts.vanilla || file.antiLazyPill === false
+}
+
+/** The Eco section drops in effect (#314), or `undefined` when none are set. */
+export function ecoOptions(opts: Pick<CliOptions, 'eco'>): EcoOptions | undefined {
+  const { autoPlanning, autoResearch, autoMaintenance } = opts.eco
+  if (!autoPlanning && !autoResearch && !autoMaintenance) return undefined
+  return { autoPlanning, autoResearch, autoMaintenance }
 }
 
 /**
@@ -802,8 +842,11 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
   if (opts.research || opts.directPrompt) {
     const kindLabel = opts.directPrompt ? 'prompt run' : 'research'
     const userSystemPrompt = await loadUserSystemPrompt(cwd)
+    const noBuiltinPrompt = antiLazyPillOff(opts, fileConfig)
+    const eco = ecoOptions(opts)
     if (userSystemPrompt) io.out(`◆ system prompt: ${SYSTEM_PROMPT_FILE}`)
-    if (fileConfig.antiLazyPill === false) io.out('◆ anti-lazy-pill: off (the-framework.yml)')
+    if (noBuiltinPrompt) io.out(`◆ built-in system prompt: off (${opts.vanilla ? 'vanilla' : 'the-framework.yml'})`)
+    else if (eco) io.out(`◆ eco: dropping ${Object.keys(eco).filter(k => eco[k as keyof EcoOptions]).join(', ')}`)
     try {
       await runPrompt({
         prompt: opts.directPrompt ? intent : renderResearchPrompt(intent),
@@ -820,7 +863,8 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
         ...(opts.model ? { model: opts.model } : {}),
         ...(opts.maxCost ? { budgetUsd: opts.maxCost } : {}),
         ...(userSystemPrompt ? { systemPrompt: userSystemPrompt } : {}),
-        ...(fileConfig.antiLazyPill === false ? { antiLazyPill: false } : {}),
+        ...(noBuiltinPrompt ? { antiLazyPill: false } : {}),
+        ...(eco ? { eco } : {}),
         ...(modeList.includes('autopilot') ? { autopilot: true } : {}),
         ...((): { sessionLink?: string } => {
           const link = chooseSessionLink(opts, fake)
@@ -916,8 +960,11 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
   // A user SYSTEM.md and the-framework.yml's anti-lazy-pill toggle shape the system
   // prompt injected into every prompt (#301). The built-in pill is on unless removed.
   const userSystemPrompt = await loadUserSystemPrompt(cwd)
+  const noBuiltinPrompt = antiLazyPillOff(opts, fileConfig)
+  const eco = ecoOptions(opts)
   if (userSystemPrompt) io.out(`◆ system prompt: ${SYSTEM_PROMPT_FILE}`)
-  if (fileConfig.antiLazyPill === false) io.out('◆ anti-lazy-pill: off (the-framework.yml)')
+  if (noBuiltinPrompt) io.out(`◆ built-in system prompt: off (${opts.vanilla ? 'vanilla' : 'the-framework.yml'})`)
+  else if (eco) io.out(`◆ eco: dropping ${Object.keys(eco).filter(k => eco[k as keyof EcoOptions]).join(', ')}`)
 
   const runOpts: RunFrameworkOptions = {
     intent,
@@ -954,7 +1001,8 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
     ...(buildEvent ? { buildEvent } : {}),
     ...(memory.length ? { memory } : {}),
     ...(userSystemPrompt ? { systemPrompt: userSystemPrompt } : {}),
-    ...(fileConfig.antiLazyPill === false ? { antiLazyPill: false } : {}),
+    ...(noBuiltinPrompt ? { antiLazyPill: false } : {}),
+    ...(eco ? { eco } : {}),
     ...((): { sessionLink?: string } => {
       const link = chooseSessionLink(opts, fake)
       return link ? { sessionLink: link } : {}

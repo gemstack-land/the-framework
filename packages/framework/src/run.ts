@@ -37,7 +37,7 @@ import {
 import { snapshotWorkspace } from './sandbox.js'
 import type { Driver, DriverEvent, DriverSession } from './driver/index.js'
 import { memoryFraming, type LoadedMemory } from './memory.js'
-import { systemPromptBlock, type TfContext } from './system-prompt.js'
+import { systemPromptBlock, type EcoOptions, type TfContext } from './system-prompt.js'
 import { AWAIT_PROTOCOL, CONFIRM_APPROVED, CONFIRM_DECLINED, PLAN_DECLINED_MESSAGE, isDeclinedConfirmation, parseAwaitGate, type ParsedAwaitGate } from './turn-gate.js'
 // Value import from todo-loop.js is a benign cycle: todo-loop.js only calls
 // run.js's hoisted function declarations (requestChoices / resolveAwaitGate).
@@ -121,6 +121,8 @@ export interface RunFrameworkOptions {
    * is the historical config key: #326 is the anti-lazy-pill's (#297) successor.
    */
   antiLazyPill?: boolean
+  /** Eco fine-grained control (#314): drop the enabled #326 sections to save tokens. */
+  eco?: EcoOptions
   /**
    * A user-picked Open Loop domain preset ({loops, prompts, skills}) to run the
    * build under (#251). Its skills (and their personas) frame every phase, and
@@ -339,7 +341,7 @@ export async function runFramework(opts: RunFrameworkOptions): Promise<RunFramew
   // the steps. `tf.params.autopilot` reflects the run's autopilot mode (#325).
   const tf: TfContext = {
     prompt: opts.intent,
-    params: { autopilot: opts.modes?.includes('autopilot') ?? false },
+    params: { autopilot: opts.modes?.includes('autopilot') ?? false, ...(opts.eco ? { eco: opts.eco } : {}) },
   }
   const promptBlock = systemPromptBlock({ antiLazyPill: opts.antiLazyPill, user: opts.systemPrompt, tf })
   // The await protocol (#337) concretizes the pill's showChoices()/AWAIT macros into a

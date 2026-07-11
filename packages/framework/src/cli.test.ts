@@ -8,11 +8,13 @@ import { daemonStatePath } from './daemon.js'
 import { EVENTS_FILE, FRAMEWORK_DIR } from './store/index.js'
 import {
   activeModes,
+  antiLazyPillOff,
   autoSelectPreset,
   buildDeployTarget,
   chooseSessionLink,
   claudeDriverOptions,
   CLAUDE_CODE_SESSION_LIST,
+  ecoOptions,
   mergeRunConfig,
   parseArgs,
   resolveDomainPreset,
@@ -43,6 +45,30 @@ test('parseArgs reads the backlog-loop flags (#323)', () => {
   assert.equal(parseArgs(['--no-todo-loop', 'x']).todoLoop, false)
   assert.equal(parseArgs(['--max-todo-items', '5', 'x']).todoMaxItems, 5)
   assert.match(parseArgs(['--max-todo-items', '0', 'x']).error!, /max-todo-items/)
+})
+
+test('parseArgs reads the Global options flags: vanilla + eco (#314)', () => {
+  const dflt = parseArgs(['x'])
+  assert.equal(dflt.vanilla, false)
+  assert.deepEqual(dflt.eco, { autoPlanning: false, autoResearch: false, autoMaintenance: false })
+  const on = parseArgs(['--vanilla', '--eco-auto-planning', '--eco-auto-maintenance', 'x'])
+  assert.equal(on.vanilla, true)
+  assert.deepEqual(on.eco, { autoPlanning: true, autoResearch: false, autoMaintenance: true })
+})
+
+test('ecoOptions returns undefined when nothing is set, else only the enabled drops (#314)', () => {
+  assert.equal(ecoOptions(parseArgs(['x'])), undefined)
+  assert.deepEqual(ecoOptions(parseArgs(['--eco-auto-research', 'x'])), {
+    autoPlanning: false,
+    autoResearch: true,
+    autoMaintenance: false,
+  })
+})
+
+test('antiLazyPillOff is true for --vanilla or the-framework.yml antiLazyPill:false (#314)', () => {
+  assert.equal(antiLazyPillOff(parseArgs(['x']), {}), false)
+  assert.equal(antiLazyPillOff(parseArgs(['--vanilla', 'x']), {}), true)
+  assert.equal(antiLazyPillOff(parseArgs(['x']), { antiLazyPill: false }), true)
 })
 
 test('parseArgs reads the research subcommand with its optional what (#331)', () => {
