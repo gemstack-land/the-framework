@@ -112,6 +112,16 @@ export function dashboardHtml(title: string, stoppable = false, choiceable = fal
     color: #9db4d6; text-transform: uppercase; letter-spacing: .6px; }
   #prompts pre { margin: 0; padding: 10px 12px; border-top: 1px solid #1c2230; white-space: pre-wrap;
     word-break: break-word; font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; color: #c3ccdb; }
+  /* Project log (#314): the committed .the-framework/LOGS.md history, newest-first. */
+  #projectlog-panel { grid-column: 1 / -1; }
+  #projectlog .pl-title { color: #e8ecf3; font-size: 13px; }
+  #projectlog .pl-meta { color: #7b8496; font-size: 11px; margin-top: 3px; display: flex;
+    align-items: center; gap: 6px; flex-wrap: wrap; }
+  #projectlog .kind { color: #9db4d6; text-transform: uppercase; letter-spacing: .5px; font-size: 10px; }
+  #projectlog .pl-prompts { margin: 6px 0 0; padding-left: 16px; list-style: disc; }
+  #projectlog .pl-prompts li { padding: 1px 0; border-bottom: 0; color: #8b93a3; font-size: 12px; }
+  #projectlog .dot { font-size: 9px; }
+  #projectlog .empty { color: #5c657a; font-size: 12px; }
   /* Start-a-run panel (#345): only the daemon dashboard wires /api/start; the
      per-run page and the relay render it hidden. */
   #start-panel { grid-column: 1 / -1; }
@@ -296,6 +306,10 @@ export function dashboardHtml(title: string, stoppable = false, choiceable = fal
   <section id="prompts-panel" hidden>
     <h2>Prompts sent to Claude Code</h2>
     <div id="prompts"></div>
+  </section>
+  <section id="projectlog-panel">
+    <h2>Project log</h2>
+    <ul id="projectlog"><li class="empty">loading…</li></ul>
   </section>
 </main>
 </div>
@@ -665,6 +679,33 @@ function loadRuns() {
   fetch('api/runs').then(r => r.ok ? r.json() : { runs: [] }).then(d => renderRuns(d.runs || [])).catch(() => {});
 }
 
+// Project log (#314): the committed .the-framework/LOGS.md history (#378/#379),
+// newest-first. All fields are agent/user-controlled, so every value is escaped
+// and the session link is passed through safeUrl.
+function renderProjectLog(logs) {
+  const ul = $('projectlog'); ul.innerHTML = '';
+  if (!logs.length) { ul.innerHTML = '<li class="empty">No runs logged yet.</li>'; return; }
+  for (const e of logs) {
+    const li = document.createElement('li');
+    const when = e.at ? new Date(e.at).toLocaleString() : '';
+    const link = e.sessionLink
+      ? ' \\u00b7 <a href="' + esc(safeUrl(e.sessionLink)) + '" target="_blank" rel="noopener">session</a>'
+      : (e.sessionId ? ' \\u00b7 session ' + esc(e.sessionId) : '');
+    const prompts = (e.prompts && e.prompts.length)
+      ? '<ul class="pl-prompts">' + e.prompts.map(p => '<li>' + esc(p) + '</li>').join('') + '</ul>'
+      : '';
+    li.innerHTML = '<div class="pl-title">' + esc(e.title || 'untitled') + '</div>' +
+      '<div class="pl-meta"><span class="dot ' + statusClass(e.status) + '">\\u25cf</span>' +
+      '<span>' + esc(e.status) + '</span><span class="kind">' + esc(e.kind) + '</span>' +
+      '<span>\\u00b7 ' + esc(when) + '</span>' + link + '</div>' + prompts;
+    ul.appendChild(li);
+  }
+}
+
+function loadLogs() {
+  fetch('api/logs').then(r => r.ok ? r.json() : { logs: [] }).then(d => renderProjectLog(d.logs || [])).catch(() => {});
+}
+
 // Document sidebar (#319): render the PLAN.md / TODO.md the agent writes at the
 // workspace root, with a sticky tab nav to jump between them. Minimal, dependency-
 // free markdown so the page stays a single self-contained file.
@@ -904,6 +945,8 @@ src.onmessage = ev => {
   if (mode === 'live') render(fe);
   // A finished run has just been archived; refresh the list so it appears.
   if (fe.kind === 'end') setTimeout(loadRuns, 1500);
+  // A finished run also appends to .the-framework/LOGS.md (#379); refresh the log.
+  if (fe.kind === 'end') setTimeout(loadLogs, 1500);
   // A plan/backlog is usually written right before a choice gate or at run end;
   // refresh the doc sidebar promptly so PLAN.md / TODO.md appear without waiting.
   if (fe.kind === 'choice' || fe.kind === 'end') setTimeout(loadDocs, 500);
@@ -913,6 +956,8 @@ loadRuns();
 setInterval(loadRuns, 10000);
 loadDocs();
 setInterval(loadDocs, 4000);
+loadLogs();
+setInterval(loadLogs, 10000);
 `
 }
 

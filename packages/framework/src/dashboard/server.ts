@@ -4,6 +4,7 @@ import { EventStream } from '@gemstack/ai-autopilot'
 import type { ChoiceBy, FrameworkEvent } from '../events.js'
 import type { EcoOptions } from '../system-prompt.js'
 import { listRuns, loadRunEvents } from '../store/index.js'
+import { readLogs } from '../logs.js'
 import { readDocs } from './docs.js'
 import { dashboardHtml } from './page.js'
 import { serveSSE } from './sse.js'
@@ -163,6 +164,12 @@ function handle(
   // workspace root, so the human can read the plan + backlog beside the run.
   if (url === '/api/docs') {
     void serveDocs(res, cwd)
+    return
+  }
+  // Project log (#314): the committed `.the-framework/LOGS.md` history of every
+  // loop/prompt/build run in this workspace (#378/#379), newest-first.
+  if (url === '/api/logs') {
+    void serveLogs(res, cwd)
     return
   }
   if (url === '/stop') {
@@ -356,6 +363,13 @@ async function serveDocs(res: ServerResponse, cwd: string | undefined): Promise<
   const docs = cwd ? await readDocs(cwd).catch(() => []) : []
   res.writeHead(200, { 'content-type': 'application/json' })
   res.end(JSON.stringify({ docs }))
+}
+
+/** `GET /api/logs` — the workspace's committed `.the-framework/LOGS.md` entries, newest-first, or `[]`. */
+async function serveLogs(res: ServerResponse, cwd: string | undefined): Promise<void> {
+  const logs = cwd ? await readLogs(cwd).catch(() => []) : []
+  res.writeHead(200, { 'content-type': 'application/json' })
+  res.end(JSON.stringify({ logs }))
 }
 
 function closeServer(

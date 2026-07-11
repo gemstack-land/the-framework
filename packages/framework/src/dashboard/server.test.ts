@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { startDashboard, parseStartOptions, type StartRunOptions } from './server.js'
 import type { FrameworkEvent } from '../events.js'
+import { appendLog } from '../logs.js'
 
 function fetchText(url: string): Promise<{ status: number; body: string }> {
   return new Promise((resolvePromise, rejectPromise) => {
@@ -152,6 +153,34 @@ test('GET /api/docs serves the workspace PLAN.md / TODO.md, or [] without a cwd 
     const noCwd = await startDashboard({ port: 0 })
     try {
       assert.deepEqual(JSON.parse((await fetchText(noCwd.url + '/api/docs')).body), { docs: [] })
+    } finally {
+      await noCwd.close()
+    }
+  } finally {
+    await rm(cwd, { recursive: true, force: true })
+  }
+})
+
+test('GET /api/logs serves the .the-framework/LOGS.md entries newest-first, or [] without a cwd (#314)', async () => {
+  const cwd = await mkdtemp(join(tmpdir(), 'framework-projectlog-'))
+  try {
+    await appendLog(cwd, { at: '2026-07-10T09:00:00.000Z', kind: 'prompt', title: 'first run', status: 'done' })
+    await appendLog(cwd, { at: '2026-07-10T10:00:00.000Z', kind: 'build', title: 'second run', status: 'failed' })
+    const withCwd = await startDashboard({ port: 0, cwd })
+    try {
+      const { status, body } = await fetchText(withCwd.url + '/api/logs')
+      assert.equal(status, 200)
+      const parsed = JSON.parse(body)
+      assert.equal(parsed.logs.length, 2)
+      assert.equal(parsed.logs[0].title, 'second run') // newest-first
+      assert.equal(parsed.logs[1].title, 'first run')
+    } finally {
+      await withCwd.close()
+    }
+    // No cwd wired -> empty list, never an error.
+    const noCwd = await startDashboard({ port: 0 })
+    try {
+      assert.deepEqual(JSON.parse((await fetchText(noCwd.url + '/api/logs')).body), { logs: [] })
     } finally {
       await noCwd.close()
     }
