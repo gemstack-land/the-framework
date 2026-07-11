@@ -3,7 +3,7 @@ import { test } from 'node:test'
 import { JSDOM } from 'jsdom'
 import { dashboardHtml } from './page.js'
 
-// The Project log panel (#314) renders the committed .the-framework/LOGS.md
+// The project loops list (#314/#395, in the second sidebar) renders the committed .the-framework/LOGS.md
 // entries the server returns from GET /api/logs. It drives the real client JS in
 // jsdom, answering the page's own `fetch('api/logs')` with a canned payload.
 

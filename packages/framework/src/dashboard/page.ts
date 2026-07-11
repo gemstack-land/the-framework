@@ -134,16 +134,36 @@ export function dashboardHtml(title: string, stoppable = false, choiceable = fal
     color: #9db4d6; text-transform: uppercase; letter-spacing: .6px; }
   #prompts pre { margin: 0; padding: 10px 12px; border-top: 1px solid #1c2230; white-space: pre-wrap;
     word-break: break-word; font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; color: #c3ccdb; }
-  /* Project log (#314): the committed .the-framework/LOGS.md history, newest-first. */
-  #projectlog-panel { grid-column: 1 / -1; }
+  /* Project loops (#314/#395): the selected project's .the-framework/LOGS.md, in
+     the second sidebar; a click shows the entry in the main view. */
+  #projectlog li { cursor: pointer; padding: 8px; border-radius: 6px; }
+  #projectlog li:hover { background: #141a24; }
+  #projectlog li.active { background: #17212f; }
   #projectlog .pl-title { color: #e8ecf3; font-size: 13px; }
   #projectlog .pl-meta { color: #7b8496; font-size: 11px; margin-top: 3px; display: flex;
     align-items: center; gap: 6px; flex-wrap: wrap; }
   #projectlog .kind { color: #9db4d6; text-transform: uppercase; letter-spacing: .5px; font-size: 10px; }
   #projectlog .pl-prompts { margin: 6px 0 0; padding-left: 16px; list-style: disc; }
-  #projectlog .pl-prompts li { padding: 1px 0; border-bottom: 0; color: #8b93a3; font-size: 12px; }
+  #projectlog .pl-prompts li { padding: 1px 0; border-bottom: 0; color: #8b93a3; font-size: 12px;
+    cursor: default; }
+  #projectlog .pl-prompts li:hover { background: none; }
   #projectlog .dot { font-size: 9px; }
-  #projectlog .empty { color: #5c657a; font-size: 12px; }
+  #projectlog .empty { color: #5c657a; font-size: 12px; cursor: default; }
+  #projectlog .empty:hover { background: none; }
+  /* Main view (#395): the selected (or latest) loop/prompt of the current project,
+     claude.ai/code-style. */
+  #project-view { grid-column: 1 / -1; }
+  #project-view[hidden] { display: none; }
+  #pv-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+  #pv-title { font-size: 16px; font-weight: 600; color: #e8ecf3; }
+  #pv-kind { font-size: 10px; text-transform: uppercase; letter-spacing: .6px; color: #9db4d6;
+    background: #131a2a; border: 1px solid #24344a; border-radius: 999px; padding: 2px 8px; }
+  #pv-meta { color: #7b8496; font-size: 12px; margin-top: 8px; display: flex; align-items: center;
+    gap: 8px; flex-wrap: wrap; }
+  #pv-meta .dot { font-size: 9px; }
+  #pv-prompts { margin: 12px 0 0; padding-left: 18px; list-style: disc; }
+  #pv-prompts li { padding: 3px 0; border-bottom: 0; color: #c3ccdb; font-size: 13px; }
+  #pv-empty { color: #5c657a; font-size: 13px; }
   /* Start-a-run panel (#345): only the daemon dashboard wires /api/start; the
      per-run page and the relay render it hidden. */
   #start-panel { grid-column: 1 / -1; }
@@ -255,6 +275,8 @@ export function dashboardHtml(title: string, stoppable = false, choiceable = fal
   <ul id="queue"><li class="empty">loading…</li></ul>
 </aside>
 <aside id="sidebar">
+  <h2 id="loops-heading">Loops</h2>
+  <ul id="projectlog"><li class="empty">loading…</li></ul>
   <h2>Runs</h2>
   <ul id="runs"><li class="empty">loading…</li></ul>
 </aside>
@@ -269,6 +291,10 @@ export function dashboardHtml(title: string, stoppable = false, choiceable = fal
   <span class="run">live until you stop the run</span>
 </div>
 <main>
+  <section id="project-view" hidden>
+    <h2 id="pv-project">Project</h2>
+    <div id="pv-body"></div>
+  </section>
   <section id="start-panel"${startable ? '' : ' hidden'}>
     <h2>Start a run</h2>
     <textarea id="start-prompt" rows="3" placeholder="What should the agent build?"></textarea>
@@ -336,10 +362,6 @@ export function dashboardHtml(title: string, stoppable = false, choiceable = fal
   <section id="prompts-panel" hidden>
     <h2>Prompts sent to Claude Code</h2>
     <div id="prompts"></div>
-  </section>
-  <section id="projectlog-panel">
-    <h2>Project log</h2>
-    <ul id="projectlog"><li class="empty">loading…</li></ul>
   </section>
 </main>
 </div>
@@ -667,7 +689,8 @@ function showLive() {
 }
 
 function showRun(id) {
-  fetch('api/runs/' + encodeURIComponent(id)).then(r => r.ok ? r.json() : null).then(data => {
+  const q = selectedProjectId ? '?project=' + encodeURIComponent(selectedProjectId) : '';
+  fetch('api/runs/' + encodeURIComponent(id) + q).then(r => r.ok ? r.json() : null).then(data => {
     if (!data) return;
     mode = 'history'; activeRunId = id;
     $('viewing').classList.add('on');
@@ -706,17 +729,21 @@ function renderRuns(runs) {
 }
 
 function loadRuns() {
-  fetch('api/runs').then(r => r.ok ? r.json() : { runs: [] }).then(d => renderRuns(d.runs || [])).catch(() => {});
+  const q = selectedProjectId ? '?project=' + encodeURIComponent(selectedProjectId) : '';
+  fetch('api/runs' + q).then(r => r.ok ? r.json() : { runs: [] }).then(d => renderRuns(d.runs || [])).catch(() => {});
 }
 
-// Project log (#314): the committed .the-framework/LOGS.md history (#378/#379),
-// newest-first. All fields are agent/user-controlled, so every value is escaped
-// and the session link is passed through safeUrl.
+// Project loops (#314/#395): the selected project's committed .the-framework/LOGS.md
+// (#378/#379), newest-first, in the second sidebar. Clicking an entry shows it in the
+// main view. All fields are agent/user-controlled, so every value is escaped and the
+// session link is passed through safeUrl.
 function renderProjectLog(logs) {
+  currentLogs = logs;
   const ul = $('projectlog'); ul.innerHTML = '';
-  if (!logs.length) { ul.innerHTML = '<li class="empty">No runs logged yet.</li>'; return; }
+  if (!logs.length) { ul.innerHTML = '<li class="empty">No runs logged yet.</li>'; renderProjectView(); return; }
   for (const e of logs) {
     const li = document.createElement('li');
+    li.dataset.at = e.at || '';
     const when = e.at ? new Date(e.at).toLocaleString() : '';
     const link = e.sessionLink
       ? ' \\u00b7 <a href="' + esc(safeUrl(e.sessionLink)) + '" target="_blank" rel="noopener">session</a>'
@@ -728,8 +755,51 @@ function renderProjectLog(logs) {
       '<div class="pl-meta"><span class="dot ' + statusClass(e.status) + '">\\u25cf</span>' +
       '<span>' + esc(e.status) + '</span><span class="kind">' + esc(e.kind) + '</span>' +
       '<span>\\u00b7 ' + esc(when) + '</span>' + link + '</div>' + prompts;
+    li.addEventListener('click', ev => { if (ev.target.tagName !== 'A') selectLog(e.at); });
     ul.appendChild(li);
   }
+  markLogActive();
+  renderProjectView();
+}
+
+// The entry the main view shows: the one the user clicked, else the newest.
+function shownLog() {
+  return currentLogs.find(e => e.at === selectedLogAt) || currentLogs[0] || null;
+}
+
+function selectLog(at) {
+  selectedLogAt = at;
+  markLogActive();
+  renderProjectView();
+}
+
+function markLogActive() {
+  const entry = shownLog();
+  const at = entry ? entry.at : null;
+  for (const li of $('projectlog').children) {
+    if (li.dataset) li.classList.toggle('active', at !== null && li.dataset.at === at);
+  }
+}
+
+// Main view (#395): the selected/latest loop or prompt of the current project,
+// claude.ai/code-style. Hidden when the project has no logged runs.
+function renderProjectView() {
+  const entry = shownLog();
+  const view = $('project-view');
+  if (!entry) { view.hidden = true; return; }
+  const when = entry.at ? new Date(entry.at).toLocaleString() : '';
+  const link = entry.sessionLink
+    ? ' <span>\\u00b7 <a href="' + esc(safeUrl(entry.sessionLink)) + '" target="_blank" rel="noopener">open session</a></span>'
+    : (entry.sessionId ? ' <span>\\u00b7 session ' + esc(entry.sessionId) + '</span>' : '');
+  const prompts = (entry.prompts && entry.prompts.length)
+    ? '<ul id="pv-prompts">' + entry.prompts.map(p => '<li>' + esc(p) + '</li>').join('') + '</ul>'
+    : '';
+  $('pv-body').innerHTML =
+    '<div id="pv-head"><span id="pv-kind">' + esc(entry.kind) + '</span>' +
+    '<span id="pv-title">' + esc(entry.title || 'untitled') + '</span></div>' +
+    '<div id="pv-meta"><span class="dot ' + statusClass(entry.status) + '">\\u25cf</span>' +
+    '<span>' + esc(entry.status) + '</span><span>\\u00b7 ' + esc(when) + '</span>' + link + '</div>' + prompts;
+  view.hidden = false;
 }
 
 function loadLogs() {
@@ -743,6 +813,22 @@ function loadLogs() {
 // every value is escaped.
 let allProjects = [];
 let selectedProjectId = null;
+let selectedProjectName = '';
+let didAutoSelect = false;
+let currentLogs = [];
+let selectedLogAt = null;
+
+function projectName(id) {
+  const p = allProjects.find(x => x.id === id);
+  return p ? (p.name || 'project') : '';
+}
+
+// Second sidebar + main view (#395) follow the selected project: its loops list
+// (#projectlog) and Runs archive re-scope, and the headings name it.
+function updateProjectHeadings() {
+  $('loops-heading').textContent = selectedProjectName ? 'Loops \\u00b7 ' + selectedProjectName : 'Loops';
+  $('pv-project').textContent = selectedProjectName || 'Project';
+}
 
 function ago(iso) {
   if (!iso) return 'no activity yet';
@@ -762,8 +848,12 @@ function byRecency(a, b) {
 
 function selectProject(id) {
   selectedProjectId = selectedProjectId === id ? null : id;
+  selectedProjectName = projectName(selectedProjectId);
+  selectedLogAt = null;
   markProjectActive();
+  updateProjectHeadings();
   loadLogs();
+  loadRuns();
 }
 
 function markProjectActive() {
@@ -787,6 +877,13 @@ function renderProjects(projects) {
   }
   markProjectActive();
   renderOverview(projects);
+  // Default the second sidebar + main view to the most-recently-active project
+  // once, on first load; after that, respect the user's selection (incl. none).
+  if (!didAutoSelect && !selectedProjectId && projects.length) {
+    didAutoSelect = true;
+    const top = projects.slice().sort(byRecency)[0];
+    if (top) selectProject(top.id);
+  }
 }
 
 function renderOverview(projects) {

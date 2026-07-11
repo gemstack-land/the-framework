@@ -76,14 +76,24 @@ test('the Overview shows a project count and active tally', async () => {
   assert.match(h.query('#overview .ov-count')!.textContent ?? '', /2 projects.*1 active/)
 })
 
-test('selecting a project marks it active and re-points the project log to ?project=<id>', async () => {
+test('the most recently active project is auto-selected on load (#395)', async () => {
   const h = boot({ projects: PROJECTS })
   await tick()
-  const first = h.query('#projects > li') as HTMLElement
-  ;(first as unknown as { click: () => void }).click()
+  const items = h.queryAll('#projects > li') as HTMLElement[]
+  assert.ok(items[0]!.classList.contains('active'), 'the newest project starts selected')
+  assert.ok(h.calls.some(u => u === 'api/logs?project=a-1'), 'its log is loaded scoped to it')
+})
+
+test('selecting another project moves the highlight and re-points the project log', async () => {
+  const h = boot({ projects: PROJECTS })
   await tick()
-  assert.ok(first.classList.contains('active'), 'the clicked project is highlighted')
-  assert.ok(h.calls.some(u => u === 'api/logs?project=a-1'), 'the log is refetched scoped to the project')
+  const items = h.queryAll('#projects > li') as HTMLElement[]
+  const other = items[1]! // app-b, not the auto-selected one
+  ;(other as unknown as { click: () => void }).click()
+  await tick()
+  assert.ok(other.classList.contains('active'), 'the clicked project is highlighted')
+  assert.ok(!items[0]!.classList.contains('active'), 'the previous selection is cleared')
+  assert.ok(h.calls.some(u => u === 'api/logs?project=b-2'), 'the log is refetched scoped to the project')
 })
 
 test('the Queue aggregates unchecked TODO items across projects, tagged by project', async () => {
