@@ -416,6 +416,10 @@ test('/api/start passes the run kind through; a research start may omit the prom
     assert.match(page.body, /id="start-maintainability"/)
     assert.match(page.body, /const MAINTAINABILITY_PROMPT = /)
     assert.match(page.body, /wirePresetButton\('start-maintainability'/)
+    // The minimal [Maintainability] variant (#362) ships beside the fuller one.
+    assert.match(page.body, /id="start-maintainability-minimal"/)
+    assert.match(page.body, /const MAINTAINABILITY_MINIMAL_PROMPT = /)
+    assert.match(page.body, /wirePresetButton\('start-maintainability-minimal'/)
   } finally {
     await dash.close()
   }
