@@ -7,7 +7,7 @@ import { CLAUDE_CODE_SESSION_LINK } from '../events.js'
  * that foreground the orchestration (stack rationale, loop status, decisions)
  * beside a tail of the wrapped agent's own activity.
  */
-export function dashboardHtml(title: string, stoppable = false, choiceable = false): string {
+export function dashboardHtml(title: string, stoppable = false, choiceable = false, startable = false): string {
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -97,6 +97,19 @@ export function dashboardHtml(title: string, stoppable = false, choiceable = fal
   #modes .box { color: #6ea8fe; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
   #modes li.off { color: #5c657a; }
   #modes li.off .box { color: #3a4256; }
+  /* Start-a-run panel (#345): only the daemon dashboard wires /api/start; the
+     per-run page and the relay render it hidden. */
+  #start-panel { grid-column: 1 / -1; }
+  #start-panel[hidden] { display: none; }
+  #start-prompt { width: 100%; min-height: 60px; resize: vertical; font: inherit; color: #e8ecf3;
+    background: #0d1119; border: 1px solid #24344a; border-radius: 8px; padding: 8px 10px; }
+  #start-prompt:focus { outline: none; border-color: #3d5a8a; }
+  #start-actions { display: flex; align-items: center; gap: 12px; margin-top: 10px; }
+  #start-run { font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; color: #0b0e14;
+    background: #6ea8fe; border: 0; border-radius: 6px; padding: 6px 16px; }
+  #start-run:hover { background: #8bbaff; }
+  #start-run:disabled { opacity: .5; cursor: default; }
+  #start-note { color: #f0a35e; font-size: 12px; }
   /* Interactive plan-approval / choice panel (#304): full-width, accented so it
      reads as the one thing awaiting the human. */
   #choice-panel { grid-column: 1 / -1; background: #131a2a; border: 1px solid #2b3b5c;
@@ -176,6 +189,14 @@ export function dashboardHtml(title: string, stoppable = false, choiceable = fal
   <span class="run">live until you stop the run</span>
 </div>
 <main>
+  <section id="start-panel"${startable ? '' : ' hidden'}>
+    <h2>Start a run</h2>
+    <textarea id="start-prompt" rows="3" placeholder="What should the agent build?"></textarea>
+    <div id="start-actions">
+      <button id="start-run">&#9654; Start<span class="kbd">Ctrl+Enter</span></button>
+      <span id="start-note"></span>
+    </div>
+  </section>
   <section id="choice-panel" hidden>
     <h2>Your call</h2>
     <div id="choice-title"></div>
@@ -221,17 +242,18 @@ export function dashboardHtml(title: string, stoppable = false, choiceable = fal
 </aside>
 </div>
 <script>
-${clientScript(stoppable, choiceable)}
+${clientScript(stoppable, choiceable, startable)}
 </script>
 </body>
 </html>`
 }
 
-function clientScript(stoppable: boolean, choiceable: boolean): string {
+function clientScript(stoppable: boolean, choiceable: boolean, startable: boolean): string {
   // Runs in the browser. Keep it dependency-free.
   return `
 const STOPPABLE = ${stoppable ? 'true' : 'false'};
 const CHOICEABLE = ${choiceable ? 'true' : 'false'};
+const STARTABLE = ${startable ? 'true' : 'false'};
 const AUTO_ACCEPT_MS = 10000;
 const GENERIC_SESSION_LINK = ${JSON.stringify(CLAUDE_CODE_SESSION_LINK)};
 let ended = false;
@@ -668,6 +690,33 @@ function notify(title, body) {
 }
 notifyBtn.addEventListener('click', toggleNotify);
 syncNotifyBtn();
+
+// Start a run (#345): POST the prompt to /api/start; the daemon spawns the run
+// and its events stream in over the same SSE feed. A 409 means one is active.
+function startNewRun() {
+  if (!STARTABLE) return;
+  const note = $('start-note');
+  const prompt = $('start-prompt').value.trim();
+  if (!prompt) { note.textContent = 'type what to build first'; return; }
+  const btn = $('start-run');
+  btn.disabled = true;
+  note.textContent = 'starting\\u2026';
+  fetch('api/start', { method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ prompt: prompt }) })
+    .then(async r => {
+      btn.disabled = false;
+      if (r.ok) { note.textContent = ''; $('start-prompt').value = ''; showLive(); return; }
+      let msg = 'could not start (' + r.status + ')';
+      try { const b = await r.json(); if (b && b.error) msg = b.error; } catch {}
+      note.textContent = msg;
+    })
+    .catch(() => { btn.disabled = false; note.textContent = 'could not reach the dashboard server'; });
+}
+$('start-run').addEventListener('click', startNewRun);
+$('start-prompt').addEventListener('keydown', ev => {
+  // stopPropagation so the document-level Ctrl+Enter never accepts a choice too.
+  if ((ev.ctrlKey || ev.metaKey) && ev.key === 'Enter') { ev.preventDefault(); ev.stopPropagation(); startNewRun(); }
+});
 
 $('stop').addEventListener('click', stopRun);
 $('back-live').addEventListener('click', showLive);

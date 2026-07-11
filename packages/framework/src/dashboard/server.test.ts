@@ -314,6 +314,65 @@ test('POST /choice forwards a multi-select subset (array pick), including an emp
   }
 })
 
+test('POST /api/start invokes onStart with the trimmed prompt and the page is startable (#345)', async () => {
+  const prompts: string[] = []
+  const dash = await startDashboard({ port: 0, onStart: prompt => { prompts.push(prompt); return { ok: true } } })
+  try {
+    const { status, body } = await postJson(dash.url + '/api/start', { prompt: '  a blog  ' })
+    assert.equal(status, 202)
+    assert.match(body, /"ok":true/)
+    assert.deepEqual(prompts, ['a blog'])
+    // The page ships the prompt panel visible and knows the server can start runs.
+    const page = await fetchText(dash.url + '/')
+    assert.match(page.body, /STARTABLE = true/)
+    assert.match(page.body, /<section id="start-panel">/)
+    assert.match(page.body, /id="start-prompt"/)
+  } finally {
+    await dash.close()
+  }
+})
+
+test('/api/start guards: 400 empty prompt, 409 busy, 500 spawn failure (#345)', async () => {
+  let calls = 0
+  let outcome: { ok: false; busy?: boolean; error: string } = { ok: false, busy: true, error: 'a run is already active' }
+  const dash = await startDashboard({ port: 0, onStart: () => { calls++; return outcome } })
+  try {
+    // An empty / missing prompt never reaches the handler.
+    assert.equal((await postJson(dash.url + '/api/start', { prompt: '   ' })).status, 400)
+    assert.equal((await postJson(dash.url + '/api/start', {})).status, 400)
+    assert.equal(calls, 0)
+    // Busy -> 409 with the reason; any other failure -> 500.
+    const busy = await postJson(dash.url + '/api/start', { prompt: 'a blog' })
+    assert.equal(busy.status, 409)
+    assert.match(busy.body, /already active/)
+    outcome = { ok: false, error: 'spawn failed' }
+    const failed = await postJson(dash.url + '/api/start', { prompt: 'a blog' })
+    assert.equal(failed.status, 500)
+    assert.match(failed.body, /spawn failed/)
+  } finally {
+    await dash.close()
+  }
+})
+
+test('/api/start is 405 for a non-POST and 404 when starting is not wired (#345)', async () => {
+  const withStart = await startDashboard({ port: 0, onStart: () => ({ ok: true }) })
+  try {
+    assert.equal((await send(withStart.url + '/api/start', 'GET')).status, 405)
+  } finally {
+    await withStart.close()
+  }
+  const noStart = await startDashboard({ port: 0 })
+  try {
+    assert.equal((await postJson(noStart.url + '/api/start', { prompt: 'a blog' })).status, 404)
+    // The panel renders hidden on a page that cannot start runs (per-run dashboard, relay).
+    const page = await fetchText(noStart.url + '/')
+    assert.match(page.body, /STARTABLE = false/)
+    assert.match(page.body, /<section id="start-panel" hidden>/)
+  } finally {
+    await noStart.close()
+  }
+})
+
 test('/choice is 405 for a non-POST and 404 when choices are not wired (#304)', async () => {
   const withChoice = await startDashboard({ port: 0, onChoice: () => {} })
   try {

@@ -4,7 +4,7 @@ import { mkdir, readFile, writeFile, rm } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { FrameworkEvent } from './events.js'
 import { EVENTS_FILE, FRAMEWORK_DIR } from './store/index.js'
-import { startDashboard, type Dashboard } from './dashboard/index.js'
+import { startDashboard, type Dashboard, type StartRunResult } from './dashboard/index.js'
 import { appendControl } from './control.js'
 import { JsonlTailer } from './jsonl-tail.js'
 
@@ -186,6 +186,8 @@ export interface RunDaemonOptions {
   pollMs?: number
   /** Shut the daemon down when this aborts (in addition to SIGINT/SIGTERM). For tests. */
   signal?: AbortSignal
+  /** The CLI entry script to re-invoke for a dashboard-started run (#345). Default `process.argv[1]`. */
+  binPath?: string
 }
 
 /**
@@ -204,11 +206,51 @@ export async function runDaemon(cwd: string, opts: RunDaemonOptions = {}): Promi
   // `.framework/` — create it up front so the daemon works as the very first
   // command in a fresh workspace (before any run made the dir).
   await mkdir(daemonDir(cwd), { recursive: true })
+
+  // Start-from-dashboard (#345): POST /api/start spawns `framework "<prompt>"
+  // --no-dashboard` as a detached child — the same spawn pattern ensureDaemon
+  // uses for the daemon itself. The run streams into this page via the tailed
+  // event log, and its gates + Stop steer through the control channel (#344),
+  // which the run wires whenever a daemon is live. One run at a time: while the
+  // last child is alive, Start is refused (the #322 runaway concern).
+  let activeRunPid: number | undefined
+  const startRun = (prompt: string): StartRunResult => {
+    if (activeRunPid !== undefined && isProcessAlive(activeRunPid)) {
+      return { ok: false, busy: true, error: 'a run is already active; stop it or wait for it to finish' }
+    }
+    activeRunPid = undefined
+    const binPath = opts.binPath ?? process.argv[1]
+    if (!binPath) return { ok: false, error: 'cannot locate the framework CLI entry to spawn a run' }
+    // Same fork-bomb guard as ensureDaemon: never re-exec a test file as a run.
+    if (!opts.binPath && (process.env.NODE_TEST_CONTEXT || /\.test\.[cm]?[jt]s$/.test(binPath))) {
+      return { ok: false, error: 'refusing to spawn a run from a test entry; pass an explicit binPath' }
+    }
+    const child = spawn(process.execPath, [binPath, prompt, '--no-dashboard', '--cwd', cwd], {
+      detached: true,
+      stdio: 'ignore',
+    })
+    child.unref()
+    child.once('error', err => {
+      activeRunPid = undefined
+      dashboard.push({ kind: 'log', message: `✗ run failed to start: ${err.message}` })
+    })
+    child.once('exit', code => {
+      activeRunPid = undefined
+      // The run narrates its own end through the event log; only a hard failure
+      // (nonzero exit with no run to tell the tale) needs the daemon's voice.
+      if (code) dashboard.push({ kind: 'log', message: `✗ run exited with code ${code}` })
+    })
+    activeRunPid = child.pid
+    dashboard.push({ kind: 'log', message: `▶ run started: ${prompt}` })
+    return { ok: true }
+  }
+
   const dashboard: Dashboard = await startDashboard({
     port,
     cwd,
     onStop: () => void appendControl(cwd, { kind: 'stop' }).catch(() => {}),
     onChoice: (id, pick, by) => void appendControl(cwd, { kind: 'choice', id, pick, by }).catch(() => {}),
+    onStart: startRun,
   })
   const eventsPath = join(daemonDir(cwd), EVENTS_FILE)
   const tailer = new EventTailer(eventsPath, event => dashboard.push(event))
