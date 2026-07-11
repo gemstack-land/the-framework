@@ -122,6 +122,15 @@ export {
   LOGS_FILE,
   type LogEntry,
 } from './logs.js'
+export {
+  theFrameworkDir,
+  isActivated,
+  nodeProjectFs,
+  crawlRepoFiles,
+  nodeGitRunner,
+  type ProjectFs,
+  type GitRunner,
+} from './project.js'
 export { runCli, parseArgs, buildDeployTarget, workspaceSummary, autoSelectPreset, type CliIO, type CliOptions } from './cli.js'
 export {
   metaSelect,
