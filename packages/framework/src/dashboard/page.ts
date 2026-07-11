@@ -222,7 +222,7 @@ export function dashboardHtml(title: string, stoppable = false, choiceable = fal
       <button id="choice-accept">Accept<span class="kbd">Ctrl+Enter</span></button>
       <button id="choice-approve" hidden>&#10003; Approve<span class="kbd">Ctrl+Enter</span></button>
       <button id="choice-decline" hidden>&#10007; Decline</button>
-      <label id="autopilot-row"><input type="checkbox" id="autopilot-toggle" /> autopilot</label>
+      <label id="autopilot-row"><input type="checkbox" id="autopilot-toggle" /> Autopilot</label>
       <span id="choice-count"></span>
     </div>
   </section>
@@ -482,7 +482,7 @@ function selectedChoice() {
   return el ? el.value : (activeChoice ? activeChoice.recommended : null);
 }
 function renderCount() {
-  $('choice-count').textContent = '\\u25cf autopilot accepting in ' + choiceLeft + 's \\u2014 move the mouse to cancel';
+  $('choice-count').textContent = '\\u25cf Auto accept in ' + choiceLeft + 's \\u2014 move the mouse to cancel';
 }
 function startCountdown() {
   stopCountdown();
@@ -497,7 +497,7 @@ function startCountdown() {
 }
 function stopCountdown() { if (choiceTimer) { clearInterval(choiceTimer); choiceTimer = null; } }
 function cancelAutopilot() {
-  if (choiceTimer) { stopCountdown(); $('choice-count').textContent = 'autopilot canceled \\u2014 pick manually'; }
+  if (choiceTimer) { stopCountdown(); $('choice-count').textContent = 'Auto accept canceled \\u2014 pick manually'; }
 }
 function acceptChoice(by, pickOverride) {
   if (!activeChoice) return;
@@ -772,7 +772,7 @@ $('choice-approve').addEventListener('click', () => acceptChoice('user', 'approv
 $('choice-decline').addEventListener('click', () => acceptChoice('user', 'decline'));
 $('autopilot-toggle').addEventListener('change', ev => {
   localStorage.setItem('framework:autopilot', ev.target.checked ? '1' : '0');
-  if (ev.target.checked) startCountdown(); else { stopCountdown(); $('choice-count').textContent = 'autopilot off'; }
+  if (ev.target.checked) startCountdown(); else { stopCountdown(); $('choice-count').textContent = 'Auto accept off'; }
 });
 // Any mouse movement cancels the running autopilot countdown (cheap no-op once cleared).
 document.addEventListener('mousemove', cancelAutopilot);

@@ -156,10 +156,10 @@ test('autopilot countdown auto-accepts the recommended pick after 10s (#311)', (
   h.fire(CHOICE)
   // The panel opens and the countdown is armed at 10s.
   assert.equal(h.el('choice-panel').hidden, false)
-  assert.match(h.el('choice-count').textContent, /accepting in 10s/)
+  assert.match(h.el('choice-count').textContent, /Auto accept in 10s/)
   // Nine seconds in: still counting, not yet accepted.
   h.tick(9000)
-  assert.match(h.el('choice-count').textContent, /accepting in 1s/)
+  assert.match(h.el('choice-count').textContent, /Auto accept in 1s/)
   assert.equal(h.picks.length, 0)
   // The tenth tick fires the autopilot accept of the recommended option.
   h.tick(1000)
