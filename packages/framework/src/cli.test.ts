@@ -19,9 +19,12 @@ import {
   parseArgs,
   resolveDomainPreset,
   runCli,
+  runLogEntry,
+  runLogKind,
   workspaceSummary,
   type CliIO,
 } from './cli.js'
+import { readLogs } from './logs.js'
 import { FakeDriver } from './driver/index.js'
 import type { FrameworkEvent } from './events.js'
 
@@ -69,6 +72,41 @@ test('antiLazyPillOff is true for --vanilla or the-framework.yml antiLazyPill:fa
   assert.equal(antiLazyPillOff(parseArgs(['x']), {}), false)
   assert.equal(antiLazyPillOff(parseArgs(['--vanilla', 'x']), {}), true)
   assert.equal(antiLazyPillOff(parseArgs(['x']), { antiLazyPill: false }), true)
+})
+
+test('runLogKind maps the run path to a project-log kind (#379)', () => {
+  assert.equal(runLogKind({ directPrompt: false, research: false }), 'build')
+  assert.equal(runLogKind({ directPrompt: true, research: false }), 'prompt')
+  assert.equal(runLogKind({ directPrompt: false, research: true }), 'prompt')
+})
+
+test('runLogEntry maps the end event to a status and carries the session (#379)', () => {
+  const base = { at: '2026-07-11T00:00:00.000Z', kind: 'build' as const, title: 'a blog' }
+  assert.equal(runLogEntry({ ...base, end: { kind: 'end', ok: true } }).status, 'done')
+  assert.equal(runLogEntry({ ...base, end: { kind: 'end', ok: false, stopped: true } }).status, 'stopped')
+  assert.equal(runLogEntry({ ...base, end: { kind: 'end', ok: false } }).status, 'failed')
+  const withSession = runLogEntry({ ...base, end: { kind: 'end', ok: true }, sessionId: 's1', sessionLink: 'http://x/s1' })
+  assert.equal(withSession.sessionId, 's1')
+  assert.equal(withSession.sessionLink, 'http://x/s1')
+  // No session captured -> the fields are omitted, not set to undefined.
+  assert.equal('sessionId' in runLogEntry({ ...base, end: { kind: 'end', ok: true } }), false)
+})
+
+test('a finished run records itself in .the-framework/LOGS.md (#379)', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'framework-logs-'))
+  try {
+    const { io } = capture()
+    const code = await runCli(['prompt', 'review the auth flow', '--fake', '--no-dashboard', '--cwd', dir], io)
+    assert.equal(code, 0)
+    const logs = await readLogs(dir)
+    assert.equal(logs.length, 1)
+    assert.equal(logs[0]!.kind, 'prompt')
+    assert.equal(logs[0]!.title, 'review the auth flow')
+    assert.equal(logs[0]!.status, 'done')
+    assert.match(logs[0]!.at, /^\d{4}-\d{2}-\d{2}T/) // a real ISO timestamp
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
 })
 
 test('parseArgs reads the research subcommand with its optional what (#331)', () => {
