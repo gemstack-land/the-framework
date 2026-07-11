@@ -38,6 +38,7 @@ import { isWorkspaceEmpty } from './steps.js'
 import { loadFrameworkConfig, type FrameworkFileConfig } from './config.js'
 import { loadRepoMemory } from './memory.js'
 import { loadUserSystemPrompt, SYSTEM_PROMPT_FILE, type EcoOptions } from './system-prompt.js'
+import { checkForUpdate, formatUpdateStatus, nodeVersionFetcher } from './update-check.js'
 import { appendLog, type LogEntry } from './logs.js'
 import { preflight } from './preflight.js'
 import { RunStore } from './store/index.js'
@@ -1161,6 +1162,9 @@ async function ensureDaemonCmd(opts: CliOptions, io: CliIO): Promise<number> {
   io.out('  framework --help              All options')
   io.out('')
   io.out(`The Framework v${frameworkVersion()}`)
+  const status = await checkForUpdate(frameworkVersion(), nodeVersionFetcher())
+  const line = formatUpdateStatus(status)
+  if (line) io.out(line)
   return 0
 }
 

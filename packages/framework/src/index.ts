@@ -143,6 +143,15 @@ export {
   type ProjectRecord,
   type RegistryFs,
 } from './registry.js'
+export {
+  PACKAGE_NAME,
+  nodeVersionFetcher,
+  compareVersions,
+  checkForUpdate,
+  formatUpdateStatus,
+  type VersionFetcher,
+  type UpdateStatus,
+} from './update-check.js'
 export { runCli, parseArgs, buildDeployTarget, workspaceSummary, autoSelectPreset, type CliIO, type CliOptions } from './cli.js'
 export {
   metaSelect,
