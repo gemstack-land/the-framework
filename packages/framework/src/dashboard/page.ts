@@ -989,6 +989,11 @@ function submitAddProject(ev) {
   note.className = '';
   const path = $('add-project-path').value.trim();
   if (!path) { note.className = 'err'; note.textContent = 'enter a path first'; return; }
+  // A relative path would resolve against the daemon's cwd (opaque here); require an
+  // absolute path (POSIX '/...' or Windows 'C:\\...') so there is no ambiguity.
+  if (!/^(\\/|[A-Za-z]:[\\\\/])/.test(path)) {
+    note.className = 'err'; note.textContent = 'use an absolute path (e.g. /Users/you/my-repo)'; return;
+  }
   const directory = $('add-project-dir').checked;
   $('add-project-submit').disabled = true;
   note.textContent = 'installing\\u2026';

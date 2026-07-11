@@ -86,3 +86,15 @@ test('an empty path is rejected client-side without a POST', async () => {
   assert.equal(h.calls.filter(c => c.method === 'POST').length, before, 'no POST for an empty path')
   assert.match(h.query('#add-project-note')!.textContent ?? '', /enter a path/)
 })
+
+test('a relative path is rejected client-side with an absolute-path hint, no POST', async () => {
+  const h = boot(true)
+  await tick()
+  ;(h.query('#add-project') as unknown as { click: () => void }).click()
+  ;(h.query('#add-project-path') as HTMLInputElement).value = 'first-project'
+  const before = h.calls.filter(c => c.method === 'POST').length
+  h.query('#add-project-form')!.dispatchEvent(new h.window.Event('submit', { cancelable: true, bubbles: true }))
+  await tick()
+  assert.equal(h.calls.filter(c => c.method === 'POST').length, before, 'no POST for a relative path')
+  assert.match(h.query('#add-project-note')!.textContent ?? '', /absolute path/)
+})
