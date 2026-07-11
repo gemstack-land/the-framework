@@ -68,6 +68,28 @@ export function dashboardHtml(title: string, stoppable = false, choiceable = fal
   #runs .st-running { color: #6ea8fe; }
   #runs .empty { color: #5c657a; font-size: 12px; padding: 6px; cursor: default; }
   #runs .empty:hover { background: none; }
+  /* Projects sidebar (#314/#394): the leftmost nav — Overview, Projects, Queue.
+     Selecting a project re-points the project log (and, later, the main view). */
+  #projects-sidebar { flex: 0 0 220px; width: 220px; border-right: 1px solid #1c2230; padding: 14px 10px;
+    overflow-y: auto; max-height: calc(100vh - 57px); position: sticky; top: 57px; }
+  #projects-sidebar h2 { margin: 16px 0 8px; padding: 0 6px; font-size: 12px; text-transform: uppercase;
+    letter-spacing: .8px; color: #7b8496; font-weight: 600; }
+  #projects-sidebar h2:first-child { margin-top: 0; }
+  #projects li, #overview .ov-item, #queue li { padding: 7px 8px; border-bottom: 1px solid #161b26;
+    cursor: pointer; border-radius: 6px; }
+  #projects li:hover, #overview .ov-item:hover, #queue li:hover { background: #141a24; }
+  #projects li.active { background: #17212f; }
+  #projects .p-name, #overview .ov-name { color: #d7dce5; font-size: 13px; display: flex; align-items: center;
+    gap: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #projects .p-meta, #overview .ov-meta { color: #7b8496; font-size: 11px; margin-top: 2px; }
+  #projects .adot { font-size: 9px; }
+  #projects .on { color: #67d98f; }
+  #projects .off { color: #5c657a; }
+  #overview .ov-count { color: #b7c0d0; font-size: 12px; padding: 2px 6px 8px; }
+  #queue .q-text { color: #cdd4e0; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #queue .q-proj { color: #7b8496; font-size: 10px; text-transform: uppercase; letter-spacing: .5px; margin-top: 2px; }
+  #projects .empty, #overview .empty, #queue .empty { color: #5c657a; font-size: 12px; padding: 6px; cursor: default; }
+  #projects .empty:hover, #overview .empty:hover, #queue .empty:hover { background: none; }
   #viewing { display: none; align-items: center; gap: 8px; padding: 8px 20px; font-size: 12px;
     background: #16202e; border-bottom: 1px solid #24344a; color: #9db4d6; }
   #viewing.on { display: flex; }
@@ -224,6 +246,14 @@ export function dashboardHtml(title: string, stoppable = false, choiceable = fal
   <button id="stop" hidden>■ Stop</button>
 </header>
 <div id="layout">
+<aside id="projects-sidebar">
+  <h2>Overview</h2>
+  <div id="overview"><div class="empty">loading…</div></div>
+  <h2>Projects</h2>
+  <ul id="projects"><li class="empty">loading…</li></ul>
+  <h2>Queue</h2>
+  <ul id="queue"><li class="empty">loading…</li></ul>
+</aside>
 <aside id="sidebar">
   <h2>Runs</h2>
   <ul id="runs"><li class="empty">loading…</li></ul>
@@ -703,7 +733,114 @@ function renderProjectLog(logs) {
 }
 
 function loadLogs() {
-  fetch('api/logs').then(r => r.ok ? r.json() : { logs: [] }).then(d => renderProjectLog(d.logs || [])).catch(() => {});
+  const q = selectedProjectId ? '?project=' + encodeURIComponent(selectedProjectId) : '';
+  fetch('api/logs' + q).then(r => r.ok ? r.json() : { logs: [] }).then(d => renderProjectLog(d.logs || [])).catch(() => {});
+}
+
+// Projects sidebar (#314/#394): the registered projects come from /api/projects
+// (#392). Selecting one re-points the project log to ?project=<id>; the per-project
+// second sidebar + main view land in #395. All fields are path/agent-controlled, so
+// every value is escaped.
+let allProjects = [];
+let selectedProjectId = null;
+
+function ago(iso) {
+  if (!iso) return 'no activity yet';
+  const then = new Date(iso).getTime();
+  if (!then) return 'no activity yet';
+  const secs = Math.max(0, Math.round((Date.now() - then) / 1000));
+  if (secs < 60) return 'just now';
+  const mins = Math.round(secs / 60); if (mins < 60) return mins + 'm ago';
+  const hrs = Math.round(mins / 60); if (hrs < 24) return hrs + 'h ago';
+  return Math.round(hrs / 24) + 'd ago';
+}
+
+// Newest activity first; projects that never ran sort last.
+function byRecency(a, b) {
+  return (b.lastActivityAt ? Date.parse(b.lastActivityAt) : 0) - (a.lastActivityAt ? Date.parse(a.lastActivityAt) : 0);
+}
+
+function selectProject(id) {
+  selectedProjectId = selectedProjectId === id ? null : id;
+  markProjectActive();
+  loadLogs();
+}
+
+function markProjectActive() {
+  for (const li of $('projects').children) {
+    if (li.dataset) li.classList.toggle('active', li.dataset.id === selectedProjectId);
+  }
+}
+
+function renderProjects(projects) {
+  allProjects = projects.slice();
+  const ul = $('projects'); ul.innerHTML = '';
+  if (!projects.length) { ul.innerHTML = '<li class="empty">No projects yet.</li>'; return; }
+  for (const p of projects.slice().sort(byRecency)) {
+    const li = document.createElement('li');
+    li.dataset.id = p.id;
+    const dot = p.activated ? '<span class="adot on">\\u25cf</span>' : '<span class="adot off" title="marker missing">\\u25cb</span>';
+    li.innerHTML = '<div class="p-name">' + dot + '<span>' + esc(p.name || 'project') + '</span></div>' +
+      '<div class="p-meta">' + esc(ago(p.lastActivityAt)) + '</div>';
+    li.addEventListener('click', () => selectProject(p.id));
+    ul.appendChild(li);
+  }
+  markProjectActive();
+  renderOverview(projects);
+}
+
+function renderOverview(projects) {
+  const box = $('overview'); box.innerHTML = '';
+  if (!projects.length) { box.innerHTML = '<div class="empty">No projects yet.</div>'; return; }
+  const active = projects.filter(p => p.activated).length;
+  const count = document.createElement('div'); count.className = 'ov-count';
+  count.textContent = projects.length + ' project' + (projects.length === 1 ? '' : 's') + ' \\u00b7 ' + active + ' active';
+  box.appendChild(count);
+  for (const p of projects.slice().sort(byRecency).slice(0, 3)) {
+    const row = document.createElement('div'); row.className = 'ov-item'; row.dataset.id = p.id;
+    row.innerHTML = '<div class="ov-name"><span>' + esc(p.name || 'project') + '</span></div>' +
+      '<div class="ov-meta">' + esc(ago(p.lastActivityAt)) + '</div>';
+    row.addEventListener('click', () => selectProject(p.id));
+    box.appendChild(row);
+  }
+}
+
+function loadProjects() {
+  fetch('api/projects').then(r => r.ok ? r.json() : { projects: [] })
+    .then(d => { renderProjects(d.projects || []); loadQueue(); }).catch(() => {});
+}
+
+// Queue (#314): the open TODO items across all projects. Each project's TODO.md is
+// surfaced by /api/docs (#319); we pull the unchecked checklist lines and tag each
+// with its project, so the whole backlog is one glanceable list.
+function todoItems(content) {
+  const out = [];
+  for (const line of String(content).split('\\n')) {
+    const m = /^\\s*[-*]\\s+\\[ \\]\\s+(.+?)\\s*$/.exec(line);
+    if (m) out.push(m[1]);
+  }
+  return out;
+}
+
+function renderQueue(items) {
+  const ul = $('queue'); ul.innerHTML = '';
+  if (!items.length) { ul.innerHTML = '<li class="empty">Queue is empty.</li>'; return; }
+  for (const it of items.slice(0, 24)) {
+    const li = document.createElement('li'); li.dataset.id = it.projectId;
+    li.innerHTML = '<div class="q-text">' + esc(it.text) + '</div><div class="q-proj">' + esc(it.projectName) + '</div>';
+    li.addEventListener('click', () => selectProject(it.projectId));
+    ul.appendChild(li);
+  }
+}
+
+function loadQueue() {
+  const projects = allProjects.slice();
+  Promise.all(projects.map(p =>
+    fetch('api/docs?project=' + encodeURIComponent(p.id)).then(r => r.ok ? r.json() : { docs: [] })
+      .then(d => (d.docs || []).filter(doc => /todo/i.test(doc.name || ''))
+        .flatMap(doc => todoItems(doc.content).map(text => ({ projectId: p.id, projectName: p.name || 'project', text }))))
+      .catch(() => [])
+  )).then(perProject => renderQueue(perProject.flat())).catch(() => {});
 }
 
 // Document sidebar (#319): render the PLAN.md / TODO.md the agent writes at the
@@ -945,8 +1082,9 @@ src.onmessage = ev => {
   if (mode === 'live') render(fe);
   // A finished run has just been archived; refresh the list so it appears.
   if (fe.kind === 'end') setTimeout(loadRuns, 1500);
-  // A finished run also appends to .the-framework/LOGS.md (#379); refresh the log.
-  if (fe.kind === 'end') setTimeout(loadLogs, 1500);
+  // A finished run also appends to .the-framework/LOGS.md (#379); refresh the log
+  // and the projects sidebar so recency + the queue stay current.
+  if (fe.kind === 'end') { setTimeout(loadLogs, 1500); setTimeout(loadProjects, 1500); }
   // A plan/backlog is usually written right before a choice gate or at run end;
   // refresh the doc sidebar promptly so PLAN.md / TODO.md appear without waiting.
   if (fe.kind === 'choice' || fe.kind === 'end') setTimeout(loadDocs, 500);
@@ -958,6 +1096,8 @@ loadDocs();
 setInterval(loadDocs, 4000);
 loadLogs();
 setInterval(loadLogs, 10000);
+loadProjects();
+setInterval(loadProjects, 10000);
 `
 }
 
