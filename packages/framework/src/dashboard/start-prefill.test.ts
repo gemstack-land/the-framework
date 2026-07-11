@@ -4,6 +4,7 @@ import { JSDOM } from 'jsdom'
 import { dashboardHtml } from './page.js'
 import { renderResearchPrompt } from '../research-preset.js'
 import { renderReadabilityPrompt } from '../readability-preset.js'
+import { renderMaintainabilityPrompt } from '../maintainability-preset.js'
 
 // Presets only prefill the textarea (#353): the [Research] button must load the
 // full preset prompt for review and send NOTHING; Start posts the (possibly
@@ -71,6 +72,18 @@ test('[Readability] prefills its #360 prompt the same way', async () => {
   assert.equal(h.posts.length, 0) // prefill sends nothing
   assert.equal(h.box.value, renderReadabilityPrompt())
   assert.match(h.note(), /readability preset loaded/)
+  h.click('start-run')
+  await new Promise(resolve => setImmediate(resolve))
+  assert.equal(h.posts.length, 1)
+  assert.equal(h.posts[0]!.kind, 'prompt')
+})
+
+test('[Maintainability] prefills its #361 prompt the same way', async () => {
+  const h = boot()
+  h.click('start-maintainability')
+  assert.equal(h.posts.length, 0) // prefill sends nothing
+  assert.equal(h.box.value, renderMaintainabilityPrompt())
+  assert.match(h.note(), /maintainability preset loaded/)
   h.click('start-run')
   await new Promise(resolve => setImmediate(resolve))
   assert.equal(h.posts.length, 1)

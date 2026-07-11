@@ -381,6 +381,10 @@ test('/api/start passes the run kind through; a research start may omit the prom
     assert.match(page.body, /id="start-readability"/)
     assert.match(page.body, /const READABILITY_PROMPT = /)
     assert.match(page.body, /wirePresetButton\('start-readability'/)
+    // Same prefill contract for [Maintainability] (#361).
+    assert.match(page.body, /id="start-maintainability"/)
+    assert.match(page.body, /const MAINTAINABILITY_PROMPT = /)
+    assert.match(page.body, /wirePresetButton\('start-maintainability'/)
   } finally {
     await dash.close()
   }

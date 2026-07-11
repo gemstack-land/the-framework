@@ -1,6 +1,7 @@
 import { CLAUDE_CODE_SESSION_LINK } from '../events.js'
 import { renderResearchPrompt } from '../research-preset.js'
 import { renderReadabilityPrompt } from '../readability-preset.js'
+import { renderMaintainabilityPrompt } from '../maintainability-preset.js'
 
 /**
  * The single self-contained dashboard page: HTML + inline CSS + inline JS, no
@@ -212,6 +213,7 @@ export function dashboardHtml(title: string, stoppable = false, choiceable = fal
       <button id="start-run">&#9654; Start<span class="kbd">Ctrl+Enter</span></button>
       <button id="start-research" class="start-preset" title="Prefill the Research preset prompt (rates problem variability, picks deep-dives); review or edit it, then Start">&#128269; Research</button>
       <button id="start-readability" class="start-preset" title="Prefill the Readability preset prompt (refactor code to make it easier for humans to read); review or edit it, then Start">&#128200; Readability</button>
+      <button id="start-maintainability" class="start-preset" title="Prefill the Maintainability preset prompt (refactor code to make it easier to adapt for future changes); review or edit it, then Start">&#128200; Maintainability</button>
       <span id="start-note"></span>
     </div>
   </section>
@@ -277,6 +279,7 @@ const CHOICEABLE = ${choiceable ? 'true' : 'false'};
 const STARTABLE = ${startable ? 'true' : 'false'};
 const RESEARCH_PROMPT = ${JSON.stringify(renderResearchPrompt())};
 const READABILITY_PROMPT = ${JSON.stringify(renderReadabilityPrompt())};
+const MAINTAINABILITY_PROMPT = ${JSON.stringify(renderMaintainabilityPrompt())};
 const AUTO_ACCEPT_MS = 10000;
 const GENERIC_SESSION_LINK = ${JSON.stringify(CLAUDE_CODE_SESSION_LINK)};
 let ended = false;
@@ -763,6 +766,7 @@ function wirePresetButton(id, name, prompt) {
 }
 wirePresetButton('start-research', 'research', RESEARCH_PROMPT);
 wirePresetButton('start-readability', 'readability', READABILITY_PROMPT);
+wirePresetButton('start-maintainability', 'maintainability', MAINTAINABILITY_PROMPT);
 $('start-prompt').addEventListener('input', () => {
   // An emptied box is a fresh start: back to a normal build run.
   if (!$('start-prompt').value.trim() && startKind !== 'build') { startKind = 'build'; $('start-note').textContent = ''; }
