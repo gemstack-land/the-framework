@@ -802,6 +802,86 @@ test('a build turn that stops to showMultiSelect fires a checklist gate and resu
   assert.ok(prompts.some(p => /You paused to ask.*chose: routing/s.test(p)))
 })
 
+test('a build turn that stops for plan approval resumes on Approve (#358)', async () => {
+  const plan = { stack: 'Vike', narration: 'p', decisions: [{ choice: 'x', why: 'y' }], alternatives: [] }
+  const awaitBlock =
+    'The scope is large, so I wrote a plan.\n```await-confirmation\n' +
+    '{ "title": "Approve the orders plan?", "file": "PLAN_orders.agent.md" }\n' +
+    '```'
+  const driver = new FakeDriver({
+    respond: (prompt: string): string => {
+      if (/You are the architect/.test(prompt)) return '```json\n' + JSON.stringify(plan) + '\n```'
+      if (/Build this app end to end/.test(prompt)) return awaitBlock
+      if (/You paused to ask/.test(prompt)) return 'Built the plan out. Done.'
+      if (/production-grade checklist/.test(prompt)) return 'Reviewed.\n```json\n{ "blockers": [] }\n```'
+      return 'done'
+    },
+    sessionId: 'confirm358',
+  })
+
+  const events: FrameworkEvent[] = []
+  const prompts: string[] = []
+  const { result } = await runFramework({
+    intent: FAKE_INTENT,
+    driver,
+    cwd: '/tmp/ws',
+    signals: FAKE_SIGNALS,
+    onEvent: e => {
+      events.push(e)
+      if (e.kind === 'driver' && e.event.type === 'start') prompts.push(e.event.prompt)
+    },
+    requestChoice: async () => ({ picked: 'approve', by: 'user' }),
+  })
+
+  // The approval surfaced as a confirmation gate carrying the plan file.
+  const gate = events.find(e => e.kind === 'choice' && e.id === 'await-confirmation')
+  assert.ok(gate && gate.kind === 'choice')
+  assert.equal(gate.confirm, true)
+  assert.equal(gate.file, 'PLAN_orders.agent.md')
+  assert.equal(gate.recommended, 'approve')
+  assert.deepEqual(gate.options.map(o => o.id), ['approve', 'decline'])
+  // Approved: the driver was re-prompted to continue and the run finished.
+  assert.ok(events.some(e => e.kind === 'log' && /Continuing with your choice: Approve/.test(e.message)))
+  assert.ok(prompts.some(p => /You paused to ask.*Approve the orders plan.*chose: Approve/s.test(p)))
+  assert.equal(result.productionGrade, true)
+})
+
+test('a declined plan stops the run cleanly instead of building on (#358)', async () => {
+  const plan = { stack: 'Vike', narration: 'p', decisions: [{ choice: 'x', why: 'y' }], alternatives: [] }
+  const awaitBlock = 'Plan written.\n```await-confirmation\n{ "title": "Approve?", "file": "PLAN_x.agent.md" }\n```'
+  let resumed = false
+  const driver = new FakeDriver({
+    respond: (prompt: string): string => {
+      if (/You are the architect/.test(prompt)) return '```json\n' + JSON.stringify(plan) + '\n```'
+      if (/Build this app end to end/.test(prompt)) return awaitBlock
+      if (/You paused to ask/.test(prompt)) resumed = true
+      if (/production-grade checklist/.test(prompt)) resumed = true // a declined plan must not be reviewed either
+      return 'done'
+    },
+    sessionId: 'decline358',
+  })
+
+  const events: FrameworkEvent[] = []
+  await assert.rejects(
+    runFramework({
+      intent: FAKE_INTENT,
+      driver,
+      cwd: '/tmp/ws',
+      signals: FAKE_SIGNALS,
+      onEvent: e => events.push(e),
+      requestChoice: async req => ({ picked: req.confirm ? 'decline' : 'proceed', by: 'user' }),
+    }),
+  )
+  assert.equal(resumed, false)
+  assert.ok(events.some(e => e.kind === 'log' && /Plan declined, awaiting user instructions/.test(e.message)))
+  // A decline is a clean stop, not a failure.
+  const end = events.find(e => e.kind === 'end')
+  assert.ok(end && end.kind === 'end')
+  assert.equal(end.ok, false)
+  assert.equal(end.stopped, true)
+  assert.equal(end.detail, 'plan declined')
+})
+
 test('a re-architect turn that stops to ask fires a live gate instead of a stub plan (#356)', async () => {
   const first = {
     stack: 'Vike + Prisma',

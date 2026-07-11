@@ -3,7 +3,7 @@ import { join } from 'node:path'
 import type { DriverSession } from './driver/index.js'
 import type { ChoicePick, ChoiceRequest, FrameworkEvent } from './events.js'
 import { requestChoices, resolveAwaitGate } from './run.js'
-import { parseAwaitGate } from './turn-gate.js'
+import { PLAN_DECLINED_MESSAGE, isDeclinedConfirmation, parseAwaitGate } from './turn-gate.js'
 
 /**
  * The backlog loop (#323): once the main work settles, consume the agent's own
@@ -243,6 +243,11 @@ async function promptItem(
   let gate = parseAwaitGate(turn.text)
   for (let round = 0; round < MAX_AWAIT_ROUNDS && gate; round++) {
     const answer = await resolveAwaitGate(gate, round, deps)
+    if (isDeclinedConfirmation(gate, answer)) {
+      // A declined plan (#358) ends the item turn; the loop's stall check takes it from there.
+      deps.emit({ kind: 'log', message: PLAN_DECLINED_MESSAGE })
+      return
+    }
     deps.emit({ kind: 'log', message: `Continuing with your choice: ${answer}` })
     turn = await session.prompt(
       `You paused to ask: "${gate.title}". The user chose: ${answer}. Continue the backlog entry with that decision, and do not ask again unless a genuinely new choice comes up.`,

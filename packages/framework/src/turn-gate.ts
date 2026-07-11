@@ -13,7 +13,7 @@ import type { MultiSelectOption } from './run.js'
  */
 export const AWAIT_PROTOCOL = [
   '## Awaiting a choice',
-  'When these instructions tell you to showChoices() / showMultiSelect() and then AWAIT, do not decide for the user.',
+  'When these instructions tell you to showChoices() / showMultiSelect() / showMarkdown() and then AWAIT, do not decide for the user.',
   'End your turn with one fenced code block, then stop.',
   'For a single choice (showChoices, pick one), tag it `await-choices`:',
   '```await-choices',
@@ -22,6 +22,10 @@ export const AWAIT_PROTOCOL = [
   'For a multi-select (showMultiSelect, pick any number), tag it `await-multiselect` and set `default` on the entries that start checked:',
   '```await-multiselect',
   '{ "title": "<the prompt>", "options": [{ "label": "<option>", "detail": "<optional one-liner>", "default": true }] }',
+  '```',
+  'For a plan/document approval (showMarkdown of a file you wrote, then AWAIT), tag it `await-confirmation` and name the file:',
+  '```await-confirmation',
+  '{ "title": "<what to approve>", "file": "PLAN_<slug>.agent.md" }',
   '```',
   'The framework shows it, waits for the user, and re-prompts you with their answer. Do not continue past it on your own.',
 ].join('\n')
@@ -44,10 +48,31 @@ export interface ParsedMultiSelectGate {
   options: MultiSelectOption[]
 }
 
-/** A parsed await gate: either kind, discriminated by `kind`. */
+/** A plan/document approval an agent stopped to ask, parsed from an `await-confirmation` block (#358). */
+export interface ParsedConfirmationGate {
+  /** The question shown above the Approve / Decline buttons. */
+  title: string
+  /** The markdown file under approval (the doc sidebar renders it), when the agent named one. */
+  file?: string
+}
+
+/** A parsed await gate: any kind, discriminated by `kind`. */
 export type ParsedAwaitGate =
   | ({ kind: 'choices' } & ParsedChoicesGate)
   | ({ kind: 'multi' } & ParsedMultiSelectGate)
+  | ({ kind: 'confirm' } & ParsedConfirmationGate)
+
+/** The answer a resolved confirmation gate (#358) yields: the picked button's label. */
+export const CONFIRM_APPROVED = 'Approve'
+export const CONFIRM_DECLINED = 'Decline'
+
+/** The log line printed when a confirmation gate is declined (#358). */
+export const PLAN_DECLINED_MESSAGE = 'Plan declined, awaiting user instructions.'
+
+/** Whether a resolved gate was a declined confirmation (#358): the caller stops instead of re-prompting. */
+export function isDeclinedConfirmation(gate: ParsedAwaitGate, answer: string): boolean {
+  return gate.kind === 'confirm' && answer === CONFIRM_DECLINED
+}
 
 /** Find the body + start index of the last fenced block with `tag` in `text`. */
 function lastBlock(text: string, tag: string): { body: string; index: number } | undefined {
@@ -126,23 +151,60 @@ export function parseMultiSelectGate(text: string): ParsedMultiSelectGate | unde
 }
 
 /**
- * Parse whichever await gate a build turn ended on (#337 / #339). When both a
- * single- and multi-select block are present (an agent shouldn't emit both), the one
- * that appears later in the text wins. Returns `undefined` when the agent just
- * finished — the common case, so a normal build flows straight through.
+ * Parse a trailing `await-confirmation` block (#358): a plan/document approval,
+ * e.g. the #326 large-scope flow's PLAN file (`showMarkdown()` + AWAIT). No
+ * options — the gate is a fixed Approve / Decline. Same tolerance as the other
+ * parsers: blank-title fallback, malformed block ignored.
+ */
+export function parseConfirmationGate(text: string): ParsedConfirmationGate | undefined {
+  const block = lastBlock(text, 'await-confirmation')
+  if (!block) return undefined
+  let raw: unknown
+  try {
+    raw = JSON.parse(block.body)
+  } catch {
+    return undefined
+  }
+  if (typeof raw !== 'object' || raw === null) return undefined
+  const record = raw as Record<string, unknown>
+  const file = str(record.file)
+  return { title: str(record.title) || 'Approve this plan?', ...(file ? { file } : {}) }
+}
+
+/**
+ * Parse whichever await gate a build turn ended on (#337 / #339 / #358). When more
+ * than one block kind is present (an agent shouldn't emit several), the one that
+ * appears latest in the text wins; a malformed later block falls back to an earlier
+ * one. Returns `undefined` when the agent just finished — the common case, so a
+ * normal build flows straight through.
  */
 export function parseAwaitGate(text: string): ParsedAwaitGate | undefined {
-  const choicesAt = lastBlock(text, 'await-choices')?.index ?? -1
-  const multiAt = lastBlock(text, 'await-multiselect')?.index ?? -1
-  if (choicesAt < 0 && multiAt < 0) return undefined
-  if (multiAt > choicesAt) {
-    const multi = parseMultiSelectGate(text)
-    if (multi) return { kind: 'multi', ...multi }
-    const choices = parseChoicesGate(text)
-    return choices ? { kind: 'choices', ...choices } : undefined
+  const kinds: { at: number; parse: () => ParsedAwaitGate | undefined }[] = [
+    {
+      at: lastBlock(text, 'await-choices')?.index ?? -1,
+      parse: () => {
+        const g = parseChoicesGate(text)
+        return g ? { kind: 'choices', ...g } : undefined
+      },
+    },
+    {
+      at: lastBlock(text, 'await-multiselect')?.index ?? -1,
+      parse: () => {
+        const g = parseMultiSelectGate(text)
+        return g ? { kind: 'multi', ...g } : undefined
+      },
+    },
+    {
+      at: lastBlock(text, 'await-confirmation')?.index ?? -1,
+      parse: () => {
+        const g = parseConfirmationGate(text)
+        return g ? { kind: 'confirm', ...g } : undefined
+      },
+    },
+  ]
+  for (const kind of kinds.filter(k => k.at >= 0).sort((a, b) => b.at - a.at)) {
+    const gate = kind.parse()
+    if (gate) return gate
   }
-  const choices = parseChoicesGate(text)
-  if (choices) return { kind: 'choices', ...choices }
-  const multi = parseMultiSelectGate(text)
-  return multi ? { kind: 'multi', ...multi } : undefined
+  return undefined
 }

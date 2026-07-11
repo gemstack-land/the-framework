@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { parseAwaitGate, parseChoicesGate, parseMultiSelectGate } from './turn-gate.js'
+import { isDeclinedConfirmation, parseAwaitGate, parseChoicesGate, parseConfirmationGate, parseMultiSelectGate } from './turn-gate.js'
 
 const block = (json: string): string => 'Here are the options.\n```await-choices\n' + json + '\n```'
 const multiBlock = (json: string): string => 'Pick some.\n```await-multiselect\n' + json + '\n```'
+const confirmBlock = (json: string): string => 'Wrote the plan.\n```await-confirmation\n' + json + '\n```'
 
 test('parseChoicesGate returns undefined when the agent did not stop to ask (#337)', () => {
   assert.equal(parseChoicesGate('Built the whole app. Done.'), undefined)
@@ -67,6 +68,46 @@ test('parseMultiSelectGate parses a checklist and preserves default-checked entr
 test('parseMultiSelectGate returns undefined for no block / empty options (#339)', () => {
   assert.equal(parseMultiSelectGate('no block here'), undefined)
   assert.equal(parseMultiSelectGate(multiBlock('{ "options": [] }')), undefined)
+})
+
+test('parseConfirmationGate parses a plan approval with its file (#358)', () => {
+  const gate = parseConfirmationGate(confirmBlock('{ "title": "Approve the plan?", "file": "PLAN_orders.agent.md" }'))
+  assert.ok(gate)
+  assert.equal(gate.title, 'Approve the plan?')
+  assert.equal(gate.file, 'PLAN_orders.agent.md')
+})
+
+test('parseConfirmationGate defaults a blank title and omits a missing file (#358)', () => {
+  const gate = parseConfirmationGate(confirmBlock('{}'))
+  assert.ok(gate)
+  assert.equal(gate.title, 'Approve this plan?')
+  assert.equal(gate.file, undefined)
+})
+
+test('parseConfirmationGate ignores a malformed block rather than throwing (#358)', () => {
+  assert.equal(parseConfirmationGate(confirmBlock('{ not json')), undefined)
+  assert.equal(parseConfirmationGate(confirmBlock('"just a string"')), undefined)
+  assert.equal(parseConfirmationGate('no block here'), undefined)
+})
+
+test('parseAwaitGate discriminates a confirmation, later block wins (#358)', () => {
+  const c = parseAwaitGate(confirmBlock('{ "title": "Approve?", "file": "PLAN_x.agent.md" }'))
+  assert.equal(c?.kind, 'confirm')
+  const both = parseAwaitGate(block('{ "options": [{ "label": "x" }] }') + '\n' + confirmBlock('{ "title": "Approve?" }'))
+  assert.equal(both?.kind, 'confirm')
+  // A malformed later confirmation falls back to the earlier choices block.
+  const broken = parseAwaitGate(block('{ "options": [{ "label": "x" }] }') + '\n' + confirmBlock('{ not json'))
+  assert.equal(broken?.kind, 'choices')
+})
+
+test('isDeclinedConfirmation flags only a declined confirmation (#358)', () => {
+  const confirm = parseAwaitGate(confirmBlock('{ "title": "Approve?" }'))
+  assert.ok(confirm)
+  assert.equal(isDeclinedConfirmation(confirm, 'Decline'), true)
+  assert.equal(isDeclinedConfirmation(confirm, 'Approve'), false)
+  const choices = parseAwaitGate(block('{ "options": [{ "label": "Decline" }] }'))
+  assert.ok(choices)
+  assert.equal(isDeclinedConfirmation(choices, 'Decline'), false)
 })
 
 test('parseAwaitGate discriminates choices vs multiselect, later block wins (#339)', () => {

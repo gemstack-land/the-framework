@@ -64,7 +64,7 @@ const TURNS: FakeTurn[] = [ARCHITECT_TURN, BUILD_TURN, CHECKLIST_BLOCKER, IMPROV
 // single-select / #339 multi-select checklist) can be seen offline. The build turn ends
 // with an await block; the framework shows the gate, waits, then re-prompts (RESUME_TURN),
 // and the run continues to review as usual. Needs the dashboard on (so requestChoice is
-// wired); selected via FRAMEWORK_FAKE_AWAIT=choices|multiselect.
+// wired); selected via FRAMEWORK_FAKE_AWAIT=choices|multiselect|confirmation.
 const AWAIT_CHOICES_TURN: FakeTurn = {
   text:
     'I need one decision before wiring auth.\n```await-choices\n' +
@@ -79,11 +79,22 @@ const AWAIT_MULTISELECT_TURN: FakeTurn = {
   actions: ['Read', 'Grep'],
   usage: FAKE_USAGE,
 }
+const AWAIT_CONFIRMATION_TURN: FakeTurn = {
+  text:
+    'The scope is large, so I wrote a plan first.\n```await-confirmation\n' +
+    '{ "title": "Approve the plan for the orders app?", "file": "PLAN_fake-orders-app.agent.md" }\n```',
+  actions: ['Write'],
+  usage: FAKE_USAGE,
+}
 const RESUME_TURN: FakeTurn = { text: 'Applied your answer and finished building the orders app.', actions: ['Write', 'Bash'], usage: FAKE_USAGE }
 
 /** Scripted turns for the demo, optionally routed through a turn-boundary gate. */
 export function demoTurns(awaitMode: string | undefined): FakeTurn[] {
-  const askTurn = awaitMode === 'choices' ? AWAIT_CHOICES_TURN : awaitMode === 'multiselect' ? AWAIT_MULTISELECT_TURN : undefined
+  const askTurn =
+    awaitMode === 'choices' ? AWAIT_CHOICES_TURN
+    : awaitMode === 'multiselect' ? AWAIT_MULTISELECT_TURN
+    : awaitMode === 'confirmation' ? AWAIT_CONFIRMATION_TURN
+    : undefined
   if (!askTurn) return TURNS
   // The build asks (askTurn), the gate resolves, the framework re-prompts (RESUME_TURN),
   // then the normal review turns follow.

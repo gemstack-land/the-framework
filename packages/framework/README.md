@@ -236,7 +236,9 @@ A malformed file is a warning, never a failed run.
 
 Every prompt is framed with the built-in system prompt (#326, the successor of the
 validated "anti-lazy-pill" #297): unclear scope becomes a ranked `showChoices()`
-list, a large scope becomes a `PLAN_<session>.agent.md` to approve, a very large one
+list, a large scope becomes a `PLAN_<session>.agent.md` to approve (a live
+Approve/Decline gate on the dashboard; declining stops the run and hands control
+back to you), a very large one
 also spins off a `TODO_<session>.agent.md` backlog (consumed by the backlog loop),
 an alternatives pass rates problem "variability" before code is written, and edits
 to existing code stay minimal. The prompt is a template: `${{ ... }}` JS fragments

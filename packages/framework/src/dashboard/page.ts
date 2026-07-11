@@ -131,6 +131,16 @@ export function dashboardHtml(title: string, stoppable = false, choiceable = fal
   #choice-accept { font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; color: #0b0e14;
     background: #6ea8fe; border: 0; border-radius: 6px; padding: 6px 16px; }
   #choice-accept:hover { background: #8bbaff; }
+  /* Approve/Decline confirmation buttons (#358): shown instead of the option list. */
+  #choice-approve { font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; color: #0b0e14;
+    background: #4cc38a; border: 0; border-radius: 6px; padding: 6px 16px; }
+  #choice-approve:hover { background: #6fd6a5; }
+  #choice-approve[hidden], #choice-decline[hidden], #choice-accept[hidden] { display: none; }
+  #choice-decline { font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; color: #fff;
+    background: #e5484d; border: 0; border-radius: 6px; padding: 6px 16px; }
+  #choice-decline:hover { background: #f2555a; }
+  #choice-file { color: #8b93a3; font-size: 12px; margin: -4px 0 10px; }
+  #choice-file[hidden] { display: none; }
   #autopilot-row { display: flex; align-items: center; gap: 6px; color: #b7c0d0; font-size: 13px; cursor: pointer; }
   #choice-count { color: #6ea8fe; font-size: 12px; }
   .kbd { color: #26324a; background: #aebfe0; border-radius: 4px; padding: 0 5px; font-size: 10px;
@@ -206,9 +216,12 @@ export function dashboardHtml(title: string, stoppable = false, choiceable = fal
   <section id="choice-panel" hidden>
     <h2>Your call</h2>
     <div id="choice-title"></div>
+    <div id="choice-file" hidden></div>
     <ul id="choice-options"></ul>
     <div id="choice-actions">
       <button id="choice-accept">Accept<span class="kbd">Ctrl+Enter</span></button>
+      <button id="choice-approve" hidden>&#10003; Approve<span class="kbd">Ctrl+Enter</span></button>
+      <button id="choice-decline" hidden>&#10007; Decline</button>
       <label id="autopilot-row"><input type="checkbox" id="autopilot-toggle" /> autopilot</label>
       <span id="choice-count"></span>
     </div>
@@ -432,10 +445,19 @@ function showChoice(req) {
   activeChoice = req;
   $('choice-title').textContent = req.title || 'Your call';
   const ul = $('choice-options'); ul.innerHTML = '';
+  // A confirmation (#358) renders Approve/Decline buttons instead of the option list,
+  // pointing at the plan file the doc sidebar shows.
+  const confirm = !!req.confirm;
+  $('choice-accept').hidden = confirm;
+  $('choice-approve').hidden = !confirm;
+  $('choice-decline').hidden = !confirm;
+  const fileEl = $('choice-file');
+  fileEl.hidden = !(confirm && req.file);
+  fileEl.textContent = confirm && req.file ? 'Review ' + req.file + ' in the doc panel.' : '';
   // A multi-select (#332) renders checkboxes pre-checked per option default; a
   // single-select renders radios with the recommended option pre-selected (#304).
   const multi = !!req.multi;
-  for (const o of (req.options || [])) {
+  for (const o of (confirm ? [] : (req.options || []))) {
     const li = document.createElement('li');
     const type = multi ? 'checkbox' : 'radio';
     const nameAttr = multi ? '' : ' name="choice-opt"';
@@ -477,10 +499,12 @@ function stopCountdown() { if (choiceTimer) { clearInterval(choiceTimer); choice
 function cancelAutopilot() {
   if (choiceTimer) { stopCountdown(); $('choice-count').textContent = 'autopilot canceled \\u2014 pick manually'; }
 }
-function acceptChoice(by) {
+function acceptChoice(by, pickOverride) {
   if (!activeChoice) return;
   const id = activeChoice.id;
-  const pick = selectedChoice();
+  // The Decline button (#358) posts its pick directly; everything else reads the form
+  // (a confirmation has no inputs, so selectedChoice falls back to recommended = approve).
+  const pick = pickOverride !== undefined ? pickOverride : selectedChoice();
   stopCountdown();
   activeChoice = null;
   $('choice-panel').hidden = true;
@@ -744,6 +768,8 @@ $('start-prompt').addEventListener('keydown', ev => {
 $('stop').addEventListener('click', stopRun);
 $('back-live').addEventListener('click', showLive);
 $('choice-accept').addEventListener('click', () => acceptChoice('user'));
+$('choice-approve').addEventListener('click', () => acceptChoice('user', 'approve'));
+$('choice-decline').addEventListener('click', () => acceptChoice('user', 'decline'));
 $('autopilot-toggle').addEventListener('change', ev => {
   localStorage.setItem('framework:autopilot', ev.target.checked ? '1' : '0');
   if (ev.target.checked) startCountdown(); else { stopCountdown(); $('choice-count').textContent = 'autopilot off'; }

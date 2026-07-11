@@ -2,7 +2,7 @@ import type { Driver, DriverEvent, DriverSession } from './driver/index.js'
 import { hasSessionIdPlaceholder, resolveSessionLink, type ChoicePick, type ChoiceRequest, type FrameworkEvent } from './events.js'
 import { resolveAwaitGate } from './run.js'
 import { renderSystemPrompt, systemPromptBlock, type TfContext } from './system-prompt.js'
-import { AWAIT_PROTOCOL, parseAwaitGate } from './turn-gate.js'
+import { AWAIT_PROTOCOL, PLAN_DECLINED_MESSAGE, isDeclinedConfirmation, parseAwaitGate } from './turn-gate.js'
 import { UsageMeter } from './usage.js'
 
 /**
@@ -129,6 +129,12 @@ export async function runPrompt(opts: RunPromptOptions): Promise<RunPromptResult
     let gate = parseAwaitGate(turn.text)
     for (let round = 0; round < MAX_AWAIT_ROUNDS && gate; round++) {
       const answer = await resolveAwaitGate(gate, round, { requestChoice: opts.requestChoice, emit, signal: runSignal })
+      if (isDeclinedConfirmation(gate, answer)) {
+        // A declined plan (#358) ends the run cleanly: the user takes over with fresh instructions.
+        emit({ kind: 'log', message: PLAN_DECLINED_MESSAGE })
+        gate = undefined
+        break
+      }
       emit({ kind: 'log', message: `Continuing with your choice: ${answer}` })
       turn = await session.prompt(
         `You paused to ask: "${gate.title}". The user chose: ${answer}. Continue with that decision, and do not ask again unless a genuinely new choice comes up.`,

@@ -38,7 +38,7 @@ import { snapshotWorkspace } from './sandbox.js'
 import type { Driver, DriverEvent, DriverSession } from './driver/index.js'
 import { memoryFraming, type LoadedMemory } from './memory.js'
 import { systemPromptBlock, type TfContext } from './system-prompt.js'
-import { AWAIT_PROTOCOL, parseAwaitGate, type ParsedAwaitGate } from './turn-gate.js'
+import { AWAIT_PROTOCOL, CONFIRM_APPROVED, CONFIRM_DECLINED, PLAN_DECLINED_MESSAGE, isDeclinedConfirmation, parseAwaitGate, type ParsedAwaitGate } from './turn-gate.js'
 // Value import from todo-loop.js is a benign cycle: todo-loop.js only calls
 // run.js's hoisted function declarations (requestChoices / resolveAwaitGate).
 import { runTodoLoop, type TodoLoopResult } from './todo-loop.js'
@@ -385,7 +385,14 @@ export async function runFramework(opts: RunFrameworkOptions): Promise<RunFramew
   // usage. Everything downstream aborts on `runSignal`; only the budget path (or a
   // caller abort) trips it. With no caller signal this is just the budget signal.
   const budgetController = new AbortController()
-  const runSignal = opts.signal ? AbortSignal.any([opts.signal, budgetController.signal]) : budgetController.signal
+  // A declined plan (#358) also stops the run cleanly, like the budget cap: nothing
+  // downstream should review or improve work the user just declined.
+  const declineController = new AbortController()
+  const runSignal = AbortSignal.any([
+    ...(opts.signal ? [opts.signal] : []),
+    budgetController.signal,
+    declineController.signal,
+  ])
 
   // Watch the black box for its real session id (the {type:'result'} event) and
   // surface it as `session-update` once known — that is the honest handle a UI
@@ -494,11 +501,17 @@ export async function runFramework(opts: RunFrameworkOptions): Promise<RunFramew
     ...(opts.requestChoice ? { requestChoice: opts.requestChoice } : {}),
     emit,
     signal: runSignal,
+    onDecline: () => declineController.abort(new Error('[framework] plan declined')),
   }
   const architectAwait: { resolveAwait?: AwaitResolver } = opts.requestChoice
     ? {
         resolveAwait: async (gate, round) => {
           const answer = await resolveAwaitGate(gate, round, gateDeps)
+          if (isDeclinedConfirmation(gate, answer)) {
+            emit({ kind: 'log', message: PLAN_DECLINED_MESSAGE })
+            gateDeps.onDecline()
+            return answer
+          }
           emit({ kind: 'log', message: `Continuing with your choice: ${answer}` })
           return answer
         },
@@ -564,8 +577,15 @@ export async function runFramework(opts: RunFrameworkOptions): Promise<RunFramew
     // is a clean stop, not a failure — mark it so surfaces show "stopped". Budget is
     // its own signal, so it trips when the caller's signal did not.
     const budgetStopped = budgetController.signal.aborted && opts.signal?.aborted !== true
-    const stopped = opts.signal?.aborted === true || budgetController.signal.aborted
-    const detail = budgetStopped ? `budget reached ($${opts.budgetUsd})` : err instanceof Error ? err.message : String(err)
+    const declined = declineController.signal.aborted
+    const stopped = opts.signal?.aborted === true || budgetController.signal.aborted || declined
+    const detail = declined
+      ? 'plan declined'
+      : budgetStopped
+        ? `budget reached ($${opts.budgetUsd})`
+        : err instanceof Error
+          ? err.message
+          : String(err)
     emit({ kind: 'end', ok: false, ...(stopped ? { stopped: true } : {}), detail })
     throw err
   } finally {
@@ -652,7 +672,8 @@ const MAX_AWAIT_ROUNDS = 5
 /**
  * The agent-authored await gate (#337 / #339): the turn-boundary counterpart to the
  * framework-emitted plan-approval gate (#304). When a build turn ends by asking the
- * user — an `await-choices` (pick one) or `await-multiselect` (pick any) block per
+ * user — an `await-choices` (pick one), `await-multiselect` (pick any), or
+ * `await-confirmation` (approve/decline a plan, #358) block per
  * {@link AWAIT_PROTOCOL}, e.g. the #326 alternatives flow or the [Research] preset (#331)
  * — rather than finishing, show it, wait for the answer, and re-prompt the driver to
  * continue from that decision. A no-op unless a {@link RunFrameworkOptions.requestChoice}
@@ -668,6 +689,8 @@ function agentAwaitGate(
     emit: (event: FrameworkEvent) => void
     /** The run signal; a gate parked for an answer unblocks (default) if the run aborts. */
     signal?: AbortSignal
+    /** Called when a confirmation gate is declined (#358): the run stops instead of building on. */
+    onDecline?: () => void
   },
 ): (ctx: BuildContext) => Promise<SupervisorRun> {
   return async ctx => {
@@ -679,6 +702,13 @@ function agentAwaitGate(
       const gate = parseAwaitGate(run.text)
       if (!gate) return run // the agent finished instead of asking — the common case
       const answer = await resolveAwaitGate(gate, round, deps)
+      if (isDeclinedConfirmation(gate, answer)) {
+        // A declined plan (#358) ends the build here rather than re-prompting: the
+        // user takes over with fresh instructions (e.g. a new run from the dashboard).
+        emit({ kind: 'log', message: PLAN_DECLINED_MESSAGE })
+        deps.onDecline?.()
+        return run
+      }
       emit({ kind: 'log', message: `Continuing with your choice: ${answer}` })
       run = await continueAfterChoice(session, ctx, gate.title, answer)
     }
@@ -707,8 +737,27 @@ export async function resolveAwaitGate(
 ): Promise<string> {
   const signalOpt = deps.signal ? { signal: deps.signal } : {}
   const choiceOpt = deps.requestChoice ? { requestChoice: deps.requestChoice } : {}
-  const baseId = gate.kind === 'multi' ? 'await-multiselect' : 'await-choices'
+  const baseId = gate.kind === 'multi' ? 'await-multiselect' : gate.kind === 'confirm' ? 'await-confirmation' : 'await-choices'
   const id = round === 0 ? baseId : `${baseId}-${round}`
+  if (gate.kind === 'confirm') {
+    // The plan-approval confirmation (#358): a fixed Approve / Decline pair, recommended
+    // Approve so a headless (or aborted) run proceeds — the same semantics as the other gates.
+    const picked = await requestChoices({
+      id,
+      title: gate.title,
+      options: [
+        { id: 'approve', label: CONFIRM_APPROVED },
+        { id: 'decline', label: CONFIRM_DECLINED },
+      ],
+      recommended: 'approve',
+      confirm: true,
+      ...(gate.file ? { file: gate.file } : {}),
+      emit: deps.emit,
+      ...choiceOpt,
+      ...signalOpt,
+    })
+    return picked === 'decline' ? CONFIRM_DECLINED : CONFIRM_APPROVED
+  }
   if (gate.kind === 'multi') {
     const picked = await requestMultiSelect({ id, title: gate.title, options: gate.options, emit: deps.emit, ...choiceOpt, ...signalOpt })
     const labels = gate.options.filter(o => picked.includes(o.id)).map(o => o.label)
@@ -773,6 +822,10 @@ export interface ChoicesDeps {
   options: readonly ChoicesOption[]
   /** The option id pre-selected (autopilot auto-accepts it) and used as the headless/abort fallback. Default = the first option. */
   recommended?: string
+  /** Render as an Approve/Decline confirmation (#358): buttons instead of an option list. */
+  confirm?: boolean
+  /** The markdown file under approval; the dashboard's doc sidebar renders it. */
+  file?: string
   /** The interactive handler (the CLI wires it to the dashboard); omit for a headless run. */
   requestChoice?: (req: ChoiceRequest) => Promise<ChoicePick>
   /** Emit the `choice` / `choice-resolved` events onto the run stream. */
@@ -797,6 +850,8 @@ export async function requestChoices(deps: ChoicesDeps): Promise<string> {
     title: deps.title,
     options: options.map(o => ({ id: o.id, label: o.label, ...(o.detail ? { detail: o.detail } : {}) })),
     ...(recommended ? { recommended } : {}),
+    ...(deps.confirm ? { confirm: true } : {}),
+    ...(deps.file ? { file: deps.file } : {}),
   }
   emit({ kind: 'choice', ...req })
 
