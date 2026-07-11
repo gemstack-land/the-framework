@@ -174,6 +174,15 @@ export {
   type RunDaemonOptions,
 } from './daemon.js'
 export {
+  appendControl,
+  resetControl,
+  watchControl,
+  controlPath,
+  CONTROL_FILE,
+  type ControlEntry,
+  type ControlWatcher,
+} from './control.js'
+export {
   fakeDriver,
   FAKE_INTENT,
   FAKE_SIGNALS,

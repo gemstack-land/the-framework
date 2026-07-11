@@ -1,10 +1,12 @@
 import { spawn } from 'node:child_process'
 import { watch, type FSWatcher } from 'node:fs'
-import { open, readFile, writeFile, rm } from 'node:fs/promises'
+import { mkdir, readFile, writeFile, rm } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { FrameworkEvent } from './events.js'
 import { EVENTS_FILE, FRAMEWORK_DIR } from './store/index.js'
 import { startDashboard, type Dashboard } from './dashboard/index.js'
+import { appendControl } from './control.js'
+import { JsonlTailer } from './jsonl-tail.js'
 
 /**
  * The persistent background dashboard (#302). Today the dashboard dies with the
@@ -13,7 +15,8 @@ import { startDashboard, type Dashboard } from './dashboard/index.js'
  * appends its events to `.framework/events.jsonl` (unchanged), and the daemon
  * *tails* that file, pushing each new event to connected browsers. No run<->daemon
  * IPC — the file is the seam, matching "the dashboard is a projection of the event
- * stream". MVP: one project = the workspace `cwd`; multi-project is deferred (#299).
+ * stream". Steering goes the other way through `.framework/control.jsonl` (#344).
+ * MVP: one project = the workspace `cwd`; multi-project is deferred (#299).
  */
 
 /** The daemon's liveness record under `.framework/`. */
@@ -169,61 +172,11 @@ export async function stopDaemon(cwd: string): Promise<boolean> {
 }
 
 /**
- * Tails an append-only JSONL event log, calling `onEvent` for each complete line
- * as it is written. Reads only the bytes appended since the last {@link pull},
- * buffering a torn trailing line until its newline arrives. A file that shrinks
- * (a fresh run truncated the log) resets to the start so the new run is picked up.
+ * Tails the append-only `.framework/events.jsonl` run log. The generic tailing
+ * lives in {@link JsonlTailer}; this keeps the event-typed name the daemon (and
+ * public API) always had.
  */
-export class EventTailer {
-  private offset = 0
-  private partial = ''
-  private lastMtimeMs = 0
-
-  constructor(
-    private readonly path: string,
-    private readonly onEvent: (event: FrameworkEvent) => void,
-  ) {}
-
-  /** Read and dispatch any events appended since the previous call. */
-  async pull(): Promise<void> {
-    let fd
-    try {
-      fd = await open(this.path, 'r')
-    } catch {
-      return // not created yet (no run has started)
-    }
-    try {
-      const { size, mtimeMs } = await fd.stat()
-      // A fresh run truncates the log in place (same inode). Detect it two ways: the
-      // file shrank below what we consumed, or it was rewritten to the same length
-      // (size unchanged but mtime advanced). Either way, re-read from the top.
-      const rewritten = size === this.offset && this.offset > 0 && mtimeMs > this.lastMtimeMs
-      if (size < this.offset || rewritten) {
-        this.offset = 0
-        this.partial = ''
-      }
-      this.lastMtimeMs = mtimeMs
-      if (size === this.offset) return
-      const buf = Buffer.alloc(size - this.offset)
-      await fd.read(buf, 0, buf.length, this.offset)
-      this.offset = size
-      this.partial += buf.toString('utf8')
-      const lines = this.partial.split('\n')
-      this.partial = lines.pop() ?? '' // trailing fragment with no newline yet
-      for (const line of lines) {
-        const trimmed = line.trim()
-        if (!trimmed) continue
-        try {
-          this.onEvent(JSON.parse(trimmed) as FrameworkEvent)
-        } catch {
-          // a torn/half-written line — skip it; the store never rewrites history
-        }
-      }
-    } finally {
-      await fd.close()
-    }
-  }
-}
+export class EventTailer extends JsonlTailer<FrameworkEvent> {}
 
 /** Options for {@link runDaemon}. */
 export interface RunDaemonOptions {
@@ -244,34 +197,57 @@ export interface RunDaemonOptions {
  */
 export async function runDaemon(cwd: string, opts: RunDaemonOptions = {}): Promise<void> {
   const port = opts.port ?? DEFAULT_DAEMON_PORT
-  const dashboard: Dashboard = await startDashboard({ port, cwd })
+  // Steering (#344): the daemon owns no run, so its Stop button and choice picks
+  // append to `.framework/control.jsonl`; the live run tails that file. Appends
+  // are best-effort — a full disk must not take the dashboard down with it.
+  // The state file, the event/control logs, and the fs.watch all live under
+  // `.framework/` — create it up front so the daemon works as the very first
+  // command in a fresh workspace (before any run made the dir).
+  await mkdir(daemonDir(cwd), { recursive: true })
+  const dashboard: Dashboard = await startDashboard({
+    port,
+    cwd,
+    onStop: () => void appendControl(cwd, { kind: 'stop' }).catch(() => {}),
+    onChoice: (id, pick, by) => void appendControl(cwd, { kind: 'choice', id, pick, by }).catch(() => {}),
+  })
   const eventsPath = join(daemonDir(cwd), EVENTS_FILE)
   const tailer = new EventTailer(eventsPath, event => dashboard.push(event))
 
-  // Seed from whatever is already logged, then keep up with appends.
-  await tailer.pull()
-  let pulling = false
-  const pump = async (): Promise<void> => {
-    if (pulling) return
-    pulling = true
-    try {
-      await tailer.pull()
-    } finally {
-      pulling = false
-    }
-  }
-
   let watcher: FSWatcher | undefined
+  let poll: NodeJS.Timeout | undefined
   try {
-    watcher = watch(daemonDir(cwd), () => void pump())
-  } catch {
-    // dir may not be watchable everywhere; the poll backstop still covers it
-  }
-  const poll = setInterval(() => void pump(), opts.pollMs ?? 1000)
+    // Seed from whatever is already logged, then keep up with appends.
+    await tailer.pull()
+    let pulling = false
+    const pump = async (): Promise<void> => {
+      if (pulling) return
+      pulling = true
+      try {
+        await tailer.pull()
+      } finally {
+        pulling = false
+      }
+    }
 
-  const actualPort = Number(new URL(dashboard.url).port) || port
-  const state: DaemonState = { pid: process.pid, port: actualPort, url: dashboard.url, startedAt: new Date().toISOString() }
-  await writeFile(daemonStatePath(cwd), JSON.stringify(state, null, 2))
+    try {
+      watcher = watch(daemonDir(cwd), () => void pump())
+    } catch {
+      // dir may not be watchable everywhere; the poll backstop still covers it
+    }
+    poll = setInterval(() => void pump(), opts.pollMs ?? 1000)
+
+    const actualPort = Number(new URL(dashboard.url).port) || port
+    const state: DaemonState = { pid: process.pid, port: actualPort, url: dashboard.url, startedAt: new Date().toISOString() }
+    await writeFile(daemonStatePath(cwd), JSON.stringify(state, null, 2))
+  } catch (err) {
+    // Startup failed after the port was bound. Tear everything down, or the live
+    // server + interval keep the event loop alive: a zombie daemon squatting the
+    // port with no state file, which also wedges every later `framework` start.
+    clearInterval(poll)
+    watcher?.close()
+    await dashboard.close()
+    throw err
+  }
 
   await waitForShutdown(opts.signal)
 

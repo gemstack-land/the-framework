@@ -1,8 +1,11 @@
 import { strict as assert } from 'node:assert'
 import { test } from 'node:test'
-import { mkdtemp, writeFile, rm } from 'node:fs/promises'
+import { mkdtemp, mkdir, readFile, writeFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { appendControl } from './control.js'
+import { daemonStatePath } from './daemon.js'
+import { EVENTS_FILE, FRAMEWORK_DIR } from './store/index.js'
 import {
   activeModes,
   autoSelectPreset,
@@ -345,4 +348,60 @@ test('runCli --fake --no-dashboard runs the whole flow offline to production-gra
   assert.match(text, /checklist pass 1/)
   assert.match(text, /production-grade/)
   assert.match(text, /deploy: SSR/)
+})
+
+test('a live daemon steers a dashboard-less run through its gates via control.jsonl (#344)', async () => {
+  const cwd = await mkdtemp(join(tmpdir(), 'framework-ws-'))
+  const prevAwait = process.env.FRAMEWORK_FAKE_AWAIT
+  process.env.FRAMEWORK_FAKE_AWAIT = 'choices' // the fake build stops to ask (#341)
+  try {
+    // Fake a live daemon for this workspace: our own pid always reads as alive.
+    await mkdir(join(cwd, FRAMEWORK_DIR), { recursive: true })
+    await writeFile(
+      daemonStatePath(cwd),
+      JSON.stringify({ pid: process.pid, port: 1, url: 'http://127.0.0.1:1', startedAt: '' }),
+    )
+
+    const { io, out } = capture()
+    let settled = false
+    const done = runCli(['--fake', '--no-dashboard', '--cwd', cwd], io).finally(() => (settled = true))
+
+    // Play the daemon: tail events.jsonl for parked gates (plan-approval, then the
+    // build's await-choices) and answer each with its recommended pick, exactly as
+    // the daemon page's Accept button would.
+    const answered = new Set<string>()
+    const eventsPath = join(cwd, FRAMEWORK_DIR, EVENTS_FILE)
+    for (let i = 0; i < 500 && !settled; i++) {
+      const lines = await readFile(eventsPath, 'utf8').then(s => s.split('\n').filter(Boolean), () => [])
+      for (const l of lines) {
+        let e: { kind?: string; id?: string; recommended?: string; options?: { id: string }[] }
+        try {
+          e = JSON.parse(l)
+        } catch {
+          continue
+        }
+        if (e.kind !== 'choice' || !e.id || answered.has(e.id)) continue
+        answered.add(e.id)
+        await appendControl(cwd, { kind: 'choice', id: e.id, pick: e.recommended ?? e.options?.[0]?.id ?? '', by: 'user' })
+      }
+      await new Promise(r => setTimeout(r, 20))
+    }
+
+    assert.equal(await done, 0)
+    assert.ok(answered.has('plan-approval'), 'the plan gate parked and was steered')
+    assert.ok(answered.has('await-choices'), 'the build await gate parked and was steered')
+    assert.match(out.join('\n'), /production-grade/)
+    // Both resolutions were attributed to the steering user, not a headless auto-accept.
+    const resolved = (await readFile(eventsPath, 'utf8'))
+      .split('\n')
+      .filter(Boolean)
+      .map(l => JSON.parse(l))
+      .filter((e: { kind: string }) => e.kind === 'choice-resolved')
+    assert.equal(resolved.length, 2)
+    assert.ok(resolved.every((e: { by: string }) => e.by === 'user'))
+  } finally {
+    if (prevAwait === undefined) delete process.env.FRAMEWORK_FAKE_AWAIT
+    else process.env.FRAMEWORK_FAKE_AWAIT = prevAwait
+    await rm(cwd, { recursive: true, force: true })
+  }
 })

@@ -38,7 +38,8 @@ import { loadRepoMemory } from './memory.js'
 import { loadUserSystemPrompt, SYSTEM_PROMPT_FILE } from './system-prompt.js'
 import { preflight } from './preflight.js'
 import { RunStore } from './store/index.js'
-import { ensureDaemon, runDaemon, stopDaemon, DEFAULT_DAEMON_PORT } from './daemon.js'
+import { daemonStatus, ensureDaemon, runDaemon, stopDaemon, DEFAULT_DAEMON_PORT } from './daemon.js'
+import { resetControl, watchControl, type ControlWatcher } from './control.js'
 
 /**
  * The default link shown for a live run: the generic Claude Code entry point,
@@ -667,6 +668,31 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
     }
   }
 
+  // The persistent daemon dashboard steers this run through .framework/control.jsonl
+  // (#344): its Stop button and choice picks append entries, we tail the file and
+  // abort / resolve the parked gate. Reset first so a previous run's picks can never
+  // fire into this one (gate ids repeat across runs). Only wired when a daemon is
+  // live for this workspace — without one, headless behavior is byte-identical.
+  let control: ControlWatcher | undefined
+  if (opts.persist && (await daemonStatus(cwd))) {
+    try {
+      await resetControl(cwd)
+      control = watchControl(cwd, entry => {
+        if (entry.kind === 'stop') {
+          controller.abort()
+          return
+        }
+        const resolve = pendingChoices.get(entry.id)
+        if (resolve) {
+          pendingChoices.delete(entry.id)
+          resolve({ picked: entry.pick, by: entry.by })
+        }
+      })
+    } catch (err) {
+      io.err(`control channel unavailable (${err instanceof Error ? err.message : String(err)}); daemon steering disabled`)
+    }
+  }
+
   // Publish the run to a relay (#230) so teammates can watch it live. Best-effort:
   // a relay that is down never fails the run (relayPublisher swallows POST errors).
   let publisher: RelayPublisher | undefined
@@ -785,9 +811,10 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
     onEvent,
     signals,
     signal: controller.signal,
-    // Pause the plan-approval gate on the dashboard when one is live to accept the
-    // pick; without a dashboard the gate auto-accepts the recommended plan (#304).
-    ...(dashboard
+    // Pause the choice gates when someone can answer: this run's own dashboard, or
+    // the workspace daemon's via the control channel (#344). With neither, the gates
+    // auto-accept the recommended option as before (#304).
+    ...(dashboard || control
       ? {
           requestChoice: (req: ChoiceRequest) =>
             new Promise<ChoicePick>(resolve => pendingChoices.set(req.id, resolve)),
@@ -856,6 +883,7 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
     return 1
   } finally {
     clearInterrupt()
+    control?.close()
     // Make sure every event (including the final `end`) reached the relay before exit.
     if (publisher) await publisher.flush()
   }

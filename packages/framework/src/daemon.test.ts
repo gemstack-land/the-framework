@@ -14,6 +14,7 @@ import {
   daemonStatePath,
 } from './daemon.js'
 import { EVENTS_FILE, FRAMEWORK_DIR } from './store/index.js'
+import { controlPath } from './control.js'
 
 const logEvent = (message: string): FrameworkEvent => ({ kind: 'log', message })
 const line = (message: string): string => JSON.stringify(logEvent(message)) + '\n'
@@ -150,6 +151,70 @@ test('runDaemon serves the dashboard, records its state, and cleans up on shutdo
     ac.abort()
     await done
     assert.equal(await readDaemonState(cwd), undefined) // state file removed on exit
+  } finally {
+    ac.abort()
+    await rm(cwd, { recursive: true, force: true })
+  }
+})
+
+test('runDaemon comes up on a fresh workspace with no .framework yet', async () => {
+  const cwd = await mkdtemp(join(tmpdir(), 'framework-daemon-')) // deliberately no mkdir
+  const ac = new AbortController()
+  try {
+    const done = runDaemon(cwd, { port: 0, pollMs: 50, signal: ac.signal })
+    let state = await readDaemonState(cwd)
+    for (let i = 0; i < 100 && !state; i++) {
+      await new Promise(r => setTimeout(r, 20))
+      state = await readDaemonState(cwd)
+    }
+    assert.ok(state, 'the daemon created .framework/ itself and wrote its state file')
+    assert.equal((await fetch(state!.url)).status, 200)
+    ac.abort()
+    await done
+  } finally {
+    ac.abort()
+    await rm(cwd, { recursive: true, force: true })
+  }
+})
+
+test('runDaemon steers through the control log: /stop and /choice POSTs append entries (#344)', async () => {
+  const cwd = await tmpWorkspace()
+  const ac = new AbortController()
+  try {
+    const done = runDaemon(cwd, { port: 0, pollMs: 50, signal: ac.signal })
+    let state = await readDaemonState(cwd)
+    for (let i = 0; i < 100 && !state; i++) {
+      await new Promise(r => setTimeout(r, 20))
+      state = await readDaemonState(cwd)
+    }
+    assert.ok(state, 'daemon wrote its state file')
+
+    // The daemon page has steering wired: the Stop button shows and /choice accepts.
+    const stop = await fetch(`${state!.url}/stop`, { method: 'POST' })
+    assert.equal(stop.status, 202)
+    const choice = await fetch(`${state!.url}/choice`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ id: 'plan-approval', pick: 'alt:0', by: 'user' }),
+    })
+    assert.equal(choice.status, 202)
+
+    // Both landed in the control log (appends are async fire-and-forget: poll).
+    let lines: string[] = []
+    for (let i = 0; i < 100 && lines.length < 2; i++) {
+      await new Promise(r => setTimeout(r, 20))
+      lines = await readFile(controlPath(cwd), 'utf8').then(
+        s => s.split('\n').filter(Boolean),
+        () => [],
+      )
+    }
+    assert.deepEqual(lines.map(l => JSON.parse(l)), [
+      { kind: 'stop' },
+      { kind: 'choice', id: 'plan-approval', pick: 'alt:0', by: 'user' },
+    ])
+
+    ac.abort()
+    await done
   } finally {
     ac.abort()
     await rm(cwd, { recursive: true, force: true })
