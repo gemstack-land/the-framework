@@ -101,6 +101,15 @@ export function dashboardHtml(title: string, stoppable = false, choiceable = fal
   #modes .box { color: #6ea8fe; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
   #modes li.off { color: #5c657a; }
   #modes li.off .box { color: #3a4256; }
+  /* Prompts panel (#343): the actual system + per-turn prompts sent to the agent,
+     for full transparency. Collapsed <details> so the long text stays out of the way. */
+  #prompts-panel { grid-column: 1 / -1; }
+  #prompts-panel[hidden] { display: none; }
+  #prompts details { border: 1px solid #1c2230; border-radius: 8px; margin-bottom: 8px; background: #0d1119; }
+  #prompts summary { cursor: pointer; padding: 8px 12px; font-size: 12px; font-weight: 600;
+    color: #9db4d6; text-transform: uppercase; letter-spacing: .6px; }
+  #prompts pre { margin: 0; padding: 10px 12px; border-top: 1px solid #1c2230; white-space: pre-wrap;
+    word-break: break-word; font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; color: #c3ccdb; }
   /* Start-a-run panel (#345): only the daemon dashboard wires /api/start; the
      per-run page and the relay render it hidden. */
   #start-panel { grid-column: 1 / -1; }
@@ -259,6 +268,10 @@ export function dashboardHtml(title: string, stoppable = false, choiceable = fal
     <h2>Agent activity</h2>
     <div id="log"></div>
   </section>
+  <section id="prompts-panel" hidden>
+    <h2>Prompts sent to Claude Code</h2>
+    <div id="prompts"></div>
+  </section>
 </main>
 </div>
 <aside id="docs" hidden>
@@ -345,7 +358,18 @@ function driver(e) {
   if (e.type === 'text') log('  ' + e.text.replace(/\\s+/g, ' ').trim().slice(0, 160));
   else if (e.type === 'action') log('  \\u00b7 ' + e.label);
   else if (e.type === 'error') log('  ! ' + e.message);
-  else if (e.type === 'start') log('\\u203a prompt sent');
+  else if (e.type === 'start') { log('\\u203a prompt sent'); addPrompt('Turn ' + (++promptTurn), e.prompt); }
+}
+// Prompts panel (#343): every prompt sent to the agent, system + per turn. Uses
+// textContent (never innerHTML), so a prompt's contents can never inject markup.
+let promptTurn = 0;
+function addPrompt(label, text) {
+  const d = document.createElement('details');
+  const s = document.createElement('summary'); s.textContent = label;
+  const pre = document.createElement('pre'); pre.textContent = text;
+  d.appendChild(s); d.appendChild(pre);
+  $('prompts').appendChild(d);
+  $('prompts-panel').hidden = false;
 }
 function renderRationale(e) {
   const el = $('rationale'); el.innerHTML = '';
@@ -405,6 +429,7 @@ function render(fe) {
     log('\\u25b6 your app is running at ' + fe.url);
   }
   else if (fe.kind === 'bootstrap') bootstrap(fe.event);
+  else if (fe.kind === 'system-prompt') addPrompt('System prompt', fe.text);
   else if (fe.kind === 'driver') driver(fe.event);
   else if (fe.kind === 'modes') renderModes(fe.all, fe.active);
   else if (fe.kind === 'choice') showChoice(fe);
@@ -557,6 +582,7 @@ function resetPanels() {
   $('deploy').textContent = 'not decided yet'; $('deploy').classList.add('muted');
   $('ledger').innerHTML = '';
   $('log').textContent = '';
+  $('prompts-panel').hidden = true; $('prompts').innerHTML = ''; promptTurn = 0;
 }
 
 function project(events) {

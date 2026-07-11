@@ -364,6 +364,10 @@ export async function runFramework(opts: RunFrameworkOptions): Promise<RunFramew
     fake: opts.driver.name === 'fake',
     ...(literalLink ? { sessionLink: literalLink } : {}),
   })
+  // Surface the exact system prompt the agent runs under (#343): the #326 block
+  // plus persona / skill / memory framing. The per-turn user prompts ride along
+  // as `driver` `start` events, so the dashboard can show every prompt sent.
+  if (system) emit({ kind: 'system-prompt', text: system })
   const extensionNote = activeExtensions.length ? `, ${activeExtensions.map(e => e.name).join(' + ')}` : ''
   const skillNote = skills.length ? `, ${skills.length} skill(s)` : ''
   emit({
