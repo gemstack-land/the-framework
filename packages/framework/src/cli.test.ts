@@ -15,6 +15,7 @@ import {
   claudeDriverOptions,
   CLAUDE_CODE_SESSION_LIST,
   ecoOptions,
+  frameworkVersion,
   mergeRunConfig,
   parseArgs,
   resolveDomainPreset,
@@ -124,6 +125,20 @@ test('parseArgs reads the prompt subcommand with its verbatim text (#353)', () =
   assert.equal(p.directPrompt, true)
   assert.equal(p.intent, 'review the auth flow')
   assert.equal(parseArgs(['build', 'a', 'blog']).directPrompt, false)
+})
+
+test('frameworkVersion reports the real package version, not the 0.0.0 placeholder (#312)', async () => {
+  const pkg = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8')) as { version: string }
+  assert.equal(frameworkVersion(), pkg.version)
+  assert.notEqual(frameworkVersion(), '0.0.0')
+})
+
+test('runCli --version prints the real version (#312)', async () => {
+  const { io, out } = capture()
+  const code = await runCli(['--version'], io)
+  assert.equal(code, 0)
+  const pkg = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8')) as { version: string }
+  assert.deepEqual(out, [pkg.version])
 })
 
 test('runCli errors on a bare `framework prompt` (nothing to run, #353)', async () => {
