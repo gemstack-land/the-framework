@@ -144,6 +144,15 @@ export {
   type RegistryFs,
 } from './registry.js'
 export {
+  installProject,
+  enumerateGitRepos,
+  nodeDirLister,
+  type InstallResult,
+  type InstallDeps,
+  type DirLister,
+  type EnumerateDeps,
+} from './install.js'
+export {
   PACKAGE_NAME,
   nodeVersionFetcher,
   compareVersions,
