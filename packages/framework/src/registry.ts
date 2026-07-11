@@ -2,8 +2,9 @@ import { basename, dirname, join, resolve } from 'node:path'
 
 /**
  * The multi-project registry (#390): the list of projects the user has
- * installed The Framework into, kept as a small JSON index under the user's
- * config dir. Stores only `{id, path, addedAt}` per project; the daemon and
+ * installed The Framework into, kept as a single JSON file `.bashrc`-style —
+ * `$HOME/.the-framework.json` — so it is the user's responsibility to re-create
+ * per machine. Stores only `{id, path, addedAt}` per project; the daemon and
  * UI over it are separate concerns.
  */
 
@@ -17,11 +18,8 @@ export interface ProjectRecord {
   addedAt: string
 }
 
-/** The directory name under `$XDG_CONFIG_HOME` (dotted under `$HOME`). */
-export const REGISTRY_DIR = 'the-framework'
-
-/** The registry file name. */
-export const REGISTRY_FILE = 'projects.json'
+/** The registry file name: a single file under `$XDG_CONFIG_HOME` (dotted under `$HOME`). */
+export const REGISTRY_FILE = 'the-framework.json'
 
 /**
  * Deterministic, URL-safe id for a project path: the sanitized basename plus a
@@ -42,12 +40,12 @@ export function projectId(path: string): string {
 
 /**
  * The registry file path, resolved from `env` (injectable so tests never touch
- * the real home): `$XDG_CONFIG_HOME/the-framework/projects.json` when set,
- * else `$HOME/.the-framework/projects.json`.
+ * the real home): `$XDG_CONFIG_HOME/the-framework.json` when set, else the
+ * dotted `$HOME/.the-framework.json`. A single file, not a directory (#390).
  */
 export function registryPath(env: NodeJS.ProcessEnv): string {
-  if (env.XDG_CONFIG_HOME) return join(env.XDG_CONFIG_HOME, REGISTRY_DIR, REGISTRY_FILE)
-  return join(env.HOME ?? '', '.' + REGISTRY_DIR, REGISTRY_FILE)
+  if (env.XDG_CONFIG_HOME) return join(env.XDG_CONFIG_HOME, REGISTRY_FILE)
+  return join(env.HOME ?? '', '.' + REGISTRY_FILE)
 }
 
 /** Minimal fs seam so the registry is unit-testable without touching disk. */

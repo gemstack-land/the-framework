@@ -7,7 +7,6 @@ import {
   projectId,
   registryPath,
   removeProject,
-  REGISTRY_DIR,
   REGISTRY_FILE,
   type ProjectRecord,
   type RegistryFs,
@@ -50,13 +49,13 @@ const APP_B: ProjectRecord = {
 }
 
 test('registryPath prefers XDG_CONFIG_HOME over HOME', () => {
-  assert.equal(registryPath({ XDG_CONFIG_HOME: '/cfg' }), join('/cfg', REGISTRY_DIR, REGISTRY_FILE))
-  assert.equal(registryPath({ XDG_CONFIG_HOME: '/cfg', HOME: '/home/u' }), join('/cfg', REGISTRY_DIR, REGISTRY_FILE))
+  assert.equal(registryPath({ XDG_CONFIG_HOME: '/cfg' }), join('/cfg', REGISTRY_FILE))
+  assert.equal(registryPath({ XDG_CONFIG_HOME: '/cfg', HOME: '/home/u' }), join('/cfg', REGISTRY_FILE))
 })
 
-test('registryPath falls back to a dot dir under HOME (empty XDG counts as unset)', () => {
-  assert.equal(registryPath(ENV), join('/home/u', '.' + REGISTRY_DIR, REGISTRY_FILE))
-  assert.equal(registryPath({ XDG_CONFIG_HOME: '', HOME: '/home/u' }), join('/home/u', '.' + REGISTRY_DIR, REGISTRY_FILE))
+test('registryPath falls back to a single dotfile under HOME (empty XDG counts as unset)', () => {
+  assert.equal(registryPath(ENV), join('/home/u', '.' + REGISTRY_FILE))
+  assert.equal(registryPath({ XDG_CONFIG_HOME: '', HOME: '/home/u' }), join('/home/u', '.' + REGISTRY_FILE))
 })
 
 test('projectId is deterministic and distinct per path', () => {
@@ -96,7 +95,7 @@ test('addProject appends a record and writes pretty JSON that parses back', asyn
   const fs = memFs()
   const record = await addProject('/repos/app-a', APP_A.addedAt, fs, ENV)
   assert.deepEqual(record, APP_A)
-  assert.deepEqual(fs.dirs, [join('/home/u', '.' + REGISTRY_DIR)])
+  assert.deepEqual(fs.dirs, ['/home/u']) // the single dotfile's parent is $HOME itself
   assert.deepEqual(JSON.parse(fs.files.get(FILE)!), [APP_A])
 
   await addProject('/repos/app-b', APP_B.addedAt, fs, ENV)
