@@ -762,8 +762,11 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
   }
 
   // A mode/kind given with no preset in effect has nothing to act on: note it.
-  if (modeList.length && !domainPreset) {
-    io.err(`note: ${modeList.join(' + ')} mode(s) have no effect without a preset.`)
+  // Autopilot is the exception — it also steers the #326 system prompt's
+  // maintenance stance, so it works preset or not.
+  const presetOnlyModes = modeList.filter(m => m !== 'autopilot')
+  if (presetOnlyModes.length && !domainPreset) {
+    io.err(`note: ${presetOnlyModes.join(' + ')} mode(s) have no effect without a preset.`)
   }
   if (buildEvent && !domainPreset) {
     io.err(`note: build event "${buildEvent}" has no effect without a preset.`)
@@ -800,6 +803,7 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
         ...(opts.maxCost ? { budgetUsd: opts.maxCost } : {}),
         ...(userSystemPrompt ? { systemPrompt: userSystemPrompt } : {}),
         ...(fileConfig.antiLazyPill === false ? { antiLazyPill: false } : {}),
+        ...(modeList.includes('autopilot') ? { autopilot: true } : {}),
         ...((): { sessionLink?: string } => {
           const link = chooseSessionLink(opts, fake)
           return link ? { sessionLink: link } : {}
@@ -921,7 +925,10 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
     ...(serve && opts.sandbox ? { sandbox: opts.sandbox } : {}),
     ...(discovered ? { extensions: discovered } : {}),
     ...(opts.composeExtensions ? { composeExtensions: true } : {}),
-    ...(domainPreset ? { preset: domainPreset, ...(modeList.length ? { modes: modeList } : {}) } : {}),
+    // Modes ride along even without a domain preset: autopilot also steers the
+    // #326 system prompt's maintenance stance.
+    ...(domainPreset ? { preset: domainPreset } : {}),
+    ...(modeList.length ? { modes: modeList } : {}),
     ...(buildEvent ? { buildEvent } : {}),
     ...(memory.length ? { memory } : {}),
     ...(userSystemPrompt ? { systemPrompt: userSystemPrompt } : {}),

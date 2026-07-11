@@ -220,7 +220,7 @@ preset: software-development
 autopilot: true      # activate the preset's Autopilot mode variants
 technical: false
 event: bug-fix        # the build event kind its review loop fires for
-antiLazyPill: false   # remove the built-in anti-lazy-pill system prompt (default: on)
+antiLazyPill: false   # remove the built-in system prompt (default: on)
 ```
 
 Every field is optional. CLI flags override the file, so the precedence is:
@@ -232,17 +232,21 @@ Every field is optional. CLI flags override the file, so the precedence is:
 When the file contributes anything, the run narrates it (`◆ the-framework.yml: ...`).
 A malformed file is a warning, never a failed run.
 
-### System prompt: the anti-lazy-pill + `SYSTEM.md`
+### System prompt: the built-in working agreement + `SYSTEM.md`
 
-Every prompt is framed with a built-in system prompt (the validated "anti-lazy-pill",
-#297): unclear scope becomes a ranked list to approve, a large scope becomes a
-`PLAN.md`, a very large one also spins off a `TODO.md` backlog. It turns a mock UI
-shell into a real backend and declares what it descopes instead of faking it.
+Every prompt is framed with the built-in system prompt (#326, the successor of the
+validated "anti-lazy-pill" #297): unclear scope becomes a ranked `showChoices()`
+list, a large scope becomes a `PLAN_<session>.agent.md` to approve, a very large one
+also spins off a `TODO_<session>.agent.md` backlog (consumed by the backlog loop),
+an alternatives pass rates problem "variability" before code is written, and edits
+to existing code stay minimal. The prompt is a template: `${{ ... }}` JS fragments
+render against the run context (e.g. `tf.params.autopilot` relaxes the maintenance
+stance on autopilot runs).
 
 Drop a `SYSTEM.md` at the workspace root to add your own instructions on top (it
-travels with the repo, like the memory files). To remove the built-in pill and keep
-only your own, set `antiLazyPill: false` in `the-framework.yml`. The run narrates
-what it picked up (`◆ system prompt: SYSTEM.md`).
+travels with the repo, like the memory files). To remove the built-in prompt and keep
+only your own, set `antiLazyPill: false` in `the-framework.yml` (the key keeps its
+historical name). The run narrates what it picked up (`◆ system prompt: SYSTEM.md`).
 
 ## Extensions (#190)
 

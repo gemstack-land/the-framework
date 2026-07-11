@@ -139,10 +139,14 @@ export {
 export {
   loadUserSystemPrompt,
   systemPromptBlock,
-  ANTI_LAZY_PILL,
+  renderSystemPrompt,
+  SYSTEM_PROMPT_TEMPLATE,
   SYSTEM_PROMPT_FILE,
   type SystemPromptOptions,
+  type TfContext,
+  type RenderedSystemPrompt,
 } from './system-prompt.js'
+export { renderTemplate, TemplateFragmentError } from './prompt-template.js'
 export {
   extractParamNames,
   renderPresetPrompt,

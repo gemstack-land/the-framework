@@ -1,7 +1,7 @@
 import type { Driver, DriverEvent, DriverSession } from './driver/index.js'
 import { hasSessionIdPlaceholder, resolveSessionLink, type ChoicePick, type ChoiceRequest, type FrameworkEvent } from './events.js'
 import { resolveAwaitGate } from './run.js'
-import { systemPromptBlock } from './system-prompt.js'
+import { renderSystemPrompt, systemPromptBlock, type TfContext } from './system-prompt.js'
 import { AWAIT_PROTOCOL, parseAwaitGate } from './turn-gate.js'
 import { UsageMeter } from './usage.js'
 
@@ -36,8 +36,10 @@ export interface RunPromptOptions {
   model?: string
   /** A user SYSTEM.md to append to the built-in system prompt (#301). */
   systemPrompt?: string
-  /** Include the anti-lazy working agreement. Default true (#301). */
+  /** Include the built-in #326 system prompt. Default true (#301; the name is the historical config key). */
   antiLazyPill?: boolean
+  /** Whether autopilot mode is on: steers the #326 prompt's maintenance stance (#325). Default false. */
+  autopilot?: boolean
   /** Stop the run once the agent has spent this much, in USD (#322). */
   budgetUsd?: number
   /** Session link template for the dashboard, `{sessionId}` resolved when known. */
@@ -69,10 +71,16 @@ export async function runPrompt(opts: RunPromptOptions): Promise<RunPromptResult
     opts.onEvent?.(event)
   }
 
-  // The pill + any user SYSTEM.md frame the session (#301). The await protocol is
-  // always on — honoring the prompt's gates is the whole point of this path.
-  const promptBlock = systemPromptBlock({ antiLazyPill: opts.antiLazyPill, user: opts.systemPrompt })
+  // The built-in #326 prompt + any user SYSTEM.md frame the session (#301). The
+  // await protocol is always on — honoring the prompt's gates is the whole point
+  // of this path.
+  const tf: TfContext = { prompt: opts.prompt, params: { autopilot: opts.autopilot === true } }
+  const promptBlock = systemPromptBlock({ antiLazyPill: opts.antiLazyPill, user: opts.systemPrompt, tf })
   const system = [...(promptBlock ? [promptBlock] : []), AWAIT_PROTOCOL].join('\n\n')
+  // The template's `# User prompt` half carries the prompt (today it renders to
+  // exactly `opts.prompt`; any framing Rom adds around the slot rides along). With
+  // the built-in prompt off, the raw prompt is sent as-is.
+  const firstPrompt = opts.antiLazyPill === false ? opts.prompt : renderSystemPrompt(tf).user
 
   const linkTemplate = opts.sessionLink
   const literalLink = linkTemplate && !hasSessionIdPlaceholder(linkTemplate) ? linkTemplate : undefined
@@ -117,7 +125,7 @@ export async function runPrompt(opts: RunPromptOptions): Promise<RunPromptResult
   })
 
   try {
-    let turn = await session.prompt(opts.prompt, { signal: runSignal })
+    let turn = await session.prompt(firstPrompt, { signal: runSignal })
     let gate = parseAwaitGate(turn.text)
     for (let round = 0; round < MAX_AWAIT_ROUNDS && gate; round++) {
       const answer = await resolveAwaitGate(gate, round, { requestChoice: opts.requestChoice, emit, signal: runSignal })

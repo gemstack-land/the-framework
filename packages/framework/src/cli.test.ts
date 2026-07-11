@@ -258,9 +258,16 @@ test('runCli rejects an unknown --preset with a usage error (exit 2)', async () 
 test('runCli notes mode flags given without a preset', async () => {
   const { io, err } = capture()
   // --fake so the note fires before any real run; unknown-preset path is not hit.
+  const code = await runCli(['--fake', '--no-dashboard', '--technical'], io)
+  assert.equal(code, 0)
+  assert.ok(err.some(l => /technical mode\(s\) have no effect without a preset/.test(l)))
+})
+
+test('runCli does not note --autopilot without a preset (it steers the #326 prompt)', async () => {
+  const { io, err } = capture()
   const code = await runCli(['--fake', '--no-dashboard', '--autopilot'], io)
   assert.equal(code, 0)
-  assert.ok(err.some(l => /have no effect without a preset/.test(l)))
+  assert.ok(!err.some(l => /have no effect without a preset/.test(l)))
 })
 
 test('runCli notes --kind given without a preset (#265)', async () => {

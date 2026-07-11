@@ -16,7 +16,7 @@ export interface FrameworkFileConfig {
   technical?: boolean
   /** Build event kind the preset's review loop fires for, e.g. `bug-fix` (#265). */
   event?: string
-  /** Inject the built-in anti-lazy-pill system prompt (#301). Default `true`; set false to remove it. */
+  /** Inject the built-in system prompt (#326, via #301). Default `true`; set false to remove it. */
   antiLazyPill?: boolean
 }
 

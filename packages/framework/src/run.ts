@@ -37,7 +37,7 @@ import {
 import { snapshotWorkspace } from './sandbox.js'
 import type { Driver, DriverEvent, DriverSession } from './driver/index.js'
 import { memoryFraming, type LoadedMemory } from './memory.js'
-import { systemPromptBlock } from './system-prompt.js'
+import { systemPromptBlock, type TfContext } from './system-prompt.js'
 import { AWAIT_PROTOCOL, parseAwaitGate, type ParsedAwaitGate } from './turn-gate.js'
 // Value import from todo-loop.js is a benign cycle: todo-loop.js only calls
 // run.js's hoisted function declarations (requestChoices / resolveAwaitGate).
@@ -112,12 +112,13 @@ export interface RunFrameworkOptions {
   /**
    * A user-authored system prompt (from `SYSTEM.md`) injected into every prompt
    * (#301). Load with `loadUserSystemPrompt(cwd)`. Composed after the built-in
-   * anti-lazy-pill, so a repo can add its own instructions on top of the default.
+   * #326 system prompt, so a repo can add its own instructions on top of the default.
    */
   systemPrompt?: string
   /**
-   * Inject the built-in anti-lazy-pill (#297) into every prompt (#301). Default
-   * `true`; pass `false` (e.g. from `the-framework.yml`) to remove it.
+   * Inject the built-in #326 system prompt into every prompt (#301). Default
+   * `true`; pass `false` (e.g. from `the-framework.yml`) to remove it. The name
+   * is the historical config key: #326 is the anti-lazy-pill's (#297) successor.
    */
   antiLazyPill?: boolean
   /**
@@ -130,9 +131,9 @@ export interface RunFrameworkOptions {
    */
   preset?: DomainPreset
   /**
-   * The active modes for {@link preset} (e.g. `['autopilot']`), for narration.
-   * The preset is expected to be loaded with these already applied; this is the
-   * label shown to the user.
+   * The active modes for the run (e.g. `['autopilot']`). Narrated with the
+   * {@link preset} (which is expected to be loaded with them already applied),
+   * and `autopilot` also steers the #326 system prompt's maintenance stance.
    */
   modes?: readonly string[]
   /**
@@ -331,9 +332,16 @@ export async function runFramework(opts: RunFrameworkOptions): Promise<RunFramew
   // The repo's own memory files (#260) frame the agent alongside personas + skills:
   // their contents give context, and the agent is told to keep the ones it owns current.
   const memoryBlock = opts.memory && opts.memory.length ? memoryFraming(opts.memory) : ''
-  // The anti-lazy-pill + any user SYSTEM.md lead the system prompt so its working
-  // agreement frames every prompt before the role/skill/memory context (#301).
-  const promptBlock = systemPromptBlock({ antiLazyPill: opts.antiLazyPill, user: opts.systemPrompt })
+  // The built-in #326 system prompt + any user SYSTEM.md lead the system prompt so
+  // its working agreement frames every prompt before the role/skill/memory context
+  // (#301). Only the template's system half is used here: each Bootstrap step
+  // composes its own prompt around the intent, so the user-prompt slot stays with
+  // the steps. `tf.params.autopilot` reflects the run's autopilot mode (#325).
+  const tf: TfContext = {
+    prompt: opts.intent,
+    params: { autopilot: opts.modes?.includes('autopilot') ?? false },
+  }
+  const promptBlock = systemPromptBlock({ antiLazyPill: opts.antiLazyPill, user: opts.systemPrompt, tf })
   // The await protocol (#337) concretizes the pill's showChoices()/AWAIT macros into a
   // signal the turn-boundary gate can detect, so it rides along with the pill.
   const system = [
