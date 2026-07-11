@@ -101,7 +101,7 @@ framework relay                Host a run relay so teammates can watch a run (se
   --cf-project <name>    Cloudflare Pages project name (for a Pages deploy).
   --dokploy-url <url>    Dokploy instance URL (required for --deploy dokploy).
   --dokploy-app <id>     Dokploy application id (required for --deploy dokploy).
-  --port <n>             Dashboard port (default: 4477); with `relay`, the relay port (4488).
+  --port <n>             Dashboard port (default: 4200); with `relay`, the relay port (4488).
   --no-dashboard         Run headless.
   --share <relay-url>    Publish this run to a relay (see below) so teammates can watch it.
   --resume               Reopen the last run's dashboard from .framework/ (see below).

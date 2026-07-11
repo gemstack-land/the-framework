@@ -9,7 +9,7 @@ import { serveSSE } from './sse.js'
 
 /** Options for {@link startDashboard}. */
 export interface DashboardOptions {
-  /** Port to bind. Default `4477`; pass `0` for an ephemeral port. */
+  /** Port to bind. Default `4200`; pass `0` for an ephemeral port. */
   port?: number
   /** Host to bind. Default `127.0.0.1` (localhost only). */
   host?: string
@@ -61,7 +61,7 @@ export interface Dashboard {
  */
 export function startDashboard(opts: DashboardOptions = {}): Promise<Dashboard> {
   const host = opts.host ?? '127.0.0.1'
-  const port = opts.port ?? 4477
+  const port = opts.port ?? 4200
   const title = opts.title ?? 'The Framework'
   const onStop = opts.onStop
   const onChoice = opts.onChoice

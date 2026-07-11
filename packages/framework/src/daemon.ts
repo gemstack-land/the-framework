@@ -20,7 +20,7 @@ import { startDashboard, type Dashboard } from './dashboard/index.js'
 export const DAEMON_STATE_FILE = 'daemon.json'
 
 /** The default dashboard port the daemon binds. Matches the per-run dashboard. */
-export const DEFAULT_DAEMON_PORT = 4477
+export const DEFAULT_DAEMON_PORT = 4200
 
 /** What a running daemon writes so a later `framework` invocation can find it. */
 export interface DaemonState {

@@ -123,7 +123,7 @@ Options:
   --cf-project <name>    Cloudflare Pages project name (for a Pages deploy).
   --dokploy-url <url>    Dokploy instance URL (required for --deploy dokploy).
   --dokploy-app <id>     Dokploy application id (required for --deploy dokploy).
-  --port <n>             Dashboard port (default: 4477); with the relay, the relay port (4488).
+  --port <n>             Dashboard port (default: 4200); with the relay, the relay port (4488).
   --no-dashboard         Do not start the localhost dashboard.
   --share <relay-url>    Publish this run to a relay (from "framework relay") so
                          teammates can watch it live; prints the shareable URL.
