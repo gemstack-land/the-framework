@@ -37,7 +37,7 @@ const STATUSES: readonly string[] = ['done', 'stopped', 'failed', 'running']
 const SEP = ' · '
 
 /** The one-time first line of the file, written on the first append. */
-const HEADER = '# The Framework logs\n'
+export const LOGS_HEADER = '# The Framework logs\n'
 
 /** The log path under `cwd`. */
 export function logsPath(cwd: string): string {
@@ -149,7 +149,7 @@ function parseEntry(lines: string[]): LogEntry | undefined {
 export async function appendLog(cwd: string, entry: LogEntry, fs: StoreFs = nodeStoreFs()): Promise<void> {
   await fs.mkdir(join(cwd, THE_FRAMEWORK_DIR))
   const path = logsPath(cwd)
-  if (!(await fs.exists(path))) await fs.write(path, HEADER)
+  if (!(await fs.exists(path))) await fs.write(path, LOGS_HEADER)
   await fs.append(path, '\n' + renderLogEntry(entry) + '\n')
 }
 
