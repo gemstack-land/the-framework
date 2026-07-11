@@ -381,7 +381,7 @@ function setSessionLink(sessionId, sessionLink) {
     const generic = sessionLink === GENERIC_SESSION_LINK;
     const label = generic ? 'Open Claude Code' : 'live session';
     const idTail = sessionId ? ' <code>' + esc(sessionId) + '</code>' : '';
-    el.innerHTML = '\\u25b6 <a href="' + esc(sessionLink) + '" target="_blank" rel="noopener">' + label + '</a>' + idTail;
+    el.innerHTML = '\\u25b6 <a href="' + esc(safeUrl(sessionLink)) + '" target="_blank" rel="noopener">' + label + '</a>' + idTail;
     el.title = generic ? 'Generic Claude Code entry point, not a live session link' : (sessionId || '');
   } else if (sessionId) {
     el.innerHTML = 'session <code>' + esc(sessionId) + '</code>';
@@ -397,7 +397,7 @@ function render(fe) {
   } else if (fe.kind === 'session-update') setSessionLink(fe.sessionId, fe.sessionLink);
   else if (fe.kind === 'preview') {
     const a = $('app-link');
-    a.href = fe.url; a.textContent = fe.url;
+    a.href = safeUrl(fe.url); a.textContent = fe.url;
     $('app-banner').hidden = false;
     log('\\u25b6 your app is running at ' + fe.url);
   }
@@ -430,7 +430,13 @@ function stopRun() {
   btn.textContent = 'stopping\\u2026';
   fetch('stop', { method: 'POST' }).catch(() => {});
 }
-function esc(s) { const d = document.createElement('div'); d.textContent = String(s); return d.innerHTML; }
+// Attribute-safe: textContent->innerHTML escapes < > &, but NOT quotes, so we also
+// escape " and ' to stay safe inside quoted HTML attributes, not just text nodes.
+function esc(s) { const d = document.createElement('div'); d.textContent = String(s); return d.innerHTML.replace(/"/g, '&quot;').replace(/'/g, '&#39;'); }
+// Neutralize a link before it reaches an href: only http(s)/mailto/relative/anchor
+// URLs pass; anything else (javascript:, data:) collapses to '#' so a published
+// event can't smuggle a script URL into a clickable link.
+function safeUrl(u) { return /^(https?:|mailto:|\\/|#)/i.test(String(u)) ? String(u) : '#'; }
 
 // Interactive plan-approval / choice panel (#304). The run pauses on a 'choice'
 // event; we render the options with the recommended one pre-selected, accept on
@@ -588,7 +594,7 @@ function renderRuns(runs) {
     const li = document.createElement('li');
     li.dataset.id = r.id;
     const when = new Date(r.startedAt).toLocaleString();
-    const link = r.sessionLink ? ' \\u00b7 <a href="' + esc(r.sessionLink) + '" target="_blank" rel="noopener">session</a>' : '';
+    const link = r.sessionLink ? ' \\u00b7 <a href="' + esc(safeUrl(r.sessionLink)) + '" target="_blank" rel="noopener">session</a>' : '';
     li.innerHTML = '<div class="r-intent">' + esc(r.intent || 'untitled run') + '</div>' +
       '<div class="r-meta"><span class="dot ' + statusClass(r.status) + '">\\u25cf</span>' +
       '<span>' + esc(r.status) + '</span><span>\\u00b7 ' + esc(when) + '</span>' + link + '</div>';

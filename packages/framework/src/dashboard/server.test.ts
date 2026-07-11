@@ -265,10 +265,14 @@ test('/stop is 405 for a non-POST and 404 when stopping is not wired (#218)', as
   }
 })
 
-function postJson(url: string, body: unknown): Promise<{ status: number; body: string }> {
+function postJson(
+  url: string,
+  body: unknown,
+  headers: Record<string, string> = {},
+): Promise<{ status: number; body: string }> {
   return new Promise((resolvePromise, rejectPromise) => {
     const payload = JSON.stringify(body)
-    const req = request(url, { method: 'POST', headers: { 'content-type': 'application/json' } }, res => {
+    const req = request(url, { method: 'POST', headers: { 'content-type': 'application/json', ...headers } }, res => {
       let out = ''
       res.on('data', c => (out += c))
       res.on('end', () => resolvePromise({ status: res.statusCode ?? 0, body: out }))
@@ -277,6 +281,33 @@ function postJson(url: string, body: unknown): Promise<{ status: number; body: s
     req.end(payload)
   })
 }
+
+test('state-changing POSTs reject a cross-origin Origin but allow same-origin / no-Origin (CSRF)', async () => {
+  const started: string[] = []
+  const dash = await startDashboard({
+    port: 0,
+    onStop: () => started.push('stop'),
+    onChoice: id => started.push('choice:' + id),
+    onStart: prompt => (started.push('start:' + prompt), { ok: true }),
+  })
+  try {
+    // A browser on another site attaches its Origin; every steering route must refuse it.
+    const evil = { origin: 'https://evil.example' }
+    assert.equal((await postJson(dash.url + '/stop', {}, evil)).status, 403)
+    assert.equal((await postJson(dash.url + '/choice', { id: 'x', pick: 'y' }, evil)).status, 403)
+    assert.equal((await postJson(dash.url + '/api/start', { prompt: 'a blog' }, evil)).status, 403)
+    assert.deepEqual(started, []) // none of the handlers fired
+
+    // The dashboard's own page (loopback Origin) is allowed, as is a non-browser
+    // caller that sends no Origin at all.
+    assert.equal((await postJson(dash.url + '/stop', {}, { origin: dash.url })).status, 202)
+    assert.equal((await postJson(dash.url + '/stop', {}, { origin: 'http://localhost:1234' })).status, 202)
+    assert.equal((await postJson(dash.url + '/api/start', { prompt: 'a blog' })).status, 202)
+    assert.deepEqual(started, ['stop', 'stop', 'start:a blog'])
+  } finally {
+    await dash.close()
+  }
+})
 
 test('POST /choice invokes onChoice with the pick and the page reports it is choiceable (#304)', async () => {
   const picks: Array<{ id: string; pick: string | string[]; by: string }> = []

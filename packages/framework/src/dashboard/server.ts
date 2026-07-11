@@ -155,6 +155,11 @@ function handle(
       res.end('method not allowed')
       return
     }
+    if (!isSameOriginRequest(req)) {
+      res.writeHead(403, { 'content-type': 'text/plain' })
+      res.end('cross-origin request forbidden')
+      return
+    }
     if (!onStop) {
       res.writeHead(404, { 'content-type': 'text/plain' })
       res.end('stopping not enabled')
@@ -171,6 +176,11 @@ function handle(
     if (req.method !== 'POST') {
       res.writeHead(405, { 'content-type': 'text/plain', allow: 'POST' })
       res.end('method not allowed')
+      return
+    }
+    if (!isSameOriginRequest(req)) {
+      res.writeHead(403, { 'content-type': 'text/plain' })
+      res.end('cross-origin request forbidden')
       return
     }
     if (!onChoice) {
@@ -204,6 +214,11 @@ function handle(
       res.end('method not allowed')
       return
     }
+    if (!isSameOriginRequest(req)) {
+      res.writeHead(403, { 'content-type': 'text/plain' })
+      res.end('cross-origin request forbidden')
+      return
+    }
     if (!onStart) {
       res.writeHead(404, { 'content-type': 'text/plain' })
       res.end('starting not enabled')
@@ -233,6 +248,28 @@ function handle(
   }
   res.writeHead(404, { 'content-type': 'text/plain' })
   res.end('not found')
+}
+
+/**
+ * CSRF guard for the state-changing POST routes. A browser attaches an `Origin`
+ * header to every cross-site request, so we reject any POST whose Origin is not
+ * this same server (or a loopback host) — otherwise a page on `evil.com` could
+ * `fetch()` the localhost dashboard and spawn/steer a run. An absent Origin means
+ * a non-browser caller (curl, the test suite) with no ambient session to abuse,
+ * so it passes.
+ */
+function isSameOriginRequest(req: IncomingMessage): boolean {
+  const origin = req.headers.origin
+  if (!origin) return true
+  const host = req.headers.host
+  if (host && (origin === `http://${host}` || origin === `https://${host}`)) return true
+  let hostname: string
+  try {
+    hostname = new URL(origin).hostname
+  } catch {
+    return false // malformed Origin: treat as cross-origin
+  }
+  return hostname === 'localhost' || hostname === '::1' || hostname === '[::1]' || hostname.startsWith('127.')
 }
 
 /** Read a small JSON request body, tolerant of malformed input (yields `{}`). */
