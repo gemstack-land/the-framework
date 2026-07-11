@@ -48,6 +48,17 @@ export function dashboardHtml(title: string, stoppable = false, choiceable = fal
   #app-banner .dot { color: #67d98f; }
   #app-banner a { color: #67d98f; font-weight: 600; }
   #app-banner .run { color: #6f8a79; font-size: 12px; }
+  /* Run-start feedback (#403): a banner that says a run is starting, warns when it
+     produces no output, reports a launch/exit failure, and shows the busy refusal. */
+  #run-notice { display: flex; align-items: center; gap: 8px; padding: 10px 20px; font-size: 13px;
+    position: sticky; top: 57px; border-bottom: 1px solid #1c2230; }
+  #run-notice[hidden] { display: none; }
+  #run-notice.rn-starting { background: #12233a; border-bottom-color: #24344a; color: #9db4d6; }
+  #run-notice.rn-starting .rn-icon { animation: rn-pulse 1.1s ease-in-out infinite; }
+  #run-notice.rn-warn { background: #2a2114; border-bottom-color: #4a3a1c; color: #f0a35e; }
+  #run-notice.rn-error { background: #2a1416; border-bottom-color: #4a1c1e; color: #e2686a; }
+  #run-notice.rn-busy { background: #131a2a; border-bottom-color: #2b3b5c; color: #9db4d6; }
+  @keyframes rn-pulse { 0%,100% { opacity: 1; } 50% { opacity: .3; } }
   /* Fill the viewport below the 57px header so the sidebar border runs full-height
      even when the content is short. */
   #layout { display: flex; align-items: stretch; min-height: calc(100vh - 57px); }
@@ -321,6 +332,7 @@ export function dashboardHtml(title: string, stoppable = false, choiceable = fal
   <span>Your app is running at <a id="app-link" href="#" target="_blank" rel="noopener">…</a></span>
   <span class="run">live until you stop the run</span>
 </div>
+<div id="run-notice" hidden></div>
 <main>
   <section id="project-view" hidden>
     <h2 id="pv-project">Project</h2>
@@ -1154,6 +1166,52 @@ syncNotifyBtn();
 // verbatim); nothing is sent until Start / Ctrl+Enter. Clearing the box reverts
 // to a normal 'build' run.
 let startKind = 'build';
+// Run-start feedback (#403). A run is spawned detached, so there is a gap between
+// the click and the first event (and a failed launch produces none). This little
+// state machine makes that gap and its failure modes visible.
+let runPhase = 'idle';       // idle | starting | stalled | live
+let runNoticeKind = '';      // which banner is showing
+let runWatchdog = null;
+const RUN_STALL_MS = 8000;
+
+function showRunNotice(kind, text) {
+  runNoticeKind = kind;
+  const el = $('run-notice');
+  el.className = 'rn-' + kind;
+  el.innerHTML = '<span class="rn-icon">' + esc(text.icon) + '</span><span>' + esc(text.msg) + '</span>';
+  el.hidden = false;
+}
+function clearRunNotice() { runNoticeKind = ''; $('run-notice').hidden = true; }
+function stopRunWatchdog() { if (runWatchdog) { clearTimeout(runWatchdog); runWatchdog = null; } }
+function armRunWatchdog() {
+  stopRunWatchdog();
+  runWatchdog = setTimeout(() => {
+    if (runPhase === 'starting') {
+      runPhase = 'stalled';
+      showRunNotice('warn', { icon: '\\u26a0', msg: 'No output yet \\u2014 the run may have failed to start. Is Claude Code installed?' });
+    }
+  }, RUN_STALL_MS);
+}
+
+// Drive the feedback state from the live event stream. The daemon's own lines are
+// kind 'log' (e.g. "\\u2717 run exited..."); the run's first real event is not, so a
+// non-log event means the run truly started.
+function runFeedbackOnEvent(fe) {
+  if (runPhase === 'starting' || runPhase === 'stalled') {
+    if (fe.kind === 'log' && /^\\u2717 run /.test(fe.message || '')) {
+      runPhase = 'idle'; stopRunWatchdog();
+      showRunNotice('error', { icon: '\\u2717', msg: fe.message });
+    } else if (fe.kind !== 'log') {
+      runPhase = 'live'; stopRunWatchdog(); clearRunNotice();
+    }
+  }
+  if (fe.kind === 'end') {
+    runPhase = 'idle'; stopRunWatchdog();
+    // Leave a failure banner up; clear the transient ones now the run is over.
+    if (runNoticeKind !== 'error') clearRunNotice();
+  }
+}
+
 function startNewRun() {
   if (!STARTABLE) return;
   const note = $('start-note');
@@ -1166,10 +1224,22 @@ function startNewRun() {
     body: JSON.stringify({ prompt: prompt, kind: startKind, options: collectStartOptions() }) })
     .then(async r => {
       for (const b of buttons) b.disabled = false;
-      if (r.ok) { note.textContent = ''; $('start-prompt').value = ''; startKind = 'build'; showLive(); return; }
+      if (r.ok) {
+        note.textContent = ''; $('start-prompt').value = ''; startKind = 'build';
+        runPhase = 'starting';
+        showRunNotice('starting', { icon: '\\u25cc', msg: 'Starting your run\\u2026' });
+        showLive();
+        armRunWatchdog();
+        return;
+      }
       let msg = 'could not start (' + r.status + ')';
       try { const b = await r.json(); if (b && b.error) msg = b.error; } catch {}
       note.textContent = msg;
+      // 409 = a run is already active. Make that refusal obvious, then auto-dismiss.
+      if (r.status === 409) {
+        showRunNotice('busy', { icon: '\\u25cf', msg: 'A run is already active \\u2014 stop it or wait for it to finish.' });
+        setTimeout(() => { if (runNoticeKind === 'busy') clearRunNotice(); }, 6000);
+      }
     })
     .catch(() => { for (const b of buttons) b.disabled = false; note.textContent = 'could not reach the dashboard server'; });
 }
@@ -1260,6 +1330,7 @@ const src = new EventSource('events');
 src.onmessage = ev => {
   let fe; try { fe = JSON.parse(ev.data); } catch { return; }
   liveEvents.push(fe);
+  runFeedbackOnEvent(fe);
   if (mode === 'live') render(fe);
   // A finished run has just been archived; refresh the list so it appears.
   if (fe.kind === 'end') setTimeout(loadRuns, 1500);
