@@ -48,7 +48,9 @@ export function dashboardHtml(title: string, stoppable = false, choiceable = fal
   #app-banner .dot { color: #67d98f; }
   #app-banner a { color: #67d98f; font-weight: 600; }
   #app-banner .run { color: #6f8a79; font-size: 12px; }
-  #layout { display: flex; align-items: stretch; }
+  /* Fill the viewport below the 57px header so the sidebar border runs full-height
+     even when the content is short. */
+  #layout { display: flex; align-items: stretch; min-height: calc(100vh - 57px); }
   #sidebar { flex: 0 0 240px; width: 240px; border-right: 1px solid #1c2230; padding: 14px 10px;
     overflow-y: auto; max-height: calc(100vh - 57px); }
   #sidebar h2 { margin: 0 0 8px; padding: 0 6px; font-size: 12px; text-transform: uppercase;
