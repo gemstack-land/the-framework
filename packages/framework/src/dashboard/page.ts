@@ -1,5 +1,6 @@
 import { CLAUDE_CODE_SESSION_LINK } from '../events.js'
 import { renderResearchPrompt } from '../research-preset.js'
+import { renderReadabilityPrompt } from '../readability-preset.js'
 
 /**
  * The single self-contained dashboard page: HTML + inline CSS + inline JS, no
@@ -110,10 +111,10 @@ export function dashboardHtml(title: string, stoppable = false, choiceable = fal
     background: #6ea8fe; border: 0; border-radius: 6px; padding: 6px 16px; }
   #start-run:hover { background: #8bbaff; }
   #start-run:disabled { opacity: .5; cursor: default; }
-  #start-research { font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; color: #b7c0d0;
+  .start-preset { font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; color: #b7c0d0;
     background: #141a24; border: 1px solid #24344a; border-radius: 6px; padding: 6px 14px; }
-  #start-research:hover { background: #17212f; }
-  #start-research:disabled { opacity: .5; cursor: default; }
+  .start-preset:hover { background: #17212f; }
+  .start-preset:disabled { opacity: .5; cursor: default; }
   #start-note { color: #f0a35e; font-size: 12px; }
   /* Interactive plan-approval / choice panel (#304): full-width, accented so it
      reads as the one thing awaiting the human. */
@@ -209,7 +210,8 @@ export function dashboardHtml(title: string, stoppable = false, choiceable = fal
     <textarea id="start-prompt" rows="3" placeholder="What should the agent build?"></textarea>
     <div id="start-actions">
       <button id="start-run">&#9654; Start<span class="kbd">Ctrl+Enter</span></button>
-      <button id="start-research" title="Prefill the Research preset prompt (rates problem variability, picks deep-dives); review or edit it, then Start">&#128269; Research</button>
+      <button id="start-research" class="start-preset" title="Prefill the Research preset prompt (rates problem variability, picks deep-dives); review or edit it, then Start">&#128269; Research</button>
+      <button id="start-readability" class="start-preset" title="Prefill the Readability preset prompt (refactor code to make it easier for humans to read); review or edit it, then Start">&#128200; Readability</button>
       <span id="start-note"></span>
     </div>
   </section>
@@ -274,6 +276,7 @@ const STOPPABLE = ${stoppable ? 'true' : 'false'};
 const CHOICEABLE = ${choiceable ? 'true' : 'false'};
 const STARTABLE = ${startable ? 'true' : 'false'};
 const RESEARCH_PROMPT = ${JSON.stringify(renderResearchPrompt())};
+const READABILITY_PROMPT = ${JSON.stringify(renderReadabilityPrompt())};
 const AUTO_ACCEPT_MS = 10000;
 const GENERIC_SESSION_LINK = ${JSON.stringify(CLAUDE_CODE_SESSION_LINK)};
 let ended = false;
@@ -724,8 +727,8 @@ syncNotifyBtn();
 
 // Start a run (#345): POST the prompt to /api/start; the daemon spawns the run
 // and its events stream in over the same SSE feed. A 409 means one is active.
-// Presets only PREFILL the textarea (#353): the [Research] button loads the full
-// preset prompt for review/editing and flips startKind to 'prompt' (run the text
+// Presets only PREFILL the textarea (#353): a preset button loads its full
+// prompt for review/editing and flips startKind to 'prompt' (run the text
 // verbatim); nothing is sent until Start / Ctrl+Enter. Clearing the box reverts
 // to a normal 'build' run.
 let startKind = 'build';
@@ -734,7 +737,7 @@ function startNewRun() {
   const note = $('start-note');
   const prompt = $('start-prompt').value.trim();
   if (!prompt) { note.textContent = startKind === 'build' ? 'type what to build first' : 'the prompt is empty'; return; }
-  const buttons = [$('start-run'), $('start-research')];
+  const buttons = [$('start-run'), ...document.querySelectorAll('.start-preset')];
   for (const b of buttons) b.disabled = true;
   note.textContent = 'starting\\u2026';
   fetch('api/start', { method: 'POST', headers: { 'content-type': 'application/json' },
@@ -749,13 +752,17 @@ function startNewRun() {
     .catch(() => { for (const b of buttons) b.disabled = false; note.textContent = 'could not reach the dashboard server'; });
 }
 $('start-run').addEventListener('click', startNewRun);
-$('start-research').addEventListener('click', () => {
-  const box = $('start-prompt');
-  box.value = RESEARCH_PROMPT;
-  startKind = 'prompt';
-  $('start-note').textContent = 'research preset loaded \\u2014 review or edit, then Start';
-  box.focus();
-});
+function wirePresetButton(id, name, prompt) {
+  $(id).addEventListener('click', () => {
+    const box = $('start-prompt');
+    box.value = prompt;
+    startKind = 'prompt';
+    $('start-note').textContent = name + ' preset loaded \\u2014 review or edit, then Start';
+    box.focus();
+  });
+}
+wirePresetButton('start-research', 'research', RESEARCH_PROMPT);
+wirePresetButton('start-readability', 'readability', READABILITY_PROMPT);
 $('start-prompt').addEventListener('input', () => {
   // An emptied box is a fresh start: back to a normal build run.
   if (!$('start-prompt').value.trim() && startKind !== 'build') { startKind = 'build'; $('start-note').textContent = ''; }

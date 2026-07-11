@@ -376,7 +376,11 @@ test('/api/start passes the run kind through; a research start may omit the prom
     const page = await fetchText(dash.url + '/')
     assert.match(page.body, /id="start-research"/)
     assert.match(page.body, /const RESEARCH_PROMPT = /)
-    assert.match(page.body, /research preset loaded/)
+    assert.match(page.body, /wirePresetButton\('start-research'/)
+    // Same prefill contract for [Readability] (#360).
+    assert.match(page.body, /id="start-readability"/)
+    assert.match(page.body, /const READABILITY_PROMPT = /)
+    assert.match(page.body, /wirePresetButton\('start-readability'/)
   } finally {
     await dash.close()
   }
