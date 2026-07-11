@@ -93,9 +93,9 @@ export function dashboardHtml(title: string, stoppable = false, choiceable = fal
   /* Add project(s) (#396): a small install form under the Projects heading. */
   #projects-head { display: flex; align-items: center; justify-content: space-between; margin: 16px 0 8px; }
   #projects-head h2 { margin: 0; }
-  #add-project { font: inherit; font-size: 12px; cursor: pointer; color: #9db4d6; background: #131a2a;
-    border: 1px solid #24344a; border-radius: 6px; padding: 2px 8px; }
-  #add-project:hover { background: #17212f; }
+  #add-project { font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; color: #cfe6d6;
+    background: #1c5233; border: 1px solid #3f8f5f; border-radius: 6px; padding: 3px 10px; }
+  #add-project:hover { background: #23653f; border-color: #4fa571; }
   #add-project[hidden] { display: none; }
   #add-project-form { padding: 8px 6px 10px; display: flex; flex-direction: column; gap: 6px; }
   #add-project-form[hidden] { display: none; }

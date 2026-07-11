@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process'
 import { watch, type FSWatcher } from 'node:fs'
-import { mkdir, readFile, writeFile, rm } from 'node:fs/promises'
-import { join } from 'node:path'
+import { mkdir, readFile, writeFile, rm, stat } from 'node:fs/promises'
+import { join, resolve } from 'node:path'
 import type { FrameworkEvent } from './events.js'
 import { EVENTS_FILE, FRAMEWORK_DIR } from './store/index.js'
 import { startDashboard, type Dashboard, type StartRunKind, type StartRunOptions, type StartRunResult, type AddProjectResult } from './dashboard/index.js'
@@ -296,8 +296,14 @@ export async function runDaemon(cwd: string, opts: RunDaemonOptions = {}): Promi
   // is idempotent (an already-activated repo is a no-op success); a git failure on any
   // target aborts and surfaces as an error the dialog shows.
   const addProjects = async (path: string, directory: boolean): Promise<AddProjectResult> => {
-    const targets = directory ? await enumerateGitRepos(path) : [path]
-    if (!targets.length) return { ok: false, error: `no git repositories found under ${path}` }
+    // Resolve relative input against the daemon cwd, and check the directory really
+    // exists first: without this a bad path reaches git as a missing cwd, which
+    // surfaces as the confusing "spawn git ENOENT" rather than a path error.
+    const abs = resolve(path)
+    const isDir = await stat(abs).then(s => s.isDirectory()).catch(() => false)
+    if (!isDir) return { ok: false, error: `path does not exist or is not a directory: ${abs}` }
+    const targets = directory ? await enumerateGitRepos(abs) : [abs]
+    if (!targets.length) return { ok: false, error: `no git repositories found under ${abs}` }
     let added = 0
     let alreadyActivated = 0
     for (const repo of targets) {
