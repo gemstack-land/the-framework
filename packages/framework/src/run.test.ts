@@ -888,3 +888,45 @@ test('requestChoices resolves to the recommended option if the run aborts while 
   })
   assert.equal(picked, 'b') // fell back to the recommended option, not a hang
 })
+
+test('a fake run skips the backlog loop by default; the demo stays deterministic (#323)', async () => {
+  const events: FrameworkEvent[] = []
+  const result = await runFramework({
+    intent: FAKE_INTENT,
+    driver: fakeDriver(),
+    cwd: '/tmp/ws',
+    signals: FAKE_SIGNALS,
+    onEvent: e => events.push(e),
+  })
+  assert.equal(result.todo, undefined)
+  assert.equal(events.some(e => e.kind === 'log' && /Backlog/.test(e.message)), false)
+})
+
+test('runFramework runs the backlog loop after the build when opted in (#323)', async () => {
+  const { mkdtemp, rm, writeFile } = await import('node:fs/promises')
+  const { tmpdir } = await import('node:os')
+  const { join } = await import('node:path')
+  const cwd = await mkdtemp(join(tmpdir(), 'framework-run-todo-'))
+  await writeFile(join(cwd, 'TODO.md'), '- [ ] leftover task\n')
+  try {
+    const events: FrameworkEvent[] = []
+    // The fake script never edits the backlog, so the loop stall-stops after two
+    // attempts — proving the wiring runs post-build with the run's own session.
+    const result = await runFramework({
+      intent: FAKE_INTENT,
+      driver: fakeDriver(),
+      cwd,
+      signals: FAKE_SIGNALS,
+      todoLoop: true,
+      onEvent: e => events.push(e),
+    })
+    assert.deepEqual(result.todo, { completed: 2, reason: 'stalled', file: 'TODO.md' })
+    assert.ok(events.some(e => e.kind === 'log' && /Backlog: TODO\.md has 1 open item\(s\)/.test(e.message)))
+    // The loop runs before the run's end event.
+    const endIndex = events.findIndex(e => e.kind === 'end')
+    const stallIndex = events.findIndex(e => e.kind === 'log' && /no progress/.test(e.message))
+    assert.ok(stallIndex !== -1 && stallIndex < endIndex)
+  } finally {
+    await rm(cwd, { recursive: true, force: true })
+  }
+})

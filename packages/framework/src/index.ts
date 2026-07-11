@@ -54,6 +54,7 @@ export {
   runFramework,
   requestChoices,
   requestMultiSelect,
+  resolveAwaitGate,
   type RunFrameworkOptions,
   type RunFrameworkResult,
   type DeployDecision,
@@ -183,6 +184,18 @@ export {
   type ControlWatcher,
 } from './control.js'
 export { runPrompt, type RunPromptOptions, type RunPromptResult } from './prompt-run.js'
+export {
+  runTodoLoop,
+  findTodoBacklog,
+  parseTodoEntries,
+  TODO_FILE_PATTERN,
+  FLAT_TODO_FILE,
+  DEFAULT_MAX_TODO_ITEMS,
+  type TodoBacklog,
+  type TodoLoopOptions,
+  type TodoLoopResult,
+  type TodoLoopReason,
+} from './todo-loop.js'
 export {
   renderResearchPrompt,
   RESEARCH_PRESET_NAME,

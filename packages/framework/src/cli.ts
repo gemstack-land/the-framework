@@ -113,6 +113,10 @@ Options:
                          auto-activate either way (default: off, hand-rolled + Prisma).
   --max-passes <n>       Full-fledged loop pass budget (default: 5).
   --max-cost <usd>       Stop the run once it has spent this much (USD).
+  --no-todo-loop         Do not consume the agent's TODO backlog after the build
+                         (the loop is on by default; it gates per item on the
+                         dashboard and stops when the backlog is empty).
+  --max-todo-items <n>   Backlog entries worked per run (default: 25).
   --permission-mode <mode>   Claude Code permission mode: default | acceptEdits |
                              bypassPermissions | plan (default: bypassPermissions,
                              so the headless loop can run installs/builds/tests).
@@ -169,6 +173,8 @@ export interface CliOptions {
   buildEvent?: string | undefined
   maxPasses?: number
   maxCost?: number
+  todoLoop: boolean
+  todoMaxItems?: number
   deploy?: string | undefined
   cfProject?: string | undefined
   dokployUrl?: string | undefined
@@ -220,6 +226,7 @@ export function parseArgs(argv: string[]): CliOptions {
     daemon: false,
     stop: false,
     research: false,
+    todoLoop: true,
   }
   const PERMISSION_MODES: PermissionMode[] = ['default', 'acceptEdits', 'bypassPermissions', 'plan']
   const words: string[] = []
@@ -346,6 +353,15 @@ export function parseArgs(argv: string[]): CliOptions {
         const n = Number(argv[++i])
         if (!Number.isFinite(n) || n <= 0) opts.error = `invalid --max-cost: must be a positive number (USD)`
         else opts.maxCost = n
+        break
+      }
+      case '--no-todo-loop':
+        opts.todoLoop = false
+        break
+      case '--max-todo-items': {
+        const n = Number(argv[++i])
+        if (!Number.isInteger(n) || n < 1) opts.error = `invalid --max-todo-items: must be a positive integer`
+        else opts.todoMaxItems = n
         break
       }
       case '--port': {
@@ -897,6 +913,8 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
     ...(opts.model ? { model: opts.model } : {}),
     ...(opts.maxPasses ? { maxPasses: opts.maxPasses } : {}),
     ...(opts.maxCost ? { budgetUsd: opts.maxCost } : {}),
+    ...(opts.todoLoop ? {} : { todoLoop: false }),
+    ...(opts.todoMaxItems ? { todoMaxItems: opts.todoMaxItems } : {}),
     ...(deploy ? { deploy } : {}),
     ...(deployTarget ? { deployTarget } : {}),
     ...(serve ? { serve } : {}),

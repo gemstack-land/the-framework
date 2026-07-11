@@ -1,6 +1,6 @@
 import type { Driver, DriverEvent, DriverSession } from './driver/index.js'
 import { hasSessionIdPlaceholder, resolveSessionLink, type ChoicePick, type ChoiceRequest, type FrameworkEvent } from './events.js'
-import { requestChoices, requestMultiSelect } from './run.js'
+import { resolveAwaitGate } from './run.js'
 import { systemPromptBlock } from './system-prompt.js'
 import { AWAIT_PROTOCOL, parseAwaitGate } from './turn-gate.js'
 import { UsageMeter } from './usage.js'
@@ -120,34 +120,7 @@ export async function runPrompt(opts: RunPromptOptions): Promise<RunPromptResult
     let turn = await session.prompt(opts.prompt, { signal: runSignal })
     let gate = parseAwaitGate(turn.text)
     for (let round = 0; round < MAX_AWAIT_ROUNDS && gate; round++) {
-      // Round 0 keeps a stable id; later rounds get a unique one so a dashboard never
-      // confuses a re-ask with the answer it just resolved (same scheme as #337).
-      const baseId = gate.kind === 'multi' ? 'await-multiselect' : 'await-choices'
-      const id = round === 0 ? baseId : `${baseId}-${round}`
-      let answer: string
-      if (gate.kind === 'multi') {
-        const picked = await requestMultiSelect({
-          id,
-          title: gate.title,
-          options: gate.options,
-          ...(opts.requestChoice ? { requestChoice: opts.requestChoice } : {}),
-          emit,
-          signal: runSignal,
-        })
-        const labels = gate.options.filter(o => picked.includes(o.id)).map(o => o.label)
-        answer = labels.length ? labels.join(', ') : '(none)'
-      } else {
-        const pickedId = await requestChoices({
-          id,
-          title: gate.title,
-          options: gate.options,
-          ...(gate.recommended ? { recommended: gate.recommended } : {}),
-          ...(opts.requestChoice ? { requestChoice: opts.requestChoice } : {}),
-          emit,
-          signal: runSignal,
-        })
-        answer = gate.options.find(o => o.id === pickedId)?.label ?? pickedId
-      }
+      const answer = await resolveAwaitGate(gate, round, { requestChoice: opts.requestChoice, emit, signal: runSignal })
       emit({ kind: 'log', message: `Continuing with your choice: ${answer}` })
       turn = await session.prompt(
         `You paused to ask: "${gate.title}". The user chose: ${answer}. Continue with that decision, and do not ask again unless a genuinely new choice comes up.`,
