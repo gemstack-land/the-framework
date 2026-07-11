@@ -80,6 +80,10 @@ test('formatFrameworkEvent renders a session-update line', () => {
   )
 })
 
+test('formatFrameworkEvent renders a system-prompt line by length (#343)', () => {
+  assert.equal(formatFrameworkEvent({ kind: 'system-prompt', text: 'abcde' }), '  system prompt sent (5 chars)')
+})
+
 test('formatFrameworkEvent renders a preview line', () => {
   assert.equal(
     formatFrameworkEvent({ kind: 'preview', url: 'http://localhost:3000', command: 'npm run dev' }),

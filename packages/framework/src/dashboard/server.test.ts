@@ -91,6 +91,18 @@ test('page ships opt-in browser notifications for run-end and choice gates (#309
   }
 })
 
+test('page ships the Prompts transparency panel fed by system-prompt + driver events (#343)', async () => {
+  const dash = await startDashboard({ port: 0 })
+  try {
+    const { body } = await fetchText(dash.url + '/')
+    assert.match(body, /id="prompts-panel"/)
+    assert.match(body, /function addPrompt/)
+    assert.match(body, /fe\.kind === 'system-prompt'/)
+  } finally {
+    await dash.close()
+  }
+})
+
 test('page ships a live spend readout fed by usage events (#322)', async () => {
   const dash = await startDashboard({ port: 0 })
   try {

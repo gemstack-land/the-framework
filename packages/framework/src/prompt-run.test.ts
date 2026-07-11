@@ -34,6 +34,31 @@ test('runPrompt runs a gateless prompt straight through and emits session + end'
   assert.equal(events.some(e => e.kind === 'choice'), false)
 })
 
+test('runPrompt surfaces the system prompt (#343); the user prompt rides a driver start event', async () => {
+  const events: FrameworkEvent[] = []
+  const driver = new FakeDriver({ turns: [{ text: 'done' }] })
+  const startSpy = driver.start.bind(driver)
+  let captured = ''
+  driver.start = async opts => {
+    captured = opts.system ?? ''
+    return startSpy(opts)
+  }
+
+  await runPrompt({ prompt: 'refactor the auth flow', driver, cwd: '/ws', onEvent: e => events.push(e) })
+
+  // The system prompt is emitted verbatim: exactly what the driver was started with.
+  const sys = events.find(e => e.kind === 'system-prompt')
+  assert.ok(sys, 'a system-prompt event is emitted')
+  assert.equal((sys as { text: string }).text, captured)
+  assert.match((sys as { text: string }).text, /# System prompt/) // the built-in #326 block
+  // The user prompt is observable too, carried by the driver start event.
+  const start = events.find(
+    (e): e is Extract<FrameworkEvent, { kind: 'driver' }> => e.kind === 'driver' && e.event.type === 'start',
+  )
+  assert.ok(start, 'the driver start event carries the user prompt')
+  if (start.event.type === 'start') assert.match(start.event.prompt, /refactor the auth flow/)
+})
+
 test('runPrompt pauses on a multi-select gate and continues with the pick (#331)', async () => {
   const events: FrameworkEvent[] = []
   const picks: ChoiceRequest[] = []

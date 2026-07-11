@@ -91,6 +91,9 @@ export async function runPrompt(opts: RunPromptOptions): Promise<RunPromptResult
     fake: opts.driver.name === 'fake',
     ...(literalLink ? { sessionLink: literalLink } : {}),
   })
+  // Surface the exact system prompt the agent runs under (#343). The user prompts
+  // ride along as `driver` `start` events, so the dashboard can show them all.
+  emit({ kind: 'system-prompt', text: system })
 
   // Usage accounting + the self-stopping budget cap, the same wiring as a build
   // run (#322): the run signal composes the caller's abort with the budget abort.

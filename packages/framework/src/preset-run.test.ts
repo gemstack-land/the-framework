@@ -46,6 +46,12 @@ test('a domain preset frames the run and is narrated', async () => {
   assert.match(system(), /Skill: Engineering Practices/)
   assert.match(system(), /google\.github\.io\/eng-practices/)
 
+  // That exact system prompt is surfaced for transparency (#343), not just handed
+  // to the driver.
+  const sys = events.find(e => e.kind === 'system-prompt')
+  assert.ok(sys, 'a system-prompt event is emitted')
+  assert.equal((sys as { text: string }).text, system())
+
   // It was narrated (title + active modes).
   const log = events.find(e => e.kind === 'log' && /Domain preset: Software Development/.test(e.message))
   assert.ok(log, 'domain preset is logged')
