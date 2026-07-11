@@ -36,6 +36,7 @@ import { isWorkspaceEmpty } from './steps.js'
 import { loadFrameworkConfig, type FrameworkFileConfig } from './config.js'
 import { loadRepoMemory } from './memory.js'
 import { loadUserSystemPrompt, SYSTEM_PROMPT_FILE, type EcoOptions } from './system-prompt.js'
+import { appendLog, type LogEntry } from './logs.js'
 import { preflight } from './preflight.js'
 import { RunStore } from './store/index.js'
 import { daemonStatus, ensureDaemon, runDaemon, stopDaemon, DEFAULT_DAEMON_PORT } from './daemon.js'
@@ -465,6 +466,35 @@ export function ecoOptions(opts: Pick<CliOptions, 'eco'>): EcoOptions | undefine
   return { autoPlanning, autoResearch, autoMaintenance }
 }
 
+/** The log kind a run records in `.the-framework/LOGS.md` (#379): the direct paths are prompts, a build run is a build. */
+export function runLogKind(opts: Pick<CliOptions, 'directPrompt' | 'research'>): LogEntry['kind'] {
+  return opts.directPrompt || opts.research ? 'prompt' : 'build'
+}
+
+/**
+ * Build the project-log entry (#379) for a finished run from its `end` event and
+ * the session captured along the way. Pure, so the status mapping is unit-testable
+ * without a live run.
+ */
+export function runLogEntry(input: {
+  at: string
+  kind: LogEntry['kind']
+  title: string
+  end: Extract<FrameworkEvent, { kind: 'end' }>
+  sessionId?: string | undefined
+  sessionLink?: string | undefined
+}): LogEntry {
+  const status: LogEntry['status'] = input.end.ok ? 'done' : input.end.stopped ? 'stopped' : 'failed'
+  return {
+    at: input.at,
+    kind: input.kind,
+    title: input.title,
+    status,
+    ...(input.sessionId ? { sessionId: input.sessionId } : {}),
+    ...(input.sessionLink ? { sessionLink: input.sessionLink } : {}),
+  }
+}
+
 /**
  * Merge CLI flags over a project's `the-framework.yml` defaults (#258). A `--preset`
  * flag wins over the file's `preset`; the mode flags OR with the file's booleans
@@ -790,8 +820,32 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
   // set by a user interrupt or a budget cap (#322). Trusted over which signal
   // aborted, since a budget stop trips an internal signal the CLI never sees.
   let stoppedCleanly = false
+  // Record the finished run in the project log `.the-framework/LOGS.md` (#379). The
+  // kind + title are known up front; the session id/link arrive mid-run, and the
+  // `end` event (fired once by both run paths) closes the entry. Best-effort: the
+  // project DB is committed history, so it must never break a run.
+  const logKind = runLogKind(opts)
+  const logTitle = intent || (opts.research ? 'this PR' : '')
+  let logSessionId: string | undefined
+  let logSessionLink: string | undefined
   const onEvent = (event: FrameworkEvent) => {
-    if (event.kind === 'end' && event.stopped) stoppedCleanly = true
+    if (event.kind === 'session' && event.sessionLink) logSessionLink = event.sessionLink
+    else if (event.kind === 'session-update') {
+      logSessionId = event.sessionId
+      if (event.sessionLink) logSessionLink = event.sessionLink
+    }
+    if (event.kind === 'end') {
+      if (event.stopped) stoppedCleanly = true
+      const entry = runLogEntry({
+        at: new Date().toISOString(),
+        kind: logKind,
+        title: logTitle,
+        end: event,
+        sessionId: logSessionId,
+        sessionLink: logSessionLink,
+      })
+      void appendLog(cwd, entry).catch(() => {})
+    }
     io.out(formatFrameworkEvent(event))
     dashboard?.push(event)
     void store?.append(event)
