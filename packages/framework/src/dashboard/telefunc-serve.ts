@@ -4,6 +4,7 @@ import { Telefunc } from 'telefunc/node'
 import { registerDashboardTelefunctions } from '../dashboard-rpc/register.js'
 import type { ProjectsProvider } from './projects.js'
 import type { FrameworkEvent } from '../events.js'
+import type { PreferencesStore } from '../registry.js'
 import { isSameOriginRequest, type AddProjectResult, type StartRunKind, type StartRunOptions, type StartRunResult } from './server.js'
 
 /** Wired by the daemon so `sendStart` can reach the daemon's own `startRun` closure. */
@@ -33,6 +34,9 @@ export interface DashboardContext {
   addProject?: AddProjectHandler
   projects?: ProjectsProvider
   eventsSource?: EventsSource
+  /** The user-preferences store (#410). The daemon/foreground wire the real registry file;
+   * a public host (the relay) leaves it unset so `onPreferences`/`savePreferences` are inert. */
+  preferences?: PreferencesStore
 }
 
 let instance: Telefunc | undefined
@@ -62,6 +66,7 @@ export function makeTelefuncMount(
   projects?: ProjectsProvider,
   eventsSource?: EventsSource,
   addProject?: AddProjectHandler,
+  preferences?: PreferencesStore,
 ): (req: IncomingMessage, res: ServerResponse) => Promise<boolean> {
   return async (req, res) => {
     if (!isSameOriginRequest(req)) {
@@ -75,6 +80,7 @@ export function makeTelefuncMount(
       ...(addProject ? { addProject } : {}),
       ...(projects ? { projects } : {}),
       ...(eventsSource ? { eventsSource } : {}),
+      ...(preferences ? { preferences } : {}),
     }
     // Never let a telefunc failure become an unhandled rejection that kills the daemon:
     // telefunc 0.2.22 throws on a bare `GET /_telefunc` (it passes the request as a body,

@@ -2,6 +2,7 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import type { AddressInfo } from 'node:net'
 import type { EcoOptions } from '../system-prompt.js'
 import type { ProjectsProvider } from './projects.js'
+import { registryPreferencesStore, type PreferencesStore } from '../registry.js'
 import { serveClientBundle } from './static.js'
 import { makeTelefuncMount } from './telefunc-serve.js'
 
@@ -36,6 +37,13 @@ export interface DashboardOptions {
    * repo under a directory) and register it (the daemon does). Omit to disable adding.
    */
   onAddProject?: (path: string, directory: boolean) => Promise<AddProjectResult> | AddProjectResult
+  /**
+   * The user-preferences store (#410): the `onPreferences` / `savePreferences` telefunctions
+   * read/write it through the request context. Defaults to the real registry file (the daemon
+   * and per-run foreground dashboard both want it); the public relay serves its own mount and
+   * never wires one, so preferences stay inert there.
+   */
+  preferences?: PreferencesStore
   /**
    * Serve the new dashboard bundle (#405) from this directory — the prerendered Vike SPA
    * (`index.html` + `assets/**`). The daemon also mounts the dashboard's Telefunc surface
@@ -108,7 +116,7 @@ export function startDashboard(opts: DashboardOptions = {}): Promise<Dashboard> 
   // registry, byte-identical to the daemon default; the per-run dashboard passes a
   // single-project provider, the relay an empty one.
   const telefuncMount = clientBundleDir
-    ? makeTelefuncMount(opts.onStart, opts.projects, undefined, opts.onAddProject)
+    ? makeTelefuncMount(opts.onStart, opts.projects, undefined, opts.onAddProject, opts.preferences ?? registryPreferencesStore())
     : undefined
 
   const server = createServer((req, res) => {

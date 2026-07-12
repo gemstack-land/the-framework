@@ -165,8 +165,15 @@ export {
   listProjects,
   addProject,
   removeProject,
+  readRegistry,
+  readPreferences,
+  writePreferences,
+  registryPreferencesStore,
   REGISTRY_FILE,
   type ProjectRecord,
+  type Registry,
+  type Preferences,
+  type PreferencesStore,
   type RegistryFs,
 } from './registry.js'
 export {

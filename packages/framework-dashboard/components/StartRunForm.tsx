@@ -8,7 +8,7 @@ import {
 } from '@gemstack/framework/client'
 import { sendStart } from '../server/control.telefunc.js'
 import { onProjects } from '../server/projects.telefunc.js'
-import { autopilotOn, setAutopilot } from '../lib/autopilot.js'
+import { usePreferences, updatePreferences, autopilotEnabled } from '../lib/preferences.js'
 import { Button } from './ui/button.js'
 import { cn } from '../lib/utils.js'
 
@@ -33,13 +33,15 @@ export function StartRunForm({ projectId }: { projectId: string }) {
   const [error, setError] = useState<string | null>(null)
   const [note, setNote] = useState<string | null>(null)
 
-  const [autopilot, setAutopilotState] = useState(autopilotOn)
-  const [technical, setTechnical] = useState(false)
-  const [vanilla, setVanilla] = useState(false)
-  const [eco, setEco] = useState(false)
-  const [ecoPlanning, setEcoPlanning] = useState(false)
-  const [ecoResearch, setEcoResearch] = useState(false)
-  const [ecoMaintenance, setEcoMaintenance] = useState(false)
+  // The Global options persist daemon-side (#410), shared with the choice-gate countdown.
+  const preferences = usePreferences()
+  const autopilot = autopilotEnabled(preferences)
+  const technical = preferences.technical ?? false
+  const vanilla = preferences.vanilla ?? false
+  const eco = preferences.eco ?? false
+  const ecoPlanning = preferences.ecoPlanning ?? false
+  const ecoResearch = preferences.ecoResearch ?? false
+  const ecoMaintenance = preferences.ecoMaintenance ?? false
 
   // Context selector (#439/#314): the agent can reach every registered repo, so ticking a
   // subset narrows its focus — the picked paths become one `Context:` line in the system
@@ -127,11 +129,6 @@ export function StartRunForm({ projectId }: { projectId: string }) {
     }
   }
 
-  const toggleAutopilot = (on: boolean) => {
-    setAutopilotState(on)
-    setAutopilot(on) // keep the choice-gate countdown in lockstep (#433)
-  }
-
   return (
     <form onSubmit={submit} className="border-b border-border p-4">
       <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Start a run</div>
@@ -155,29 +152,29 @@ export function StartRunForm({ projectId }: { projectId: string }) {
 
       <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1.5 text-xs text-muted-foreground">
         <label className="flex cursor-pointer items-center gap-1.5" title="Auto-accept the recommended choice after a countdown; also relaxes the maintenance stance">
-          <input type="checkbox" checked={autopilot} onChange={e => toggleAutopilot(e.target.checked)} disabled={busy} /> Autopilot
+          <input type="checkbox" checked={autopilot} onChange={e => updatePreferences({ autopilot: e.target.checked })} disabled={busy} /> Autopilot
         </label>
         <label className="flex cursor-pointer items-center gap-1.5" title="Expose technical detail (e.g. tech-stack choices)">
-          <input type="checkbox" checked={technical} onChange={e => setTechnical(e.target.checked)} disabled={busy} /> Technical control
+          <input type="checkbox" checked={technical} onChange={e => updatePreferences({ technical: e.target.checked })} disabled={busy} /> Technical control
         </label>
         <label className="flex cursor-pointer items-center gap-1.5" title="Remove all system prompts: the same as raw Claude Code">
-          <input type="checkbox" checked={vanilla} onChange={e => setVanilla(e.target.checked)} disabled={busy} /> Vanilla
+          <input type="checkbox" checked={vanilla} onChange={e => updatePreferences({ vanilla: e.target.checked })} disabled={busy} /> Vanilla
         </label>
         <label className={cn('flex items-center gap-1.5', ecoDisabled ? 'opacity-40' : 'cursor-pointer')} title="Trim the built-in system prompt to save tokens">
-          <input type="checkbox" checked={eco && !ecoDisabled} onChange={e => setEco(e.target.checked)} disabled={busy || ecoDisabled} /> Eco
+          <input type="checkbox" checked={eco && !ecoDisabled} onChange={e => updatePreferences({ eco: e.target.checked })} disabled={busy || ecoDisabled} /> Eco
         </label>
       </div>
 
       {eco && !ecoDisabled && (
         <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1.5 pl-4 text-xs text-muted-foreground">
           <label className="flex cursor-pointer items-center gap-1.5" title="Drop the planning section, letting the agent plan on its own">
-            <input type="checkbox" checked={ecoPlanning} onChange={e => setEcoPlanning(e.target.checked)} disabled={busy} /> Auto planning
+            <input type="checkbox" checked={ecoPlanning} onChange={e => updatePreferences({ ecoPlanning: e.target.checked })} disabled={busy} /> Auto planning
           </label>
           <label className="flex cursor-pointer items-center gap-1.5" title="Drop the alternatives/variability section">
-            <input type="checkbox" checked={ecoResearch} onChange={e => setEcoResearch(e.target.checked)} disabled={busy} /> Auto research
+            <input type="checkbox" checked={ecoResearch} onChange={e => updatePreferences({ ecoResearch: e.target.checked })} disabled={busy} /> Auto research
           </label>
           <label className="flex cursor-pointer items-center gap-1.5" title="Drop the maintenance section">
-            <input type="checkbox" checked={ecoMaintenance} onChange={e => setEcoMaintenance(e.target.checked)} disabled={busy} /> Auto maintenance
+            <input type="checkbox" checked={ecoMaintenance} onChange={e => updatePreferences({ ecoMaintenance: e.target.checked })} disabled={busy} /> Auto maintenance
           </label>
         </div>
       )}

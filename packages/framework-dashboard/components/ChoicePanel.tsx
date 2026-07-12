@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { ChoiceRequest } from '@gemstack/framework'
 import { sendChoice } from '../server/control.telefunc.js'
-import { autopilotOn, setAutopilot } from '../lib/autopilot.js'
+import { usePreferences, updatePreferences, autopilotEnabled } from '../lib/preferences.js'
 import { Button } from './ui/button.js'
 import { cn } from '../lib/utils.js'
 
@@ -26,7 +26,7 @@ export function ChoicePanel({
   const [checked, setChecked] = useState<Set<string>>(
     () => new Set(choice.multi ? choice.options.filter(o => o.default).map(o => o.id) : []),
   )
-  const [autopilot, setAutopilotState] = useState(autopilotOn)
+  const autopilot = autopilotEnabled(usePreferences())
   const [secondsLeft, setSecondsLeft] = useState<number | null>(null)
   const [cancelled, setCancelled] = useState(false)
 
@@ -95,10 +95,7 @@ export function ChoicePanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autopilot, cancelled, busy])
 
-  const toggleAutopilot = (on: boolean) => {
-    setAutopilotState(on)
-    setAutopilot(on) // keep the Start form's Global option in lockstep (#433)
-  }
+  const toggleAutopilot = (on: boolean) => updatePreferences({ autopilot: on }) // shared with the Start form (#410)
 
   return (
     <section className="border-b border-border bg-accent/40 p-4">
