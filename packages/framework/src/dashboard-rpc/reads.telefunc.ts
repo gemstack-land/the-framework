@@ -1,6 +1,7 @@
 import { listRuns, loadRunEvents, type RunMeta } from '../store/index.js'
 import { readLogs, type LogEntry } from '../logs.js'
 import { readDocs, type WorkspaceDoc } from '../dashboard/docs.js'
+import { collectQueue, type ProjectQueue } from '../dashboard/queue.js'
 import { contextProjects } from './context.js'
 import type { FrameworkEvent } from '../events.js'
 
@@ -40,4 +41,10 @@ export async function onDocs(projectId: string): Promise<WorkspaceDoc[]> {
 export async function onProjectLog(projectId: string): Promise<LogEntry[]> {
   const cwd = await projectPath(projectId)
   return cwd ? readLogs(cwd).catch(() => []) : []
+}
+
+/** The aggregated open TODO queue across every registered project (#438), most-open first. */
+export async function onQueue(): Promise<ProjectQueue[]> {
+  const projects = await contextProjects().list().catch(() => [])
+  return collectQueue(projects)
 }
