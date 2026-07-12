@@ -6,6 +6,7 @@ import { sendStop } from '../server/control.telefunc.js'
 import { pendingChoice, isRunActive } from '../lib/live-state.js'
 import { EventList } from './EventList.js'
 import { ChoicePanel } from './ChoicePanel.js'
+import { StartRunForm } from './StartRunForm.js'
 import { Button } from './ui/button.js'
 
 // The live event stream (#405/#314): a projection of the selected project's
@@ -38,26 +39,26 @@ export function EventStream({ projectId }: { projectId: string | null }) {
   if (!projectId) {
     return <div className="grid flex-1 place-items-center text-sm text-muted-foreground">Select a project to watch its live run.</div>
   }
-  if (events.length === 0) {
-    return (
-      <div className="grid flex-1 place-items-center text-sm text-muted-foreground">
-        Waiting for events… (start a run in this project)
-      </div>
-    )
-  }
 
+  const active = isRunActive(events)
   const choice = pendingChoice(events)
   return (
     <>
-      {isRunActive(events) && (
+      {active ? (
         <div className="flex items-center justify-end border-b border-border px-4 py-2">
           <Button variant="outline" size="sm" onClick={() => void sendStop(projectId)}>
             Stop run
           </Button>
         </div>
+      ) : (
+        <StartRunForm projectId={projectId} />
       )}
       {choice && <ChoicePanel key={choice.id} projectId={projectId} choice={choice} />}
-      <EventList events={events} />
+      {events.length > 0 ? (
+        <EventList events={events} />
+      ) : (
+        <div className="grid flex-1 place-items-center text-sm text-muted-foreground">No events yet.</div>
+      )}
     </>
   )
 }

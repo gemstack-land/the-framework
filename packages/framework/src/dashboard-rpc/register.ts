@@ -1,6 +1,6 @@
 import { __decorateTelefunction } from 'telefunc'
 import { onRuns, onRun, onDocs, onProjectLog } from './reads.telefunc.js'
-import { sendStop, sendChoice } from './control.telefunc.js'
+import { sendStop, sendChoice, sendStart } from './control.telefunc.js'
 import { onEvents } from './events.telefunc.js'
 import { onProjects } from './projects.telefunc.js'
 
@@ -35,6 +35,7 @@ export function registerDashboardTelefunctions(appRootDir: string = process.cwd(
   reg(onProjectLog, 'onProjectLog', reads)
   reg(sendStop, 'sendStop', control)
   reg(sendChoice, 'sendChoice', control)
+  reg(sendStart, 'sendStart', control)
   reg(onEvents, 'onEvents', events)
   reg(onProjects, 'onProjects', projects)
 }

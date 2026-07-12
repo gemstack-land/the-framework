@@ -4,13 +4,18 @@ import { Telefunc } from 'telefunc/node'
 import { registerDashboardTelefunctions } from '../dashboard-rpc/register.js'
 import { isSameOriginRequest, type StartRunKind, type StartRunOptions, type StartRunResult } from './server.js'
 
-/** Wired by the daemon so `sendStart` (added with this mount) can reach `startRun`. */
+/** Wired by the daemon so `sendStart` can reach the daemon's own `startRun` closure. */
 export type StartRunHandler = (
   prompt: string,
   kind: StartRunKind,
   options: StartRunOptions,
   projectId?: string,
 ) => StartRunResult | Promise<StartRunResult>
+
+/** The Telefunc request context the mount provides; `sendStart` reads `startRun` from it. */
+export interface DashboardContext {
+  startRun?: StartRunHandler
+}
 
 let instance: Telefunc | undefined
 
@@ -44,6 +49,7 @@ export function makeTelefuncMount(
       return true
     }
     const tf = setup()
-    return tf.serve({ req, res, context: (startRun ? { startRun } : {}) as never })
+    const context: DashboardContext = startRun ? { startRun } : {}
+    return tf.serve({ req, res, context: context as never })
   }
 }

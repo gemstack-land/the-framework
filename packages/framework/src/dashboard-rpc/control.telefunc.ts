@@ -1,6 +1,9 @@
+import { getContext } from 'telefunc'
 import { appendControl } from '../control.js'
 import { defaultProjectsProvider } from '../dashboard/projects.js'
 import type { ChoiceBy } from '../events.js'
+import type { StartRunKind, StartRunOptions, StartRunResult } from '../dashboard/server.js'
+import type { DashboardContext } from '../dashboard/telefunc-serve.js'
 
 // The write side behind the new dashboard (#405): steering a live run. The reverse of
 // the event stream — events flow run -> events.jsonl -> Channel -> browser; steering
@@ -34,4 +37,25 @@ export async function sendChoice(
 ): Promise<void> {
   const cwd = await projectPath(projectId)
   if (cwd) await appendControl(cwd, { kind: 'choice', id, pick, by })
+}
+
+/**
+ * Start a run in the project (#405, #345): the one write that needs the daemon, since
+ * spawning goes through the daemon's own `startRun` closure (with its one-run-per-
+ * project busy guard). The daemon provides `startRun` on the Telefunc request context,
+ * so this runs in-process. `kind` defaults to a plain build run; a `build`/`prompt`
+ * needs a non-empty prompt, `research` may be empty (its "what" defaults server-side).
+ * Returns the daemon's {@link StartRunResult} — `busy` when a run is already active.
+ */
+export async function sendStart(
+  projectId: string,
+  prompt: string,
+  kind: StartRunKind = 'build',
+  options: StartRunOptions = {},
+): Promise<StartRunResult> {
+  const { startRun } = getContext<DashboardContext>()
+  if (!startRun) return { ok: false, error: 'starting a run is not enabled on this server' }
+  const text = prompt.trim()
+  if (!text && kind !== 'research') return { ok: false, error: 'a non-empty prompt is required' }
+  return startRun(text, kind, options, projectId)
 }
