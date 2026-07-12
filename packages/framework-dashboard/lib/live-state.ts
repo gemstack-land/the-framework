@@ -35,6 +35,26 @@ export function pendingChoice(events: readonly FrameworkEvent[]): ChoiceRequest 
   return pendingChoices(events).at(-1) ?? null
 }
 
+/** One ad-hoc markdown view the agent pushed to the right rail (#441). */
+export interface AgentView {
+  id: string
+  title: string
+  markdown: string
+}
+
+/**
+ * Every markdown view the agent has shown this run (#441), in first-seen order. A `view`
+ * event with an id already seen updates it in place (the agent re-showed the same title),
+ * so the rail keeps one entry per view rather than stacking duplicates.
+ */
+export function agentViews(events: readonly FrameworkEvent[]): AgentView[] {
+  const byId = new Map<string, AgentView>()
+  for (const event of events) {
+    if (event.kind === 'view') byId.set(event.id, { id: event.id, title: event.title, markdown: event.markdown })
+  }
+  return [...byId.values()]
+}
+
 /**
  * Whether the run is still going, i.e. worth showing a Stop button. A run ends with a
  * single `end` event; until one arrives (and once anything has streamed) it is live.

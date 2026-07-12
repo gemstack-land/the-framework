@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { isDeclinedConfirmation, parseAwaitGate, parseChoicesGate, parseConfirmationGate, parseMultiSelectGate } from './turn-gate.js'
+import { isDeclinedConfirmation, parseAwaitGate, parseChoicesGate, parseConfirmationGate, parseMarkdownViews, parseMultiSelectGate } from './turn-gate.js'
 
 const block = (json: string): string => 'Here are the options.\n```await-choices\n' + json + '\n```'
 const multiBlock = (json: string): string => 'Pick some.\n```await-multiselect\n' + json + '\n```'
@@ -119,4 +119,32 @@ test('parseAwaitGate discriminates choices vs multiselect, later block wins (#33
   // Both present: the one appearing later in the turn wins.
   const both = parseAwaitGate(block('{ "options": [{ "label": "x" }] }') + '\n' + multiBlock('{ "options": [{ "label": "y" }] }'))
   assert.equal(both?.kind, 'multi')
+})
+
+test('parseMarkdownViews returns [] when the turn has no show-markdown block (#441)', () => {
+  assert.deepEqual(parseMarkdownViews('Built the app, nothing to show.'), [])
+})
+
+test('parseMarkdownViews parses a titled block, stripping the heading (#441)', () => {
+  const views = parseMarkdownViews('Here is the plan.\n```show-markdown\n# Deployment plan\n## Steps\n- do X\n```')
+  assert.deepEqual(views, [{ id: 'deployment-plan', title: 'Deployment plan', markdown: '## Steps\n- do X' }])
+})
+
+test('parseMarkdownViews falls back to Note when the block has no heading (#441)', () => {
+  const views = parseMarkdownViews('```show-markdown\njust some body text\n```')
+  assert.deepEqual(views, [{ id: 'note', title: 'Note', markdown: 'just some body text' }])
+})
+
+test('parseMarkdownViews collects several blocks and keeps the later of a repeated title (#441)', () => {
+  const views = parseMarkdownViews(
+    '```show-markdown\n# Plan\nfirst\n```\ntext\n```show-markdown\n# Summary\ndone\n```\n```show-markdown\n# Plan\nupdated\n```',
+  )
+  assert.deepEqual(views, [
+    { id: 'plan', title: 'Plan', markdown: 'updated' },
+    { id: 'summary', title: 'Summary', markdown: 'done' },
+  ])
+})
+
+test('parseMarkdownViews skips a blank block (#441)', () => {
+  assert.deepEqual(parseMarkdownViews('```show-markdown\n# Empty\n```'), [])
 })
