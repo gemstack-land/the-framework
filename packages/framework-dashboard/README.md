@@ -9,9 +9,12 @@ IPC:
 
 - **Projects sidebar** — a Telefunc RPC (`server/projects.telefunc.ts`) over the
   global registry (`@gemstack/framework`'s `listProjects`).
-- **Live event stream** — SSE (`server/events-sse.ts`) tailing the selected
-  project's `.the-framework/events.jsonl`. (#405 pairs SSE with Telefunc-stream;
-  the SSE half is here, Telefunc-stream is a follow-up to evaluate.)
+- **Read model** — Telefunc RPCs (`server/reads.telefunc.ts`) for run history, a
+  run's replay, the surfaced PLAN/TODO docs, and the committed `LOGS.md`.
+- **Live event stream** — a Telefunc Channel (`server/events.telefunc.ts`) tailing
+  the selected project's `.the-framework/events.jsonl`; each new line becomes one
+  `channel.send(event)`, and the client `.listen()`s. Serialization, type
+  validation, and reconnect come from Telefunc.
 
 ## Run it
 

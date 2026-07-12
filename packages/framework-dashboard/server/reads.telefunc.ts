@@ -13,7 +13,8 @@ import {
 // The read model over Telefunc (#405 phase 2): the run history, a run's replay, the
 // surfaced PLAN/TODO docs, and the committed LOGS.md — each keyed by project id and
 // backed by the same readers the daemon's /api/* endpoints use, so the new dashboard
-// stays a projection of the same files. A live run stream stays on SSE (events-sse.ts).
+// stays a projection of the same files. The live run stream is its own Telefunc
+// Channel (events.telefunc.ts).
 
 /** The registry path for a project id, or undefined when unknown (readers then yield empty). */
 async function projectPath(projectId: string): Promise<string | undefined> {

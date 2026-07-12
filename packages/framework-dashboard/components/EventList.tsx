@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react'
 import type { FrameworkEvent } from '@gemstack/framework'
 import { Badge } from './ui/badge.js'
 
-// Presentational event log, shared by the live SSE stream and past-run replay. Each
+// Presentational event log, shared by the live stream and past-run replay. Each
 // FrameworkEvent is a kind badge + a one-line summary; the pane sticks to the bottom
 // as events arrive (live) — replay renders the whole list at once.
 export function EventList({ events, stick = true }: { events: FrameworkEvent[]; stick?: boolean }) {

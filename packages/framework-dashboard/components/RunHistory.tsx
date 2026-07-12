@@ -13,7 +13,7 @@ const STATUS_TONE: Record<string, string> = {
 }
 
 // The Runs rail (#314 second sidebar): the selected project's archived runs over a
-// Telefunc RPC (server/reads.telefunc.ts). "Live" returns to the SSE stream; picking a
+// Telefunc RPC (server/reads.telefunc.ts). "Live" returns to the live stream; picking a
 // run replays it in the main view. Polls so a run that just finished shows up.
 export function RunHistory({
   projectId,

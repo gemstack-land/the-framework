@@ -6,10 +6,10 @@ import { RunReplay } from '../../components/RunReplay.js'
 import { RightRail } from '../../components/RightRail.js'
 import { Badge } from '../../components/ui/badge.js'
 
-// The dashboard shell (#405 phase 2): Projects | Runs | main (live SSE stream or a
-// past-run replay) | Docs/Log rail. The Projects RPC, run history, run replay, docs
-// and log are all Telefunc; the live stream is SSE. A projection of the same
-// .the-framework files the daemon writes.
+// The dashboard shell (#405 phase 2): Projects | Runs | main (live event stream or a
+// past-run replay) | Docs/Log rail. Everything over the wire is Telefunc — the
+// Projects RPC, run history, run replay, docs, log, and the live stream (a Channel).
+// A projection of the same .the-framework files the daemon writes.
 export default function Page() {
   const [projectId, setProjectId] = useState<string | null>(null)
   // null = follow the live stream; a run id = replay that archived run.
