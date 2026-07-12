@@ -7,3 +7,4 @@ export {
   type SummarizeDeps,
 } from './projects.js'
 export { dashboardHtml } from './page.js'
+export { readDocs, DOC_CATEGORIES, type WorkspaceDoc } from './docs.js'

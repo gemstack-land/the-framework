@@ -92,7 +92,7 @@ export {
   SESSION_ID_PLACEHOLDER,
   OPEN_LOOP_MODES,
 } from './events.js'
-export { startDashboard, dashboardHtml, summarizeProject, defaultProjectsProvider, type Dashboard, type DashboardOptions, type StartRunKind, type StartRunResult, type AddProjectResult, type ProjectSummary, type ProjectsProvider, type SummarizeDeps } from './dashboard/index.js'
+export { startDashboard, dashboardHtml, summarizeProject, defaultProjectsProvider, readDocs, type Dashboard, type DashboardOptions, type StartRunKind, type StartRunResult, type AddProjectResult, type ProjectSummary, type ProjectsProvider, type SummarizeDeps, type WorkspaceDoc } from './dashboard/index.js'
 export {
   RunStore,
   nodeStoreFs,
