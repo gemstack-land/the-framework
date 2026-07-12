@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import type { ProjectSummary } from '@gemstack/framework'
 import { onProjects, sendAddProject } from '../server/projects.telefunc.js'
+import { QueueSection } from './QueueSection.js'
 import { Button } from './ui/button.js'
 import { cn } from '../lib/utils.js'
 
@@ -34,15 +35,17 @@ export function ProjectsSidebar({
 
   return (
     <aside className="flex w-64 shrink-0 flex-col border-r border-border">
-      <div className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Projects</div>
-      <div className="flex-1 overflow-y-auto px-2">
-        {projects === null && <p className="px-2 py-1 text-sm text-muted-foreground">Loading…</p>}
-        {projects?.length === 0 && (
-          <p className="px-2 py-1 text-sm text-muted-foreground">
-            No projects yet. Add one below, or run <code className="rounded bg-muted px-1">framework</code> in a repo.
-          </p>
-        )}
-        {projects?.map(p => (
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        <QueueSection selectedId={selectedId} onSelect={onSelect} />
+        <div className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Projects</div>
+        <div className="px-2">
+          {projects === null && <p className="px-2 py-1 text-sm text-muted-foreground">Loading…</p>}
+          {projects?.length === 0 && (
+            <p className="px-2 py-1 text-sm text-muted-foreground">
+              No projects yet. Add one below, or run <code className="rounded bg-muted px-1">framework</code> in a repo.
+            </p>
+          )}
+          {projects?.map(p => (
           <Button
             key={p.id}
             variant="ghost"
@@ -63,7 +66,8 @@ export function ProjectsSidebar({
               {p.lastActivityAt ? new Date(p.lastActivityAt).toLocaleString() : 'no activity yet'}
             </span>
           </Button>
-        ))}
+          ))}
+        </div>
       </div>
       <AddProject onAdded={() => reload(true)} />
     </aside>
