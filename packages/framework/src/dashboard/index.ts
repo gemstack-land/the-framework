@@ -1,4 +1,4 @@
-export { startDashboard, parseStartOptions, type Dashboard, type DashboardOptions, type StartRunKind, type StartRunOptions, type StartRunResult, type AddProjectResult } from './server.js'
+export { startDashboard, isSameOriginRequest, type Dashboard, type DashboardOptions, type StartRunKind, type StartRunOptions, type StartRunResult, type AddProjectResult } from './server.js'
 export {
   summarizeProject,
   defaultProjectsProvider,
@@ -11,5 +11,4 @@ export {
 export { resolveDashboardBundle } from './bundle.js'
 export { makeTelefuncMount, type EventsSource } from './telefunc-serve.js'
 export { serveClientBundle } from './static.js'
-export { dashboardHtml } from './page.js'
 export { readDocs, DOC_CATEGORIES, type WorkspaceDoc } from './docs.js'

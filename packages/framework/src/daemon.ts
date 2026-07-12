@@ -1,12 +1,10 @@
 import { spawn } from 'node:child_process'
-import { watch, type FSWatcher } from 'node:fs'
 import { mkdir, readFile, writeFile, rm, stat } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
 import type { FrameworkEvent } from './events.js'
-import { EVENTS_FILE, FRAMEWORK_DIR } from './store/index.js'
+import { FRAMEWORK_DIR } from './store/index.js'
 import { startDashboard, type Dashboard, type StartRunKind, type StartRunOptions, type StartRunResult, type AddProjectResult } from './dashboard/index.js'
 import { resolveDashboardBundle } from './dashboard/bundle.js'
-import { appendControl } from './control.js'
 import { isActivated } from './project.js'
 import { addProject, listProjects, projectId } from './registry.js'
 import { installProject, enumerateGitRepos } from './install.js'
@@ -220,8 +218,6 @@ export class EventTailer extends JsonlTailer<FrameworkEvent> {}
 export interface RunDaemonOptions {
   /** Port to bind. Default {@link DEFAULT_DAEMON_PORT}; pass `0` for an ephemeral port. */
   port?: number
-  /** Poll interval backstop for the file tail, ms. Default 1000. */
-  pollMs?: number
   /** Shut the daemon down when this aborts (in addition to SIGINT/SIGTERM). For tests. */
   signal?: AbortSignal
   /** The CLI entry script to re-invoke for a dashboard-started run (#345). Default `process.argv[1]`. */
@@ -231,11 +227,11 @@ export interface RunDaemonOptions {
 }
 
 /**
- * The daemon body — run in the detached child. Starts the dashboard, seeds it
- * from the existing log, then tails `.the-framework/events.jsonl` (an `fs.watch` plus
- * a poll backstop, since `fs.watch` is unreliable across platforms), pushing each
- * new event to browsers. Resolves on SIGINT/SIGTERM after tearing the dashboard
- * down and removing its state file.
+ * The daemon body — run in the detached child. Serves the prerendered Vike + Telefunc
+ * dashboard (#405/#426): the SPA reads each project's `.the-framework/events.jsonl` over a
+ * Telefunc Channel and steers over control.jsonl, so the daemon just serves the bundle,
+ * spawns runs, and records its liveness. Resolves on SIGINT/SIGTERM after tearing the
+ * dashboard down and removing its state file.
  */
 export async function runDaemon(cwd: string, opts: RunDaemonOptions = {}): Promise<void> {
   const port = opts.port ?? DEFAULT_DAEMON_PORT
@@ -312,29 +308,11 @@ export async function runDaemon(cwd: string, opts: RunDaemonOptions = {}): Promi
         stdio: 'ignore',
       })
       child.unref()
-      child.once('error', err => {
-        activeRuns.delete(key)
-        dashboard.push({ kind: 'log', message: `✗ run failed to start: ${err.message}` })
-      })
-      child.once('exit', code => {
-        activeRuns.delete(key)
-        // The run narrates its own end through the event log; only a hard failure
-        // (nonzero exit with no run to tell the tale) needs the daemon's voice.
-        if (code) dashboard.push({ kind: 'log', message: `✗ run exited with code ${code}` })
-      })
+      // The run narrates itself through its own `.the-framework/events.jsonl`, which the
+      // dashboard streams over a Telefunc Channel; the daemon just tracks liveness.
+      child.once('error', () => activeRuns.delete(key))
+      child.once('exit', () => activeRuns.delete(key))
       if (child.pid !== undefined) activeRuns.set(key, child.pid)
-      // A verbatim prompt can be a whole preset document: narrate its first line only.
-      const firstLine = prompt.split('\n', 1)[0] ?? ''
-      const brief = firstLine.length > 80 ? `${firstLine.slice(0, 80)}…` : firstLine
-      dashboard.push({
-        kind: 'log',
-        message:
-          kind === 'research'
-            ? `▶ research started: ${prompt || 'this PR'}`
-            : kind === 'prompt'
-              ? `▶ prompt run started: ${brief}`
-              : `▶ run started: ${prompt}`,
-      })
       return { ok: true }
     } finally {
       starting.delete(key)
@@ -366,70 +344,34 @@ export async function runDaemon(cwd: string, opts: RunDaemonOptions = {}): Promi
     return { ok: true, added, alreadyActivated }
   }
 
-  // Steering is keyed per project (#393): a Stop / choice pick carries the project id
-  // the browser is viewing, and we append it to that project's own control.jsonl (its
-  // live run tails that file). No project id targets the home project, as before.
-  const steer = (id: string | undefined, entry: Parameters<typeof appendControl>[1]): void =>
-    void resolveProject(id).then(path => (path ? appendControl(path, entry) : undefined)).catch(() => {})
-  // The new dashboard (#405) is now the default: the daemon serves the prerendered SPA
-  // at `/` (page.ts moves to `/legacy`). `FRAMEWORK_DASHBOARD=legacy` is the escape
-  // hatch back to page.ts at `/`. If the built bundle is absent (an install that never
-  // shipped it), the daemon falls back to page.ts too.
-  const forceLegacy = env['FRAMEWORK_DASHBOARD'] === 'legacy'
-  const clientBundleDir = forceLegacy ? undefined : await resolveDashboardBundle()
+  // The daemon serves the prerendered Vike + Telefunc dashboard (#405/#426): the SPA reads
+  // each project's `.the-framework/events.jsonl` over a Telefunc Channel and steers over
+  // control.jsonl, so there is no in-process event stream to feed here. `sendStart` /
+  // `sendAddProject` reach the closures above through the Telefunc request context. A
+  // missing bundle (a broken install) surfaces as a 503 from the server.
+  const clientBundleDir = await resolveDashboardBundle()
   const dashboard: Dashboard = await startDashboard({
     port,
-    cwd,
-    onStop: projectId => steer(projectId, { kind: 'stop' }),
-    onChoice: (id, pick, by, projectId) => steer(projectId, { kind: 'choice', id, pick, by }),
     onStart: startRun,
     onAddProject: addProjects,
-    ...(clientBundleDir ? { clientBundleDir, dashboardMode: 'next' } : {}),
+    ...(clientBundleDir ? { clientBundleDir } : {}),
   })
-  const eventsPath = join(daemonDir(cwd), EVENTS_FILE)
-  const tailer = new EventTailer(eventsPath, event => dashboard.push(event))
 
-  let watcher: FSWatcher | undefined
-  let poll: NodeJS.Timeout | undefined
   try {
-    // Seed from whatever is already logged, then keep up with appends.
-    await tailer.pull()
-    let pulling = false
-    const pump = async (): Promise<void> => {
-      if (pulling) return
-      pulling = true
-      try {
-        await tailer.pull()
-      } finally {
-        pulling = false
-      }
-    }
-
-    try {
-      watcher = watch(daemonDir(cwd), () => void pump())
-    } catch {
-      // dir may not be watchable everywhere; the poll backstop still covers it
-    }
-    poll = setInterval(() => void pump(), opts.pollMs ?? 1000)
-
     const actualPort = Number(new URL(dashboard.url).port) || port
     const state: DaemonState = { pid: process.pid, port: actualPort, url: dashboard.url, startedAt: new Date().toISOString() }
     await mkdir(dirname(daemonStatePath(env)), { recursive: true })
     await writeFile(daemonStatePath(env), JSON.stringify(state, null, 2))
   } catch (err) {
-    // Startup failed after the port was bound. Tear everything down, or the live
-    // server + interval keep the event loop alive: a zombie daemon squatting the
-    // port with no state file, which also wedges every later `framework` start.
-    clearInterval(poll)
-    watcher?.close()
+    // Startup failed after the port was bound. Tear the server down, or it keeps the
+    // event loop alive: a zombie daemon squatting the port with no state file, which
+    // also wedges every later `framework` start.
     await dashboard.close()
     throw err
   }
 
   await waitForShutdown(opts.signal)
 
-  clearInterval(poll)
-  watcher?.close()
   await dashboard.close()
   await rm(daemonStatePath(env), { force: true }).catch(() => {})
 }

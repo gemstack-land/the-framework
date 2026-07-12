@@ -4,651 +4,95 @@ import { get, request } from 'node:http'
 import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { startDashboard, parseStartOptions, type StartRunOptions } from './server.js'
-import type { FrameworkEvent } from '../events.js'
-import type { ProjectsProvider, ProjectSummary } from './projects.js'
-import { appendLog } from '../logs.js'
+import { startDashboard, isSameOriginRequest } from './server.js'
+import type { IncomingMessage } from 'node:http'
 
-function fetchText(url: string): Promise<{ status: number; body: string }> {
+function fetchText(url: string): Promise<{ status: number; body: string; type: string }> {
   return new Promise((resolvePromise, rejectPromise) => {
     get(url, res => {
       let body = ''
       res.on('data', c => (body += c))
-      res.on('end', () => resolvePromise({ status: res.statusCode ?? 0, body }))
+      res.on('end', () =>
+        resolvePromise({ status: res.statusCode ?? 0, body, type: String(res.headers['content-type'] ?? '') }),
+      )
     }).on('error', rejectPromise)
   })
 }
 
-function send(url: string, method: string): Promise<{ status: number; body: string }> {
+// A cross-origin POST: an `Origin` header for a host that is not this server.
+function postCrossOrigin(url: string): Promise<{ status: number; body: string }> {
   return new Promise((resolvePromise, rejectPromise) => {
-    const req = request(url, { method }, res => {
+    const req = request(url, { method: 'POST', headers: { origin: 'http://evil.com', 'content-type': 'application/json' } }, res => {
       let body = ''
       res.on('data', c => (body += c))
       res.on('end', () => resolvePromise({ status: res.statusCode ?? 0, body }))
     })
     req.on('error', rejectPromise)
-    req.end()
+    req.end('{}')
   })
 }
 
-// Read SSE `data:` lines until `count` have arrived, then resolve and disconnect.
-function readSse(url: string, count: number): Promise<FrameworkEvent[]> {
-  return new Promise((resolvePromise, rejectPromise) => {
-    const req = get(url, res => {
-      let buffer = ''
-      const collected: FrameworkEvent[] = []
-      res.on('data', chunk => {
-        buffer += chunk
-        let nl: number
-        while ((nl = buffer.indexOf('\n\n')) !== -1) {
-          const frame = buffer.slice(0, nl)
-          buffer = buffer.slice(nl + 2)
-          const line = frame.split('\n').find(l => l.startsWith('data: '))
-          if (line) collected.push(JSON.parse(line.slice(6)) as FrameworkEvent)
-          if (collected.length >= count) {
-            req.destroy()
-            resolvePromise(collected)
-            return
-          }
-        }
-      })
-    })
-    req.on('error', () => {}) // destroy() triggers an expected error; ignore
-    setTimeout(() => rejectPromise(new Error('SSE timeout')), 3000).unref?.()
-  })
+// A minimal prerendered SPA bundle: an index.html shell + one hashed asset.
+async function fakeBundle(): Promise<string> {
+  const dir = await mkdtemp(join(tmpdir(), 'dash-bundle-'))
+  await writeFile(join(dir, 'index.html'), '<!doctype html><html><body><div id="root"></div></body></html>')
+  await mkdir(join(dir, 'assets'), { recursive: true })
+  await writeFile(join(dir, 'assets', 'app.js'), 'console.log("app")')
+  return dir
 }
 
-test('dashboard serves the HTML page with the title', async () => {
-  const dash = await startDashboard({ port: 0, title: 'My Framework' })
+test('without a bundle the server reports the dashboard is not installed (503)', async () => {
+  const dash = await startDashboard({ port: 0 })
   try {
     const { status, body } = await fetchText(dash.url + '/')
-    assert.equal(status, 200)
-    assert.match(body, /My Framework/)
-    // Relative path so it resolves against the page's base URL — /events on the
-    // localhost dashboard, /r/<id>/events when re-served by the relay (#230).
-    assert.match(body, /new EventSource\('events'\)/)
-    // The Modes panel + its renderer ship in the page (#272), hidden until a modes event.
-    assert.match(body, /id="modes-panel" hidden/)
-    assert.match(body, /function renderModes/)
-    // The main grid is capped and centered in the content column, not left-hugging.
-    assert.match(body, /main \{[^}]*max-width: 1100px; margin: 0 auto;/)
-    // The layout fills the viewport below the header, so the sidebar border runs full-height.
-    assert.match(body, /#layout \{[^}]*min-height: calc\(100vh - 57px\);/)
-    // The header and sidebar stay in view while the content scrolls (sticky).
-    assert.match(body, /header \{[^}]*position: sticky; top: 0;[^}]*background: #0b0e14;/)
-    assert.match(body, /#sidebar \{[^}]*position: sticky; top: 57px;/)
-    assert.match(body, /#app-banner \{[^}]*position: sticky; top: 57px;/)
+    assert.equal(status, 503)
+    assert.match(body, /not installed/)
   } finally {
     await dash.close()
   }
 })
 
-test('page ships opt-in browser notifications for run-end and choice gates (#309)', async () => {
-  const dash = await startDashboard({ port: 0 })
+test('serves the prerendered SPA shell at / and hashed assets, with an SPA fallback', async () => {
+  const bundle = await fakeBundle()
+  const dash = await startDashboard({ port: 0, clientBundleDir: bundle })
   try {
-    const { body } = await fetchText(dash.url + '/')
-    // The header bell + its permission-gated notify helper ship in the page.
-    assert.match(body, /id="notify"/)
-    assert.match(body, /function notify\(title, body\)/)
-    assert.match(body, /Notification\.requestPermission/)
-    // Fired on a run end and when a choice gate needs the human.
-    assert.match(body, /Run finished/)
-    assert.match(body, /The run needs your input/)
-    // Only nudges when the tab is backgrounded, so a watched run stays quiet.
-    assert.match(body, /document\.hidden/)
+    const root = await fetchText(dash.url + '/')
+    assert.equal(root.status, 200)
+    assert.match(root.body, /<div id="root">/)
+
+    const asset = await fetchText(dash.url + '/assets/app.js')
+    assert.equal(asset.status, 200)
+    assert.match(asset.type, /javascript/)
+
+    // An unknown client route falls back to the SPA shell (client-side routing).
+    const deep = await fetchText(dash.url + '/some/client/route')
+    assert.equal(deep.status, 200)
+    assert.match(deep.body, /<div id="root">/)
   } finally {
     await dash.close()
+    await rm(bundle, { recursive: true, force: true })
   }
 })
 
-test('page ships the Prompts transparency panel fed by system-prompt + driver events (#343)', async () => {
-  const dash = await startDashboard({ port: 0 })
+test('the Telefunc mount rejects a cross-origin POST (CSRF guard)', async () => {
+  const bundle = await fakeBundle()
+  const dash = await startDashboard({ port: 0, clientBundleDir: bundle })
   try {
-    const { body } = await fetchText(dash.url + '/')
-    assert.match(body, /id="prompts-panel"/)
-    assert.match(body, /function addPrompt/)
-    assert.match(body, /fe\.kind === 'system-prompt'/)
+    const { status, body } = await postCrossOrigin(dash.url + '/_telefunc')
+    assert.equal(status, 403)
+    assert.match(body, /cross-origin/)
   } finally {
     await dash.close()
+    await rm(bundle, { recursive: true, force: true })
   }
 })
 
-test('page ships a live spend readout fed by usage events (#322)', async () => {
-  const dash = await startDashboard({ port: 0 })
-  try {
-    const { body } = await fetchText(dash.url + '/')
-    // Header element + its updater, dispatched from a usage event.
-    assert.match(body, /id="spend"/)
-    assert.match(body, /function updateSpend\(fe\)/)
-    assert.match(body, /fe\.kind === 'usage'/)
-  } finally {
-    await dash.close()
-  }
-})
-
-test('page ships the document sidebar with a dependency-free markdown renderer (#319)', async () => {
-  const dash = await startDashboard({ port: 0 })
-  try {
-    const { body } = await fetchText(dash.url + '/')
-    assert.match(body, /id="docs"/)
-    assert.match(body, /id="docs-nav"/)
-    assert.match(body, /function renderMarkdown/)
-    assert.match(body, /fetch\('api\/docs'\)/)
-  } finally {
-    await dash.close()
-  }
-})
-
-test('GET /api/docs serves the workspace PLAN.md / TODO.md, or [] without a cwd (#319)', async () => {
-  const cwd = await mkdtemp(join(tmpdir(), 'framework-docs-'))
-  try {
-    await writeFile(join(cwd, 'PLAN.md'), '# Plan\n\nBuild it.\n')
-    const withCwd = await startDashboard({ port: 0, cwd })
-    try {
-      const { status, body } = await fetchText(withCwd.url + '/api/docs')
-      assert.equal(status, 200)
-      const parsed = JSON.parse(body)
-      assert.equal(parsed.docs.length, 1)
-      assert.equal(parsed.docs[0].name, 'PLAN.md')
-      assert.match(parsed.docs[0].content, /Build it\./)
-    } finally {
-      await withCwd.close()
-    }
-    // No cwd wired -> empty list, never an error.
-    const noCwd = await startDashboard({ port: 0 })
-    try {
-      assert.deepEqual(JSON.parse((await fetchText(noCwd.url + '/api/docs')).body), { docs: [] })
-    } finally {
-      await noCwd.close()
-    }
-  } finally {
-    await rm(cwd, { recursive: true, force: true })
-  }
-})
-
-test('GET /api/logs serves the .the-framework/LOGS.md entries newest-first, or [] without a cwd (#314)', async () => {
-  const cwd = await mkdtemp(join(tmpdir(), 'framework-projectlog-'))
-  try {
-    await appendLog(cwd, { at: '2026-07-10T09:00:00.000Z', kind: 'prompt', title: 'first run', status: 'done' })
-    await appendLog(cwd, { at: '2026-07-10T10:00:00.000Z', kind: 'build', title: 'second run', status: 'failed' })
-    const withCwd = await startDashboard({ port: 0, cwd })
-    try {
-      const { status, body } = await fetchText(withCwd.url + '/api/logs')
-      assert.equal(status, 200)
-      const parsed = JSON.parse(body)
-      assert.equal(parsed.logs.length, 2)
-      assert.equal(parsed.logs[0].title, 'second run') // newest-first
-      assert.equal(parsed.logs[1].title, 'first run')
-    } finally {
-      await withCwd.close()
-    }
-    // No cwd wired -> empty list, never an error.
-    const noCwd = await startDashboard({ port: 0 })
-    try {
-      assert.deepEqual(JSON.parse((await fetchText(noCwd.url + '/api/logs')).body), { logs: [] })
-    } finally {
-      await noCwd.close()
-    }
-  } finally {
-    await rm(cwd, { recursive: true, force: true })
-  }
-})
-
-/** A fake provider so the multi-project routes are exercised without the real registry. */
-function fakeProjects(summaries: ProjectSummary[], paths: Record<string, string> = {}): ProjectsProvider {
-  return {
-    async list() {
-      return summaries
-    },
-    async resolvePath(id) {
-      return paths[id]
-    },
-  }
-}
-
-test('GET /api/projects lists the registered projects (#392)', async () => {
-  const summaries: ProjectSummary[] = [
-    { id: 'app-a-1', path: '/repos/app-a', name: 'app-a', activated: true, lastActivityAt: '2026-07-11T10:00:00.000Z' },
-    { id: 'app-b-2', path: '/repos/app-b', name: 'app-b', activated: false },
-  ]
-  const dash = await startDashboard({ port: 0, projects: fakeProjects(summaries) })
-  try {
-    const { status, body } = await fetchText(dash.url + '/api/projects')
-    assert.equal(status, 200)
-    assert.deepEqual(JSON.parse(body), { projects: summaries })
-  } finally {
-    await dash.close()
-  }
-})
-
-test('?project=<id> reads that project, an unknown id reads [] (#392)', async () => {
-  const cwd = await mkdtemp(join(tmpdir(), 'framework-proj-'))
-  try {
-    await appendLog(cwd, { at: '2026-07-10T10:00:00.000Z', kind: 'build', title: 'in project a', status: 'done' })
-    const dash = await startDashboard({ port: 0, projects: fakeProjects([], { 'a-1': cwd }) })
-    try {
-      // Known id resolves to the seeded workspace.
-      const known = JSON.parse((await fetchText(dash.url + '/api/logs?project=a-1')).body)
-      assert.equal(known.logs.length, 1)
-      assert.equal(known.logs[0].title, 'in project a')
-      // Unknown id resolves to nothing -> empty, never an error.
-      assert.deepEqual(JSON.parse((await fetchText(dash.url + '/api/logs?project=nope')).body), { logs: [] })
-    } finally {
-      await dash.close()
-    }
-  } finally {
-    await rm(cwd, { recursive: true, force: true })
-  }
-})
-
-test('dashboard replays buffered events and streams them over SSE', async () => {
-  const dash = await startDashboard({ port: 0 })
-  try {
-    dash.push({ kind: 'session', driver: 'fake', workspace: '/ws', fake: true })
-    dash.push({ kind: 'log', message: 'hello' })
-    const events = await readSse(dash.url + '/events', 2)
-    assert.equal(events[0]!.kind, 'session')
-    assert.equal(events[1]!.kind, 'log')
-  } finally {
-    await dash.close()
-  }
-})
-
-test('page labels the generic default "Open Claude Code", not a live session (#214)', async () => {
-  const dash = await startDashboard({ port: 0 })
-  try {
-    const { body } = await fetchText(dash.url + '/')
-    // Honest label: the generic entry point is not a per-run live session.
-    assert.match(body, /GENERIC_SESSION_LINK = "https:\/\/claude\.ai\/code"/)
-    assert.match(body, /'Open Claude Code'/)
-    assert.match(body, /'live session'/) // still used for a real --session-link
-  } finally {
-    await dash.close()
-  }
-})
-
-test('dashboard returns 404 for unknown paths', async () => {
-  const dash = await startDashboard({ port: 0 })
-  try {
-    const { status } = await fetchText(dash.url + '/nope')
-    assert.equal(status, 404)
-  } finally {
-    await dash.close()
-  }
-})
-
-test('POST /stop invokes onStop and the page renders the Stop button (#218)', async () => {
-  let stopped = 0
-  const dash = await startDashboard({ port: 0, onStop: () => stopped++ })
-  try {
-    const { status, body } = await send(dash.url + '/stop', 'POST')
-    assert.equal(status, 202)
-    assert.match(body, /"ok":true/)
-    assert.equal(stopped, 1)
-    // The page ships the button + enables it when a stop handler is wired.
-    const page = await fetchText(dash.url + '/')
-    assert.match(page.body, /id="stop"/)
-    assert.match(page.body, /STOPPABLE = true/)
-  } finally {
-    await dash.close()
-  }
-})
-
-test('/api/runs lists the workspace archive and /api/runs/<id> replays a run (#303)', async () => {
-  const cwd = await mkdtemp(join(tmpdir(), 'fw-hist-'))
-  const runs = join(cwd, '.the-framework', 'runs')
-  await mkdir(runs, { recursive: true })
-  const events: FrameworkEvent[] = [
-    { kind: 'session', driver: 'fake', workspace: cwd, fake: true },
-    { kind: 'bootstrap', event: { type: 'scope', scope: 'full', intent: 'a blog' } },
-    { kind: 'end', ok: true },
-  ]
-  const id = '2026-07-04T00-00-00-000Z'
-  await writeFile(join(runs, `${id}.jsonl`), events.map(e => JSON.stringify(e)).join('\n') + '\n')
-  await writeFile(
-    join(runs, `${id}.json`),
-    JSON.stringify({ version: 1, id, status: 'done', startedAt: '2026-07-04T00:00:00.000Z', updatedAt: '', passes: 1, intent: 'a blog' }),
-  )
-
-  const dash = await startDashboard({ port: 0, cwd })
-  try {
-    const list = await fetchText(dash.url + '/api/runs')
-    assert.equal(list.status, 200)
-    const parsed = JSON.parse(list.body) as { runs: { id: string; intent: string; status: string }[] }
-    assert.equal(parsed.runs.length, 1)
-    assert.equal(parsed.runs[0]!.intent, 'a blog')
-    assert.equal(parsed.runs[0]!.status, 'done')
-
-    const one = await fetchText(dash.url + '/api/runs/' + id)
-    assert.equal(one.status, 200)
-    const run = JSON.parse(one.body) as { id: string; events: FrameworkEvent[]; meta: { intent: string } }
-    assert.equal(run.id, id)
-    assert.equal(run.events.length, 3)
-    assert.equal(run.meta.intent, 'a blog')
-
-    assert.equal((await fetchText(dash.url + '/api/runs/does-not-exist')).status, 404)
-  } finally {
-    await dash.close()
-    await rm(cwd, { recursive: true, force: true })
-  }
-})
-
-test('/api/runs is an empty list when no workspace is wired', async () => {
-  const dash = await startDashboard({ port: 0 })
-  try {
-    const list = await fetchText(dash.url + '/api/runs')
-    assert.equal(list.status, 200)
-    assert.deepEqual(JSON.parse(list.body), { runs: [] })
-    assert.equal((await fetchText(dash.url + '/api/runs/anything')).status, 404)
-  } finally {
-    await dash.close()
-  }
-})
-
-test('/stop is 405 for a non-POST and 404 when stopping is not wired (#218)', async () => {
-  const withStop = await startDashboard({ port: 0, onStop: () => {} })
-  try {
-    assert.equal((await send(withStop.url + '/stop', 'GET')).status, 405)
-  } finally {
-    await withStop.close()
-  }
-  const noStop = await startDashboard({ port: 0 })
-  try {
-    assert.equal((await send(noStop.url + '/stop', 'POST')).status, 404)
-    const page = await fetchText(noStop.url + '/')
-    assert.match(page.body, /STOPPABLE = false/)
-  } finally {
-    await noStop.close()
-  }
-})
-
-test('POST /api/projects installs + registers via onAddProject (#396)', async () => {
-  const calls: Array<{ path: string; directory: boolean }> = []
-  const dash = await startDashboard({
-    port: 0,
-    onAddProject: (path, directory) => {
-      calls.push({ path, directory })
-      return { ok: true, added: directory ? 2 : 1, alreadyActivated: 0 }
-    },
-  })
-  try {
-    // A single repo.
-    const one = await postJson(dash.url + '/api/projects', { path: '/repos/app-a' })
-    assert.equal(one.status, 202)
-    assert.deepEqual(JSON.parse(one.body), { ok: true, added: 1, alreadyActivated: 0 })
-    // A folder of repos.
-    const many = await postJson(dash.url + '/api/projects', { path: '/repos', directory: true })
-    assert.equal(JSON.parse(many.body).added, 2)
-    assert.deepEqual(calls, [
-      { path: '/repos/app-a', directory: false },
-      { path: '/repos', directory: true },
-    ])
-    // A missing path is a 400 and never reaches the handler.
-    assert.equal((await postJson(dash.url + '/api/projects', {})).status, 400)
-    assert.equal(calls.length, 2)
-  } finally {
-    await dash.close()
-  }
-})
-
-test('POST /api/projects surfaces a failed install as 400, and is 404 when adding is disabled (#396)', async () => {
-  const failing = await startDashboard({ port: 0, onAddProject: () => ({ ok: false, error: 'not a git repo' }) })
-  try {
-    const res = await postJson(failing.url + '/api/projects', { path: '/nope' })
-    assert.equal(res.status, 400)
-    assert.deepEqual(JSON.parse(res.body), { ok: false, error: 'not a git repo' })
-  } finally {
-    await failing.close()
-  }
-  // No handler wired -> 404 (adding disabled), and a cross-origin POST is refused.
-  const noAdd = await startDashboard({ port: 0 })
-  try {
-    assert.equal((await postJson(noAdd.url + '/api/projects', { path: '/x' })).status, 404)
-    assert.equal((await postJson(noAdd.url + '/api/projects', { path: '/x' }, { origin: 'https://evil.example' })).status, 403)
-  } finally {
-    await noAdd.close()
-  }
-})
-
-function postJson(
-  url: string,
-  body: unknown,
-  headers: Record<string, string> = {},
-): Promise<{ status: number; body: string }> {
-  return new Promise((resolvePromise, rejectPromise) => {
-    const payload = JSON.stringify(body)
-    const req = request(url, { method: 'POST', headers: { 'content-type': 'application/json', ...headers } }, res => {
-      let out = ''
-      res.on('data', c => (out += c))
-      res.on('end', () => resolvePromise({ status: res.statusCode ?? 0, body: out }))
-    })
-    req.on('error', rejectPromise)
-    req.end(payload)
-  })
-}
-
-test('state-changing POSTs reject a cross-origin Origin but allow same-origin / no-Origin (CSRF)', async () => {
-  const started: string[] = []
-  const dash = await startDashboard({
-    port: 0,
-    onStop: () => started.push('stop'),
-    onChoice: id => started.push('choice:' + id),
-    onStart: prompt => (started.push('start:' + prompt), { ok: true }),
-  })
-  try {
-    // A browser on another site attaches its Origin; every steering route must refuse it.
-    const evil = { origin: 'https://evil.example' }
-    assert.equal((await postJson(dash.url + '/stop', {}, evil)).status, 403)
-    assert.equal((await postJson(dash.url + '/choice', { id: 'x', pick: 'y' }, evil)).status, 403)
-    assert.equal((await postJson(dash.url + '/api/start', { prompt: 'a blog' }, evil)).status, 403)
-    assert.deepEqual(started, []) // none of the handlers fired
-
-    // The dashboard's own page (loopback Origin) is allowed, as is a non-browser
-    // caller that sends no Origin at all.
-    assert.equal((await postJson(dash.url + '/stop', {}, { origin: dash.url })).status, 202)
-    assert.equal((await postJson(dash.url + '/stop', {}, { origin: 'http://localhost:1234' })).status, 202)
-    assert.equal((await postJson(dash.url + '/api/start', { prompt: 'a blog' })).status, 202)
-    assert.deepEqual(started, ['stop', 'stop', 'start:a blog'])
-  } finally {
-    await dash.close()
-  }
-})
-
-test('POST /choice invokes onChoice with the pick and the page reports it is choiceable (#304)', async () => {
-  const picks: Array<{ id: string; pick: string | string[]; by: string }> = []
-  const dash = await startDashboard({ port: 0, onChoice: (id, pick, by) => picks.push({ id, pick, by }) })
-  try {
-    const { status } = await postJson(dash.url + '/choice', { id: 'plan-approval', pick: 'alt:0', by: 'autopilot' })
-    assert.equal(status, 202)
-    assert.deepEqual(picks, [{ id: 'plan-approval', pick: 'alt:0', by: 'autopilot' }])
-    // An unknown `by` is normalized to 'user'.
-    await postJson(dash.url + '/choice', { id: 'plan-approval', pick: 'proceed' })
-    assert.equal(picks[1]!.by, 'user')
-    const page = await fetchText(dash.url + '/')
-    assert.match(page.body, /CHOICEABLE = true/)
-  } finally {
-    await dash.close()
-  }
-})
-
-test('POST /choice forwards a multi-select subset (array pick), including an empty set (#332)', async () => {
-  const picks: Array<{ id: string; pick: string | string[] }> = []
-  const dash = await startDashboard({ port: 0, onChoice: (id, pick) => picks.push({ id, pick }) })
-  try {
-    await postJson(dash.url + '/choice', { id: 'ms', pick: ['p0', 'p2'], by: 'user' })
-    // An empty subset (nothing checked) is still a valid resolution, not dropped.
-    await postJson(dash.url + '/choice', { id: 'ms', pick: [], by: 'user' })
-    // Non-string array members are filtered out.
-    await postJson(dash.url + '/choice', { id: 'ms', pick: ['p1', 3, null], by: 'user' })
-    assert.deepEqual(picks, [
-      { id: 'ms', pick: ['p0', 'p2'] },
-      { id: 'ms', pick: [] },
-      { id: 'ms', pick: ['p1'] },
-    ])
-  } finally {
-    await dash.close()
-  }
-})
-
-test('POST /api/start invokes onStart with the trimmed prompt and the page is startable (#345)', async () => {
-  const prompts: string[] = []
-  const dash = await startDashboard({ port: 0, onStart: prompt => { prompts.push(prompt); return { ok: true } } })
-  try {
-    const { status, body } = await postJson(dash.url + '/api/start', { prompt: '  a blog  ' })
-    assert.equal(status, 202)
-    assert.match(body, /"ok":true/)
-    assert.deepEqual(prompts, ['a blog'])
-    // The page ships the prompt panel visible and knows the server can start runs.
-    const page = await fetchText(dash.url + '/')
-    assert.match(page.body, /STARTABLE = true/)
-    assert.match(page.body, /<section id="start-panel">/)
-    assert.match(page.body, /id="start-prompt"/)
-  } finally {
-    await dash.close()
-  }
-})
-
-test('/api/start guards: 400 empty prompt, 409 busy, 500 spawn failure (#345)', async () => {
-  let calls = 0
-  let outcome: { ok: false; busy?: boolean; error: string } = { ok: false, busy: true, error: 'a run is already active' }
-  const dash = await startDashboard({ port: 0, onStart: () => { calls++; return outcome } })
-  try {
-    // An empty / missing prompt never reaches the handler.
-    assert.equal((await postJson(dash.url + '/api/start', { prompt: '   ' })).status, 400)
-    assert.equal((await postJson(dash.url + '/api/start', {})).status, 400)
-    assert.equal(calls, 0)
-    // Busy -> 409 with the reason; any other failure -> 500.
-    const busy = await postJson(dash.url + '/api/start', { prompt: 'a blog' })
-    assert.equal(busy.status, 409)
-    assert.match(busy.body, /already active/)
-    outcome = { ok: false, error: 'spawn failed' }
-    const failed = await postJson(dash.url + '/api/start', { prompt: 'a blog' })
-    assert.equal(failed.status, 500)
-    assert.match(failed.body, /spawn failed/)
-  } finally {
-    await dash.close()
-  }
-})
-
-test('/api/start passes the run kind through; a research start may omit the prompt (#331)', async () => {
-  const calls: Array<{ prompt: string; kind: string }> = []
-  const dash = await startDashboard({ port: 0, onStart: (prompt, kind) => { calls.push({ prompt, kind }); return { ok: true } } })
-  try {
-    // No kind -> build; unknown kind -> build.
-    await postJson(dash.url + '/api/start', { prompt: 'a blog' })
-    await postJson(dash.url + '/api/start', { prompt: 'a blog', kind: 'nonsense' })
-    // Research: kind passes through, and an empty prompt is allowed (defaults to
-    // "this PR" downstream) where a build's would 400.
-    assert.equal((await postJson(dash.url + '/api/start', { prompt: 'the auth flow', kind: 'research' })).status, 202)
-    assert.equal((await postJson(dash.url + '/api/start', { kind: 'research' })).status, 202)
-    assert.deepEqual(calls, [
-      { prompt: 'a blog', kind: 'build' },
-      { prompt: 'a blog', kind: 'build' },
-      { prompt: 'the auth flow', kind: 'research' },
-      { prompt: '', kind: 'research' },
-    ])
-    // The page ships the [Research] button beside Start, as a prefill (#353): the
-    // full preset text is baked in, and nothing is sent until Start / Ctrl+Enter.
-    const page = await fetchText(dash.url + '/')
-    assert.match(page.body, /id="start-research"/)
-    assert.match(page.body, /const RESEARCH_PROMPT = /)
-    assert.match(page.body, /wirePresetButton\('start-research'/)
-    // Same prefill contract for [Readability] (#360).
-    assert.match(page.body, /id="start-readability"/)
-    assert.match(page.body, /const READABILITY_PROMPT = /)
-    assert.match(page.body, /wirePresetButton\('start-readability'/)
-    // Same prefill contract for [Maintainability] (#361).
-    assert.match(page.body, /id="start-maintainability"/)
-    assert.match(page.body, /const MAINTAINABILITY_PROMPT = /)
-    assert.match(page.body, /wirePresetButton\('start-maintainability'/)
-    // The minimal [Maintainability] variant (#362) ships beside the fuller one.
-    assert.match(page.body, /id="start-maintainability-minimal"/)
-    assert.match(page.body, /const MAINTAINABILITY_MINIMAL_PROMPT = /)
-    assert.match(page.body, /wirePresetButton\('start-maintainability-minimal'/)
-  } finally {
-    await dash.close()
-  }
-})
-
-test('parseStartOptions keeps only known boolean fields (#314)', () => {
-  assert.deepEqual(parseStartOptions(undefined), {})
-  assert.deepEqual(parseStartOptions('nope'), {})
-  // Truthy-but-not-true values are ignored; only `=== true` survives.
-  assert.deepEqual(parseStartOptions({ autopilot: true, technical: 'yes', vanilla: 1, junk: true }), {
-    autopilot: true,
-  })
-  assert.deepEqual(
-    parseStartOptions({ eco: { autoPlanning: true, autoResearch: false, bogus: true } }),
-    { eco: { autoPlanning: true } },
-  )
-  // An eco object with nothing enabled drops out entirely.
-  assert.deepEqual(parseStartOptions({ eco: { autoResearch: false } }), {})
-})
-
-test('/api/start forwards the sanitized Global options to onStart (#314)', async () => {
-  const calls: StartRunOptions[] = []
-  const dash = await startDashboard({ port: 0, onStart: (_p, _k, options) => { calls.push(options); return { ok: true } } })
-  try {
-    await postJson(dash.url + '/api/start', {
-      prompt: 'a blog',
-      options: { autopilot: true, vanilla: true, eco: { autoMaintenance: true, junk: true }, junk: true },
-    })
-    // No options field at all -> the handler still gets an object (all-off).
-    await postJson(dash.url + '/api/start', { prompt: 'a blog' })
-    assert.deepEqual(calls, [
-      { autopilot: true, vanilla: true, eco: { autoMaintenance: true } },
-      {},
-    ])
-  } finally {
-    await dash.close()
-  }
-})
-
-test('/api/start kind=prompt runs verbatim text and requires a prompt (#353)', async () => {
-  const calls: Array<{ prompt: string; kind: string }> = []
-  const dash = await startDashboard({ port: 0, onStart: (prompt, kind) => { calls.push({ prompt, kind }); return { ok: true } } })
-  try {
-    assert.equal((await postJson(dash.url + '/api/start', { prompt: 'Measure "problem variability" of the auth flow', kind: 'prompt' })).status, 202)
-    // A verbatim prompt run with no text has nothing to run.
-    assert.equal((await postJson(dash.url + '/api/start', { prompt: '   ', kind: 'prompt' })).status, 400)
-    assert.deepEqual(calls, [{ prompt: 'Measure "problem variability" of the auth flow', kind: 'prompt' }])
-  } finally {
-    await dash.close()
-  }
-})
-
-test('/api/start is 405 for a non-POST and 404 when starting is not wired (#345)', async () => {
-  const withStart = await startDashboard({ port: 0, onStart: () => ({ ok: true }) })
-  try {
-    assert.equal((await send(withStart.url + '/api/start', 'GET')).status, 405)
-  } finally {
-    await withStart.close()
-  }
-  const noStart = await startDashboard({ port: 0 })
-  try {
-    assert.equal((await postJson(noStart.url + '/api/start', { prompt: 'a blog' })).status, 404)
-    // The panel renders hidden on a page that cannot start runs (per-run dashboard, relay).
-    const page = await fetchText(noStart.url + '/')
-    assert.match(page.body, /STARTABLE = false/)
-    assert.match(page.body, /<section id="start-panel" hidden>/)
-  } finally {
-    await noStart.close()
-  }
-})
-
-test('/choice is 405 for a non-POST and 404 when choices are not wired (#304)', async () => {
-  const withChoice = await startDashboard({ port: 0, onChoice: () => {} })
-  try {
-    assert.equal((await send(withChoice.url + '/choice', 'GET')).status, 405)
-  } finally {
-    await withChoice.close()
-  }
-  const noChoice = await startDashboard({ port: 0 })
-  try {
-    assert.equal((await postJson(noChoice.url + '/choice', { id: 'x', pick: 'y' })).status, 404)
-    const page = await fetchText(noChoice.url + '/')
-    assert.match(page.body, /CHOICEABLE = false/)
-  } finally {
-    await noChoice.close()
-  }
+test('isSameOriginRequest: absent Origin passes; same host + loopback pass; evil.com fails', () => {
+  const req = (headers: Record<string, string>): IncomingMessage => ({ headers } as IncomingMessage)
+  assert.equal(isSameOriginRequest(req({})), true) // no Origin (curl / tests)
+  assert.equal(isSameOriginRequest(req({ host: 'localhost:4200', origin: 'http://localhost:4200' })), true)
+  assert.equal(isSameOriginRequest(req({ origin: 'http://127.0.0.1:9999' })), true)
+  assert.equal(isSameOriginRequest(req({ origin: 'http://[::1]' })), true)
+  assert.equal(isSameOriginRequest(req({ host: 'localhost:4200', origin: 'http://evil.com' })), false)
+  assert.equal(isSameOriginRequest(req({ origin: 'not-a-url' })), false)
 })

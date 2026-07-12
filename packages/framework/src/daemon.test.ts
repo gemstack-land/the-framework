@@ -2,7 +2,7 @@ import { strict as assert } from 'node:assert'
 import { test } from 'node:test'
 import { mkdtemp, writeFile, appendFile, rm, mkdir, readFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
 import type { FrameworkEvent } from './events.js'
 import {
   EventTailer,
@@ -16,6 +16,26 @@ import {
 } from './daemon.js'
 import { EVENTS_FILE, FRAMEWORK_DIR } from './store/index.js'
 import { controlPath } from './control.js'
+import { projectId } from './registry.js'
+
+// The new dashboard steers + starts over Telefunc (#405/#426), not the retired /api/* HTTP
+// routes. Post an RPC to the daemon's in-process `/_telefunc` mount (same-origin), keyed by
+// the client-baked file path, and return the unwrapped `ret`.
+async function callTelefunc(url: string, file: string, name: string, args: unknown[]): Promise<unknown> {
+  const res = await fetch(`${url}/_telefunc`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', origin: url },
+    body: JSON.stringify({ file, name, args }),
+  })
+  const text = await res.text()
+  return text ? (JSON.parse(text) as { ret?: unknown }).ret : undefined
+}
+type StartResult = { ok: true } | { ok: false; busy?: boolean; error: string }
+// The home project's id: what the browser sends for the daemon's own workspace, which the
+// daemon resolves back to `cwd` (see `resolveProject`).
+const homeId = (cwd: string): string => projectId(resolve(cwd))
+const sendStart = (url: string, cwd: string, prompt: string, kind = 'build'): Promise<StartResult> =>
+  callTelefunc(url, '/server/control.telefunc.ts', 'sendStart', [homeId(cwd), prompt, kind]) as Promise<StartResult>
 
 test('startOptionFlags maps only enabled Global options to CLI flags (#314)', () => {
   assert.deepEqual(startOptionFlags({}), [])
@@ -158,7 +178,7 @@ test('runDaemon serves the dashboard, records its state, and cleans up on shutdo
   const env = await configEnv(cwd)
   const ac = new AbortController()
   try {
-    const done = runDaemon(cwd, { port: 0, pollMs: 50, signal: ac.signal, env })
+    const done = runDaemon(cwd, { port: 0, signal: ac.signal, env })
 
     // Wait for the daemon to bind and report itself.
     let state = await readDaemonState(env)
@@ -170,10 +190,10 @@ test('runDaemon serves the dashboard, records its state, and cleans up on shutdo
     assert.equal(state!.pid, process.pid)
     assert.match(state!.url, /^http:\/\/127\.0\.0\.1:\d+$/)
 
-    // The dashboard page is served.
+    // The new Vike + Telefunc dashboard (its prerendered SPA shell) is served.
     const res = await fetch(state!.url)
     assert.equal(res.status, 200)
-    assert.match(await res.text(), /The Framework/)
+    assert.match(await res.text(), /id="root"/)
 
     ac.abort()
     await done
@@ -189,7 +209,7 @@ test('runDaemon comes up on a fresh workspace with no .the-framework yet', async
   const env = await configEnv(cwd)
   const ac = new AbortController()
   try {
-    const done = runDaemon(cwd, { port: 0, pollMs: 50, signal: ac.signal, env })
+    const done = runDaemon(cwd, { port: 0, signal: ac.signal, env })
     let state = await readDaemonState(env)
     for (let i = 0; i < 100 && !state; i++) {
       await new Promise(r => setTimeout(r, 20))
@@ -205,7 +225,7 @@ test('runDaemon comes up on a fresh workspace with no .the-framework yet', async
   }
 })
 
-test('POST /api/start spawns the run child (prompt, --no-dashboard, --cwd) one at a time (#345)', async () => {
+test('sendStart spawns the run child (prompt, --no-dashboard, --cwd) one at a time (#345)', async () => {
   const cwd = await tmpWorkspace()
   // A stub CLI standing in for the framework bin: it records its argv, then
   // stays alive briefly so the one-run-at-a-time guard has a window to trip.
@@ -221,7 +241,7 @@ setTimeout(() => {}, 600)
   const env = await configEnv(cwd)
   const ac = new AbortController()
   try {
-    const done = runDaemon(cwd, { port: 0, pollMs: 50, signal: ac.signal, binPath: stub, env })
+    const done = runDaemon(cwd, { port: 0, signal: ac.signal, binPath: stub, env })
     let state = await readDaemonState(env)
     for (let i = 0; i < 100 && !state; i++) {
       await new Promise(r => setTimeout(r, 20))
@@ -229,16 +249,10 @@ setTimeout(() => {}, 600)
     }
     assert.ok(state, 'daemon wrote its state file')
 
-    const startUrl = `${state!.url}/api/start`
-    const post = (prompt: string) =>
-      fetch(startUrl, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ prompt }),
-      })
+    const post = (prompt: string) => sendStart(state!.url, cwd, prompt)
 
     const first = await post('a blog')
-    assert.equal(first.status, 202)
+    assert.equal(first.ok, true)
 
     // The child got the prompt as one word plus the headless + workspace flags.
     let lines: string[] = []
@@ -253,16 +267,15 @@ setTimeout(() => {}, 600)
 
     // While that child is alive, a second Start is refused (#322 runaway concern).
     const busy = await post('another app')
-    assert.equal(busy.status, 409)
-    assert.match(await busy.text(), /already active/)
+    assert.ok(busy.ok === false && busy.busy === true, 'a second start is refused as busy')
 
     // Once the child exits, the guard resets and Start works again.
-    let again = busy
-    for (let i = 0; i < 100 && again.status !== 202; i++) {
+    let again: StartResult = busy
+    for (let i = 0; i < 100 && !again.ok; i++) {
       await new Promise(r => setTimeout(r, 50))
       again = await post('a second run')
     }
-    assert.equal(again.status, 202)
+    assert.equal(again.ok, true)
 
     ac.abort()
     await done
@@ -272,7 +285,7 @@ setTimeout(() => {}, 600)
   }
 })
 
-test('POST /api/start kind=research spawns the research subcommand, defaulting the what (#331)', async () => {
+test('sendStart kind=research spawns the research subcommand, defaulting the what (#331)', async () => {
   const cwd = await tmpWorkspace()
   const stub = join(cwd, 'stub-cli.cjs')
   await writeFile(
@@ -285,7 +298,7 @@ fs.appendFileSync(path.join(args[args.indexOf('--cwd') + 1], 'started.log'), JSO
   const env = await configEnv(cwd)
   const ac = new AbortController()
   try {
-    const done = runDaemon(cwd, { port: 0, pollMs: 50, signal: ac.signal, binPath: stub, env })
+    const done = runDaemon(cwd, { port: 0, signal: ac.signal, binPath: stub, env })
     let state = await readDaemonState(env)
     for (let i = 0; i < 100 && !state; i++) {
       await new Promise(r => setTimeout(r, 20))
@@ -293,15 +306,10 @@ fs.appendFileSync(path.join(args[args.indexOf('--cwd') + 1], 'started.log'), JSO
     }
     assert.ok(state, 'daemon wrote its state file')
 
-    const post = (body: object) =>
-      fetch(`${state!.url}/api/start`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(body),
-      })
+    const post = (prompt: string, kind: string) => sendStart(state!.url, cwd, prompt, kind)
 
     // With a what -> it is passed through; without -> omitted so the CLI defaults it.
-    assert.equal((await post({ prompt: 'the auth flow', kind: 'research' })).status, 202)
+    assert.equal((await post('the auth flow', 'research')).ok, true)
     let lines: string[] = []
     for (let i = 0; i < 100 && lines.length < 1; i++) {
       await new Promise(r => setTimeout(r, 20))
@@ -312,12 +320,12 @@ fs.appendFileSync(path.join(args[args.indexOf('--cwd') + 1], 'started.log'), JSO
     }
     assert.deepEqual(JSON.parse(lines[0]!), ['research', 'the auth flow', '--no-dashboard', '--cwd', cwd])
 
-    let second = await post({ kind: 'research' })
-    for (let i = 0; i < 100 && second.status !== 202; i++) {
+    let second = await post('', 'research')
+    for (let i = 0; i < 100 && !second.ok; i++) {
       await new Promise(r => setTimeout(r, 50))
-      second = await post({ kind: 'research' })
+      second = await post('', 'research')
     }
-    assert.equal(second.status, 202)
+    assert.equal(second.ok, true)
     for (let i = 0; i < 100 && lines.length < 2; i++) {
       await new Promise(r => setTimeout(r, 20))
       lines = (await readFile(join(cwd, 'started.log'), 'utf8')).split('\n').filter(Boolean)
@@ -327,12 +335,12 @@ fs.appendFileSync(path.join(args[args.indexOf('--cwd') + 1], 'started.log'), JSO
     // kind=prompt (#353): a preset the user reviewed in the textarea runs verbatim
     // through the `prompt` subcommand, never re-rendered.
     const verbatim = 'Measure "problem variability" of this PR\n- List all high-level flows'
-    let third = await post({ prompt: verbatim, kind: 'prompt' })
-    for (let i = 0; i < 100 && third.status !== 202; i++) {
+    let third = await post(verbatim, 'prompt')
+    for (let i = 0; i < 100 && !third.ok; i++) {
       await new Promise(r => setTimeout(r, 50))
-      third = await post({ prompt: verbatim, kind: 'prompt' })
+      third = await post(verbatim, 'prompt')
     }
-    assert.equal(third.status, 202)
+    assert.equal(third.ok, true)
     for (let i = 0; i < 100 && lines.length < 3; i++) {
       await new Promise(r => setTimeout(r, 20))
       lines = (await readFile(join(cwd, 'started.log'), 'utf8')).split('\n').filter(Boolean)
@@ -347,26 +355,21 @@ fs.appendFileSync(path.join(args[args.indexOf('--cwd') + 1], 'started.log'), JSO
   }
 })
 
-test('/api/start refuses to re-exec a test entry as the run (#345)', async () => {
+test('sendStart refuses to re-exec a test entry as the run (#345)', async () => {
   const cwd = await tmpWorkspace()
   const env = await configEnv(cwd)
   const ac = new AbortController()
   try {
     // No binPath: argv[1] here is this test file — the fork-bomb guard must trip.
-    const done = runDaemon(cwd, { port: 0, pollMs: 50, signal: ac.signal, env })
+    const done = runDaemon(cwd, { port: 0, signal: ac.signal, env })
     let state = await readDaemonState(env)
     for (let i = 0; i < 100 && !state; i++) {
       await new Promise(r => setTimeout(r, 20))
       state = await readDaemonState(env)
     }
     assert.ok(state, 'daemon wrote its state file')
-    const res = await fetch(`${state!.url}/api/start`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ prompt: 'a blog' }),
-    })
-    assert.equal(res.status, 500)
-    assert.match(await res.text(), /test entry/)
+    const result = await sendStart(state!.url, cwd, 'a blog')
+    assert.ok(result.ok === false && /test entry/.test(result.error), 'the fork-bomb guard refuses a test entry')
     ac.abort()
     await done
   } finally {
@@ -375,12 +378,17 @@ test('/api/start refuses to re-exec a test entry as the run (#345)', async () =>
   }
 })
 
-test('runDaemon steers through the control log: /stop and /choice POSTs append entries (#344)', async () => {
+test('runDaemon steers through the control log: sendStop / sendChoice append entries (#344)', async () => {
   const cwd = await tmpWorkspace()
   const env = await configEnv(cwd)
   const ac = new AbortController()
+  // sendStop / sendChoice resolve the project through the registry the Telefunc layer reads
+  // from `process.env` (not the daemon's injected `env`), so point the config dir there for
+  // this test; restore it after. (sendStart uses the daemon's own homeId shortcut instead.)
+  const prevXdg = process.env['XDG_CONFIG_HOME']
+  process.env['XDG_CONFIG_HOME'] = env['XDG_CONFIG_HOME']
   try {
-    const done = runDaemon(cwd, { port: 0, pollMs: 50, signal: ac.signal, env })
+    const done = runDaemon(cwd, { port: 0, signal: ac.signal, env })
     let state = await readDaemonState(env)
     for (let i = 0; i < 100 && !state; i++) {
       await new Promise(r => setTimeout(r, 20))
@@ -388,15 +396,10 @@ test('runDaemon steers through the control log: /stop and /choice POSTs append e
     }
     assert.ok(state, 'daemon wrote its state file')
 
-    // The daemon page has steering wired: the Stop button shows and /choice accepts.
-    const stop = await fetch(`${state!.url}/stop`, { method: 'POST' })
-    assert.equal(stop.status, 202)
-    const choice = await fetch(`${state!.url}/choice`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ id: 'plan-approval', pick: 'alt:0', by: 'user' }),
-    })
-    assert.equal(choice.status, 202)
+    // The dashboard steers over Telefunc: sendStop / sendChoice append to control.jsonl.
+    const id = homeId(cwd)
+    await callTelefunc(state!.url, '/server/control.telefunc.ts', 'sendStop', [id])
+    await callTelefunc(state!.url, '/server/control.telefunc.ts', 'sendChoice', [id, 'plan-approval', 'alt:0', 'user'])
 
     // Both landed in the control log (appends are async fire-and-forget: poll).
     let lines: string[] = []
@@ -416,6 +419,8 @@ test('runDaemon steers through the control log: /stop and /choice POSTs append e
     await done
   } finally {
     ac.abort()
+    if (prevXdg === undefined) delete process.env['XDG_CONFIG_HOME']
+    else process.env['XDG_CONFIG_HOME'] = prevXdg
     await rm(cwd, { recursive: true, force: true })
   }
 })

@@ -807,40 +807,30 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
   })
   // Serve the new Vike + Telefunc dashboard (#405/#427) for this run, in single-project
   // mode: the SPA reads this one `cwd` (its own `.the-framework/events.jsonl` +
-  // control.jsonl) without touching the global registry, so a one-shot run never
-  // pollutes the Projects list. The bundle rides in `.the-framework/events.jsonl`, so it
-  // needs the store: without --persist there is nothing to stream, and we fall back to
-  // page.ts. An old install missing the built bundle also falls back (resolve -> undefined).
+  // control.jsonl) without touching the global registry, so a one-shot run never pollutes
+  // the Projects list. It streams the persisted event log, so a --no-persist run (or an
+  // old install missing the built bundle) runs headless.
   let dashboard: Dashboard | undefined
   let clientBundleDir: string | undefined
-  if (opts.dashboard) {
-    if (opts.persist) clientBundleDir = await resolveDashboardBundle()
+  if (opts.dashboard && opts.persist) clientBundleDir = await resolveDashboardBundle()
+  if (clientBundleDir) {
     try {
       dashboard = await startDashboard({
         ...(opts.port !== undefined ? { port: opts.port } : {}),
-        onStop: () => controller.abort(),
-        onChoice: (id, pick, by) => {
-          const resolve = pendingChoices.get(id)
-          if (resolve) {
-            pendingChoices.delete(id)
-            resolve({ picked: pick, by })
-          }
-        },
-        cwd,
-        ...(clientBundleDir
-          ? { clientBundleDir, dashboardMode: 'next' as const, projects: singleProjectProvider(cwd) }
-          : {}),
+        clientBundleDir,
+        projects: singleProjectProvider(cwd),
       })
       io.out(`◆ dashboard: ${dashboard.url}`)
     } catch (err) {
+      dashboard = undefined
       clientBundleDir = undefined
       io.err(`could not start dashboard (${err instanceof Error ? err.message : String(err)}); continuing headless`)
     }
   }
-  // The new dashboard steers this live run purely through control.jsonl (its Stop /
-  // choice picks are Telefunc writes to that file, #427), so tail it whenever the new
-  // dashboard is up — not only when a daemon is (the condition just below).
-  const newDashboard = dashboard !== undefined && clientBundleDir !== undefined
+  // The new dashboard steers this live run purely through control.jsonl (its Stop / choice
+  // picks are Telefunc writes to that file, #427), which the watcher below tails whenever
+  // the dashboard is up — not only when a daemon is.
+  const newDashboard = dashboard !== undefined
 
   // Persist the orchestration state so a restart can --resume it (#211). The log
   // is the dashboard's own event stream, appended to .the-framework/ in the workspace.
@@ -922,7 +912,6 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
       void appendLog(cwd, entry).catch(() => {})
     }
     io.out(formatFrameworkEvent(event))
-    dashboard?.push(event)
     void store?.append(event)
     publisher?.publish(event)
   }
@@ -1354,27 +1343,26 @@ async function resumeRun(opts: CliOptions, io: CliIO): Promise<number> {
   // Resume serves the new dashboard too (#427), single-project on this `cwd`: the saved
   // `.the-framework/events.jsonl` is exactly what the SPA's event Channel tails, so the
   // past run replays with no extra wiring (it is finished, so there is nothing to steer).
-  // No bundle (old install) falls back to page.ts, byte-identical to before.
+  // A missing bundle (an old install) replays to the terminal only.
   let dashboard: Dashboard | undefined
   if (opts.dashboard) {
     const clientBundleDir = await resolveDashboardBundle()
-    try {
-      dashboard = await startDashboard({
-        ...(opts.port !== undefined ? { port: opts.port } : {}),
-        cwd,
-        ...(clientBundleDir
-          ? { clientBundleDir, dashboardMode: 'next' as const, projects: singleProjectProvider(cwd) }
-          : {}),
-      })
-      io.out(`◆ dashboard (resumed): ${dashboard.url}`)
-    } catch (err) {
-      io.err(`could not start dashboard (${err instanceof Error ? err.message : String(err)}); replaying to terminal only`)
+    if (clientBundleDir) {
+      try {
+        dashboard = await startDashboard({
+          ...(opts.port !== undefined ? { port: opts.port } : {}),
+          clientBundleDir,
+          projects: singleProjectProvider(cwd),
+        })
+        io.out(`◆ dashboard (resumed): ${dashboard.url}`)
+      } catch (err) {
+        io.err(`could not start dashboard (${err instanceof Error ? err.message : String(err)}); replaying to terminal only`)
+      }
     }
   }
 
   for (const event of events) {
     io.out(formatFrameworkEvent(event))
-    dashboard?.push(event)
   }
   io.out(`\n• resumed ${meta.status} run of "${meta.intent ?? 'unknown intent'}" (${events.length} event(s), ${meta.passes} pass(es)).`)
 

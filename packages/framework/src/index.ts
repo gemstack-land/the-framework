@@ -117,7 +117,7 @@ export {
   type SweepDeps,
   type MaintenanceFs,
 } from './maintenance.js'
-export { startDashboard, dashboardHtml, summarizeProject, defaultProjectsProvider, readDocs, type Dashboard, type DashboardOptions, type StartRunKind, type StartRunResult, type AddProjectResult, type ProjectSummary, type ProjectsProvider, type SummarizeDeps, type WorkspaceDoc } from './dashboard/index.js'
+export { startDashboard, summarizeProject, defaultProjectsProvider, readDocs, type Dashboard, type DashboardOptions, type StartRunKind, type StartRunResult, type AddProjectResult, type ProjectSummary, type ProjectsProvider, type SummarizeDeps, type WorkspaceDoc } from './dashboard/index.js'
 export {
   RunStore,
   nodeStoreFs,
