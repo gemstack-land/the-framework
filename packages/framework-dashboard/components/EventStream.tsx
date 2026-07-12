@@ -1,48 +1,31 @@
-import { useEffect, useState } from 'react'
 import type { FrameworkEvent } from '@gemstack/framework'
-import type { ClientChannel } from 'telefunc'
-import { onEvents } from '../server/events.telefunc.js'
 import { sendStop } from '../server/control.telefunc.js'
-import { pendingChoice, isRunActive } from '../lib/live-state.js'
+import { isRunActive } from '../lib/live-state.js'
 import { EventList } from './EventList.js'
-import { ChoicePanel } from './ChoicePanel.js'
 import { StartRunForm } from './StartRunForm.js'
 import { RunOverview } from './RunOverview.js'
 import { Button } from './ui/button.js'
 
-// The live event stream (#405/#314): a projection of the selected project's
-// `.the-framework/events.jsonl`, streamed over a Telefunc Channel
-// (server/events.telefunc.ts) that pushes one `FrameworkEvent` per new line. The same
-// projection drives the write side (#405): the interactive gate the run parks on and
-// a Stop button, both posted back over Telefunc (server/control.telefunc.ts).
-export function EventStream({ projectId, readOnly = false }: { projectId: string | null; readOnly?: boolean }) {
-  const [events, setEvents] = useState<FrameworkEvent[]>([])
-
-  useEffect(() => {
-    setEvents([])
-    if (!projectId) return
-    let channel: ClientChannel<never, FrameworkEvent> | undefined
-    let cancelled = false
-    void onEvents(projectId).then(ch => {
-      if (cancelled) {
-        void ch.close()
-        return
-      }
-      channel = ch
-      ch.listen(event => setEvents(prev => [...prev, event]))
-    })
-    return () => {
-      cancelled = true
-      void channel?.close()
-    }
-  }, [projectId])
-
+// The live event view (#405/#314): a projection of the selected project's
+// `.the-framework/events.jsonl`, streamed over a Telefunc Channel by the shell's
+// `useLiveEvents` hook and passed in as `events`. The main column shows the run overview,
+// the event feed, and the Stop/Start controls; the interactive choice gates the run parks
+// on now live in the right rail (#440), read from this same stream.
+export function EventStream({
+  projectId,
+  events,
+  readOnly = false,
+}: {
+  projectId: string | null
+  events: FrameworkEvent[]
+  readOnly?: boolean
+}) {
   if (!projectId) {
     return <div className="grid flex-1 place-items-center text-sm text-muted-foreground">Select a project to watch its live run.</div>
   }
 
-  // Read-only watch mode (the relay, #426): no steering (no Stop/Start, no interactive
-  // gate), just the run overview + the live event feed, both projected from the stream.
+  // Read-only watch mode (the relay, #426): no steering (no Stop/Start), just the run
+  // overview + the live event feed, both projected from the stream.
   if (readOnly) {
     if (events.length === 0) {
       return <div className="grid flex-1 place-items-center text-sm text-muted-foreground">Waiting for the run to start…</div>
@@ -56,7 +39,6 @@ export function EventStream({ projectId, readOnly = false }: { projectId: string
   }
 
   const active = isRunActive(events)
-  const choice = pendingChoice(events)
   return (
     <>
       {active ? (
@@ -68,7 +50,6 @@ export function EventStream({ projectId, readOnly = false }: { projectId: string
       ) : (
         <StartRunForm projectId={projectId} />
       )}
-      {choice && <ChoicePanel key={choice.id} projectId={projectId} choice={choice} />}
       {events.length > 0 ? (
         <>
           <RunOverview events={events} />

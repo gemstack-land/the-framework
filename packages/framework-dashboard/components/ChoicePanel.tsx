@@ -11,8 +11,17 @@ import { cn } from '../lib/utils.js'
 // multi-select checklist (#332), and the single-select list (#304). When Autopilot is on
 // it auto-accepts the recommended pick after a countdown (#433), which any mouse movement
 // cancels. The panel clears itself when the resulting `choice-resolved` event streams in
-// (pendingChoice drops it); mount it with `key={choice.id}` so a re-fired gate resets state.
-export function ChoicePanel({ projectId, choice }: { projectId: string; choice: ChoiceRequest }) {
+// (pendingChoices drops it); mount it with `key={choice.id}` so a re-fired gate resets state.
+// `active` (the first gate in the right rail, #440) binds Ctrl+Enter to Accept.
+export function ChoicePanel({
+  projectId,
+  choice,
+  active = false,
+}: {
+  projectId: string
+  choice: ChoiceRequest
+  active?: boolean
+}) {
   const [busy, setBusy] = useState(false)
   const [checked, setChecked] = useState<Set<string>>(
     () => new Set(choice.multi ? choice.options.filter(o => o.default).map(o => o.id) : []),
@@ -36,9 +45,10 @@ export function ChoicePanel({ projectId, choice }: { projectId: string; choice: 
   const approveId = choice.recommended ?? choice.options[0]?.id
   const declineId = choice.options.find(o => o.id !== approveId)?.id ?? approveId
 
-  // What the countdown accepts: the checked subset for a multi-select, else the
-  // recommended option (an Approve for a confirm gate).
+  // What Accept picks: the checked subset for a multi-select, else the recommended option
+  // (an Approve for a confirm gate). Shared by the button, the countdown, and Ctrl+Enter.
   const autoPick = (): string | string[] => (choice.multi ? [...checked] : (approveId ?? ''))
+  const accept = (by: 'user' | 'autopilot' = 'user') => post(autoPick(), by)
 
   // Any mouse movement cancels the auto-accept — the human is here, so let them pick.
   useEffect(() => {
@@ -46,6 +56,21 @@ export function ChoicePanel({ projectId, choice }: { projectId: string; choice: 
     window.addEventListener('mousemove', cancel, { once: true })
     return () => window.removeEventListener('mousemove', cancel)
   }, [])
+
+  // Ctrl+Enter accepts the recommended pick (page.ts parity, #440). Only the active gate
+  // (the first in the rail) binds it, so the shortcut is unambiguous with several gates open.
+  useEffect(() => {
+    if (!active) return
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter' && !busy) {
+        e.preventDefault()
+        accept()
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active, busy, checked])
 
   // The countdown: tick down once a second while autopilot is on and uncancelled, then
   // auto-accept. Restarts if autopilot is toggled back on before a pick is made.
@@ -61,7 +86,7 @@ export function ChoicePanel({ projectId, choice }: { projectId: string; choice: 
       if (left <= 0) {
         clearInterval(timer)
         setSecondsLeft(null)
-        post(autoPick(), 'autopilot')
+        accept('autopilot')
       } else {
         setSecondsLeft(left)
       }
@@ -145,6 +170,7 @@ export function ChoicePanel({ projectId, choice }: { projectId: string; choice: 
               : secondsLeft !== null && `● Auto accept in ${secondsLeft}s — move the mouse to cancel`}
           </span>
         )}
+        {active && !busy && <span className="ml-auto">Ctrl+Enter to accept</span>}
       </div>
     </section>
   )

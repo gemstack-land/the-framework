@@ -9,25 +9,30 @@ import type { FrameworkEvent, ChoiceRequest } from '@gemstack/framework'
 type ChoiceEvent = { kind: 'choice' } & ChoiceRequest
 
 /**
- * The choice gate the run is currently parked on, or null. A `choice` event opens a
- * gate; a matching `choice-resolved` (same id) closes it. Later events win, so a
- * re-fired gate (#324 loops the plan approval with a fresh id) supersedes an earlier
- * one, and a resolved gate never lingers.
+ * Every choice gate the run is currently parked on, in fire order. A `choice` event
+ * opens a gate; a matching `choice-resolved` (same id) closes it. A re-fired gate (a new
+ * `choice` with an id already open) replaces the earlier one in place; a resolved gate
+ * never lingers. The run can park on several gates at once (#440 shows them all at once
+ * in the right rail), so this returns the list rather than just the latest.
  */
-export function pendingChoice(events: readonly FrameworkEvent[]): ChoiceRequest | null {
-  const resolved = new Set<string>()
-  for (let i = events.length - 1; i >= 0; i--) {
-    const event = events[i]!
+export function pendingChoices(events: readonly FrameworkEvent[]): ChoiceRequest[] {
+  const open = new Map<string, ChoiceRequest>()
+  for (const event of events) {
     if (event.kind === 'choice-resolved') {
-      resolved.add(event.id)
+      open.delete(event.id)
       continue
     }
-    if (event.kind === 'choice' && !resolved.has(event.id)) {
+    if (event.kind === 'choice') {
       const { kind: _kind, ...request } = event as ChoiceEvent
-      return request
+      open.set(event.id, request)
     }
   }
-  return null
+  return [...open.values()]
+}
+
+/** The single gate the run is currently parked on (the most recent), or null. */
+export function pendingChoice(events: readonly FrameworkEvent[]): ChoiceRequest | null {
+  return pendingChoices(events).at(-1) ?? null
 }
 
 /**
