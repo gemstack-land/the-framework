@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process'
 import { watch, type FSWatcher } from 'node:fs'
 import { mkdir, readFile, writeFile, rm, stat } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import type { FrameworkEvent } from './events.js'
 import { EVENTS_FILE, FRAMEWORK_DIR } from './store/index.js'
 import { startDashboard, type Dashboard, type StartRunKind, type StartRunOptions, type StartRunResult, type AddProjectResult } from './dashboard/index.js'
@@ -52,6 +53,21 @@ export interface DaemonState {
 /** The `.the-framework/` directory for a workspace. */
 export function daemonDir(cwd: string): string {
   return join(cwd, FRAMEWORK_DIR)
+}
+
+/**
+ * Locate the prerendered dashboard bundle (#405). A published install copies it into
+ * `dist/dashboard-client` (see scripts/bundle-dashboard.mjs); the workspace falls back
+ * to `packages/framework-dashboard/dist/client`. Returns the directory only when its
+ * `index.html` exists, else undefined (the daemon then serves the legacy page.ts).
+ */
+async function resolveDashboardBundle(): Promise<string | undefined> {
+  const here = dirname(fileURLToPath(import.meta.url)) // dist/ (or dist-test/) at runtime
+  const candidates = [join(here, 'dashboard-client'), join(here, '..', '..', 'framework-dashboard', 'dist', 'client')]
+  for (const dir of candidates) {
+    if (await stat(join(dir, 'index.html')).then(s => s.isFile()).catch(() => false)) return dir
+  }
+  return undefined
 }
 
 /**
@@ -370,6 +386,12 @@ export async function runDaemon(cwd: string, opts: RunDaemonOptions = {}): Promi
   // live run tails that file). No project id targets the home project, as before.
   const steer = (id: string | undefined, entry: Parameters<typeof appendControl>[1]): void =>
     void resolveProject(id).then(path => (path ? appendControl(path, entry) : undefined)).catch(() => {})
+  // The new dashboard (#405) is opt-in via `FRAMEWORK_DASHBOARD` (`legacy` mounts its
+  // Telefunc surface + assets so it can be smoke-tested with page.ts still at `/`;
+  // `next` serves the SPA at `/`). Unset = today's behavior, pure page.ts.
+  const dashPref = env['FRAMEWORK_DASHBOARD']
+  const clientBundleDir = dashPref ? await resolveDashboardBundle() : undefined
+  const dashboardMode = dashPref === 'next' ? 'next' : 'legacy'
   const dashboard: Dashboard = await startDashboard({
     port,
     cwd,
@@ -377,6 +399,8 @@ export async function runDaemon(cwd: string, opts: RunDaemonOptions = {}): Promi
     onChoice: (id, pick, by, projectId) => steer(projectId, { kind: 'choice', id, pick, by }),
     onStart: startRun,
     onAddProject: addProjects,
+    ...(clientBundleDir ? { clientBundleDir } : {}),
+    dashboardMode,
   })
   const eventsPath = join(daemonDir(cwd), EVENTS_FILE)
   const tailer = new EventTailer(eventsPath, event => dashboard.push(event))

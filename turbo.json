@@ -5,6 +5,10 @@
       "dependsOn": ["^build"],
       "outputs": ["dist/**"]
     },
+    "bundle:dashboard": {
+      "dependsOn": ["@gemstack/framework-dashboard#build"],
+      "outputs": ["dist/dashboard-client/**"]
+    },
     "dev": {
       "cache": false,
       "persistent": true

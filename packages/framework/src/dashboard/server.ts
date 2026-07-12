@@ -9,6 +9,8 @@ import { readDocs } from './docs.js'
 import { defaultProjectsProvider, type ProjectsProvider } from './projects.js'
 import { dashboardHtml } from './page.js'
 import { serveSSE } from './sse.js'
+import { serveClientBundle } from './static.js'
+import { makeTelefuncMount } from './telefunc-serve.js'
 
 /** Options for {@link startDashboard}. */
 export interface DashboardOptions {
@@ -70,6 +72,20 @@ export interface DashboardOptions {
    * disable adding; the page hides the "Add project(s)" control.
    */
   onAddProject?: (path: string, directory: boolean) => Promise<AddProjectResult> | AddProjectResult
+  /**
+   * Serve the new dashboard bundle (#405) from this directory — the prerendered Vike
+   * SPA (`index.html` + `assets/**`). When set, the daemon also mounts the dashboard's
+   * Telefunc surface at `/_telefunc` (RPCs + the live-event Channel). Omit to serve
+   * only the legacy `page.ts` (today's behavior, byte-identical).
+   */
+  clientBundleDir?: string
+  /**
+   * Which dashboard `/` serves during the #405 migration. `legacy` (default) keeps
+   * `page.ts` at `/`; `next` serves the new SPA at `/` and moves `page.ts` to
+   * `/legacy`. `/_telefunc` is mounted in both modes (when {@link clientBundleDir} is
+   * set) so the new dashboard is testable before the flip.
+   */
+  dashboardMode?: 'legacy' | 'next'
 }
 
 /** The outcome of an {@link DashboardOptions.onAddProject} attempt (#396). */
@@ -140,10 +156,37 @@ export function startDashboard(opts: DashboardOptions = {}): Promise<Dashboard> 
   const cwd = opts.cwd
   const projects = opts.projects ?? defaultProjectsProvider()
   const onAddProject = opts.onAddProject
+  const clientBundleDir = opts.clientBundleDir
+  const mode = opts.dashboardMode ?? 'legacy'
   const stream = new EventStream<FrameworkEvent>()
   const clients = new Set<ServerResponse>()
+  // The new dashboard (#405) is opt-in via `clientBundleDir`. When absent, serving is
+  // byte-identical to before (legacy page.ts only). When set, `/_telefunc` (RPCs +
+  // Channel) is always mounted, and in `next` mode the SPA takes `/` while page.ts
+  // moves to `/legacy` (whose SSE + steer routes still fall through to the legacy handler).
+  const telefuncMount = clientBundleDir ? makeTelefuncMount(onStart) : undefined
 
-  const server = createServer((req, res) => handle(req, res, stream, clients, title, onStop, onChoice, onStart, cwd, projects, onAddProject))
+  const server = createServer((req, res) => {
+    if (clientBundleDir) {
+      const { pathname } = new URL(req.url ?? '/', 'http://localhost')
+      if (pathname === '/_telefunc' || pathname.startsWith('/_telefunc/')) {
+        void telefuncMount!(req, res)
+        return
+      }
+      if (mode === 'next') {
+        if (pathname === '/legacy') {
+          res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' })
+          res.end(dashboardHtml(title, Boolean(onStop), Boolean(onChoice), Boolean(onStart), Boolean(onAddProject)))
+          return
+        }
+        if (!isLegacyRoute(pathname)) {
+          void serveClientBundle(req, res, clientBundleDir)
+          return
+        }
+      }
+    }
+    handle(req, res, stream, clients, title, onStop, onChoice, onStart, cwd, projects, onAddProject)
+  })
 
   return new Promise<Dashboard>((resolvePromise, rejectPromise) => {
     server.once('error', rejectPromise)
@@ -372,7 +415,16 @@ function handle(
  * a non-browser caller (curl, the test suite) with no ambient session to abuse,
  * so it passes.
  */
-function isSameOriginRequest(req: IncomingMessage): boolean {
+/**
+ * The legacy `page.ts` routes that must keep working at `/legacy` in `next` mode: its
+ * SSE stream and the `/api/*` + steer endpoints it polls/posts. Everything else in
+ * `next` mode is served from the new SPA bundle (assets, or the `index.html` fallback).
+ */
+function isLegacyRoute(pathname: string): boolean {
+  return pathname === '/events' || pathname.startsWith('/api/') || pathname === '/stop' || pathname === '/choice'
+}
+
+export function isSameOriginRequest(req: IncomingMessage): boolean {
   const origin = req.headers.origin
   if (!origin) return true
   const host = req.headers.host
