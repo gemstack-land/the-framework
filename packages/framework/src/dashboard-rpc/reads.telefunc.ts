@@ -2,6 +2,7 @@ import { listRuns, loadRunEvents, type RunMeta } from '../store/index.js'
 import { readLogs, type LogEntry } from '../logs.js'
 import { readDocs, type WorkspaceDoc } from '../dashboard/docs.js'
 import { collectQueue, type ProjectQueue } from '../dashboard/queue.js'
+import { buildOverview, type Overview } from '../dashboard/overview.js'
 import { contextProjects } from './context.js'
 import type { FrameworkEvent } from '../events.js'
 
@@ -47,4 +48,10 @@ export async function onProjectLog(projectId: string): Promise<LogEntry[]> {
 export async function onQueue(): Promise<ProjectQueue[]> {
   const projects = await contextProjects().list().catch(() => [])
   return collectQueue(projects)
+}
+
+/** The cross-project Overview (#437): what is running now, the queue size, and recent projects. */
+export async function onOverview(): Promise<Overview> {
+  const projects = await contextProjects().list().catch(() => [])
+  return buildOverview(projects)
 }
