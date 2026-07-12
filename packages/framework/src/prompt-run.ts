@@ -2,7 +2,7 @@ import type { Driver, DriverEvent, DriverSession } from './driver/index.js'
 import { hasSessionIdPlaceholder, resolveSessionLink, type ChoicePick, type ChoiceRequest, type FrameworkEvent } from './events.js'
 import { resolveAwaitGate } from './run.js'
 import { renderSystemPrompt, systemPromptBlock, type EcoOptions, type TfContext } from './system-prompt.js'
-import { AWAIT_PROTOCOL, PLAN_DECLINED_MESSAGE, isDeclinedConfirmation, parseAwaitGate } from './turn-gate.js'
+import { AWAIT_PROTOCOL, PLAN_DECLINED_MESSAGE, isDeclinedConfirmation, parseAwaitGate, parseMarkdownViews } from './turn-gate.js'
 import { UsageMeter } from './usage.js'
 
 /**
@@ -134,8 +134,14 @@ export async function runPrompt(opts: RunPromptOptions): Promise<RunPromptResult
     onEvent: onDriverEvent,
   })
 
+  // Non-blocking markdown views the agent showed this turn (#441), pushed to the rail.
+  const showViews = (text: string): void => {
+    for (const view of parseMarkdownViews(text)) emit({ kind: 'view', ...view })
+  }
+
   try {
     let turn = await session.prompt(firstPrompt, { signal: runSignal })
+    showViews(turn.text)
     let gate = parseAwaitGate(turn.text)
     for (let round = 0; round < MAX_AWAIT_ROUNDS && gate; round++) {
       const answer = await resolveAwaitGate(gate, round, { requestChoice: opts.requestChoice, emit, signal: runSignal })
@@ -150,6 +156,7 @@ export async function runPrompt(opts: RunPromptOptions): Promise<RunPromptResult
         `You paused to ask: "${gate.title}". The user chose: ${answer}. Continue with that decision, and do not ask again unless a genuinely new choice comes up.`,
         { signal: runSignal },
       )
+      showViews(turn.text)
       gate = parseAwaitGate(turn.text)
     }
     // The agent kept asking past the limit: finish with the latest turn rather than loop.

@@ -104,6 +104,13 @@ export type FrameworkEvent =
   /** A framework-level log line. */
   | { kind: 'log'; message: string }
   /**
+   * An ad-hoc markdown view the agent pushed to show the user (#441), e.g. a plan,
+   * a summary, or a diff writeup. Non-blocking (unlike a `choice`): the dashboard
+   * renders it as a view in the right rail. `id` is stable per title, so re-showing
+   * the same view updates it in place rather than stacking a duplicate.
+   */
+  | { kind: 'view'; id: string; title: string; markdown: string }
+  /**
    * Cumulative token + cost usage for the run so far (#322). Emitted after each
    * agent turn that reports usage; the dashboard renders a live spend readout and
    * the run stops itself once `costUsd` reaches the budget cap, if one is set.
@@ -156,6 +163,8 @@ export function formatFrameworkEvent(event: FrameworkEvent): string {
       return `▶ your app is running at ${event.url}`
     case 'log':
       return `  ${event.message}`
+    case 'view':
+      return `▶ view: ${event.title}`
     case 'usage':
       return `  spend: $${event.costUsd.toFixed(4)}${
         event.budgetUsd ? ` / $${event.budgetUsd}` : ''

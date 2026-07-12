@@ -38,7 +38,7 @@ import { snapshotWorkspace } from './sandbox.js'
 import type { Driver, DriverEvent, DriverSession } from './driver/index.js'
 import { memoryFraming, type LoadedMemory } from './memory.js'
 import { systemPromptBlock, type EcoOptions, type TfContext } from './system-prompt.js'
-import { AWAIT_PROTOCOL, CONFIRM_APPROVED, CONFIRM_DECLINED, PLAN_DECLINED_MESSAGE, isDeclinedConfirmation, parseAwaitGate, type ParsedAwaitGate } from './turn-gate.js'
+import { AWAIT_PROTOCOL, CONFIRM_APPROVED, CONFIRM_DECLINED, PLAN_DECLINED_MESSAGE, isDeclinedConfirmation, parseAwaitGate, parseMarkdownViews, type ParsedAwaitGate } from './turn-gate.js'
 // Value import from todo-loop.js is a benign cycle: todo-loop.js only calls
 // run.js's hoisted function declarations (requestChoices / resolveAwaitGate).
 import { runTodoLoop, type TodoLoopResult } from './todo-loop.js'
@@ -703,7 +703,12 @@ function agentAwaitGate(
 ): (ctx: BuildContext) => Promise<SupervisorRun> {
   return async ctx => {
     const { requestChoice, emit } = deps
+    // Non-blocking markdown views the agent showed this turn (#441), pushed to the rail.
+    const showViews = (text: string): void => {
+      for (const view of parseMarkdownViews(text)) emit({ kind: 'view', ...view })
+    }
     let run = await base(ctx)
+    showViews(run.text)
     if (!requestChoice) return run
 
     for (let round = 0; round < MAX_AWAIT_ROUNDS; round++) {
@@ -719,6 +724,7 @@ function agentAwaitGate(
       }
       emit({ kind: 'log', message: `Continuing with your choice: ${answer}` })
       run = await continueAfterChoice(session, ctx, gate.title, answer)
+      showViews(run.text)
     }
     // The agent kept asking past the limit: proceed with the latest turn rather than loop.
     emit({ kind: 'log', message: 'Proceeding with the build (await limit reached).' })

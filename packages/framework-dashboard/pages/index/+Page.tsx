@@ -7,7 +7,7 @@ import { RightRail } from '../../components/RightRail.js'
 import { RelayView } from '../../components/RelayView.js'
 import { Badge } from '../../components/ui/badge.js'
 import { useLiveEvents } from '../../lib/use-live-events.js'
-import { pendingChoices } from '../../lib/live-state.js'
+import { pendingChoices, agentViews } from '../../lib/live-state.js'
 
 // The dashboard shell (#405 phase 2): Projects | Runs | main (live event stream or a
 // past-run replay) | Docs/Log rail. Everything over the wire is Telefunc — the
@@ -27,6 +27,7 @@ export default function Page() {
   // (#440) read one shared Telefunc Channel. Hooks run before the relay early return below.
   const events = useLiveEvents(projectId)
   const choices = projectId ? pendingChoices(events) : []
+  const views = projectId ? agentViews(events) : []
 
   // On the relay (#426), the URL carries `?run=<id>` and there is no local registry or
   // files — show that one run read-only. `window` is absent during prerender (ssr:false),
@@ -48,7 +49,7 @@ export default function Page() {
         <main className="flex min-w-0 flex-1 flex-col">
           {projectId && runId ? <RunReplay projectId={projectId} runId={runId} /> : <EventStream projectId={projectId} events={events} />}
         </main>
-        <RightRail projectId={projectId} choices={choices} />
+        <RightRail projectId={projectId} choices={choices} views={views} />
       </div>
     </div>
   )

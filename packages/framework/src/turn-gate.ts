@@ -28,6 +28,14 @@ export const AWAIT_PROTOCOL = [
   '{ "title": "<what to approve>", "file": "PLAN_<slug>.agent.md" }',
   '```',
   'The framework shows it, waits for the user, and re-prompts you with their answer. Do not continue past it on your own.',
+  '',
+  '## Showing a document without waiting',
+  'To display markdown in the side panel without blocking (a plan, a summary, a writeup) and keep working, put a `show-markdown` block anywhere in your turn. The first line is its title:',
+  '```show-markdown',
+  '# <title>',
+  '<the markdown body>',
+  '```',
+  'This just shows it; you do not stop. Re-emit the same title to update that view in place.',
 ].join('\n')
 
 /** A single-select choice an agent stopped to ask, parsed from an `await-choices` block (#337). */
@@ -72,6 +80,49 @@ export const PLAN_DECLINED_MESSAGE = 'Plan declined, awaiting user instructions.
 /** Whether a resolved gate was a declined confirmation (#358): the caller stops instead of re-prompting. */
 export function isDeclinedConfirmation(gate: ParsedAwaitGate, answer: string): boolean {
   return gate.kind === 'confirm' && answer === CONFIRM_DECLINED
+}
+
+/** A non-blocking markdown view the agent pushed via a `show-markdown` block (#441). */
+export interface ParsedMarkdownView {
+  /** Stable id (a slug of the title), so re-showing the same title updates in place. */
+  id: string
+  /** The view's title (the first `# ` heading, or a fallback). */
+  title: string
+  /** The markdown body (the heading line removed). */
+  markdown: string
+}
+
+/** Slugify a title into a stable id, or `view` when it has no usable characters. */
+function slugify(title: string): string {
+  const slug = title
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+  return slug || 'view'
+}
+
+/**
+ * Parse every `show-markdown` block (per {@link AWAIT_PROTOCOL}) out of a turn's text
+ * (#441) — a non-blocking view the agent pushed to the side panel, so a turn may carry
+ * several and does not stop. Each block's first `# ` line is the title (the rest is the
+ * body); a block with no heading falls back to "Note". Blank blocks are skipped, and two
+ * blocks that slug to the same id keep the later one (an in-turn update). Never throws.
+ */
+export function parseMarkdownViews(text: string): ParsedMarkdownView[] {
+  const re = /```show-markdown\s+([\s\S]*?)```/g
+  const byId = new Map<string, ParsedMarkdownView>()
+  for (const m of text.matchAll(re)) {
+    const body = (m[1] ?? '').trim()
+    if (!body) continue
+    const lines = body.split('\n')
+    const heading = /^#\s+(.+)/.exec(lines[0] ?? '')
+    const title = heading ? heading[1]!.trim() : 'Note'
+    const markdown = (heading ? lines.slice(1).join('\n') : body).trim()
+    if (!markdown) continue
+    const id = slugify(title)
+    byId.set(id, { id, title, markdown })
+  }
+  return [...byId.values()]
 }
 
 /** Find the body + start index of the last fenced block with `tag` in `text`. */
