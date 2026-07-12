@@ -5,8 +5,12 @@ import {
   addProject,
   listProjects,
   projectId,
+  readPreferences,
+  readRegistry,
+  registryPreferencesStore,
   registryPath,
   removeProject,
+  writePreferences,
   REGISTRY_FILE,
   type ProjectRecord,
   type RegistryFs,
@@ -96,7 +100,7 @@ test('addProject appends a record and writes pretty JSON that parses back', asyn
   const record = await addProject('/repos/app-a', APP_A.addedAt, fs, ENV)
   assert.deepEqual(record, APP_A)
   assert.deepEqual(fs.dirs, ['/home/u']) // the single dotfile's parent is $HOME itself
-  assert.deepEqual(JSON.parse(fs.files.get(FILE)!), [APP_A])
+  assert.deepEqual(JSON.parse(fs.files.get(FILE)!), { projects: [APP_A], preferences: {} })
 
   await addProject('/repos/app-b', APP_B.addedAt, fs, ENV)
   assert.deepEqual(await listProjects(fs, ENV), [APP_A, APP_B])
@@ -109,7 +113,7 @@ test('addProject is idempotent by resolved path and keeps the original addedAt',
     const again = await addProject(variant, '2027-01-01T00:00:00.000Z', fs, ENV)
     assert.deepEqual(again, APP_A) // existing record, addedAt untouched
   }
-  assert.deepEqual(JSON.parse(fs.files.get(FILE)!), [APP_A])
+  assert.deepEqual(JSON.parse(fs.files.get(FILE)!), { projects: [APP_A], preferences: {} })
 })
 
 test('addProject normalizes the stored path to an absolute one', async () => {
@@ -134,4 +138,58 @@ test('removeProject on an unknown id is false and does not write', async () => {
 test('removeProject on an empty / missing registry is false', async () => {
   assert.equal(await removeProject(APP_A.id, memFs(), ENV), false)
   assert.equal(await removeProject(APP_A.id, memFs({ [FILE]: '[]' }), ENV), false)
+})
+
+// Preferences (#410): stored in the same file next to the project list.
+
+test('readRegistry reads a legacy bare-array file as { projects, preferences: {} }', async () => {
+  const raw = JSON.stringify([APP_A, APP_B])
+  assert.deepEqual(await readRegistry(memFs({ [FILE]: raw }), ENV), {
+    projects: [APP_A, APP_B],
+    preferences: {},
+  })
+})
+
+test('readRegistry reads the object form with preferences and drops unknown/non-boolean fields', async () => {
+  const raw = JSON.stringify({
+    projects: [APP_A],
+    preferences: { autopilot: false, eco: true, ecoPlanning: 'yes', bogus: 1 },
+  })
+  assert.deepEqual(await readRegistry(memFs({ [FILE]: raw }), ENV), {
+    projects: [APP_A],
+    preferences: { autopilot: false, eco: true }, // ecoPlanning (non-boolean) + bogus dropped
+  })
+})
+
+test('readPreferences on a missing / legacy file is {}', async () => {
+  assert.deepEqual(await readPreferences(memFs(), ENV), {})
+  assert.deepEqual(await readPreferences(memFs({ [FILE]: JSON.stringify([APP_A]) }), ENV), {})
+})
+
+test('writePreferences persists sanitized prefs and preserves the project list', async () => {
+  const fs = memFs({ [FILE]: JSON.stringify([APP_A, APP_B]) })
+  await writePreferences({ autopilot: false, technical: true, bogus: 3 } as never, fs, ENV)
+  assert.deepEqual(JSON.parse(fs.files.get(FILE)!), {
+    projects: [APP_A, APP_B],
+    preferences: { autopilot: false, technical: true },
+  })
+  // The project list still reads back unchanged.
+  assert.deepEqual(await listProjects(fs, ENV), [APP_A, APP_B])
+})
+
+test('addProject preserves existing preferences', async () => {
+  const fs = memFs({ [FILE]: JSON.stringify({ projects: [APP_A], preferences: { autopilot: false } }) })
+  await addProject('/repos/app-b', APP_B.addedAt, fs, ENV)
+  assert.deepEqual(JSON.parse(fs.files.get(FILE)!), {
+    projects: [APP_A, APP_B],
+    preferences: { autopilot: false },
+  })
+})
+
+test('registryPreferencesStore round-trips through the same file', async () => {
+  const fs = memFs()
+  const store = registryPreferencesStore(fs, ENV)
+  assert.deepEqual(await store.read(), {})
+  await store.save({ vanilla: true })
+  assert.deepEqual(await store.read(), { vanilla: true })
 })

@@ -3,6 +3,7 @@ import { onRuns, onRun, onDocs, onProjectLog, onQueue, onOverview } from './read
 import { sendStop, sendChoice, sendStart } from './control.telefunc.js'
 import { onEvents } from './events.telefunc.js'
 import { onProjects, sendAddProject } from './projects.telefunc.js'
+import { onPreferences, savePreferences } from './preferences.telefunc.js'
 
 // The client bakes each RPC key from the dashboard's source path (relative to its Vite
 // root, keeping the `.ts` extension) as `"<telefuncFilePath>:<exportName>"`. Since the
@@ -14,6 +15,7 @@ export const DASHBOARD_TELEFUNC_KEYS = {
   control: '/server/control.telefunc.ts',
   events: '/server/events.telefunc.ts',
   projects: '/server/projects.telefunc.ts',
+  preferences: '/server/preferences.telefunc.ts',
 } as const
 
 let registered = false
@@ -28,7 +30,7 @@ export function registerDashboardTelefunctions(appRootDir: string = process.cwd(
   registered = true
   const reg = (fn: (...args: never[]) => unknown, name: string, key: string): void =>
     __decorateTelefunction(fn as never, name, key, appRootDir)
-  const { reads, control, events, projects } = DASHBOARD_TELEFUNC_KEYS
+  const { reads, control, events, projects, preferences } = DASHBOARD_TELEFUNC_KEYS
   reg(onRuns, 'onRuns', reads)
   reg(onRun, 'onRun', reads)
   reg(onDocs, 'onDocs', reads)
@@ -41,4 +43,6 @@ export function registerDashboardTelefunctions(appRootDir: string = process.cwd(
   reg(onEvents, 'onEvents', events)
   reg(onProjects, 'onProjects', projects)
   reg(sendAddProject, 'sendAddProject', projects)
+  reg(onPreferences, 'onPreferences', preferences)
+  reg(savePreferences, 'savePreferences', preferences)
 }

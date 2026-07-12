@@ -1,6 +1,7 @@
 import { getContext } from 'telefunc'
 import { defaultProjectsProvider, type ProjectsProvider } from '../dashboard/projects.js'
 import type { EventsSource } from '../dashboard/telefunc-serve.js'
+import type { PreferencesStore } from '../registry.js'
 
 /**
  * The {@link ProjectsProvider} a telefunction should read a project id against (#427).
@@ -27,6 +28,19 @@ export function contextProjects(): ProjectsProvider {
 export function contextEventsSource(): EventsSource | undefined {
   try {
     return getContext<{ eventsSource?: EventsSource }>()?.eventsSource
+  } catch {
+    return undefined
+  }
+}
+
+/**
+ * The user-preferences store on the context, or undefined (#410). The daemon/foreground wire
+ * the real registry file; a public host (the relay) leaves it unset, so the preferences RPCs
+ * degrade to a read-only default / a no-op write on a shared host.
+ */
+export function contextPreferences(): PreferencesStore | undefined {
+  try {
+    return getContext<{ preferences?: PreferencesStore }>()?.preferences
   } catch {
     return undefined
   }

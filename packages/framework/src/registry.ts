@@ -4,8 +4,8 @@ import { basename, dirname, join, resolve } from 'node:path'
  * The multi-project registry (#390): the list of projects the user has
  * installed The Framework into, kept as a single JSON file `.bashrc`-style —
  * `$HOME/.the-framework.json` — so it is the user's responsibility to re-create
- * per machine. Stores only `{id, path, addedAt}` per project; the daemon and
- * UI over it are separate concerns.
+ * per machine. The same file also holds the user's dashboard preferences (#410),
+ * so the daemon owns one user file and the UI never needs localStorage.
  */
 
 /** One registered project. */
@@ -16,6 +16,39 @@ export interface ProjectRecord {
   path: string
   /** ISO timestamp the project was added. */
   addedAt: string
+}
+
+/**
+ * The dashboard's Global options (#410), persisted next to the project list so they
+ * survive restarts without localStorage — the daemon reads/writes them, the SPA reads
+ * them over Telefunc. Flat booleans mirroring the Start form's toggles; every field is
+ * optional and absent means off (Autopilot still defaults on in the UI).
+ */
+export interface Preferences {
+  autopilot?: boolean
+  technical?: boolean
+  vanilla?: boolean
+  eco?: boolean
+  ecoPlanning?: boolean
+  ecoResearch?: boolean
+  ecoMaintenance?: boolean
+}
+
+/**
+ * The persisted registry file shape (#410): the project list plus the user preferences.
+ * Older installs wrote a bare `ProjectRecord[]`; {@link readRegistry} still reads those and
+ * the next write migrates the file to this object form.
+ */
+export interface Registry {
+  projects: ProjectRecord[]
+  preferences: Preferences
+}
+
+/** A read/write handle for the user preferences, threaded through the dashboard's Telefunc
+ * context so a public host (the relay) can leave it unwired. */
+export interface PreferencesStore {
+  read(): Promise<Preferences>
+  save(preferences: Preferences): Promise<void>
 }
 
 /** The registry file name: a single file under `$XDG_CONFIG_HOME` (dotted under `$HOME`). */
@@ -86,24 +119,11 @@ function isRecord(value: unknown): value is ProjectRecord {
   return typeof record.id === 'string' && typeof record.path === 'string' && typeof record.addedAt === 'string'
 }
 
-/**
- * Read the registry. Forgiving: a missing / unreadable / malformed / non-array
- * file yields `[]`, never throws. Deduped by resolved path, first wins.
- */
-export async function listProjects(
-  fs: RegistryFs = nodeRegistryFs(),
-  env: NodeJS.ProcessEnv = process.env,
-): Promise<ProjectRecord[]> {
-  let parsed: unknown
-  try {
-    parsed = JSON.parse(await fs.read(registryPath(env)))
-  } catch {
-    return []
-  }
-  if (!Array.isArray(parsed)) return []
+/** Keep well-formed records, deduped by resolved path (first wins). */
+function dedupeProjects(values: unknown[]): ProjectRecord[] {
   const seen = new Set<string>()
   const projects: ProjectRecord[] = []
-  for (const value of parsed) {
+  for (const value of values) {
     if (!isRecord(value)) continue
     const key = resolve(value.path)
     if (seen.has(key)) continue
@@ -113,10 +133,74 @@ export async function listProjects(
   return projects
 }
 
+const PREFERENCE_KEYS = [
+  'autopilot',
+  'technical',
+  'vanilla',
+  'eco',
+  'ecoPlanning',
+  'ecoResearch',
+  'ecoMaintenance',
+] as const
+
+/** Keep only the known boolean preference fields, so a hand-edited or browser-supplied
+ * object never lands junk (or non-booleans) in the user's home file. */
+function sanitizePreferences(value: unknown): Preferences {
+  if (typeof value !== 'object' || value === null) return {}
+  const input = value as Record<string, unknown>
+  const preferences: Preferences = {}
+  for (const key of PREFERENCE_KEYS) {
+    if (typeof input[key] === 'boolean') preferences[key] = input[key] as boolean
+  }
+  return preferences
+}
+
+/**
+ * Read the whole registry. Forgiving: a missing / unreadable / malformed file yields an
+ * empty registry, never throws. Accepts both the current object form and the legacy bare
+ * `ProjectRecord[]` (pre-#410), so old installs keep working; projects are deduped by
+ * resolved path and unknown preference fields are dropped.
+ */
+export async function readRegistry(
+  fs: RegistryFs = nodeRegistryFs(),
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<Registry> {
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(await fs.read(registryPath(env)))
+  } catch {
+    return { projects: [], preferences: {} }
+  }
+  // Legacy format: a bare array of project records. Migrated to the object form on next write.
+  if (Array.isArray(parsed)) return { projects: dedupeProjects(parsed), preferences: {} }
+  if (typeof parsed !== 'object' || parsed === null) return { projects: [], preferences: {} }
+  const obj = parsed as Record<string, unknown>
+  const projects = Array.isArray(obj.projects) ? dedupeProjects(obj.projects) : []
+  return { projects, preferences: sanitizePreferences(obj.preferences) }
+}
+
+/** Write the registry back as pretty object-form JSON, creating the parent dir. */
+async function writeRegistry(registry: Registry, fs: RegistryFs, env: NodeJS.ProcessEnv): Promise<void> {
+  const file = registryPath(env)
+  await fs.mkdir(dirname(file))
+  await fs.write(file, JSON.stringify(registry, null, 2))
+}
+
+/**
+ * Read the registry's project list. Forgiving: a missing / unreadable / malformed
+ * file yields `[]`, never throws. Deduped by resolved path, first wins.
+ */
+export async function listProjects(
+  fs: RegistryFs = nodeRegistryFs(),
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<ProjectRecord[]> {
+  return (await readRegistry(fs, env)).projects
+}
+
 /**
  * Register a project. Idempotent by resolved path: when the path is already
  * registered, the existing record is returned untouched (addedAt survives);
- * otherwise the new record is appended and the file written back.
+ * otherwise the new record is appended and the file written back (preferences preserved).
  */
 export async function addProject(
   path: string,
@@ -125,30 +209,58 @@ export async function addProject(
   env: NodeJS.ProcessEnv = process.env,
 ): Promise<ProjectRecord> {
   const absolute = resolve(path)
-  const projects = await listProjects(fs, env)
-  const existing = projects.find(project => resolve(project.path) === absolute)
+  const registry = await readRegistry(fs, env)
+  const existing = registry.projects.find(project => resolve(project.path) === absolute)
   if (existing) return existing
 
   const record: ProjectRecord = { id: projectId(absolute), path: absolute, addedAt }
-  projects.push(record)
-  const file = registryPath(env)
-  await fs.mkdir(dirname(file))
-  await fs.write(file, JSON.stringify(projects, null, 2))
+  registry.projects.push(record)
+  await writeRegistry(registry, fs, env)
   return record
 }
 
 /**
- * Drop the project whose id matches and write the list back. Returns whether a
- * record was removed; an empty/missing registry is a no-write `false`.
+ * Drop the project whose id matches and write the list back (preferences preserved).
+ * Returns whether a record was removed; an empty/missing registry is a no-write `false`.
  */
 export async function removeProject(
   id: string,
   fs: RegistryFs = nodeRegistryFs(),
   env: NodeJS.ProcessEnv = process.env,
 ): Promise<boolean> {
-  const projects = await listProjects(fs, env)
-  const remaining = projects.filter(project => project.id !== id)
-  if (remaining.length === projects.length) return false
-  await fs.write(registryPath(env), JSON.stringify(remaining, null, 2))
+  const registry = await readRegistry(fs, env)
+  const remaining = registry.projects.filter(project => project.id !== id)
+  if (remaining.length === registry.projects.length) return false
+  await writeRegistry({ projects: remaining, preferences: registry.preferences }, fs, env)
   return true
+}
+
+/** The user's dashboard preferences (#410), or `{}` when none are stored. */
+export async function readPreferences(
+  fs: RegistryFs = nodeRegistryFs(),
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<Preferences> {
+  return (await readRegistry(fs, env)).preferences
+}
+
+/** Persist the dashboard preferences (#410), sanitized, preserving the project list. */
+export async function writePreferences(
+  preferences: Preferences,
+  fs: RegistryFs = nodeRegistryFs(),
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<void> {
+  const registry = await readRegistry(fs, env)
+  await writeRegistry({ projects: registry.projects, preferences: sanitizePreferences(preferences) }, fs, env)
+}
+
+/** A {@link PreferencesStore} bound to the real registry file, wired by the daemon so the
+ * dashboard's preferences RPCs read/write the user's home file. */
+export function registryPreferencesStore(
+  fs: RegistryFs = nodeRegistryFs(),
+  env: NodeJS.ProcessEnv = process.env,
+): PreferencesStore {
+  return {
+    read: () => readPreferences(fs, env),
+    save: preferences => writePreferences(preferences, fs, env),
+  }
 }
