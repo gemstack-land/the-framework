@@ -1,0 +1,54 @@
+@import 'tailwindcss';
+
+/* shadcn-style design tokens (neutral slate), light + dark. The Framework's MVP page
+   is dark-first; mirror that so the spike reads as the same product. */
+@theme {
+  --radius: 0.5rem;
+}
+
+:root {
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.145 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.145 0 0);
+  --muted: oklch(0.97 0 0);
+  --muted-foreground: oklch(0.556 0 0);
+  --border: oklch(0.922 0 0);
+  --primary: oklch(0.58 0.16 264);
+  --primary-foreground: oklch(0.985 0 0);
+  --accent: oklch(0.97 0 0);
+  --accent-foreground: oklch(0.205 0 0);
+}
+
+.dark {
+  --background: oklch(0.16 0.01 264);
+  --foreground: oklch(0.95 0 0);
+  --card: oklch(0.2 0.01 264);
+  --card-foreground: oklch(0.95 0 0);
+  --muted: oklch(0.27 0.01 264);
+  --muted-foreground: oklch(0.7 0 0);
+  --border: oklch(0.3 0.01 264);
+  --primary: oklch(0.62 0.17 264);
+  --primary-foreground: oklch(0.985 0 0);
+  --accent: oklch(0.27 0.01 264);
+  --accent-foreground: oklch(0.95 0 0);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+}
+
+body {
+  background-color: var(--background);
+  color: var(--foreground);
+}
