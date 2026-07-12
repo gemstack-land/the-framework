@@ -93,6 +93,16 @@ export {
   OPEN_LOOP_MODES,
 } from './events.js'
 export {
+  architectPlan,
+  decisionLedger,
+  loopStatus,
+  sessionInfo,
+  type ArchitectPlan,
+  type Decision,
+  type LoopStatus,
+  type SessionInfo,
+} from './run-view.js'
+export {
   assessRepo,
   planMaintenanceSweep,
   maintainSweep,

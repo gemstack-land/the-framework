@@ -7,6 +7,7 @@ import { pendingChoice, isRunActive } from '../lib/live-state.js'
 import { EventList } from './EventList.js'
 import { ChoicePanel } from './ChoicePanel.js'
 import { StartRunForm } from './StartRunForm.js'
+import { RunOverview } from './RunOverview.js'
 import { Button } from './ui/button.js'
 
 // The live event stream (#405/#314): a projection of the selected project's
@@ -41,12 +42,16 @@ export function EventStream({ projectId, readOnly = false }: { projectId: string
   }
 
   // Read-only watch mode (the relay, #426): no steering (no Stop/Start, no interactive
-  // gate), just the live event feed. The stream is served from the relay's in-memory run.
+  // gate), just the run overview + the live event feed, both projected from the stream.
   if (readOnly) {
-    return events.length > 0 ? (
-      <EventList events={events} />
-    ) : (
-      <div className="grid flex-1 place-items-center text-sm text-muted-foreground">Waiting for the run to start…</div>
+    if (events.length === 0) {
+      return <div className="grid flex-1 place-items-center text-sm text-muted-foreground">Waiting for the run to start…</div>
+    }
+    return (
+      <>
+        <RunOverview events={events} />
+        <EventList events={events} />
+      </>
     )
   }
 
@@ -65,7 +70,10 @@ export function EventStream({ projectId, readOnly = false }: { projectId: string
       )}
       {choice && <ChoicePanel key={choice.id} projectId={projectId} choice={choice} />}
       {events.length > 0 ? (
-        <EventList events={events} />
+        <>
+          <RunOverview events={events} />
+          <EventList events={events} />
+        </>
       ) : (
         <div className="grid flex-1 place-items-center text-sm text-muted-foreground">No events yet.</div>
       )}

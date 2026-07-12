@@ -43,6 +43,10 @@
     "./dashboard-rpc": {
       "import": "./dist/dashboard-rpc/index.js",
       "types": "./dist/dashboard-rpc/index.d.ts"
+    },
+    "./client": {
+      "import": "./dist/client.js",
+      "types": "./dist/client.d.ts"
     }
   },
   "scripts": {
