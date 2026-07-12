@@ -37,7 +37,7 @@ export function RightRail({
   if (!projectId) return null
 
   const tabs: Tab[] = [...(hasChoices ? ['choices' as const] : []), ...(hasViews ? ['views' as const] : []), 'docs', 'log']
-  const label = (t: Tab) => (t === 'choices' ? 'Choices' : t === 'views' ? 'Views' : t === 'docs' ? 'Docs' : 'Project log')
+  const label = (t: Tab) => (t === 'choices' ? 'Choices' : t === 'views' ? 'Views' : t === 'docs' ? 'Docs' : 'Log')
   const count = (t: Tab) => (t === 'choices' ? choices.length : t === 'views' ? views.length : 0)
 
   return (
