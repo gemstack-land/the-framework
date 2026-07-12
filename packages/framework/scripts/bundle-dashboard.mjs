@@ -14,8 +14,11 @@ const dest = join(here, '..', 'dist', 'dashboard-client')
 
 const hasIndex = await stat(join(src, 'index.html')).then(s => s.isFile()).catch(() => false)
 if (!hasIndex) {
-  console.error(`[bundle:dashboard] no prerendered bundle at ${src} (build @gemstack/framework-dashboard first)`)
-  process.exit(1)
+  // Skip rather than fail so a standalone `npm pack` of framework never breaks; a
+  // release runs `framework-dashboard build` first (see the root `release` script), and
+  // an install without the bundle just falls back to the legacy page.ts dashboard.
+  console.warn(`[bundle:dashboard] no prerendered bundle at ${src}; skipping (dashboard falls back to page.ts)`)
+  process.exit(0)
 }
 
 await rm(dest, { recursive: true, force: true })

@@ -386,12 +386,12 @@ export async function runDaemon(cwd: string, opts: RunDaemonOptions = {}): Promi
   // live run tails that file). No project id targets the home project, as before.
   const steer = (id: string | undefined, entry: Parameters<typeof appendControl>[1]): void =>
     void resolveProject(id).then(path => (path ? appendControl(path, entry) : undefined)).catch(() => {})
-  // The new dashboard (#405) is opt-in via `FRAMEWORK_DASHBOARD` (`legacy` mounts its
-  // Telefunc surface + assets so it can be smoke-tested with page.ts still at `/`;
-  // `next` serves the SPA at `/`). Unset = today's behavior, pure page.ts.
-  const dashPref = env['FRAMEWORK_DASHBOARD']
-  const clientBundleDir = dashPref ? await resolveDashboardBundle() : undefined
-  const dashboardMode = dashPref === 'next' ? 'next' : 'legacy'
+  // The new dashboard (#405) is now the default: the daemon serves the prerendered SPA
+  // at `/` (page.ts moves to `/legacy`). `FRAMEWORK_DASHBOARD=legacy` is the escape
+  // hatch back to page.ts at `/`. If the built bundle is absent (an install that never
+  // shipped it), the daemon falls back to page.ts too.
+  const forceLegacy = env['FRAMEWORK_DASHBOARD'] === 'legacy'
+  const clientBundleDir = forceLegacy ? undefined : await resolveDashboardBundle()
   const dashboard: Dashboard = await startDashboard({
     port,
     cwd,
@@ -399,8 +399,7 @@ export async function runDaemon(cwd: string, opts: RunDaemonOptions = {}): Promi
     onChoice: (id, pick, by, projectId) => steer(projectId, { kind: 'choice', id, pick, by }),
     onStart: startRun,
     onAddProject: addProjects,
-    ...(clientBundleDir ? { clientBundleDir } : {}),
-    dashboardMode,
+    ...(clientBundleDir ? { clientBundleDir, dashboardMode: 'next' } : {}),
   })
   const eventsPath = join(daemonDir(cwd), EVENTS_FILE)
   const tailer = new EventTailer(eventsPath, event => dashboard.push(event))

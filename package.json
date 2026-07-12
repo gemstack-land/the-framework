@@ -13,7 +13,7 @@
     "test": "turbo run test",
     "changeset": "changeset",
     "changeset:version": "changeset version",
-    "release": "turbo run build --filter=./packages/* && changeset publish"
+    "release": "turbo run build bundle:dashboard --filter=./packages/* && changeset publish"
   },
   "devDependencies": {
     "@changesets/cli": "^2.27.0",
