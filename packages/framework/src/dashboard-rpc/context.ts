@@ -1,5 +1,6 @@
 import { getContext } from 'telefunc'
 import { defaultProjectsProvider, type ProjectsProvider } from '../dashboard/projects.js'
+import type { EventsSource } from '../dashboard/telefunc-serve.js'
 
 /**
  * The {@link ProjectsProvider} a telefunction should read a project id against (#427).
@@ -14,5 +15,19 @@ export function contextProjects(): ProjectsProvider {
     return ctx?.projects ?? defaultProjectsProvider()
   } catch {
     return defaultProjectsProvider()
+  }
+}
+
+/**
+ * The in-memory {@link EventsSource} on the context, or undefined (#426). Only the relay
+ * sets one — it has no `.the-framework/events.jsonl` on disk, so `onEvents` streams from
+ * the relay's in-memory run instead. Unset on the daemon/foreground, where `onEvents`
+ * tails the file as before.
+ */
+export function contextEventsSource(): EventsSource | undefined {
+  try {
+    return getContext<{ eventsSource?: EventsSource }>()?.eventsSource
+  } catch {
+    return undefined
   }
 }

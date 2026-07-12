@@ -1323,7 +1323,7 @@ function spawnMaintenanceRun(review: RepoReview, binPath: string, maxCost?: numb
 async function runRelayServer(opts: CliOptions, io: CliIO): Promise<number> {
   const relay = await startRelay(opts.port !== undefined ? { port: opts.port } : {})
   io.out(`◆ relay listening at ${relay.url}`)
-  io.out(`  Runs published with \`framework "..." --share ${relay.url}\` are watchable at ${relay.url}/r/<id>/`)
+  io.out(`  Runs published with \`framework "..." --share ${relay.url}\` are watchable at ${relay.url}/?run=<id>`)
   io.out(`  Press Ctrl+C to stop.`)
   await waitForInterrupt()
   await relay.close()

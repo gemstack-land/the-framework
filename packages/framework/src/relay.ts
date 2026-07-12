@@ -2,24 +2,34 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import type { AddressInfo } from 'node:net'
 import { EventStream } from '@gemstack/ai-autopilot'
 import type { FrameworkEvent } from './events.js'
-import { dashboardHtml } from './dashboard/page.js'
-import { serveSSE } from './dashboard/sse.js'
+import { resolveDashboardBundle } from './dashboard/bundle.js'
+import { serveClientBundle } from './dashboard/static.js'
+import { makeTelefuncMount } from './dashboard/telefunc-serve.js'
+import { emptyProjectsProvider } from './dashboard/projects.js'
 
 /**
  * The hosted run relay (#230): the first slice toward shared team sessions. It
- * ingests a run's {@link FrameworkEvent} stream over HTTP and re-serves the exact
- * same dashboard (SSE + history replay) to N remote browsers, keyed by run id. So
- * two people on different machines open one run URL and both watch it live.
+ * ingests a run's {@link FrameworkEvent} stream over HTTP and re-serves the same new
+ * dashboard (#405) to N remote browsers, keyed by run id. So two people on different
+ * machines open one run URL and both watch it live.
  *
- * Deliberately unauthenticated: anyone with a run's URL can watch it. Accounts,
- * teams, RBAC, and authorized steering layer on later (via vike-auth/-rbac). The
- * relay only projects the stream — it never runs an agent.
+ * It serves the prerendered dashboard SPA and streams events over Telefunc, exactly
+ * like the daemon — except the run comes from the relay's own in-memory stream (fed by
+ * publishers over HTTP), not a file. The dashboard opens in a read-only, single-run
+ * "watch" mode (no Projects/Runs/Docs rails, no Stop/Start), and only the live event
+ * stream is exposed: an empty projects provider (#426) makes the file/registry-backed
+ * RPCs return nothing on this public host.
  *
- * Endpoints (per run id):
+ * Deliberately unauthenticated: anyone with a run's URL can watch it. Accounts, teams,
+ * RBAC, and authorized steering layer on later (via vike-auth/-rbac). The relay only
+ * projects the stream — it never runs an agent.
+ *
+ * Endpoints:
  * - `POST /r/:id/publish` — ingest one event (JSON object) or a batch (JSON array)
- * - `GET  /r/:id/`        — the dashboard page (read-only: no Stop button)
- * - `GET  /r/:id/events`  — the SSE stream (replays history, then follows live)
- * - `GET  /r/:id`         — redirects to `/r/:id/` so the page's relative paths resolve
+ * - `GET  /?run=:id`      — the dashboard SPA in read-only watch mode for that run
+ * - `GET  /r/:id[/]`      — redirects to `/?run=:id` (the viewer URL)
+ * - `POST /_telefunc`     — the dashboard's Telefunc surface (only `onEvents` is live)
+ * - `GET  /assets/…`      — the SPA's static assets
  * - `GET  /healthz`       — liveness probe for the host
  */
 export interface RelayOptions {
@@ -41,13 +51,19 @@ export interface RelayOptions {
    * run is evicted (its stream closed, its viewers dropped). Default 200.
    */
   maxRuns?: number
+  /**
+   * The prerendered dashboard bundle to serve (the SPA `index.html` + `assets/**`).
+   * Defaults to {@link resolveDashboardBundle}; pass a directory to override (tests).
+   * When no bundle is found, the SPA routes 404 while publish/telefunc/healthz still work.
+   */
+  clientBundleDir?: string
 }
 
 /** A running relay. Ingest events programmatically or over HTTP; browsers watch by run id. */
 export interface Relay {
   /** The base URL of the relay (e.g. `http://0.0.0.0:4488`). */
   readonly url: string
-  /** The viewer URL for a run id (`<url>/r/<id>/`). */
+  /** The viewer URL for a run id (`<url>/?run=<id>`). */
   viewerUrl(runId: string): string
   /** Push one event into a run's stream, creating the run on first use. */
   ingest(runId: string, event: FrameworkEvent): void
@@ -59,18 +75,17 @@ export interface Relay {
 
 interface Run {
   stream: EventStream<FrameworkEvent>
-  clients: Set<ServerResponse>
 }
 
 const RUN_PATH = /^\/r\/([^/]+)(\/[^?]*)?/
 
 /** Start the hosted run relay. See {@link Relay}. */
-export function startRelay(opts: RelayOptions = {}): Promise<Relay> {
+export async function startRelay(opts: RelayOptions = {}): Promise<Relay> {
   const host = opts.host ?? '0.0.0.0'
   const port = opts.port ?? 4488
-  const title = opts.title ?? 'The Framework'
   const maxBody = opts.maxBodyBytes ?? 256 * 1024
   const maxRuns = opts.maxRuns ?? 200
+  const clientBundleDir = opts.clientBundleDir ?? (await resolveDashboardBundle())
   // Insertion-ordered as an LRU: touching a run re-inserts it at the end, so the
   // first entry is always the least-recently-used and the eviction victim.
   const runs = new Map<string, Run>()
@@ -86,17 +101,20 @@ export function startRelay(opts: RelayOptions = {}): Promise<Relay> {
     while (runs.size >= maxRuns) {
       const oldest = runs.keys().next().value
       if (oldest === undefined) break
-      const victim = runs.get(oldest)!
-      victim.stream.close()
-      for (const res of victim.clients) res.end()
+      runs.get(oldest)!.stream.close() // closing drains every viewer's Channel follower
       runs.delete(oldest)
     }
-    const r: Run = { stream: new EventStream<FrameworkEvent>(), clients: new Set() }
+    const r: Run = { stream: new EventStream<FrameworkEvent>() }
     runs.set(id, r)
     return r
   }
 
-  const server = createServer((req, res) => handle(req, res, { runs, run, title, maxBody }))
+  // The dashboard's Telefunc surface, mounted like the daemon's — but `onEvents` streams
+  // the relay's own in-memory run (create-on-access, so a viewer can connect before the
+  // publisher), and an empty projects provider neutralizes every file/registry RPC on
+  // this public host. No `startRun`, so a start is never enabled here.
+  const telefunc = makeTelefuncMount(undefined, emptyProjectsProvider(), id => run(id).stream)
+  const server = createServer((req, res) => handle(req, res, { run, maxBody, clientBundleDir, telefunc }))
 
   return new Promise<Relay>((resolvePromise, rejectPromise) => {
     server.once('error', rejectPromise)
@@ -106,7 +124,7 @@ export function startRelay(opts: RelayOptions = {}): Promise<Relay> {
       const url = `http://${host}:${address.port}`
       resolvePromise({
         url,
-        viewerUrl: id => `${url}/r/${encodeURIComponent(id)}/`,
+        viewerUrl: id => `${url}/?run=${encodeURIComponent(id)}`,
         ingest: (id, event) => run(id).stream.push(event),
         runIds: () => [...runs.keys()],
         close: () => closeRelay(server, runs),
@@ -116,55 +134,50 @@ export function startRelay(opts: RelayOptions = {}): Promise<Relay> {
 }
 
 interface HandleCtx {
-  runs: Map<string, Run>
   run: (id: string) => Run
-  title: string
   maxBody: number
+  clientBundleDir: string | undefined
+  telefunc: (req: IncomingMessage, res: ServerResponse) => Promise<boolean>
 }
 
 function handle(req: IncomingMessage, res: ServerResponse, ctx: HandleCtx): void {
-  const url = req.url ?? '/'
-  if (url === '/healthz') {
+  const { pathname } = new URL(req.url ?? '/', 'http://localhost')
+  if (pathname === '/healthz') {
     res.writeHead(200, { 'content-type': 'text/plain' })
     res.end('ok')
     return
   }
-  const m = RUN_PATH.exec(url)
-  if (!m) {
-    res.writeHead(404, { 'content-type': 'text/plain' })
-    res.end('not found')
+  // The dashboard's live event stream (and the rest of its RPC surface, neutralized).
+  if (pathname === '/_telefunc' || pathname.startsWith('/_telefunc/')) {
+    void ctx.telefunc(req, res)
     return
   }
-  const id = decodeURIComponent(m[1]!)
-  const rest = m[2] ?? ''
-
-  // No trailing slash: redirect so the page's relative `events`/`stop` resolve under /r/:id/.
-  if (rest === '') {
-    res.writeHead(302, { location: `/r/${encodeURIComponent(id)}/` })
+  const m = RUN_PATH.exec(pathname)
+  if (m) {
+    const id = decodeURIComponent(m[1]!)
+    const rest = m[2] ?? ''
+    // Ingest is the one thing still under /r/:id/ — the publisher POSTs a run's events here.
+    if (rest === '/publish') {
+      if (req.method !== 'POST') {
+        res.writeHead(405, { 'content-type': 'text/plain', allow: 'POST' })
+        res.end('method not allowed')
+        return
+      }
+      ingestBody(req, res, ctx.run(id), ctx.maxBody)
+      return
+    }
+    // Any viewer GET of a run moved to the SPA at `/?run=:id`; redirect old links there.
+    res.writeHead(302, { location: `/?run=${encodeURIComponent(id)}` })
     res.end()
     return
   }
-  if (rest === '/') {
-    res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' })
-    res.end(dashboardHtml(ctx.title, false)) // read-only: steering is out of scope for the keystone
-    return
-  }
-  if (rest === '/events') {
-    const r = ctx.run(id)
-    serveSSE(req, res, r.stream, r.clients)
-    return
-  }
-  if (rest === '/publish') {
-    if (req.method !== 'POST') {
-      res.writeHead(405, { 'content-type': 'text/plain', allow: 'POST' })
-      res.end('method not allowed')
-      return
-    }
-    ingestBody(req, res, ctx.run(id), ctx.maxBody)
+  // Everything else is the dashboard SPA (`/`, `/?run=:id`, `/assets/**`, SPA fallback).
+  if (ctx.clientBundleDir) {
+    void serveClientBundle(req, res, ctx.clientBundleDir)
     return
   }
   res.writeHead(404, { 'content-type': 'text/plain' })
-  res.end('not found')
+  res.end('dashboard bundle not built')
 }
 
 /** Read a JSON body (one event or an array) and push each event into the run's stream. */
@@ -199,18 +212,14 @@ function ingestBody(req: IncomingMessage, res: ServerResponse, r: Run, maxBody: 
 }
 
 function closeRelay(server: Server, runs: Map<string, Run>): Promise<void> {
-  for (const { stream, clients } of runs.values()) {
-    stream.close()
-    for (const res of clients) res.end()
-    clients.clear()
-  }
+  for (const { stream } of runs.values()) stream.close() // closing drains each Channel follower
   runs.clear()
   return new Promise(resolvePromise => server.close(() => resolvePromise()))
 }
 
 /** A publisher that forwards a run's events to a relay. Best-effort and ordered. */
 export interface RelayPublisher {
-  /** The viewer URL to share (`<base>/r/<id>/`). */
+  /** The viewer URL to share (`<base>/?run=<id>`). */
   readonly url: string
   /** Queue one event to POST to the relay (serialized, so the relay replays in order). */
   publish(event: FrameworkEvent): void
@@ -230,10 +239,12 @@ export function relayPublisher(
   onError?: (err: unknown) => void,
   timeoutMs = 10_000,
 ): RelayPublisher {
-  const root = `${base.replace(/\/+$/, '')}/r/${encodeURIComponent(runId)}`
+  const origin = base.replace(/\/+$/, '')
+  const root = `${origin}/r/${encodeURIComponent(runId)}`
   let chain: Promise<void> = Promise.resolve()
   return {
-    url: `${root}/`,
+    // Share the SPA viewer URL; events still POST to the ingest route under /r/:id/.
+    url: `${origin}/?run=${encodeURIComponent(runId)}`,
     publish(event) {
       chain = chain.then(async () => {
         try {

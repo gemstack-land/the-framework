@@ -14,7 +14,7 @@ import { Button } from './ui/button.js'
 // (server/events.telefunc.ts) that pushes one `FrameworkEvent` per new line. The same
 // projection drives the write side (#405): the interactive gate the run parks on and
 // a Stop button, both posted back over Telefunc (server/control.telefunc.ts).
-export function EventStream({ projectId }: { projectId: string | null }) {
+export function EventStream({ projectId, readOnly = false }: { projectId: string | null; readOnly?: boolean }) {
   const [events, setEvents] = useState<FrameworkEvent[]>([])
 
   useEffect(() => {
@@ -38,6 +38,16 @@ export function EventStream({ projectId }: { projectId: string | null }) {
 
   if (!projectId) {
     return <div className="grid flex-1 place-items-center text-sm text-muted-foreground">Select a project to watch its live run.</div>
+  }
+
+  // Read-only watch mode (the relay, #426): no steering (no Stop/Start, no interactive
+  // gate), just the live event feed. The stream is served from the relay's in-memory run.
+  if (readOnly) {
+    return events.length > 0 ? (
+      <EventList events={events} />
+    ) : (
+      <div className="grid flex-1 place-items-center text-sm text-muted-foreground">Waiting for the run to start…</div>
+    )
   }
 
   const active = isRunActive(events)
