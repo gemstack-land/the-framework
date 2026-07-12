@@ -87,6 +87,23 @@ export function defaultProjectsProvider(): ProjectsProvider {
  * its `cwd` for the fixed `id` — every read RPC + the event Channel then read the run's
  * own `.the-framework/` files. An unknown id resolves to nothing, as with the registry.
  */
+/**
+ * A {@link ProjectsProvider} that knows no projects (#426): `list()` is empty and
+ * `resolvePath` never resolves. The relay passes this so the file/registry-backed RPCs
+ * (runs, docs, log, and any steer) return nothing on a public, unauthenticated host — it
+ * only serves the live event stream from its own in-memory run (via `eventsSource`).
+ */
+export function emptyProjectsProvider(): ProjectsProvider {
+  return {
+    async list() {
+      return []
+    },
+    async resolvePath() {
+      return undefined
+    },
+  }
+}
+
 export function singleProjectProvider(cwd: string, id = 'home'): ProjectsProvider {
   return {
     async list() {

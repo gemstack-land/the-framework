@@ -3,6 +3,7 @@ import { config } from 'telefunc'
 import { Telefunc } from 'telefunc/node'
 import { registerDashboardTelefunctions } from '../dashboard-rpc/register.js'
 import type { ProjectsProvider } from './projects.js'
+import type { FrameworkEvent } from '../events.js'
 import { isSameOriginRequest, type StartRunKind, type StartRunOptions, type StartRunResult } from './server.js'
 
 /** Wired by the daemon so `sendStart` can reach the daemon's own `startRun` closure. */
@@ -13,14 +14,21 @@ export type StartRunHandler = (
   projectId?: string,
 ) => StartRunResult | Promise<StartRunResult>
 
+/** Resolve a project id to its live event stream (#426): the relay feeds `onEvents` from
+ * its own in-memory stream rather than a file on disk. */
+export type EventsSource = (projectId: string) => AsyncIterable<FrameworkEvent> | undefined
+
 /**
  * The Telefunc request context the mount provides. `sendStart` reads `startRun` from it;
  * every project-keyed RPC reads `projects` (#427) — the daemon leaves it unset to use the
- * global registry, the per-run foreground dashboard passes a single-project provider.
+ * global registry, the per-run foreground dashboard passes a single-project provider. The
+ * relay passes `eventsSource` (#426) so `onEvents` streams its in-memory run instead of a
+ * file, plus an empty `projects` so the file/registry RPCs return nothing on a public host.
  */
 export interface DashboardContext {
   startRun?: StartRunHandler
   projects?: ProjectsProvider
+  eventsSource?: EventsSource
 }
 
 let instance: Telefunc | undefined
@@ -48,6 +56,7 @@ function setup(): Telefunc {
 export function makeTelefuncMount(
   startRun?: StartRunHandler,
   projects?: ProjectsProvider,
+  eventsSource?: EventsSource,
 ): (req: IncomingMessage, res: ServerResponse) => Promise<boolean> {
   return async (req, res) => {
     if (!isSameOriginRequest(req)) {
@@ -59,6 +68,7 @@ export function makeTelefuncMount(
     const context: DashboardContext = {
       ...(startRun ? { startRun } : {}),
       ...(projects ? { projects } : {}),
+      ...(eventsSource ? { eventsSource } : {}),
     }
     return tf.serve({ req, res, context: context as never })
   }

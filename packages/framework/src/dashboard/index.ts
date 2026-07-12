@@ -3,10 +3,13 @@ export {
   summarizeProject,
   defaultProjectsProvider,
   singleProjectProvider,
+  emptyProjectsProvider,
   type ProjectSummary,
   type ProjectsProvider,
   type SummarizeDeps,
 } from './projects.js'
 export { resolveDashboardBundle } from './bundle.js'
+export { makeTelefuncMount, type EventsSource } from './telefunc-serve.js'
+export { serveClientBundle } from './static.js'
 export { dashboardHtml } from './page.js'
 export { readDocs, DOC_CATEGORIES, type WorkspaceDoc } from './docs.js'
