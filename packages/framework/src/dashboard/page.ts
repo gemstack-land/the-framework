@@ -591,7 +591,7 @@ function stopRun() {
   const btn = $('stop');
   btn.disabled = true;
   btn.textContent = 'stopping\\u2026';
-  fetch('stop', { method: 'POST' }).catch(() => {});
+  fetch('stop' + projectQuery(), { method: 'POST' }).catch(() => {});
 }
 // Attribute-safe: textContent->innerHTML escapes < > &, but NOT quotes, so we also
 // escape " and ' to stay safe inside quoted HTML attributes, not just text nodes.
@@ -683,7 +683,7 @@ function acceptChoice(by, pickOverride) {
   stopCountdown();
   activeChoice = null;
   $('choice-panel').hidden = true;
-  fetch('choice', { method: 'POST', headers: { 'content-type': 'application/json' },
+  fetch('choice' + projectQuery(), { method: 'POST', headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ id: id, pick: pick, by: by }) }).catch(() => {});
 }
 function resolveChoice(fe) {
@@ -858,6 +858,9 @@ function loadLogs() {
 let allProjects = [];
 let selectedProjectId = null;
 let selectedProjectName = '';
+// The ?project=<id> the read endpoints and the write POSTs (start/stop/choice)
+// carry, so the daemon steers and starts runs in the viewed project (#393).
+function projectQuery() { return selectedProjectId ? '?project=' + encodeURIComponent(selectedProjectId) : ''; }
 let didAutoSelect = false;
 let currentLogs = [];
 let selectedLogAt = null;
@@ -1220,7 +1223,7 @@ function startNewRun() {
   const buttons = [$('start-run'), ...document.querySelectorAll('.start-preset')];
   for (const b of buttons) b.disabled = true;
   note.textContent = 'starting\\u2026';
-  fetch('api/start', { method: 'POST', headers: { 'content-type': 'application/json' },
+  fetch('api/start' + projectQuery(), { method: 'POST', headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ prompt: prompt, kind: startKind, options: collectStartOptions() }) })
     .then(async r => {
       for (const b of buttons) b.disabled = false;

@@ -1,13 +1,13 @@
 import { spawn } from 'node:child_process'
 import { watch, type FSWatcher } from 'node:fs'
 import { mkdir, readFile, writeFile, rm, stat } from 'node:fs/promises'
-import { join, resolve } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 import type { FrameworkEvent } from './events.js'
 import { EVENTS_FILE, FRAMEWORK_DIR } from './store/index.js'
 import { startDashboard, type Dashboard, type StartRunKind, type StartRunOptions, type StartRunResult, type AddProjectResult } from './dashboard/index.js'
 import { appendControl } from './control.js'
 import { isActivated } from './project.js'
-import { addProject } from './registry.js'
+import { addProject, listProjects, projectId } from './registry.js'
 import { installProject, enumerateGitRepos } from './install.js'
 import { JsonlTailer } from './jsonl-tail.js'
 
@@ -19,11 +19,20 @@ import { JsonlTailer } from './jsonl-tail.js'
  * *tails* that file, pushing each new event to connected browsers. No run<->daemon
  * IPC — the file is the seam, matching "the dashboard is a projection of the event
  * stream". Steering goes the other way through `.the-framework/control.jsonl` (#344).
- * MVP: one project = the workspace `cwd`; multi-project is deferred (#299).
+ *
+ * One daemon per machine (#393): liveness lives in a single global file next to the
+ * registry ({@link daemonStatePath}), not per-workspace, so `framework` in any repo
+ * finds the same daemon. Runs and steering are keyed per project: the daemon spawns
+ * each run with `--cwd <project path>` and appends its control entries to that
+ * project's own `control.jsonl`. Its own `cwd` is just the home project it streams by
+ * default (per-project live streaming is folded in with the dashboard rebuild, #405).
  */
 
-/** The daemon's liveness record under `.the-framework/`. */
-export const DAEMON_STATE_FILE = 'daemon.json'
+/**
+ * The daemon's liveness record filename. A single global file (one daemon per
+ * machine, #393), resolved by {@link daemonStatePath} beside the registry.
+ */
+export const DAEMON_STATE_FILE = 'the-framework-daemon.json'
 
 /** The default dashboard port the daemon binds. Matches the per-run dashboard. */
 export const DEFAULT_DAEMON_PORT = 4200
@@ -61,15 +70,21 @@ export function startOptionFlags(options: StartRunOptions): string[] {
   return flags
 }
 
-/** The daemon state file path for a workspace. */
-export function daemonStatePath(cwd: string): string {
-  return join(daemonDir(cwd), DAEMON_STATE_FILE)
+/**
+ * The global daemon state file path (#393): a single file beside the registry, so
+ * there is one daemon per machine. `$XDG_CONFIG_HOME/the-framework-daemon.json` when
+ * set, else the dotted `$HOME/.the-framework-daemon.json` — mirroring `registryPath`.
+ * `env` is injectable so tests never touch the real home.
+ */
+export function daemonStatePath(env: NodeJS.ProcessEnv = process.env): string {
+  if (env.XDG_CONFIG_HOME) return join(env.XDG_CONFIG_HOME, DAEMON_STATE_FILE)
+  return join(env.HOME ?? '', '.' + DAEMON_STATE_FILE)
 }
 
 /** Read the daemon state, or `undefined` when absent or unreadable/corrupt. */
-export async function readDaemonState(cwd: string): Promise<DaemonState | undefined> {
+export async function readDaemonState(env: NodeJS.ProcessEnv = process.env): Promise<DaemonState | undefined> {
   try {
-    const raw = await readFile(daemonStatePath(cwd), 'utf8')
+    const raw = await readFile(daemonStatePath(env), 'utf8')
     const data = JSON.parse(raw) as Partial<DaemonState>
     if (typeof data.pid === 'number' && typeof data.port === 'number' && typeof data.url === 'string') {
       return { pid: data.pid, port: data.port, url: data.url, startedAt: data.startedAt ?? '' }
@@ -92,15 +107,15 @@ export function isProcessAlive(pid: number): boolean {
 }
 
 /**
- * The live daemon for a workspace, or `undefined` when none is running. A state
+ * The live daemon for this machine, or `undefined` when none is running. A state
  * file whose process is gone is stale — it is removed so the next `ensureDaemon`
  * starts fresh.
  */
-export async function daemonStatus(cwd: string): Promise<DaemonState | undefined> {
-  const state = await readDaemonState(cwd)
+export async function daemonStatus(env: NodeJS.ProcessEnv = process.env): Promise<DaemonState | undefined> {
+  const state = await readDaemonState(env)
   if (!state) return undefined
   if (isProcessAlive(state.pid)) return state
-  await rm(daemonStatePath(cwd), { force: true }).catch(() => {})
+  await rm(daemonStatePath(env), { force: true }).catch(() => {})
   return undefined
 }
 
@@ -119,16 +134,19 @@ export interface EnsureDaemonOptions {
   timeoutMs?: number
   /** The CLI entry script to re-invoke for the child. Default `process.argv[1]`. */
   binPath?: string
+  /** Env for the global liveness path (#393). Default `process.env`; injectable for tests. */
+  env?: NodeJS.ProcessEnv
 }
 
 /**
- * Ensure a background dashboard daemon is running for `cwd`, starting one if not.
- * Idempotent: a second call while one is live just returns it. The child is
- * detached and unref'd, so it outlives this process; it reports itself by writing
- * {@link DAEMON_STATE_FILE}, which this call polls for before returning.
+ * Ensure the machine's background dashboard daemon is running, starting one (homed
+ * at `cwd`) if not. Idempotent and machine-global (#393): a second call from any
+ * repo while one is live just returns it. The child is detached and unref'd, so it
+ * outlives this process; it reports itself by writing {@link DAEMON_STATE_FILE},
+ * which this call polls for before returning.
  */
 export async function ensureDaemon(cwd: string, opts: EnsureDaemonOptions = {}): Promise<EnsureResult> {
-  const existing = await daemonStatus(cwd)
+  const existing = await daemonStatus(opts.env)
   if (existing) return { state: existing, alreadyRunning: true }
 
   const port = opts.port ?? DEFAULT_DAEMON_PORT
@@ -150,16 +168,16 @@ export async function ensureDaemon(cwd: string, opts: EnsureDaemonOptions = {}):
   })
   child.unref()
 
-  const state = await waitForDaemon(cwd, opts.timeoutMs ?? 5000)
+  const state = await waitForDaemon(opts.env, opts.timeoutMs ?? 5000)
   if (!state) throw new Error('the daemon did not come up in time')
   return { state, alreadyRunning: false }
 }
 
-/** Poll for the daemon's state file to appear and its process to be alive. */
-async function waitForDaemon(cwd: string, timeoutMs: number): Promise<DaemonState | undefined> {
+/** Poll for the daemon's global state file to appear and its process to be alive. */
+async function waitForDaemon(env: NodeJS.ProcessEnv | undefined, timeoutMs: number): Promise<DaemonState | undefined> {
   const step = 100
   for (let waited = 0; waited <= timeoutMs; waited += step) {
-    const state = await daemonStatus(cwd)
+    const state = await daemonStatus(env)
     if (state) return state
     await delay(step)
   }
@@ -171,12 +189,12 @@ function delay(ms: number): Promise<void> {
 }
 
 /**
- * Stop the workspace's daemon, if any. Returns true when one was running and got
- * a termination signal. The daemon removes its own state file on exit; a stale
+ * Stop the machine's daemon, if any (#393). Returns true when one was running and
+ * got a termination signal. The daemon removes its own state file on exit; a stale
  * file (dead process) is cleaned up here.
  */
-export async function stopDaemon(cwd: string): Promise<boolean> {
-  const state = await readDaemonState(cwd)
+export async function stopDaemon(env: NodeJS.ProcessEnv = process.env): Promise<boolean> {
+  const state = await readDaemonState(env)
   if (!state) return false
   const alive = isProcessAlive(state.pid)
   if (alive) {
@@ -186,7 +204,7 @@ export async function stopDaemon(cwd: string): Promise<boolean> {
       // already gone between the check and the signal
     }
   }
-  await rm(daemonStatePath(cwd), { force: true }).catch(() => {})
+  await rm(daemonStatePath(env), { force: true }).catch(() => {})
   return alive
 }
 
@@ -207,6 +225,8 @@ export interface RunDaemonOptions {
   signal?: AbortSignal
   /** The CLI entry script to re-invoke for a dashboard-started run (#345). Default `process.argv[1]`. */
   binPath?: string
+  /** Env for the global liveness path (#393). Default `process.env`; injectable for tests. */
+  env?: NodeJS.ProcessEnv
 }
 
 /**
@@ -218,6 +238,7 @@ export interface RunDaemonOptions {
  */
 export async function runDaemon(cwd: string, opts: RunDaemonOptions = {}): Promise<void> {
   const port = opts.port ?? DEFAULT_DAEMON_PORT
+  const env = opts.env ?? process.env
   // Steering (#344): the daemon owns no run, so its Stop button and choice picks
   // append to `.the-framework/control.jsonl`; the live run tails that file. Appends
   // are best-effort — a full disk must not take the dashboard down with it.
@@ -230,65 +251,93 @@ export async function runDaemon(cwd: string, opts: RunDaemonOptions = {}): Promi
   // it shows up in the Projects list. Best-effort and idempotent (addProject
   // dedupes by path), so it never blocks the daemon coming up.
   if (await isActivated(cwd).catch(() => false)) {
-    await addProject(cwd, new Date().toISOString()).catch(() => {})
+    await addProject(cwd, new Date().toISOString(), undefined, env).catch(() => {})
+  }
+
+  // Per-project run state (#393). The one global run became a map keyed by project
+  // id, so each project runs at most one run at a time independently. The daemon's
+  // own `cwd` is the home project; a run started without a project id targets it, and
+  // the browser passes the home project's id or omits it (both resolve to `homeId`).
+  const homeId = projectId(resolve(cwd))
+  const activeRuns = new Map<string, number>()
+  const starting = new Set<string>() // reserved keys mid-spawn, to close the async gap
+  // A project id resolves to its repo path via the registry; the home id (or none)
+  // resolves to the daemon's own `cwd` without a lookup.
+  const resolveProject = async (id: string | undefined): Promise<string | undefined> => {
+    if (!id || id === homeId) return cwd
+    const records = await listProjects(undefined, env).catch(() => [])
+    return records.find(record => record.id === id)?.path
   }
 
   // Start-from-dashboard (#345): POST /api/start spawns `framework "<prompt>"
-  // --no-dashboard` as a detached child — the same spawn pattern ensureDaemon
-  // uses for the daemon itself. The run streams into this page via the tailed
-  // event log, and its gates + Stop steer through the control channel (#344),
-  // which the run wires whenever a daemon is live. One run at a time: while the
-  // last child is alive, Start is refused (the #322 runaway concern).
-  let activeRunPid: number | undefined
-  const startRun = (prompt: string, kind: StartRunKind, options: StartRunOptions = {}): StartRunResult => {
-    if (activeRunPid !== undefined && isProcessAlive(activeRunPid)) {
-      return { ok: false, busy: true, error: 'a run is already active; stop it or wait for it to finish' }
+  // --no-dashboard --cwd <project>` as a detached child — the same spawn pattern
+  // ensureDaemon uses for the daemon itself. The run streams into this page via the
+  // tailed event log, and its gates + Stop steer through the control channel (#344),
+  // which the run wires whenever a daemon is live. One run per project (#393): while
+  // that project's child is alive, Start for it is refused (the #322 runaway concern).
+  const startRun = async (
+    prompt: string,
+    kind: StartRunKind,
+    options: StartRunOptions = {},
+    targetProjectId?: string,
+  ): Promise<StartRunResult> => {
+    const key = targetProjectId ?? homeId
+    const active = activeRuns.get(key)
+    if (starting.has(key) || (active !== undefined && isProcessAlive(active))) {
+      return { ok: false, busy: true, error: 'a run is already active for this project; stop it or wait for it to finish' }
     }
-    activeRunPid = undefined
-    const binPath = opts.binPath ?? process.argv[1]
-    if (!binPath) return { ok: false, error: 'cannot locate the framework CLI entry to spawn a run' }
-    // Same fork-bomb guard as ensureDaemon: never re-exec a test file as a run.
-    if (!opts.binPath && (process.env.NODE_TEST_CONTEXT || /\.test\.[cm]?[jt]s$/.test(binPath))) {
-      return { ok: false, error: 'refusing to spawn a run from a test entry; pass an explicit binPath' }
-    }
-    // [Research] (#331) runs the research subcommand; its empty prompt is fine
-    // (the "what" defaults to `this PR` in the CLI). A `prompt` kind (#353) is a
-    // preset the user reviewed in the textarea: run it verbatim, never re-render.
-    const runArgs =
-      kind === 'research'
-        ? ['research', ...(prompt ? [prompt] : [])]
-        : kind === 'prompt'
-          ? ['prompt', prompt]
-          : [prompt]
-    const child = spawn(process.execPath, [binPath, ...runArgs, ...startOptionFlags(options), '--no-dashboard', '--cwd', cwd], {
-      detached: true,
-      stdio: 'ignore',
-    })
-    child.unref()
-    child.once('error', err => {
-      activeRunPid = undefined
-      dashboard.push({ kind: 'log', message: `✗ run failed to start: ${err.message}` })
-    })
-    child.once('exit', code => {
-      activeRunPid = undefined
-      // The run narrates its own end through the event log; only a hard failure
-      // (nonzero exit with no run to tell the tale) needs the daemon's voice.
-      if (code) dashboard.push({ kind: 'log', message: `✗ run exited with code ${code}` })
-    })
-    activeRunPid = child.pid
-    // A verbatim prompt can be a whole preset document: narrate its first line only.
-    const firstLine = prompt.split('\n', 1)[0] ?? ''
-    const brief = firstLine.length > 80 ? `${firstLine.slice(0, 80)}…` : firstLine
-    dashboard.push({
-      kind: 'log',
-      message:
+    activeRuns.delete(key)
+    starting.add(key)
+    try {
+      const projectCwd = await resolveProject(targetProjectId)
+      if (!projectCwd) return { ok: false, error: `unknown project: ${targetProjectId}` }
+      const binPath = opts.binPath ?? process.argv[1]
+      if (!binPath) return { ok: false, error: 'cannot locate the framework CLI entry to spawn a run' }
+      // Same fork-bomb guard as ensureDaemon: never re-exec a test file as a run.
+      if (!opts.binPath && (process.env.NODE_TEST_CONTEXT || /\.test\.[cm]?[jt]s$/.test(binPath))) {
+        return { ok: false, error: 'refusing to spawn a run from a test entry; pass an explicit binPath' }
+      }
+      // [Research] (#331) runs the research subcommand; its empty prompt is fine
+      // (the "what" defaults to `this PR` in the CLI). A `prompt` kind (#353) is a
+      // preset the user reviewed in the textarea: run it verbatim, never re-render.
+      const runArgs =
         kind === 'research'
-          ? `▶ research started: ${prompt || 'this PR'}`
+          ? ['research', ...(prompt ? [prompt] : [])]
           : kind === 'prompt'
-            ? `▶ prompt run started: ${brief}`
-            : `▶ run started: ${prompt}`,
-    })
-    return { ok: true }
+            ? ['prompt', prompt]
+            : [prompt]
+      const child = spawn(process.execPath, [binPath, ...runArgs, ...startOptionFlags(options), '--no-dashboard', '--cwd', projectCwd], {
+        detached: true,
+        stdio: 'ignore',
+      })
+      child.unref()
+      child.once('error', err => {
+        activeRuns.delete(key)
+        dashboard.push({ kind: 'log', message: `✗ run failed to start: ${err.message}` })
+      })
+      child.once('exit', code => {
+        activeRuns.delete(key)
+        // The run narrates its own end through the event log; only a hard failure
+        // (nonzero exit with no run to tell the tale) needs the daemon's voice.
+        if (code) dashboard.push({ kind: 'log', message: `✗ run exited with code ${code}` })
+      })
+      if (child.pid !== undefined) activeRuns.set(key, child.pid)
+      // A verbatim prompt can be a whole preset document: narrate its first line only.
+      const firstLine = prompt.split('\n', 1)[0] ?? ''
+      const brief = firstLine.length > 80 ? `${firstLine.slice(0, 80)}…` : firstLine
+      dashboard.push({
+        kind: 'log',
+        message:
+          kind === 'research'
+            ? `▶ research started: ${prompt || 'this PR'}`
+            : kind === 'prompt'
+              ? `▶ prompt run started: ${brief}`
+              : `▶ run started: ${prompt}`,
+      })
+      return { ok: true }
+    } finally {
+      starting.delete(key)
+    }
   }
 
   // Add project(s) (#396): install a single repo, or every git repo directly under
@@ -316,11 +365,16 @@ export async function runDaemon(cwd: string, opts: RunDaemonOptions = {}): Promi
     return { ok: true, added, alreadyActivated }
   }
 
+  // Steering is keyed per project (#393): a Stop / choice pick carries the project id
+  // the browser is viewing, and we append it to that project's own control.jsonl (its
+  // live run tails that file). No project id targets the home project, as before.
+  const steer = (id: string | undefined, entry: Parameters<typeof appendControl>[1]): void =>
+    void resolveProject(id).then(path => (path ? appendControl(path, entry) : undefined)).catch(() => {})
   const dashboard: Dashboard = await startDashboard({
     port,
     cwd,
-    onStop: () => void appendControl(cwd, { kind: 'stop' }).catch(() => {}),
-    onChoice: (id, pick, by) => void appendControl(cwd, { kind: 'choice', id, pick, by }).catch(() => {}),
+    onStop: projectId => steer(projectId, { kind: 'stop' }),
+    onChoice: (id, pick, by, projectId) => steer(projectId, { kind: 'choice', id, pick, by }),
     onStart: startRun,
     onAddProject: addProjects,
   })
@@ -352,7 +406,8 @@ export async function runDaemon(cwd: string, opts: RunDaemonOptions = {}): Promi
 
     const actualPort = Number(new URL(dashboard.url).port) || port
     const state: DaemonState = { pid: process.pid, port: actualPort, url: dashboard.url, startedAt: new Date().toISOString() }
-    await writeFile(daemonStatePath(cwd), JSON.stringify(state, null, 2))
+    await mkdir(dirname(daemonStatePath(env)), { recursive: true })
+    await writeFile(daemonStatePath(env), JSON.stringify(state, null, 2))
   } catch (err) {
     // Startup failed after the port was bound. Tear everything down, or the live
     // server + interval keep the event loop alive: a zombie daemon squatting the
@@ -368,7 +423,7 @@ export async function runDaemon(cwd: string, opts: RunDaemonOptions = {}): Promi
   clearInterval(poll)
   watcher?.close()
   await dashboard.close()
-  await rm(daemonStatePath(cwd), { force: true }).catch(() => {})
+  await rm(daemonStatePath(env), { force: true }).catch(() => {})
 }
 
 /** Resolve on SIGINT/SIGTERM, or when the optional abort signal fires. */

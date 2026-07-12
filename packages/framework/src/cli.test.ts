@@ -478,13 +478,17 @@ test('runCli --fake --no-dashboard runs the whole flow offline to production-gra
 
 test('a live daemon steers a dashboard-less run through its gates via control.jsonl (#344)', async () => {
   const cwd = await mkdtemp(join(tmpdir(), 'framework-ws-'))
+  const cfg = await mkdtemp(join(tmpdir(), 'framework-cfg-'))
   const prevAwait = process.env.FRAMEWORK_FAKE_AWAIT
+  const prevXdg = process.env.XDG_CONFIG_HOME
   process.env.FRAMEWORK_FAKE_AWAIT = 'choices' // the fake build stops to ask (#341)
+  process.env.XDG_CONFIG_HOME = cfg // the run reads the global daemon liveness from here (#393)
   try {
-    // Fake a live daemon for this workspace: our own pid always reads as alive.
+    // Fake the machine's live daemon (#393): our own pid always reads as alive. The
+    // run's steering check is now global, so the liveness goes in the config dir.
     await mkdir(join(cwd, FRAMEWORK_DIR), { recursive: true })
     await writeFile(
-      daemonStatePath(cwd),
+      daemonStatePath(),
       JSON.stringify({ pid: process.pid, port: 1, url: 'http://127.0.0.1:1', startedAt: '' }),
     )
 
@@ -528,6 +532,9 @@ test('a live daemon steers a dashboard-less run through its gates via control.js
   } finally {
     if (prevAwait === undefined) delete process.env.FRAMEWORK_FAKE_AWAIT
     else process.env.FRAMEWORK_FAKE_AWAIT = prevAwait
+    if (prevXdg === undefined) delete process.env.XDG_CONFIG_HOME
+    else process.env.XDG_CONFIG_HOME = prevXdg
     await rm(cwd, { recursive: true, force: true })
+    await rm(cfg, { recursive: true, force: true })
   }
 })

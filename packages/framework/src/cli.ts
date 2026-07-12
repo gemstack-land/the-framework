@@ -44,6 +44,8 @@ import { preflight } from './preflight.js'
 import { RunStore } from './store/index.js'
 import { daemonStatus, ensureDaemon, runDaemon, stopDaemon, DEFAULT_DAEMON_PORT } from './daemon.js'
 import { resetControl, watchControl, type ControlWatcher } from './control.js'
+import { isActivated } from './project.js'
+import { addProject } from './registry.js'
 import { runPrompt } from './prompt-run.js'
 import { renderResearchPrompt } from './research-preset.js'
 
@@ -804,10 +806,11 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
   // The persistent daemon dashboard steers this run through .the-framework/control.jsonl
   // (#344): its Stop button and choice picks append entries, we tail the file and
   // abort / resolve the parked gate. Reset first so a previous run's picks can never
-  // fire into this one (gate ids repeat across runs). Only wired when a daemon is
-  // live for this workspace — without one, headless behavior is byte-identical.
+  // fire into this one (gate ids repeat across runs). Only wired when the machine's
+  // daemon is live (#393): the one daemon steers runs in any project, and it writes
+  // to this run's own control.jsonl. Without a daemon, headless behavior is identical.
   let control: ControlWatcher | undefined
-  if (opts.persist && (await daemonStatus(cwd))) {
+  if (opts.persist && (await daemonStatus())) {
     try {
       await resetControl(cwd)
       control = watchControl(cwd, entry => {
@@ -1153,6 +1156,14 @@ async function ensureDaemonCmd(opts: CliOptions, io: CliIO): Promise<number> {
     io.err(`could not start the dashboard daemon (${err instanceof Error ? err.message : String(err)}).`)
     return 1
   }
+  // One daemon per machine (#393): when it is already running, `framework` in a new
+  // repo would not otherwise register that repo (only the daemon's own cwd is added
+  // on startup). Register it here too, best-effort, so it shows up in the Projects
+  // list either way. Idempotent (addProject dedupes by path).
+  if (await isActivated(cwd).catch(() => false)) {
+    await addProject(cwd, new Date().toISOString()).catch(() => {})
+  }
+
   const { state, alreadyRunning } = result
   io.out(`◆ dashboard ${alreadyRunning ? 'already running' : 'started'}: ${state.url}`)
   io.out('')
@@ -1168,10 +1179,9 @@ async function ensureDaemonCmd(opts: CliOptions, io: CliIO): Promise<number> {
   return 0
 }
 
-/** `framework stop`: stop this workspace's background dashboard, if any. */
-async function stopDaemonCmd(opts: CliOptions, io: CliIO): Promise<number> {
-  const cwd = opts.cwd ?? process.cwd()
-  const stopped = await stopDaemon(cwd)
+/** `framework stop`: stop the machine's background dashboard, if any (#393). */
+async function stopDaemonCmd(_opts: CliOptions, io: CliIO): Promise<number> {
+  const stopped = await stopDaemon()
   io.out(stopped ? '◆ dashboard stopped.' : 'No background dashboard was running.')
   return 0
 }

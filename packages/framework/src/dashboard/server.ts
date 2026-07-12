@@ -20,18 +20,21 @@ export interface DashboardOptions {
   title?: string
   /**
    * Called when the browser hits the Stop button (`POST /stop`). Wire this to
-   * abort the run (e.g. an `AbortController.abort()`). Omit to disable stopping;
-   * the page hides the button when the server reports no stop handler.
+   * abort the run (e.g. an `AbortController.abort()`). The optional `projectId` is
+   * the `?project=<id>` the page is viewing (#393), so the daemon steers the right
+   * project; absent means the default project. Omit to disable stopping; the page
+   * hides the button when the server reports no stop handler.
    */
-  onStop?: () => void
+  onStop?: (projectId?: string) => void
   /**
    * Called when the browser posts an interactive-choice pick (#304): `POST /choice`
    * with a JSON `{ id, pick, by }` body. Wire this to resolve the run's pending
-   * choice (e.g. settle the promise a `requestChoice` handler returned). Omit to
-   * disable interactive choices; the page still renders them but the route reports
-   * no handler (404).
+   * choice (e.g. settle the promise a `requestChoice` handler returned). The optional
+   * `projectId` routes the pick to the viewed project (#393). Omit to disable
+   * interactive choices; the page still renders them but the route reports no handler
+   * (404).
    */
-  onChoice?: (id: string, pick: string | string[], by: ChoiceBy) => void
+  onChoice?: (id: string, pick: string | string[], by: ChoiceBy, projectId?: string) => void
   /**
    * The workspace whose `.the-framework/runs/` archive backs the run-history sidebar
    * (#303): `GET /api/runs` lists it, `GET /api/runs/<id>` replays one run. Omit
@@ -43,9 +46,15 @@ export interface DashboardOptions {
    * with a JSON `{ prompt, kind?, options? }` body. Wire this to spawn the run (the
    * daemon does); return `busy: true` to refuse because a run is already active
    * (409). Omit to disable starting; the page hides the prompt panel. The Global
-   * options (#314) ride along in `options`.
+   * options (#314) ride along in `options`; the optional `projectId` targets the
+   * viewed project (#393), spawning the run with that project's `--cwd`.
    */
-  onStart?: (prompt: string, kind: StartRunKind, options: StartRunOptions) => StartRunResult
+  onStart?: (
+    prompt: string,
+    kind: StartRunKind,
+    options: StartRunOptions,
+    projectId?: string,
+  ) => StartRunResult | Promise<StartRunResult>
   /**
    * The multi-project registry read side (#392): `GET /api/projects` lists it, and
    * `?project=<id>` on the read endpoints resolves to that project's path. Omit to
@@ -158,9 +167,11 @@ function handle(
   stream: EventStream<FrameworkEvent>,
   clients: Set<ServerResponse>,
   title: string,
-  onStop: (() => void) | undefined,
-  onChoice: ((id: string, pick: string | string[], by: ChoiceBy) => void) | undefined,
-  onStart: ((prompt: string, kind: StartRunKind, options: StartRunOptions) => StartRunResult) | undefined,
+  onStop: ((projectId?: string) => void) | undefined,
+  onChoice: ((id: string, pick: string | string[], by: ChoiceBy, projectId?: string) => void) | undefined,
+  onStart:
+    | ((prompt: string, kind: StartRunKind, options: StartRunOptions, projectId?: string) => StartRunResult | Promise<StartRunResult>)
+    | undefined,
   cwd: string | undefined,
   projects: ProjectsProvider,
   onAddProject: ((path: string, directory: boolean) => Promise<AddProjectResult> | AddProjectResult) | undefined,
@@ -260,7 +271,7 @@ function handle(
       res.end('stopping not enabled')
       return
     }
-    onStop()
+    onStop(projectId ?? undefined)
     res.writeHead(202, { 'content-type': 'application/json' })
     res.end('{"ok":true}')
     return
@@ -294,7 +305,7 @@ function handle(
           ? raw.filter((x): x is string => typeof x === 'string')
           : ''
       const by: ChoiceBy = body['by'] === 'autopilot' ? 'autopilot' : body['by'] === 'auto' ? 'auto' : 'user'
-      if (id && (Array.isArray(pick) || pick)) onChoice(id, pick, by)
+      if (id && (Array.isArray(pick) || pick)) onChoice(id, pick, by, projectId ?? undefined)
       res.writeHead(202, { 'content-type': 'application/json' })
       res.end('{"ok":true}')
     })
@@ -330,14 +341,22 @@ function handle(
         res.end('{"error":"a non-empty prompt is required"}')
         return
       }
-      const result = onStart(prompt, kind, parseStartOptions(body['options']))
-      if (!result.ok) {
-        res.writeHead(result.busy ? 409 : 500, { 'content-type': 'application/json' })
-        res.end(JSON.stringify({ error: result.error }))
-        return
-      }
-      res.writeHead(202, { 'content-type': 'application/json' })
-      res.end('{"ok":true}')
+      // onStart may resolve the target project's path from the registry (#393), so
+      // it can be async; await it before answering. A thrown handler is a 500.
+      void Promise.resolve(onStart(prompt, kind, parseStartOptions(body['options']), projectId ?? undefined))
+        .then(result => {
+          if (!result.ok) {
+            res.writeHead(result.busy ? 409 : 500, { 'content-type': 'application/json' })
+            res.end(JSON.stringify({ error: result.error }))
+            return
+          }
+          res.writeHead(202, { 'content-type': 'application/json' })
+          res.end('{"ok":true}')
+        })
+        .catch(err => {
+          res.writeHead(500, { 'content-type': 'application/json' })
+          res.end(JSON.stringify({ error: err instanceof Error ? err.message : String(err) }))
+        })
     })
     return
   }

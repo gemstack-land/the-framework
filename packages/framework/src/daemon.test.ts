@@ -39,6 +39,15 @@ async function tmpWorkspace(): Promise<string> {
   return cwd
 }
 
+// The global daemon liveness now lives beside the registry (#393). Point it at a
+// throwaway config dir under the workspace so tests never touch the real $HOME and
+// clean up with the workspace. Returns the env the daemon fns resolve the path from.
+async function configEnv(cwd: string): Promise<NodeJS.ProcessEnv> {
+  const dir = join(cwd, 'cfg')
+  await mkdir(dir, { recursive: true })
+  return { XDG_CONFIG_HOME: dir }
+}
+
 test('EventTailer dispatches only events appended since the last pull', async () => {
   const cwd = await tmpWorkspace()
   const path = join(cwd, FRAMEWORK_DIR, EVENTS_FILE)
@@ -107,12 +116,13 @@ test('isProcessAlive is true for this process and false for a dead pid', () => {
 
 test('readDaemonState returns undefined when absent or malformed', async () => {
   const cwd = await tmpWorkspace()
+  const env = await configEnv(cwd)
   try {
-    assert.equal(await readDaemonState(cwd), undefined) // absent
-    await writeFile(daemonStatePath(cwd), 'not json')
-    assert.equal(await readDaemonState(cwd), undefined) // malformed
-    await writeFile(daemonStatePath(cwd), JSON.stringify({ pid: 1 })) // missing fields
-    assert.equal(await readDaemonState(cwd), undefined)
+    assert.equal(await readDaemonState(env), undefined) // absent
+    await writeFile(daemonStatePath(env), 'not json')
+    assert.equal(await readDaemonState(env), undefined) // malformed
+    await writeFile(daemonStatePath(env), JSON.stringify({ pid: 1 })) // missing fields
+    assert.equal(await readDaemonState(env), undefined)
   } finally {
     await rm(cwd, { recursive: true, force: true })
   }
@@ -120,13 +130,14 @@ test('readDaemonState returns undefined when absent or malformed', async () => {
 
 test('daemonStatus removes a stale state file whose process is gone', async () => {
   const cwd = await tmpWorkspace()
+  const env = await configEnv(cwd)
   try {
     await writeFile(
-      daemonStatePath(cwd),
+      daemonStatePath(env),
       JSON.stringify({ pid: 2 ** 31 - 1, port: 4477, url: 'http://127.0.0.1:4477', startedAt: '' }),
     )
-    assert.equal(await daemonStatus(cwd), undefined) // dead pid -> not running
-    assert.equal(await readDaemonState(cwd), undefined) // ...and the stale file is cleaned up
+    assert.equal(await daemonStatus(env), undefined) // dead pid -> not running
+    assert.equal(await readDaemonState(env), undefined) // ...and the stale file is cleaned up
   } finally {
     await rm(cwd, { recursive: true, force: true })
   }
@@ -134,8 +145,9 @@ test('daemonStatus removes a stale state file whose process is gone', async () =
 
 test('stopDaemon reports false when nothing is running', async () => {
   const cwd = await tmpWorkspace()
+  const env = await configEnv(cwd)
   try {
-    assert.equal(await stopDaemon(cwd), false)
+    assert.equal(await stopDaemon(env), false)
   } finally {
     await rm(cwd, { recursive: true, force: true })
   }
@@ -143,15 +155,16 @@ test('stopDaemon reports false when nothing is running', async () => {
 
 test('runDaemon serves the dashboard, records its state, and cleans up on shutdown', async () => {
   const cwd = await tmpWorkspace()
+  const env = await configEnv(cwd)
   const ac = new AbortController()
   try {
-    const done = runDaemon(cwd, { port: 0, pollMs: 50, signal: ac.signal })
+    const done = runDaemon(cwd, { port: 0, pollMs: 50, signal: ac.signal, env })
 
     // Wait for the daemon to bind and report itself.
-    let state = await readDaemonState(cwd)
+    let state = await readDaemonState(env)
     for (let i = 0; i < 100 && !state; i++) {
       await new Promise(r => setTimeout(r, 20))
-      state = await readDaemonState(cwd)
+      state = await readDaemonState(env)
     }
     assert.ok(state, 'daemon wrote its state file')
     assert.equal(state!.pid, process.pid)
@@ -164,7 +177,7 @@ test('runDaemon serves the dashboard, records its state, and cleans up on shutdo
 
     ac.abort()
     await done
-    assert.equal(await readDaemonState(cwd), undefined) // state file removed on exit
+    assert.equal(await readDaemonState(env), undefined) // state file removed on exit
   } finally {
     ac.abort()
     await rm(cwd, { recursive: true, force: true })
@@ -173,13 +186,14 @@ test('runDaemon serves the dashboard, records its state, and cleans up on shutdo
 
 test('runDaemon comes up on a fresh workspace with no .the-framework yet', async () => {
   const cwd = await mkdtemp(join(tmpdir(), 'framework-daemon-')) // deliberately no mkdir
+  const env = await configEnv(cwd)
   const ac = new AbortController()
   try {
-    const done = runDaemon(cwd, { port: 0, pollMs: 50, signal: ac.signal })
-    let state = await readDaemonState(cwd)
+    const done = runDaemon(cwd, { port: 0, pollMs: 50, signal: ac.signal, env })
+    let state = await readDaemonState(env)
     for (let i = 0; i < 100 && !state; i++) {
       await new Promise(r => setTimeout(r, 20))
-      state = await readDaemonState(cwd)
+      state = await readDaemonState(env)
     }
     assert.ok(state, 'the daemon created .the-framework/ itself and wrote its state file')
     assert.equal((await fetch(state!.url)).status, 200)
@@ -204,13 +218,14 @@ fs.appendFileSync(path.join(args[args.indexOf('--cwd') + 1], 'started.log'), JSO
 setTimeout(() => {}, 600)
 `,
   )
+  const env = await configEnv(cwd)
   const ac = new AbortController()
   try {
-    const done = runDaemon(cwd, { port: 0, pollMs: 50, signal: ac.signal, binPath: stub })
-    let state = await readDaemonState(cwd)
+    const done = runDaemon(cwd, { port: 0, pollMs: 50, signal: ac.signal, binPath: stub, env })
+    let state = await readDaemonState(env)
     for (let i = 0; i < 100 && !state; i++) {
       await new Promise(r => setTimeout(r, 20))
-      state = await readDaemonState(cwd)
+      state = await readDaemonState(env)
     }
     assert.ok(state, 'daemon wrote its state file')
 
@@ -267,13 +282,14 @@ const args = process.argv.slice(2)
 fs.appendFileSync(path.join(args[args.indexOf('--cwd') + 1], 'started.log'), JSON.stringify(args) + '\\n')
 `,
   )
+  const env = await configEnv(cwd)
   const ac = new AbortController()
   try {
-    const done = runDaemon(cwd, { port: 0, pollMs: 50, signal: ac.signal, binPath: stub })
-    let state = await readDaemonState(cwd)
+    const done = runDaemon(cwd, { port: 0, pollMs: 50, signal: ac.signal, binPath: stub, env })
+    let state = await readDaemonState(env)
     for (let i = 0; i < 100 && !state; i++) {
       await new Promise(r => setTimeout(r, 20))
-      state = await readDaemonState(cwd)
+      state = await readDaemonState(env)
     }
     assert.ok(state, 'daemon wrote its state file')
 
@@ -333,14 +349,15 @@ fs.appendFileSync(path.join(args[args.indexOf('--cwd') + 1], 'started.log'), JSO
 
 test('/api/start refuses to re-exec a test entry as the run (#345)', async () => {
   const cwd = await tmpWorkspace()
+  const env = await configEnv(cwd)
   const ac = new AbortController()
   try {
     // No binPath: argv[1] here is this test file — the fork-bomb guard must trip.
-    const done = runDaemon(cwd, { port: 0, pollMs: 50, signal: ac.signal })
-    let state = await readDaemonState(cwd)
+    const done = runDaemon(cwd, { port: 0, pollMs: 50, signal: ac.signal, env })
+    let state = await readDaemonState(env)
     for (let i = 0; i < 100 && !state; i++) {
       await new Promise(r => setTimeout(r, 20))
-      state = await readDaemonState(cwd)
+      state = await readDaemonState(env)
     }
     assert.ok(state, 'daemon wrote its state file')
     const res = await fetch(`${state!.url}/api/start`, {
@@ -360,13 +377,14 @@ test('/api/start refuses to re-exec a test entry as the run (#345)', async () =>
 
 test('runDaemon steers through the control log: /stop and /choice POSTs append entries (#344)', async () => {
   const cwd = await tmpWorkspace()
+  const env = await configEnv(cwd)
   const ac = new AbortController()
   try {
-    const done = runDaemon(cwd, { port: 0, pollMs: 50, signal: ac.signal })
-    let state = await readDaemonState(cwd)
+    const done = runDaemon(cwd, { port: 0, pollMs: 50, signal: ac.signal, env })
+    let state = await readDaemonState(env)
     for (let i = 0; i < 100 && !state; i++) {
       await new Promise(r => setTimeout(r, 20))
-      state = await readDaemonState(cwd)
+      state = await readDaemonState(env)
     }
     assert.ok(state, 'daemon wrote its state file')
 
