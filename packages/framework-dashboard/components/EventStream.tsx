@@ -1,9 +1,12 @@
 import { useEffect, useState } from 'react'
 import type { FrameworkEvent } from '@gemstack/framework'
+import type { ClientChannel } from 'telefunc'
+import { onEvents } from '../server/events.telefunc.js'
 import { EventList } from './EventList.js'
 
-// The live event stream (#406/#314): a projection of the selected project's
-// `.the-framework/events.jsonl`, streamed over SSE (server/events-sse.ts). The row
+// The live event stream (#405/#314): a projection of the selected project's
+// `.the-framework/events.jsonl`, streamed over a Telefunc Channel
+// (server/events.telefunc.ts) that pushes one `FrameworkEvent` per new line. The row
 // rendering is shared with run replay via EventList.
 export function EventStream({ projectId }: { projectId: string | null }) {
   const [events, setEvents] = useState<FrameworkEvent[]>([])
@@ -11,15 +14,20 @@ export function EventStream({ projectId }: { projectId: string | null }) {
   useEffect(() => {
     setEvents([])
     if (!projectId) return
-    const source = new EventSource(`/api/events?project=${encodeURIComponent(projectId)}`)
-    source.onmessage = e => {
-      try {
-        setEvents(prev => [...prev, JSON.parse(e.data) as FrameworkEvent])
-      } catch {
-        // a malformed line never crashes the stream
+    let channel: ClientChannel<never, FrameworkEvent> | undefined
+    let cancelled = false
+    void onEvents(projectId).then(ch => {
+      if (cancelled) {
+        void ch.close()
+        return
       }
+      channel = ch
+      ch.listen(event => setEvents(prev => [...prev, event]))
+    })
+    return () => {
+      cancelled = true
+      void channel?.close()
     }
-    return () => source.close()
   }, [projectId])
 
   if (!projectId) {
