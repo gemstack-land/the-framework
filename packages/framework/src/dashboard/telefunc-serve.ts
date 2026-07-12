@@ -4,7 +4,7 @@ import { Telefunc } from 'telefunc/node'
 import { registerDashboardTelefunctions } from '../dashboard-rpc/register.js'
 import type { ProjectsProvider } from './projects.js'
 import type { FrameworkEvent } from '../events.js'
-import { isSameOriginRequest, type StartRunKind, type StartRunOptions, type StartRunResult } from './server.js'
+import { isSameOriginRequest, type AddProjectResult, type StartRunKind, type StartRunOptions, type StartRunResult } from './server.js'
 
 /** Wired by the daemon so `sendStart` can reach the daemon's own `startRun` closure. */
 export type StartRunHandler = (
@@ -13,6 +13,9 @@ export type StartRunHandler = (
   options: StartRunOptions,
   projectId?: string,
 ) => StartRunResult | Promise<StartRunResult>
+
+/** Wired by the daemon so `sendAddProject` can install + register a repo (#433). */
+export type AddProjectHandler = (path: string, directory: boolean) => AddProjectResult | Promise<AddProjectResult>
 
 /** Resolve a project id to its live event stream (#426): the relay feeds `onEvents` from
  * its own in-memory stream rather than a file on disk. */
@@ -27,6 +30,7 @@ export type EventsSource = (projectId: string) => AsyncIterable<FrameworkEvent> 
  */
 export interface DashboardContext {
   startRun?: StartRunHandler
+  addProject?: AddProjectHandler
   projects?: ProjectsProvider
   eventsSource?: EventsSource
 }
@@ -57,6 +61,7 @@ export function makeTelefuncMount(
   startRun?: StartRunHandler,
   projects?: ProjectsProvider,
   eventsSource?: EventsSource,
+  addProject?: AddProjectHandler,
 ): (req: IncomingMessage, res: ServerResponse) => Promise<boolean> {
   return async (req, res) => {
     if (!isSameOriginRequest(req)) {
@@ -67,6 +72,7 @@ export function makeTelefuncMount(
     const tf = setup()
     const context: DashboardContext = {
       ...(startRun ? { startRun } : {}),
+      ...(addProject ? { addProject } : {}),
       ...(projects ? { projects } : {}),
       ...(eventsSource ? { eventsSource } : {}),
     }

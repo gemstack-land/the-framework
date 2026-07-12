@@ -168,7 +168,7 @@ export function startDashboard(opts: DashboardOptions = {}): Promise<Dashboard> 
   // foreground dashboard passes a single-project provider, #427); unset -> the global
   // registry, as the daemon uses. `projects` above already defaulted, so pass the raw
   // option so an unset one stays undefined on the context (the RPC falls back).
-  const telefuncMount = clientBundleDir ? makeTelefuncMount(onStart, opts.projects) : undefined
+  const telefuncMount = clientBundleDir ? makeTelefuncMount(onStart, opts.projects, undefined, onAddProject) : undefined
 
   const server = createServer((req, res) => {
     if (clientBundleDir) {

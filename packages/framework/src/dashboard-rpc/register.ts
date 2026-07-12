@@ -2,7 +2,7 @@ import { __decorateTelefunction } from 'telefunc'
 import { onRuns, onRun, onDocs, onProjectLog } from './reads.telefunc.js'
 import { sendStop, sendChoice, sendStart } from './control.telefunc.js'
 import { onEvents } from './events.telefunc.js'
-import { onProjects } from './projects.telefunc.js'
+import { onProjects, sendAddProject } from './projects.telefunc.js'
 
 // The client bakes each RPC key from the dashboard's source path (relative to its Vite
 // root, keeping the `.ts` extension) as `"<telefuncFilePath>:<exportName>"`. Since the
@@ -38,4 +38,5 @@ export function registerDashboardTelefunctions(appRootDir: string = process.cwd(
   reg(sendStart, 'sendStart', control)
   reg(onEvents, 'onEvents', events)
   reg(onProjects, 'onProjects', projects)
+  reg(sendAddProject, 'sendAddProject', projects)
 }

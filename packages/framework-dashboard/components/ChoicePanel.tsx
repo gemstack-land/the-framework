@@ -1,24 +1,29 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { ChoiceRequest } from '@gemstack/framework'
 import { sendChoice } from '../server/control.telefunc.js'
+import { autopilotOn, setAutopilot } from '../lib/autopilot.js'
 import { Button } from './ui/button.js'
 import { cn } from '../lib/utils.js'
 
 // "Your call" — the interactive gate the run parks on (#304/#332), rendered from the
 // live event stream and posted back over Telefunc (server/control.telefunc.ts) to the
 // project's control.jsonl. Three shapes: an Approve/Decline confirm (#358), a
-// multi-select checklist (#332), and the single-select list (#304). The panel clears
-// itself when the resulting `choice-resolved` event streams in (pendingChoice drops
-// it); mount it with `key={choice.id}` so a re-fired gate resets local state.
+// multi-select checklist (#332), and the single-select list (#304). When Autopilot is on
+// it auto-accepts the recommended pick after a countdown (#433), which any mouse movement
+// cancels. The panel clears itself when the resulting `choice-resolved` event streams in
+// (pendingChoice drops it); mount it with `key={choice.id}` so a re-fired gate resets state.
 export function ChoicePanel({ projectId, choice }: { projectId: string; choice: ChoiceRequest }) {
   const [busy, setBusy] = useState(false)
   const [checked, setChecked] = useState<Set<string>>(
     () => new Set(choice.multi ? choice.options.filter(o => o.default).map(o => o.id) : []),
   )
+  const [autopilot, setAutopilotState] = useState(autopilotOn)
+  const [secondsLeft, setSecondsLeft] = useState<number | null>(null)
+  const [cancelled, setCancelled] = useState(false)
 
-  const post = (pick: string | string[]) => {
+  const post = (pick: string | string[], by: 'user' | 'autopilot' = 'user') => {
     setBusy(true)
-    void sendChoice(projectId, choice.id, pick).catch(() => setBusy(false))
+    void sendChoice(projectId, choice.id, pick, by).catch(() => setBusy(false))
   }
 
   const toggle = (id: string) =>
@@ -30,6 +35,45 @@ export function ChoicePanel({ projectId, choice }: { projectId: string; choice: 
 
   const approveId = choice.recommended ?? choice.options[0]?.id
   const declineId = choice.options.find(o => o.id !== approveId)?.id ?? approveId
+
+  // What the countdown accepts: the checked subset for a multi-select, else the
+  // recommended option (an Approve for a confirm gate).
+  const autoPick = (): string | string[] => (choice.multi ? [...checked] : (approveId ?? ''))
+
+  // Any mouse movement cancels the auto-accept — the human is here, so let them pick.
+  useEffect(() => {
+    const cancel = () => setCancelled(true)
+    window.addEventListener('mousemove', cancel, { once: true })
+    return () => window.removeEventListener('mousemove', cancel)
+  }, [])
+
+  // The countdown: tick down once a second while autopilot is on and uncancelled, then
+  // auto-accept. Restarts if autopilot is toggled back on before a pick is made.
+  useEffect(() => {
+    if (!autopilot || cancelled || busy) {
+      setSecondsLeft(null)
+      return
+    }
+    let left = Math.ceil((choice.autoAcceptMs ?? 10000) / 1000)
+    setSecondsLeft(left)
+    const timer = setInterval(() => {
+      left -= 1
+      if (left <= 0) {
+        clearInterval(timer)
+        setSecondsLeft(null)
+        post(autoPick(), 'autopilot')
+      } else {
+        setSecondsLeft(left)
+      }
+    }, 1000)
+    return () => clearInterval(timer)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autopilot, cancelled, busy])
+
+  const toggleAutopilot = (on: boolean) => {
+    setAutopilotState(on)
+    setAutopilot(on) // keep the Start form's Global option in lockstep (#433)
+  }
 
   return (
     <section className="border-b border-border bg-accent/40 p-4">
@@ -89,6 +133,19 @@ export function ChoicePanel({ projectId, choice }: { projectId: string; choice: 
           ))}
         </div>
       )}
+
+      <div className="mt-3 flex items-center gap-3 text-xs text-muted-foreground">
+        <label className="flex cursor-pointer items-center gap-1.5">
+          <input type="checkbox" checked={autopilot} onChange={e => toggleAutopilot(e.target.checked)} disabled={busy} /> Autopilot
+        </label>
+        {autopilot && !busy && (
+          <span>
+            {cancelled
+              ? 'Auto accept canceled — pick manually'
+              : secondsLeft !== null && `● Auto accept in ${secondsLeft}s — move the mouse to cancel`}
+          </span>
+        )}
+      </div>
     </section>
   )
 }

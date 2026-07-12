@@ -1,12 +1,13 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import type { ProjectSummary } from '@gemstack/framework'
-import { onProjects } from '../server/projects.telefunc.js'
+import { onProjects, sendAddProject } from '../server/projects.telefunc.js'
 import { Button } from './ui/button.js'
 import { cn } from '../lib/utils.js'
 
-// The Projects sidebar (#406/#314). Loads the registry over a Telefunc RPC and lets
-// the user pick which project's live stream to watch. A registry that is empty (no
-// project added yet) shows the how-to hint rather than a blank rail.
+// The Projects sidebar (#406/#314). Loads the registry over a Telefunc RPC and lets the
+// user pick which project's live stream to watch, or add a new one (#396/#433) via the
+// daemon's own install + register. A registry that is empty (no project added yet) shows
+// the how-to hint rather than a blank rail.
 export function ProjectsSidebar({
   selectedId,
   onSelect,
@@ -16,16 +17,18 @@ export function ProjectsSidebar({
 }) {
   const [projects, setProjects] = useState<ProjectSummary[] | null>(null)
 
+  const reload = useCallback(
+    (autoSelect: boolean) => {
+      void onProjects().then(list => {
+        setProjects(list)
+        if (autoSelect && list[0] && !selectedId) onSelect(list[0].id) // auto-select the first
+      })
+    },
+    [selectedId, onSelect],
+  )
+
   useEffect(() => {
-    let live = true
-    void onProjects().then(list => {
-      if (!live) return
-      setProjects(list)
-      if (list[0] && !selectedId) onSelect(list[0].id) // auto-select the first
-    })
-    return () => {
-      live = false
-    }
+    reload(true)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -36,7 +39,7 @@ export function ProjectsSidebar({
         {projects === null && <p className="px-2 py-1 text-sm text-muted-foreground">Loading…</p>}
         {projects?.length === 0 && (
           <p className="px-2 py-1 text-sm text-muted-foreground">
-            No projects yet. Run <code className="rounded bg-muted px-1">framework</code> in a repo to add one.
+            No projects yet. Add one below, or run <code className="rounded bg-muted px-1">framework</code> in a repo.
           </p>
         )}
         {projects?.map(p => (
@@ -62,6 +65,76 @@ export function ProjectsSidebar({
           </Button>
         ))}
       </div>
+      <AddProject onAdded={() => reload(true)} />
     </aside>
+  )
+}
+
+// Add project(s) (#396/#433): install a single repo, or every git repo directly under a
+// directory, and register each so it joins the list. The daemon does the work; this posts
+// the path over the `sendAddProject` telefunction and reloads on success.
+function AddProject({ onAdded }: { onAdded: () => void }) {
+  const [open, setOpen] = useState(false)
+  const [path, setPath] = useState('')
+  const [directory, setDirectory] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const submit = async (e: FormEvent) => {
+    e.preventDefault()
+    const trimmed = path.trim()
+    if (!trimmed || busy) return
+    setBusy(true)
+    setError(null)
+    try {
+      const result = await sendAddProject(trimmed, directory)
+      if (result.ok) {
+        setPath('')
+        setDirectory(false)
+        setOpen(false)
+        onAdded()
+      } else {
+        setError(result.error)
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to add the project.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  if (!open) {
+    return (
+      <div className="border-t border-border p-2">
+        <Button variant="outline" size="sm" className="w-full" onClick={() => setOpen(true)}>
+          + Add project
+        </Button>
+      </div>
+    )
+  }
+
+  return (
+    <form onSubmit={submit} className="border-t border-border p-3">
+      <input
+        value={path}
+        onChange={e => setPath(e.target.value)}
+        placeholder="/absolute/path/to/repo"
+        autoFocus
+        disabled={busy}
+        className="mb-2 w-full rounded-md border border-border bg-transparent px-2 py-1 text-sm outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)]"
+      />
+      <label className="mb-2 flex cursor-pointer items-center gap-1.5 text-xs text-muted-foreground">
+        <input type="checkbox" checked={directory} onChange={e => setDirectory(e.target.checked)} disabled={busy} /> It&apos;s a folder of repos
+      </label>
+      {error && <p className="mb-2 text-xs text-red-500">{error}</p>}
+      <div className="flex justify-end gap-2">
+        <Button type="button" variant="ghost" size="sm" disabled={busy} onClick={() => setOpen(false)}>
+          Cancel
+        </Button>
+        <Button type="submit" size="sm" disabled={busy || !path.trim()}>
+          {busy ? 'Adding…' : 'Add'}
+        </Button>
+      </div>
+    </form>
   )
 }

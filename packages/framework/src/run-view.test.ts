@@ -1,6 +1,6 @@
 import { strict as assert } from 'node:assert'
 import { test } from 'node:test'
-import { architectPlan, decisionLedger, loopStatus, sessionInfo } from './run-view.js'
+import { architectPlan, decisionLedger, loopStatus, sessionInfo, deployPlan } from './run-view.js'
 import type { FrameworkEvent } from './events.js'
 
 const architect = (stack: string, extra: Record<string, unknown> = {}): FrameworkEvent => ({
@@ -72,4 +72,14 @@ test('sessionInfo merges the opening session with the latest session-update link
   assert.equal(info?.sessionId, 'sess-1')
   assert.equal(info?.sessionLink, 'https://claude.ai/code/sess-1')
   assert.equal(sessionInfo([{ kind: 'log', message: 'x' }]), null)
+})
+
+test('deployPlan returns the chosen deploy target from the deploy event; latest wins (#433)', () => {
+  const boot = (event: Record<string, unknown>): FrameworkEvent => ({ kind: 'bootstrap', event: event as never })
+  assert.equal(deployPlan([{ kind: 'log', message: 'x' }]), null) // no deploy yet
+  const plan = deployPlan([
+    boot({ type: 'deploy', plan: { render: 'ssg', target: 'github-pages', reason: 'static' }, result: { deployed: false } }),
+    boot({ type: 'deploy', plan: { render: 'ssr', target: 'dokploy', reason: 'per-request data' }, result: { deployed: true } }),
+  ])
+  assert.deepEqual(plan, { render: 'ssr', target: 'dokploy', reason: 'per-request data' })
 })

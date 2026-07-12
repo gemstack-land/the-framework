@@ -99,6 +99,24 @@ export function loopStatus(events: readonly FrameworkEvent[]): LoopStatus | null
   return status
 }
 
+/** The chosen deploy plan (#433): how the app renders and where it lands, from the `deploy` bootstrap event. */
+export interface DeployPlan {
+  render: 'ssr' | 'ssg' | 'spa'
+  target: string
+  reason: string
+}
+
+/** The deploy plan the run decided on, or null before the deploy phase ran. Latest wins. */
+export function deployPlan(events: readonly FrameworkEvent[]): DeployPlan | null {
+  for (let i = events.length - 1; i >= 0; i--) {
+    const event = events[i]!
+    if (event.kind !== 'bootstrap' || event.event.type !== 'deploy') continue
+    const p = event.event.plan
+    return { render: p.render, target: p.target, reason: p.reason }
+  }
+  return null
+}
+
 /** The wrapped agent session (#431): its id and a deep link, when one is known. */
 export interface SessionInfo {
   driver?: string

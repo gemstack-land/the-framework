@@ -1,5 +1,5 @@
 import type { FrameworkEvent } from '@gemstack/framework'
-import { architectPlan, decisionLedger, loopStatus, sessionInfo } from '@gemstack/framework/client'
+import { architectPlan, decisionLedger, loopStatus, sessionInfo, deployPlan } from '@gemstack/framework/client'
 import { Badge } from './ui/badge.js'
 
 // The run overview (#431): the "moat" the wrapped agent's own chat cannot show, rebuilt
@@ -12,8 +12,9 @@ export function RunOverview({ events }: { events: FrameworkEvent[] }) {
   const ledger = decisionLedger(events)
   const loop = loopStatus(events)
   const session = sessionInfo(events)
+  const deploy = deployPlan(events)
 
-  if (!plan && !loop && !session?.sessionLink) return null
+  if (!plan && !loop && !deploy && !session?.sessionLink) return null
 
   return (
     <div className="grid gap-3 border-b border-border p-4 md:grid-cols-2">
@@ -68,6 +69,16 @@ export function RunOverview({ events }: { events: FrameworkEvent[] }) {
               {loop.passing ? 'No blockers — the checklist passed.' : `Pass ${loop.pass} in progress…`}
             </p>
           )}
+        </section>
+      )}
+
+      {deploy && (
+        <section className="rounded-lg border border-border p-3 md:col-span-2">
+          <h3 className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Deploy</h3>
+          <p className="text-sm">
+            <span className="font-medium uppercase">{deploy.render}</span> → {deploy.target}
+            <span className="text-muted-foreground"> ({deploy.reason})</span>
+          </p>
         </section>
       )}
 

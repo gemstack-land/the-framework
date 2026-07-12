@@ -8,8 +8,16 @@ export {
   decisionLedger,
   loopStatus,
   sessionInfo,
+  deployPlan,
   type ArchitectPlan,
   type Decision,
   type LoopStatus,
   type SessionInfo,
+  type DeployPlan,
 } from './run-view.js'
+// The Start-a-run presets (#433): pure prompt builders (no Node imports) the dashboard
+// prefills into the textarea, then runs verbatim as a `prompt` kind.
+export { renderResearchPrompt } from './research-preset.js'
+export { renderReadabilityPrompt } from './readability-preset.js'
+export { renderMaintainabilityPrompt } from './maintainability-preset.js'
+export { renderMaintainabilityMinimalPrompt } from './maintainability-minimal-preset.js'

@@ -5,5 +5,5 @@
 export { onRuns, onRun, onDocs, onProjectLog } from './reads.telefunc.js'
 export { sendStop, sendChoice, sendStart } from './control.telefunc.js'
 export { onEvents } from './events.telefunc.js'
-export { onProjects } from './projects.telefunc.js'
+export { onProjects, sendAddProject } from './projects.telefunc.js'
 export { registerDashboardTelefunctions, DASHBOARD_TELEFUNC_KEYS } from './register.js'
