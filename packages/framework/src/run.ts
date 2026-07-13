@@ -126,6 +126,11 @@ export interface RunFrameworkOptions {
   /** In-context directories (#439): added as one `Context:` line to the system prompt. */
   context?: readonly string[]
   /**
+   * Bootstrap mode (#297/#448): a brand-new project from an empty directory. Prepends a
+   * forceful preamble so the first turn stops for a plan instead of charging ahead. Default off.
+   */
+  bootstrap?: boolean
+  /**
    * A user-picked Open Loop domain preset ({loops, prompts, skills}) to run the
    * build under (#251). Its skills (and their personas) frame every phase, and
    * its loops + prompts are materialized into a driver-backed {@link LoopEngine}
@@ -345,7 +350,7 @@ export async function runFramework(opts: RunFrameworkOptions): Promise<RunFramew
     prompt: opts.intent,
     params: { autopilot: opts.modes?.includes('autopilot') ?? false, ...(opts.eco ? { eco: opts.eco } : {}) },
   }
-  const promptBlock = systemPromptBlock({ antiLazyPill: opts.antiLazyPill, user: opts.systemPrompt, tf, context: opts.context })
+  const promptBlock = systemPromptBlock({ antiLazyPill: opts.antiLazyPill, user: opts.systemPrompt, tf, context: opts.context, bootstrap: opts.bootstrap })
   // The await protocol (#337) concretizes the pill's showChoices()/AWAIT macros into a
   // signal the turn-boundary gate can detect, so it rides along with the pill.
   const system = [

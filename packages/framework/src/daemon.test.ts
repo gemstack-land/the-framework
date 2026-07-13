@@ -55,6 +55,8 @@ test('startOptionFlags maps only enabled Global options to CLI flags (#314)', ()
     '--context',
     '/work/ui',
   ])
+  // Bootstrap mode (#297/#448): maps to --bootstrap.
+  assert.deepEqual(startOptionFlags({ bootstrap: true }), ['--bootstrap'])
 })
 
 const logEvent = (message: string): FrameworkEvent => ({ kind: 'log', message })

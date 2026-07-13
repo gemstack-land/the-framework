@@ -60,6 +60,22 @@ Before starting to write code, measure "variability":
 \${{tf.prompt}}`
 
 /**
+ * Bootstrap mode's forceful preamble (#297/#448). The built-in #326 prompt already
+ * carries the "Unclear scope" / "Large scope" rules, but appended to Claude Code's own
+ * system prompt those lose to its default "be decisive, don't block the user" instinct —
+ * so a fresh-from-empty-dir build charges ahead instead of stopping for a plan (measured).
+ * This preamble states the override explicitly and forbids writing code before approval,
+ * which flips the behaviour without touching Rom's template. Prepended above the #326
+ * prompt only when bootstrap mode is on.
+ */
+export const BOOTSTRAP_PREAMBLE = `# Bootstrap mode
+
+You are starting a brand-new project from an empty directory. This takes precedence over any default tendency to act decisively or to start building right away:
+
+- Do NOT write, scaffold, or edit any file, and do NOT run build or install commands, until the user has approved a plan.
+- Your first reply MUST be either a list of interpretations sorted by plausibility (when the scope is unclear) or a plan the user can approve (when the scope is large), then stop and await the user's answer.`
+
+/**
  * Eco fine-grained control (#314): each flag drops one whole `##` section from the
  * built-in #326 prompt to save tokens, letting the agent auto-handle that concern.
  * The template itself stays byte-identical to Rom's #326 doc; the sections are
@@ -186,6 +202,12 @@ export interface SystemPromptOptions {
    * the block. Empty/absent adds nothing.
    */
   context?: readonly string[] | undefined
+  /**
+   * Bootstrap mode (#297/#448): starting a brand-new project from an empty directory.
+   * Prepends the forceful {@link BOOTSTRAP_PREAMBLE} above the built-in prompt so the
+   * first turn stops for a plan instead of charging ahead. Default off.
+   */
+  bootstrap?: boolean | undefined
 }
 
 /**
@@ -202,6 +224,9 @@ export function systemPromptBlock(opts: SystemPromptOptions = {}): string {
   // alone under `--vanilla`, where there is no built-in prompt to frame).
   const context = opts.context?.map(d => d.trim()).filter(Boolean)
   if (context && context.length) parts.push(`Context: ${context.join(', ')}`)
+  // Bootstrap's override sits above the #326 prompt so it frames (and outranks) its
+  // "Unclear scope" / "Large scope" rules.
+  if (opts.bootstrap) parts.push(BOOTSTRAP_PREAMBLE)
   if (opts.antiLazyPill !== false) parts.push(renderSystemPrompt(opts.tf).system)
   const user = opts.user?.trim()
   if (user) parts.push(user)

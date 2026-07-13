@@ -75,6 +75,8 @@ export interface StartRunOptions {
   eco?: EcoOptions
   /** In-context directories (#439): each becomes a `--context <dir>` flag on the spawned run. */
   context?: string[]
+  /** Bootstrap mode (#297/#448): a new project from an empty dir; maps to `--bootstrap`. */
+  bootstrap?: boolean
 }
 
 /**

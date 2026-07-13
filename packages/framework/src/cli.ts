@@ -151,6 +151,9 @@ Options:
   --context <dir>        Focus the agent on this directory (repeatable). Adds one
                          "Context: <dirs>" line to the system prompt; the agent can
                          still reach every repo, this just narrows where it looks.
+  --bootstrap            Bootstrap mode: a brand-new project from an empty dir. Makes
+                         the first turn stop for a plan (interpretations / PLAN) before
+                         writing any code, instead of charging ahead.
   --kind <name>          Build event kind the preset's review loop fires for, e.g.
                          bug-fix or major-change (default: the-framework.yml's event,
                          else the preset's own, else major-change). Selects which
@@ -224,6 +227,8 @@ export interface CliOptions {
   eco: Required<EcoOptions>
   /** `--context <dir>` (repeatable): in-context directories added as one `Context:` line (#439). */
   context: string[]
+  /** `--bootstrap`: bootstrap mode (#297/#448) — a new project from an empty dir; stop for a plan first. */
+  bootstrap: boolean
   buildEvent?: string | undefined
   maxPasses?: number
   maxCost?: number
@@ -282,6 +287,7 @@ export function parseArgs(argv: string[]): CliOptions {
     vanilla: false,
     eco: { autoPlanning: false, autoResearch: false, autoMaintenance: false },
     context: [],
+    bootstrap: false,
     dashboard: true,
     relayServe: false,
     composeExtensions: false,
@@ -332,6 +338,9 @@ export function parseArgs(argv: string[]): CliOptions {
         break
       case '--vanilla':
         opts.vanilla = true
+        break
+      case '--bootstrap':
+        opts.bootstrap = true
         break
       case '--eco-auto-planning':
         opts.eco.autoPlanning = true
@@ -978,6 +987,7 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
     if (noBuiltinPrompt) io.out(`◆ built-in system prompt: off (${opts.vanilla ? 'vanilla' : 'the-framework.yml'})`)
     else if (eco) io.out(`◆ eco: dropping ${Object.keys(eco).filter(k => eco[k as keyof EcoOptions]).join(', ')}`)
     if (opts.context.length) io.out(`◆ context: ${opts.context.join(', ')}`)
+  if (opts.bootstrap) io.out('◆ bootstrap: on (plan before building)')
     try {
       await runPrompt({
         prompt: opts.directPrompt ? intent : renderResearchPrompt(intent),
@@ -997,6 +1007,7 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
         ...(noBuiltinPrompt ? { antiLazyPill: false } : {}),
         ...(eco ? { eco } : {}),
         ...(opts.context.length ? { context: opts.context } : {}),
+        ...(opts.bootstrap ? { bootstrap: true } : {}),
         ...(modeList.includes('autopilot') ? { autopilot: true } : {}),
         ...((): { sessionLink?: string } => {
           const link = chooseSessionLink(opts, fake)
@@ -1098,6 +1109,7 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
   if (noBuiltinPrompt) io.out(`◆ built-in system prompt: off (${opts.vanilla ? 'vanilla' : 'the-framework.yml'})`)
   else if (eco) io.out(`◆ eco: dropping ${Object.keys(eco).filter(k => eco[k as keyof EcoOptions]).join(', ')}`)
   if (opts.context.length) io.out(`◆ context: ${opts.context.join(', ')}`)
+  if (opts.bootstrap) io.out('◆ bootstrap: on (plan before building)')
 
   const runOpts: RunFrameworkOptions = {
     intent,
@@ -1137,6 +1149,7 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
     ...(noBuiltinPrompt ? { antiLazyPill: false } : {}),
     ...(eco ? { eco } : {}),
     ...(opts.context.length ? { context: opts.context } : {}),
+    ...(opts.bootstrap ? { bootstrap: true } : {}),
     ...((): { sessionLink?: string } => {
       const link = chooseSessionLink(opts, fake)
       return link ? { sessionLink: link } : {}

@@ -224,6 +224,7 @@ export {
   renderSystemPrompt,
   SYSTEM_PROMPT_TEMPLATE,
   SYSTEM_PROMPT_FILE,
+  BOOTSTRAP_PREAMBLE,
   type SystemPromptOptions,
   type TfContext,
   type RenderedSystemPrompt,

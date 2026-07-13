@@ -4,6 +4,7 @@ import { mkdtemp, writeFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
+  BOOTSTRAP_PREAMBLE,
   loadUserSystemPrompt,
   renderSystemPrompt,
   systemPromptBlock,
@@ -96,6 +97,21 @@ test('systemPromptBlock ignores a whitespace-only user prompt', () => {
 test('systemPromptBlock threads tf through to the template', () => {
   const block = systemPromptBlock({ tf: { prompt: 'x', params: { autopilot: true } } })
   assert.ok(block.includes('postpone a deep refactor'))
+})
+
+test('systemPromptBlock prepends the bootstrap preamble above the built-in prompt (#297/#448)', () => {
+  const off = systemPromptBlock()
+  assert.ok(!off.includes(BOOTSTRAP_PREAMBLE)) // default off: no preamble
+  const on = systemPromptBlock({ bootstrap: true })
+  assert.ok(on.startsWith(BOOTSTRAP_PREAMBLE)) // preamble first
+  assert.ok(on.includes('# System prompt')) // then the byte-identical #326 template
+  assert.ok(on.indexOf(BOOTSTRAP_PREAMBLE) < on.indexOf('# System prompt')) // preamble outranks it
+})
+
+test('systemPromptBlock keeps the bootstrap preamble after the Context line (#439/#448)', () => {
+  const block = systemPromptBlock({ bootstrap: true, context: ['/work/api'] })
+  assert.ok(block.startsWith('Context: /work/api')) // context frames everything
+  assert.ok(block.indexOf('Context: /work/api') < block.indexOf(BOOTSTRAP_PREAMBLE))
 })
 
 test('eco.autoPlanning drops only the Large scope section (#314)', () => {
