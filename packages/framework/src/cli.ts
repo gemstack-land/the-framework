@@ -110,7 +110,8 @@ export function frameworkVersion(): string {
 const HELP = `The Framework — turnkey AI orchestration that wraps a coding agent (Claude Code).
 
 Usage:
-  framework                       Ensure the background dashboard is running; print commands.
+  framework                       Run the dashboard in the foreground (Ctrl+C stops it; logs visible).
+  framework --daemon              Run the dashboard in the background; print commands and return.
   framework [intent...]           Build what you describe, from scratch.
   framework stop                  Stop the background dashboard for this workspace.
   framework research [what]      Rate the "problem variability" of <what> (default:
@@ -254,8 +255,10 @@ export interface CliOptions {
   skipPermissions: boolean
   resume: boolean
   persist: boolean
-  /** Run the persistent dashboard daemon body (internal; the spawned child sets this). */
+  /** `framework --daemon`: run the dashboard in the background (detached), then return (#456). */
   daemon: boolean
+  /** Serve the dashboard in-process — the detached child's entry, spawned by the background path (internal, #456). */
+  daemonServe: boolean
   /** `framework stop`: stop the background daemon for this workspace. */
   stop: boolean
   /** `framework research [what]`: run the Research preset as a direct prompt (#331). */
@@ -295,6 +298,7 @@ export function parseArgs(argv: string[]): CliOptions {
     resume: false,
     persist: true,
     daemon: false,
+    daemonServe: false,
     stop: false,
     research: false,
     directPrompt: false,
@@ -365,6 +369,9 @@ export function parseArgs(argv: string[]): CliOptions {
         break
       case '--daemon':
         opts.daemon = true
+        break
+      case '--daemon-serve':
+        opts.daemonServe = true
         break
       case '--no-persist':
         opts.persist = false
@@ -711,12 +718,16 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
   // the dashboard rehydrates exactly as it looked, then leave it up read-only.
   if (opts.resume) return resumeRun(opts, io)
 
-  // `--daemon` is the detached child's own entry: it *is* the persistent dashboard,
-  // tailing .the-framework/ until signalled. Never invoked by hand (#302).
-  if (opts.daemon) {
+  // `--daemon-serve` is the detached child's own entry: it *is* the persistent dashboard,
+  // serving until signalled. Internal — the background `--daemon` path spawns it (#456).
+  if (opts.daemonServe) {
     await runDaemon(opts.cwd ?? process.cwd(), opts.port !== undefined ? { port: opts.port } : {})
     return 0
   }
+
+  // `framework --daemon` runs the dashboard in the background (detached) and returns, printing
+  // the convenience commands (#456). Bare `framework` foregrounds it instead (below).
+  if (opts.daemon) return ensureDaemonCmd(opts, io)
 
   // `framework stop` stops this workspace's background dashboard.
   if (opts.stop) return stopDaemonCmd(opts, io)
@@ -727,16 +738,16 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
 
   const fake = opts.fake
   const intent = opts.intent || (fake ? FAKE_INTENT : '')
-  // Bare `framework` (no prompt): ensure the persistent dashboard is running and
-  // print the convenience commands + version (#299/#302). A prompt still builds.
-  // A bare `framework prompt` has nothing to run — verbatim text is required.
+  // Bare `framework` (no prompt): run the dashboard server in the foreground so its logs
+  // (and server-thrown errors) are visible, and Ctrl+C stops it (#456). A prompt still
+  // builds. A bare `framework prompt` has nothing to run — verbatim text is required.
   if (opts.directPrompt && !intent) {
     io.err('framework prompt needs the prompt text, e.g. `framework prompt "review the auth flow"`.')
     io.err('Run `framework --help` for usage.')
     return 2
   }
   // A bare `framework research` is a real run — its "what" defaults to `this PR`.
-  if (!intent && !fake && !opts.research) return ensureDaemonCmd(opts, io)
+  if (!intent && !fake && !opts.research) return runForegroundDaemonCmd(opts, io)
 
   const cwd = opts.cwd ?? (fake ? join(tmpdir(), 'framework-fake-workspace') : process.cwd())
 
@@ -1212,9 +1223,40 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
  * a run URL can watch; accounts/teams/steering come later.
  */
 /**
- * `framework` (no prompt): ensure the persistent background dashboard is running
- * for this workspace, then print the URL, the convenience commands, and the
- * version (#299/#302). Idempotent — a second call just re-reports the live one.
+ * Bare `framework` (no prompt): run the dashboard server in the foreground (#456), so its
+ * logs and any server-thrown errors are visible and Ctrl+C stops it. If a background daemon
+ * (`framework --daemon`) already owns the port, defer to it rather than fight for the bind.
+ * Blocks until the server is signalled (SIGINT/SIGTERM).
+ */
+async function runForegroundDaemonCmd(opts: CliOptions, io: CliIO): Promise<number> {
+  const cwd = opts.cwd ?? process.cwd()
+  const port = opts.port ?? DEFAULT_DAEMON_PORT
+  const existing = await daemonStatus()
+  if (existing) {
+    io.out(`◆ dashboard already running in the background: ${existing.url}`)
+    io.out('  Stop it with `framework stop`, or open the URL above.')
+    return 0
+  }
+  try {
+    await runDaemon(cwd, {
+      port,
+      onListening: state => {
+        io.out(`◆ dashboard running: ${state.url}`)
+        io.out('  Ctrl+C to stop. Server logs stream below.')
+      },
+    })
+  } catch (err) {
+    io.err(`could not start the dashboard (${err instanceof Error ? err.message : String(err)}).`)
+    return 1
+  }
+  return 0
+}
+
+/**
+ * `framework --daemon` (#456): ensure the persistent background dashboard is running
+ * for this workspace, then print the URL, the convenience commands, and the version.
+ * Idempotent — a second call just re-reports the live one. Bare `framework` foregrounds
+ * the same server instead.
  */
 async function ensureDaemonCmd(opts: CliOptions, io: CliIO): Promise<number> {
   const cwd = opts.cwd ?? process.cwd()

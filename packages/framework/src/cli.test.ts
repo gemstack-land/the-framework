@@ -2,7 +2,7 @@ import { strict as assert } from 'node:assert'
 import { test } from 'node:test'
 import { mkdtemp, mkdir, readFile, writeFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, dirname } from 'node:path'
 import { appendControl } from './control.js'
 import { daemonStatePath } from './daemon.js'
 import { EVENTS_FILE, FRAMEWORK_DIR } from './store/index.js'
@@ -179,13 +179,17 @@ test('runCli prompt runs the text through the direct path (#353)', async () => {
   assert.ok(out.some(l => /prompt run done/.test(l)))
 })
 
-test('parseArgs reads the stop subcommand and the internal --daemon flag', () => {
+test('parseArgs reads the stop subcommand and the --daemon / internal --daemon-serve flags (#456)', () => {
   const stop = parseArgs(['stop'])
   assert.equal(stop.stop, true)
   assert.equal(stop.intent, '') // "stop" is a command, not build intent
   const daemon = parseArgs(['--daemon', '--port', '4477'])
   assert.equal(daemon.daemon, true)
+  assert.equal(daemon.daemonServe, false)
   assert.equal(daemon.port, 4477)
+  const serve = parseArgs(['--daemon-serve', '--port', '4477'])
+  assert.equal(serve.daemonServe, true)
+  assert.equal(serve.daemon, false)
   assert.equal(parseArgs([]).stop, false) // bare invocation is not stop
 })
 
@@ -433,15 +437,38 @@ test('runCli usage error exits 2', async () => {
   assert.equal(await runCli(['--bogus'], io), 2)
 })
 
-test('runCli with no prompt ensures the background dashboard, not a usage error (#302)', async () => {
-  const { io, err } = capture()
-  const cwd = await mkdtemp(join(tmpdir(), 'framework-bare-'))
+test('runCli bare framework foregrounds the dashboard, deferring to a running background daemon (#456)', async () => {
+  const { io, out } = capture()
+  const cfg = await mkdtemp(join(tmpdir(), 'framework-fg-'))
+  const prevXdg = process.env.XDG_CONFIG_HOME
+  process.env.XDG_CONFIG_HOME = cfg
   try {
-    // Bare `framework` routes to ensureDaemonCmd, not the old "describe what to build"
-    // usage error. The daemon spawn is refused from a test entry (it would re-exec this
-    // test file and fork-bomb), so it degrades to exit 1 — the point is it never spawns
-    // and is no longer exit 2.
-    const code = await runCli(['--cwd', cwd], io)
+    // Seed a live background daemon (this process is alive) so the foreground path
+    // short-circuits before binding a port and blocking the test.
+    const statePath = daemonStatePath(process.env)
+    await mkdir(dirname(statePath), { recursive: true })
+    await writeFile(
+      statePath,
+      JSON.stringify({ pid: process.pid, port: 4200, url: 'http://localhost:4200', startedAt: new Date().toISOString() }),
+    )
+    const code = await runCli(['--cwd', cfg], io)
+    assert.equal(code, 0)
+    assert.ok(out.some(l => /already running in the background/.test(l)))
+  } finally {
+    if (prevXdg === undefined) delete process.env.XDG_CONFIG_HOME
+    else process.env.XDG_CONFIG_HOME = prevXdg
+    await rm(cfg, { recursive: true, force: true })
+  }
+})
+
+test('runCli --daemon backgrounds the dashboard, not a usage error (#302/#456)', async () => {
+  const { io, err } = capture()
+  const cwd = await mkdtemp(join(tmpdir(), 'framework-daemon-'))
+  try {
+    // `--daemon` routes to ensureDaemonCmd. The spawn is refused from a test entry (it
+    // would re-exec this test file and fork-bomb), so it degrades to exit 1 — the point
+    // is it never spawns and is not a usage error (exit 2).
+    const code = await runCli(['--daemon', '--cwd', cwd], io)
     assert.notEqual(code, 2)
     assert.ok(err.some(l => /dashboard daemon/.test(l)))
   } finally {

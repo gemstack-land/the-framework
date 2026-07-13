@@ -163,7 +163,7 @@ export async function ensureDaemon(cwd: string, opts: EnsureDaemonOptions = {}):
     throw new Error('refusing to spawn the dashboard daemon from a test entry; pass an explicit binPath')
   }
 
-  const child = spawn(process.execPath, [binPath, '--daemon', '--cwd', cwd, '--port', String(port)], {
+  const child = spawn(process.execPath, [binPath, '--daemon-serve', '--cwd', cwd, '--port', String(port)], {
     detached: true,
     stdio: 'ignore',
   })
@@ -226,10 +226,13 @@ export interface RunDaemonOptions {
   binPath?: string
   /** Env for the global liveness path (#393). Default `process.env`; injectable for tests. */
   env?: NodeJS.ProcessEnv
+  /** Called once the server has bound and recorded its state, before it blocks (#456). For the foreground banner. */
+  onListening?: (state: DaemonState) => void
 }
 
 /**
- * The daemon body — run in the detached child. Serves the prerendered Vike + Telefunc
+ * The daemon body — run in the foreground by bare `framework`, or in the detached child that
+ * `framework --daemon` spawns (#456). Serves the prerendered Vike + Telefunc
  * dashboard (#405/#426): the SPA reads each project's `.the-framework/events.jsonl` over a
  * Telefunc Channel and steers over control.jsonl, so the daemon just serves the bundle,
  * spawns runs, and records its liveness. Resolves on SIGINT/SIGTERM after tearing the
@@ -364,6 +367,7 @@ export async function runDaemon(cwd: string, opts: RunDaemonOptions = {}): Promi
     const state: DaemonState = { pid: process.pid, port: actualPort, url: dashboard.url, startedAt: new Date().toISOString() }
     await mkdir(dirname(daemonStatePath(env)), { recursive: true })
     await writeFile(daemonStatePath(env), JSON.stringify(state, null, 2))
+    opts.onListening?.(state)
   } catch (err) {
     // Startup failed after the port was bound. Tear the server down, or it keeps the
     // event loop alive: a zombie daemon squatting the port with no state file, which
