@@ -133,6 +133,11 @@ body {
   color: var(--accent-foreground);
   border-color: var(--border);
 }
+.pe-token[data-token='file'] {
+  background: color-mix(in oklab, var(--muted-foreground) 12%, transparent);
+  color: var(--foreground);
+  border-color: var(--border);
+}
 .ProseMirror-selectednode.pe-token {
   outline: 2px solid var(--primary);
 }
