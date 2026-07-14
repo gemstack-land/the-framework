@@ -304,12 +304,6 @@ export {
   MAINTAINABILITY_PARAMS,
 } from './maintainability-preset.js'
 export {
-  renderMaintainabilityMinimalPrompt,
-  MAINTAINABILITY_MINIMAL_PRESET_NAME,
-  MAINTAINABILITY_MINIMAL_PROMPT_TEMPLATE,
-  MAINTAINABILITY_MINIMAL_PARAMS,
-} from './maintainability-minimal-preset.js'
-export {
   renderSecurityAuditPrompt,
   SECURITY_AUDIT_PRESET_NAME,
   SECURITY_AUDIT_PROMPT_TEMPLATE,

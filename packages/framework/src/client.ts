@@ -22,6 +22,5 @@ export {
 export { renderResearchPrompt } from './research-preset.js'
 export { renderReadabilityPrompt } from './readability-preset.js'
 export { renderMaintainabilityPrompt } from './maintainability-preset.js'
-export { renderMaintainabilityMinimalPrompt } from './maintainability-minimal-preset.js'
 export { renderSecurityAuditPrompt } from './security-audit-preset.js'
 export { renderUxPrompt } from './ux-preset.js'
