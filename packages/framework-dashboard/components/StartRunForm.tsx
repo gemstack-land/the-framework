@@ -4,7 +4,6 @@ import {
   renderResearchPrompt,
   renderReadabilityPrompt,
   renderMaintainabilityPrompt,
-  renderMaintainabilityMinimalPrompt,
   renderSecurityAuditPrompt,
   renderUxPrompt,
 } from '@gemstack/framework/client'
@@ -21,7 +20,6 @@ const PRESETS: { id: string; label: string; render: () => string }[] = [
   { id: 'research', label: 'Research', render: renderResearchPrompt },
   { id: 'readability', label: 'Readability', render: renderReadabilityPrompt },
   { id: 'maintainability', label: 'Maintainability', render: renderMaintainabilityPrompt },
-  { id: 'maintainability-minimal', label: 'Maintainability (minimal)', render: renderMaintainabilityMinimalPrompt },
   { id: 'security-audit', label: 'Security audit', render: renderSecurityAuditPrompt },
   { id: 'ux', label: 'UX', render: renderUxPrompt },
 ]
