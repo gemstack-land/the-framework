@@ -56,6 +56,7 @@
     "test": "tsc -p tsconfig.test.json && cd dist-test && node --test",
     "bundle:dashboard": "node scripts/bundle-dashboard.mjs",
     "bench:meta-select": "node bench/meta-select.mjs",
+    "bench:architect": "node bench/architect.mjs",
     "clean": "rm -rf dist dist-test"
   },
   "dependencies": {
