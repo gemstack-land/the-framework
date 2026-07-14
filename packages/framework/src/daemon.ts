@@ -192,12 +192,24 @@ function delay(ms: number): Promise<void> {
   return new Promise(resolvePromise => setTimeout(resolvePromise, ms))
 }
 
+/** Options for {@link stopDaemon}. */
+export interface StopDaemonOptions {
+  /** Grace period for SIGTERM before escalating to SIGKILL, ms. Default 5000. */
+  timeoutMs?: number
+}
+
 /**
  * Stop the machine's daemon, if any (#393). Returns true when one was running and
  * got a termination signal. The daemon removes its own state file on exit; a stale
  * file (dead process) is cleaned up here.
+ *
+ * Waits for the process to actually exit before returning (#514): the port is only
+ * free once it is gone, so `stop` followed by an immediate restart would otherwise
+ * race it — the new daemon hits EADDRINUSE, never reports itself ("the daemon did not
+ * come up in time"), and the old one keeps serving a stale bundle with no state file.
+ * SIGTERM is escalated to SIGKILL if the grace period lapses.
  */
-export async function stopDaemon(env: NodeJS.ProcessEnv = process.env): Promise<boolean> {
+export async function stopDaemon(env: NodeJS.ProcessEnv = process.env, opts: StopDaemonOptions = {}): Promise<boolean> {
   const state = await readDaemonState(env)
   if (!state) return false
   const alive = isProcessAlive(state.pid)
@@ -207,9 +219,28 @@ export async function stopDaemon(env: NodeJS.ProcessEnv = process.env): Promise<
     } catch {
       // already gone between the check and the signal
     }
+    if (!(await waitForExit(state.pid, opts.timeoutMs ?? 5000))) {
+      // Ignored SIGTERM / wedged shutdown: take the port back rather than leave a zombie.
+      try {
+        process.kill(state.pid, 'SIGKILL')
+      } catch {
+        // raced us to exit
+      }
+      await waitForExit(state.pid, 1000)
+    }
   }
   await rm(daemonStatePath(env), { force: true }).catch(() => {})
   return alive
+}
+
+/** Poll until the process is gone, or the timeout lapses. */
+async function waitForExit(pid: number, timeoutMs: number): Promise<boolean> {
+  const step = 50
+  for (let waited = 0; waited <= timeoutMs; waited += step) {
+    if (!isProcessAlive(pid)) return true
+    await delay(step)
+  }
+  return !isProcessAlive(pid)
 }
 
 /**
