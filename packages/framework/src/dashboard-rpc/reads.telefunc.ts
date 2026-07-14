@@ -4,6 +4,7 @@ import { readDocs, type WorkspaceDoc } from '../dashboard/docs.js'
 import { collectQueue, type ProjectQueue } from '../dashboard/queue.js'
 import { buildOverview, type Overview } from '../dashboard/overview.js'
 import { buildDashboard, type DashboardData } from '../dashboard/dashboard.js'
+import { githubUrlFor } from '../dashboard/github.js'
 import { contextProjects } from './context.js'
 import type { FrameworkEvent } from '../events.js'
 
@@ -73,4 +74,11 @@ export async function onOverview(): Promise<Overview> {
 export async function onDashboard(): Promise<DashboardData> {
   const projects = await contextProjects().list().catch(() => [])
   return buildDashboard(projects)
+}
+
+/** The project's GitHub URL from its `origin` remote (#489), or null (no remote / not GitHub / relay). */
+export async function onGithubUrl(projectId: string): Promise<string | null> {
+  const cwd = await projectPath(projectId)
+  if (!cwd) return null
+  return (await githubUrlFor(cwd)) ?? null
 }
