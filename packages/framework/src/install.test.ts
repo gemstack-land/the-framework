@@ -55,7 +55,7 @@ const CWD = '/proj'
 
 test('installProject on a clean repo seeds the log and makes exactly one install commit', async () => {
   const fs = memFs()
-  const { git, calls } = fakeGit(args => (args[0] === 'status' ? '' : ''))
+  const { git, calls } = fakeGit(args => (args[0] === 'rev-parse' ? 'true' : ''))
 
   assert.deepEqual(await installProject(CWD, { git, fs }), { ok: true })
   assert.equal(fs.files.get(logsPath(CWD)), LOGS_HEADER)
@@ -66,7 +66,7 @@ test('installProject on a clean repo seeds the log and makes exactly one install
 
 test('installProject seeds .the-framework/.gitignore so only LOGS.md is committed (#313)', async () => {
   const fs = memFs()
-  const { git } = fakeGit(() => '')
+  const { git } = fakeGit(args => (args[0] === 'rev-parse' ? 'true' : ''))
 
   await installProject(CWD, { git, fs })
   assert.equal(fs.files.get(gitignorePath(CWD)), LOGS_GITIGNORE)
@@ -77,7 +77,10 @@ test('installProject seeds .the-framework/.gitignore so only LOGS.md is committe
 
 test('installProject on a dirty repo commits the pre-existing changes first', async () => {
   const fs = memFs()
-  const { git, calls } = fakeGit(args => (args[0] === 'status' ? ' M file.ts\n' : ''))
+  const { git, calls } = fakeGit(args => {
+    if (args[0] === 'rev-parse') return 'true'
+    return args[0] === 'status' ? ' M file.ts\n' : ''
+  })
 
   assert.deepEqual(await installProject(CWD, { git, fs }), { ok: true })
 
@@ -96,6 +99,7 @@ test('installProject on an already-activated repo is a no-op that never calls gi
 test('installProject surfaces a git failure as { ok: false }, never throws', async () => {
   const fs = memFs()
   const { git } = fakeGit(args => {
+    if (args[0] === 'rev-parse') return 'true'
     if (args[0] === 'commit') throw new Error('nothing to commit')
     return ''
   })
@@ -103,9 +107,23 @@ test('installProject surfaces a git failure as { ok: false }, never throws', asy
   assert.deepEqual(await installProject(CWD, { git, fs }), { ok: false, error: 'nothing to commit' })
 })
 
+test('installProject initializes a git repo when the folder is not one yet, then installs', async () => {
+  const fs = memFs()
+  // rev-parse fails on a non-repo folder; every other git call succeeds.
+  const { git, calls } = fakeGit(args => {
+    if (args[0] === 'rev-parse') throw new Error('not a git repository')
+    return ''
+  })
+
+  assert.deepEqual(await installProject(CWD, { git, fs }), { ok: true, initialized: true })
+  assert.ok(calls.some(args => args[0] === 'init'), 'ran git init')
+  const commits = calls.filter(args => args[0] === 'commit').map(args => args[2])
+  assert.deepEqual(commits, ['[The Framework] install The Framework'])
+})
+
 test('the seeded LOGS.md is a valid empty log', async () => {
   const fs = memFs()
-  const { git } = fakeGit(() => '')
+  const { git } = fakeGit(args => (args[0] === 'rev-parse' ? 'true' : ''))
 
   await installProject(CWD, { git, fs })
   assert.equal(fs.files.get(logsPath(CWD)), LOGS_HEADER)

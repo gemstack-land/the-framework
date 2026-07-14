@@ -13,7 +13,7 @@ import { nodeStoreFs, type StoreFs } from './store/index.js'
 
 /** The outcome of {@link installProject}. Failures are values, never throws. */
 export type InstallResult =
-  | { ok: true; alreadyActivated?: boolean }
+  | { ok: true; alreadyActivated?: boolean; initialized?: boolean }
   | { ok: false; error: string }
 
 /** Injectable seams for {@link installProject}. */
@@ -35,6 +35,13 @@ export async function installProject(cwd: string, deps: InstallDeps = {}): Promi
   if (await fs.exists(logsPath(cwd))) return { ok: true, alreadyActivated: true }
 
   try {
+    // Auto-initialize a repo when the folder isn't one yet: The Framework treats
+    // git as the source of truth, so `git init` it for the user rather than erroring.
+    const insideRepo = await git(['rev-parse', '--is-inside-work-tree'], cwd)
+      .then(out => out.trim() === 'true')
+      .catch(() => false)
+    if (!insideRepo) await git(['init'], cwd)
+
     // Commit pre-existing changes first so the install commit is clean.
     const status = await git(['status', '--porcelain'], cwd)
     if (status.trim()) {
@@ -52,7 +59,7 @@ export async function installProject(cwd: string, deps: InstallDeps = {}): Promi
 
     await git(['add', '-A'], cwd)
     await git(['commit', '-m', '[The Framework] install The Framework'], cwd)
-    return { ok: true }
+    return insideRepo ? { ok: true } : { ok: true, initialized: true }
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) }
   }
