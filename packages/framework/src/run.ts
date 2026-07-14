@@ -352,10 +352,15 @@ export async function runFramework(opts: RunFrameworkOptions): Promise<RunFramew
   }
   const promptBlock = systemPromptBlock({ antiLazyPill: opts.antiLazyPill, user: opts.systemPrompt, tf, context: opts.context, bootstrap: opts.bootstrap })
   // The await protocol (#337) concretizes the pill's showChoices()/AWAIT macros into a
-  // signal the turn-boundary gate can detect, so it rides along with the pill. The signal
-  // protocol (#326) does the same for the setSessionName()/setReadyForMerge() lifecycle actions.
+  // signal the turn-boundary gate can detect. The signal protocol (#326) does the same for
+  // the setSessionName()/setReadyForMerge() lifecycle actions. Both are unconditional (like
+  // the direct-prompt path, prompt-run.ts): the agent needs the emit protocol even with the
+  // built-in prompt off (--vanilla), else setReadyForMerge() never fires and --post-merge
+  // never runs (#500).
   const system = [
-    ...(promptBlock ? [promptBlock, AWAIT_PROTOCOL, SIGNAL_PROTOCOL] : []),
+    ...(promptBlock ? [promptBlock] : []),
+    AWAIT_PROTOCOL,
+    SIGNAL_PROTOCOL,
     ...personas.map(personaInstructions),
     ...skills.map(skillInstructions),
     ...(memoryBlock ? [memoryBlock] : []),
