@@ -119,7 +119,7 @@ export {
   type SweepDeps,
   type MaintenanceFs,
 } from './maintenance.js'
-export { startDashboard, summarizeProject, defaultProjectsProvider, readDocs, type Dashboard, type DashboardOptions, type StartRunKind, type StartRunResult, type AddProjectResult, type PreviewResult, type PreviewStatus, type ProjectSummary, type ProjectsProvider, type SummarizeDeps, type WorkspaceDoc, type ProjectQueue, type QueueItem, type Overview, type ActiveRun, type RecentProject, type DashboardData, type ProjectStat, type ActivityDay } from './dashboard/index.js'
+export { startDashboard, summarizeProject, defaultProjectsProvider, readDocs, type Dashboard, type DashboardOptions, type StartRunKind, type StartRunResult, type AddProjectResult, type PreviewResult, type PreviewStatus, type ProjectSummary, type ProjectsProvider, type SummarizeDeps, type WorkspaceDoc, type ProjectQueue, type QueueItem, type Overview, type ActiveRun, type RecentProject, type DashboardData, type ProjectStat, type ActivityDay, type GitStatus, type LinkedPr } from './dashboard/index.js'
 export { startPreview, detectDevScript, parsePreviewUrl, PREVIEW_SCRIPTS, type PreviewHandle, type StartPreviewOptions } from './preview.js'
 export {
   RunStore,

@@ -1,6 +1,7 @@
 import type { FrameworkEvent } from '@gemstack/framework'
 import { StartRunForm } from './StartRunForm.js'
 import { ProjectActions } from './ProjectActions.js'
+import { GitStatusBar } from './GitStatusBar.js'
 import { PreviewBar } from './PreviewBar.js'
 import { RunOverview } from './RunOverview.js'
 
@@ -20,6 +21,7 @@ export function ProjectHome({
   return (
     <>
       <ProjectActions projectId={projectId} />
+      <GitStatusBar projectId={projectId} />
       <PreviewBar projectId={projectId} />
       <StartRunForm projectId={projectId} onRunStarted={onRunStarted} />
       {events.length > 0 && <RunOverview events={events} />}

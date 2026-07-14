@@ -5,6 +5,7 @@ import { collectQueue, type ProjectQueue } from '../dashboard/queue.js'
 import { buildOverview, type Overview } from '../dashboard/overview.js'
 import { buildDashboard, type DashboardData } from '../dashboard/dashboard.js'
 import { githubUrlFor } from '../dashboard/github.js'
+import { readGitStatus, type GitStatus } from '../dashboard/git-status.js'
 import { contextProjects } from './context.js'
 import type { FrameworkEvent } from '../events.js'
 
@@ -81,4 +82,11 @@ export async function onGithubUrl(projectId: string): Promise<string | null> {
   const cwd = await projectPath(projectId)
   if (!cwd) return null
   return (await githubUrlFor(cwd)) ?? null
+}
+
+/** The project's git status (#491): active branch, dirty flag, linked PR. Null when not a repo / relay. */
+export async function onGitStatus(projectId: string): Promise<GitStatus | null> {
+  const cwd = await projectPath(projectId)
+  if (!cwd) return null
+  return (await readGitStatus(cwd)) ?? null
 }
