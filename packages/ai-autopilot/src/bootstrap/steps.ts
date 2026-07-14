@@ -38,14 +38,14 @@ export const STACK_TRADEOFFS = `Ground the stack justification in these objectiv
   included (image/font/routing), first-class Vercel deploy. Downsides: heavier,
   React-only, a more opinionated server model, and more constrained edge/Cloudflare
   support.
-Prefer Vike as the default for edge, multi-renderer, or portability; prefer Next
-when the team wants the largest ecosystem and Vercel-native features.`
+Weigh these against the app's actual needs. Neither is a default; pick the one
+the requirements point to.`
 
 const DEFAULT_ARCHITECT_INSTRUCTIONS = `You are the lead architect. Choose the stack and structure for the app the user
 describes and commit to it — act like a senior engineer who decides and explains,
-not one who asks permission. Default to the GemStack stack (Vike + Prisma)
-unless the intent clearly calls for something else. Only choose packages that are
-published and installable on npm. Narrate what you are building
+not one who asks permission. Choose the stack that best fits what the user is
+building. Only choose packages that are published and installable on npm.
+Narrate what you are building
 and why in a sentence or two, and list the key choices so they are recorded and
 not re-litigated later.
 
