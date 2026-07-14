@@ -47,6 +47,17 @@ function insertToken(editor: Editor, range: Range, spec: TokenSpec): void {
     .run()
 }
 
+/**
+ * Replace the editor content with a template and chip-ify its token strings. Takes the live
+ * editor instance (not a captured one), so it works from the `/` menu — whose closures are
+ * built once on first render, when the useEditor result is still null.
+ */
+function applyTemplate(editor: Editor, text: string): void {
+  editor.commands.setContent(text)
+  tokenizeEditorDoc(editor)
+  editor.commands.focus('end')
+}
+
 export const PromptEditor = forwardRef<PromptEditorHandle, PromptEditorProps>(function PromptEditor(
   { onChange, onSubmit, onPreset, onMentionProject, projects, presets, disabled = false, placeholder = 'Describe what to build…  ( / for commands, @ for references )' },
   ref,
@@ -98,8 +109,9 @@ export const PromptEditor = forwardRef<PromptEditorHandle, PromptEditorProps>(fu
           if (item.id.startsWith('preset:')) {
             const preset = presetsRef.current.find(p => `preset:${p.id}` === item.id)
             if (preset) {
-              ed.chain().focus().deleteRange(range).run()
-              loadTemplate(preset.render())
+              applyTemplate(ed, preset.render())
+              setIsEmpty(ed.isEmpty)
+              onChangeRef.current(ed.storage.markdown.getMarkdown())
               onPresetRef.current?.(preset.label)
             }
             return
@@ -161,11 +173,9 @@ export const PromptEditor = forwardRef<PromptEditorHandle, PromptEditorProps>(fu
   // Replace the content with a template and turn its token strings into chips.
   function loadTemplate(text: string): void {
     if (!editor) return
-    editor.commands.setContent(text)
-    tokenizeEditorDoc(editor)
+    applyTemplate(editor, text)
     setIsEmpty(editor.isEmpty)
     onChangeRef.current(editor.storage.markdown.getMarkdown())
-    editor.commands.focus('end')
   }
 
   useImperativeHandle(ref, () => ({
