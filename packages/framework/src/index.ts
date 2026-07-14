@@ -316,6 +316,12 @@ export {
   SECURITY_AUDIT_PARAMS,
 } from './security-audit-preset.js'
 export {
+  renderUxPrompt,
+  UX_PRESET_NAME,
+  UX_PROMPT_TEMPLATE,
+  UX_PARAMS,
+} from './ux-preset.js'
+export {
   fakeDriver,
   FAKE_INTENT,
   FAKE_SIGNALS,
