@@ -37,8 +37,8 @@ import {
 import { snapshotWorkspace } from './sandbox.js'
 import type { Driver, DriverEvent, DriverSession } from './driver/index.js'
 import { memoryFraming, type LoadedMemory } from './memory.js'
-import { systemPromptBlock, type EcoOptions, type TfContext } from './system-prompt.js'
-import { AWAIT_PROTOCOL, SIGNAL_PROTOCOL, CONFIRM_APPROVED, CONFIRM_DECLINED, PLAN_DECLINED_MESSAGE, isDeclinedConfirmation, parseAwaitGate, parseMarkdownViews, parseSessionName, parseReadyForMerge, type ParsedAwaitGate } from './turn-gate.js'
+import { composeRunSystem, type EcoOptions, type TfContext } from './system-prompt.js'
+import { AWAIT_PROTOCOL, CONFIRM_APPROVED, CONFIRM_DECLINED, PLAN_DECLINED_MESSAGE, isDeclinedConfirmation, parseAwaitGate, parseMarkdownViews, parseSessionName, parseReadyForMerge, type ParsedAwaitGate } from './turn-gate.js'
 // Value import from todo-loop.js is a benign cycle: todo-loop.js only calls
 // run.js's hoisted function declarations (requestChoices / resolveAwaitGate).
 import { runTodoLoop, type TodoLoopResult } from './todo-loop.js'
@@ -350,21 +350,17 @@ export async function runFramework(opts: RunFrameworkOptions): Promise<RunFramew
     prompt: opts.intent,
     params: { autopilot: opts.modes?.includes('autopilot') ?? false, ...(opts.eco ? { eco: opts.eco } : {}) },
   }
-  const promptBlock = systemPromptBlock({ antiLazyPill: opts.antiLazyPill, user: opts.systemPrompt, tf, context: opts.context, bootstrap: opts.bootstrap })
-  // The await protocol (#337) concretizes the pill's showChoices()/AWAIT macros into a
-  // signal the turn-boundary gate can detect. The signal protocol (#326) does the same for
-  // the setSessionName()/setReadyForMerge() lifecycle actions. Both are unconditional (like
-  // the direct-prompt path, prompt-run.ts): the agent needs the emit protocol even with the
-  // built-in prompt off (--vanilla), else setReadyForMerge() never fires and --post-merge
-  // never runs (#500).
-  const system = [
-    ...(promptBlock ? [promptBlock] : []),
-    AWAIT_PROTOCOL,
-    SIGNAL_PROTOCOL,
-    ...personas.map(personaInstructions),
-    ...skills.map(skillInstructions),
-    ...(memoryBlock ? [memoryBlock] : []),
-  ].join('\n\n')
+  // One assembly path for the whole system channel (#501): the #326 prompt block, the
+  // always-on emit protocols, then this run's persona / skill / memory framing. Shared
+  // with the direct-prompt path so the two can never drift (the drift behind #500).
+  const system = composeRunSystem({
+    antiLazyPill: opts.antiLazyPill,
+    user: opts.systemPrompt,
+    tf,
+    context: opts.context,
+    bootstrap: opts.bootstrap,
+    framing: [...personas.map(personaInstructions), ...skills.map(skillInstructions), memoryBlock],
+  })
 
   // The session id is not known until the first driver turn returns, so a
   // templated link (`.../{sessionId}`) can only resolve later. A literal link is

@@ -224,11 +224,13 @@ export {
 export {
   loadUserSystemPrompt,
   systemPromptBlock,
+  composeRunSystem,
   renderSystemPrompt,
   SYSTEM_PROMPT_TEMPLATE,
   SYSTEM_PROMPT_FILE,
   BOOTSTRAP_PREAMBLE,
   type SystemPromptOptions,
+  type RunSystemOptions,
   type TfContext,
   type RenderedSystemPrompt,
 } from './system-prompt.js'
