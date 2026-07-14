@@ -111,3 +111,23 @@ test('no loop is exposed without a preset', async () => {
   })
   assert.equal(loop, undefined)
 })
+
+test('the #326 action layer is injected even with the built-in prompt off (#500)', async () => {
+  const { driver, system } = recordingDriver()
+  await runFramework({
+    intent: FAKE_INTENT,
+    driver,
+    cwd: '/tmp/ws',
+    signals: FAKE_SIGNALS,
+    antiLazyPill: false, // --vanilla: drops the built-in #326 prompt, so promptBlock is empty
+  })
+
+  // The built-in prompt is gone, but the emit protocols still ride the system channel —
+  // else the agent never learns how to signal set-session-name / ready-for-merge, so
+  // setReadyForMerge() and the --post-merge suite silently never fire (the build path used
+  // to nest these inside the promptBlock branch; the direct-prompt path always kept them).
+  assert.ok(!system().includes('# System prompt'), 'built-in #326 prompt is off')
+  assert.match(system(), /## Ready for merge/) // SIGNAL_PROTOCOL (#326)
+  assert.match(system(), /```ready-for-merge/)
+  assert.match(system(), /## Awaiting a choice/) // AWAIT_PROTOCOL (#337)
+})
