@@ -16,6 +16,11 @@
   },
   "dependencies": {
     "@gemstack/framework": "workspace:^",
+    "@tiptap/core": "^2.10.0",
+    "@tiptap/pm": "^2.10.0",
+    "@tiptap/react": "^2.10.0",
+    "@tiptap/starter-kit": "^2.10.0",
+    "@tiptap/suggestion": "^2.10.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "lucide-react": "^0.469.0",
@@ -23,6 +28,7 @@
     "react-dom": "^19.2.0",
     "tailwind-merge": "^2.6.0",
     "telefunc": "^0.2.5",
+    "tiptap-markdown": "^0.8.10",
     "vike": "^0.4.235",
     "vike-react": "^0.6.5"
   },

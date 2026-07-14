@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent, type KeyboardEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 import type { ProjectSummary } from '@gemstack/framework'
 import {
   renderResearchPrompt,
@@ -10,6 +10,7 @@ import {
 import { sendStart } from '../server/control.telefunc.js'
 import { onProjects } from '../server/projects.telefunc.js'
 import { usePreferences, updatePreferences, autopilotEnabled } from '../lib/preferences.js'
+import { PromptEditor, type PromptEditorHandle } from './PromptEditor.js'
 import { Button } from './ui/button.js'
 import { cn } from '../lib/utils.js'
 
@@ -40,6 +41,7 @@ export function StartRunForm({
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [note, setNote] = useState<string | null>(null)
+  const editorRef = useRef<PromptEditorHandle>(null)
 
   // The Global options persist daemon-side (#410), shared with the choice-gate countdown.
   const preferences = usePreferences()
@@ -110,6 +112,7 @@ export function StartRunForm({
         // writes its run.json a beat later, so seed an optimistic row with the
         // typed prompt until the real running meta takes over.
         onRunStarted?.(text)
+        editorRef.current?.clear()
         setPrompt('')
         setKind('build')
         setNote(null)
@@ -125,15 +128,12 @@ export function StartRunForm({
     }
   }
 
-  const onKeyDown = (e: KeyboardEvent) => {
-    if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') void submit()
-  }
-
-  const loadPreset = (p: (typeof PRESETS)[number]) => {
-    setPrompt(p.render())
+  // A preset button (or the `/` menu) loads the rendered template into the editor, which
+  // chip-ifies its tags; the run then goes verbatim as a `prompt` kind.
+  const loadPreset = (label: string) => {
     setKind('prompt')
     setError(null)
-    setNote(`${p.label} preset loaded — review or edit, then Start`)
+    setNote(`${label} preset loaded — review or edit, then Start`)
   }
 
   const onPromptChange = (value: string) => {
@@ -145,22 +145,40 @@ export function StartRunForm({
     }
   }
 
+  const addContext = (path: string) =>
+    setContext(prev => {
+      const next = new Set(prev)
+      next.add(path)
+      return next
+    })
+
   return (
     <form onSubmit={submit} className="border-b border-border p-4">
       <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Start a run</div>
-      <textarea
-        value={prompt}
-        onChange={e => onPromptChange(e.target.value)}
-        onKeyDown={onKeyDown}
-        placeholder="Describe what to build…"
-        rows={2}
+      <PromptEditor
+        ref={editorRef}
+        onChange={onPromptChange}
+        onSubmit={() => void submit()}
+        onPreset={loadPreset}
+        onMentionProject={addContext}
+        projects={projects}
+        presets={PRESETS}
         disabled={busy}
-        className="w-full resize-y rounded-md border border-border bg-transparent p-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)]"
       />
 
       <div className="mt-2 flex flex-wrap gap-1.5">
         {PRESETS.map(p => (
-          <Button key={p.id} type="button" variant="outline" size="sm" disabled={busy} onClick={() => loadPreset(p)}>
+          <Button
+            key={p.id}
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={busy}
+            onClick={() => {
+              editorRef.current?.loadTemplate(p.render())
+              loadPreset(p.label)
+            }}
+          >
             {p.label}
           </Button>
         ))}
