@@ -31,7 +31,11 @@ interface PromptEditorProps {
   onPreset?: (label: string) => void
   /** A project referenced via `@` (so the form can add it to the run context). */
   onMentionProject?: (path: string) => void
+  /** A file referenced via `#` (so the form can add its repo-relative path to the run context). */
+  onMentionFile?: (relPath: string) => void
   projects: ProjectSummary[]
+  /** The current project's files, repo-relative, for the `#` picker (#504). */
+  files?: string[]
   presets: { id: string; label: string; render: () => string }[]
   disabled?: boolean
   placeholder?: string
@@ -59,23 +63,27 @@ function applyTemplate(editor: Editor, text: string): void {
 }
 
 export const PromptEditor = forwardRef<PromptEditorHandle, PromptEditorProps>(function PromptEditor(
-  { onChange, onSubmit, onPreset, onMentionProject, projects, presets, disabled = false, placeholder = 'Describe what to build…  ( / commands · < tags · @ projects )' },
+  { onChange, onSubmit, onPreset, onMentionProject, onMentionFile, projects, files = [], presets, disabled = false, placeholder = 'Describe what to build…  ( / commands · < tags · @ projects · # files )' },
   ref,
 ) {
   const [isEmpty, setIsEmpty] = useState(true)
 
   // Refs so the once-built suggestion closures always see the latest props/editor.
   const projectsRef = useRef(projects)
+  const filesRef = useRef(files)
   const presetsRef = useRef(presets)
   const onPresetRef = useRef(onPreset)
   const onMentionRef = useRef(onMentionProject)
+  const onMentionFileRef = useRef(onMentionFile)
   const onChangeRef = useRef(onChange)
   const onSubmitRef = useRef(onSubmit)
   useEffect(() => {
     projectsRef.current = projects
+    filesRef.current = files
     presetsRef.current = presets
     onPresetRef.current = onPreset
     onMentionRef.current = onMentionProject
+    onMentionFileRef.current = onMentionFile
     onChangeRef.current = onChange
     onSubmitRef.current = onSubmit
   })
@@ -153,6 +161,22 @@ export const PromptEditor = forwardRef<PromptEditorHandle, PromptEditorProps>(fu
             insertToken(ed, range, { kind: 'project', label: `@${project.name}`, text: `@${project.name}` })
             onMentionRef.current?.(project.path)
           }
+        },
+      }),
+      // `#` — files: the finer-grained sibling of `@` (#504). Type to filter the project's
+      // files (git ls-files); picking one focuses the run on that file via the Context line.
+      makeTrigger({
+        char: '#',
+        key: 'hash',
+        items: query =>
+          filesRef.current
+            .filter(f => f.toLowerCase().includes(query.toLowerCase()))
+            .slice(0, 8)
+            .map(f => ({ id: `file:${f}`, label: `#${f}`, hint: 'file', group: 'Files' })),
+        onSelect: (item, { editor: ed, range }) => {
+          const rel = item.id.slice('file:'.length)
+          insertToken(ed, range, { kind: 'file', label: `#${rel}`, text: `#${rel}` })
+          onMentionFileRef.current?.(rel)
         },
       }),
     ],

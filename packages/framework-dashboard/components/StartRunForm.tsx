@@ -9,6 +9,7 @@ import {
 } from '@gemstack/framework/client'
 import { sendStart } from '../server/control.telefunc.js'
 import { onProjects } from '../server/projects.telefunc.js'
+import { onProjectFiles } from '../server/reads.telefunc.js'
 import { usePreferences, updatePreferences, autopilotEnabled } from '../lib/preferences.js'
 import { PromptEditor, type PromptEditorHandle } from './PromptEditor.js'
 import { Button } from './ui/button.js'
@@ -69,6 +70,18 @@ export function StartRunForm({
       live = false
     }
   }, [])
+
+  // The current project's files for the `#` picker (#504): repo-relative paths from
+  // `git ls-files`, reloaded when the selected project changes. Empty on the relay.
+  const [files, setFiles] = useState<string[]>([])
+  useEffect(() => {
+    let live = true
+    setFiles([])
+    void onProjectFiles(projectId).then(list => live && setFiles(list))
+    return () => {
+      live = false
+    }
+  }, [projectId])
 
   const toggleContext = (path: string) =>
     setContext(prev => {
@@ -161,7 +174,9 @@ export function StartRunForm({
         onSubmit={() => void submit()}
         onPreset={loadPreset}
         onMentionProject={addContext}
+        onMentionFile={addContext}
         projects={projects}
+        files={files}
         presets={PRESETS}
         disabled={busy}
       />

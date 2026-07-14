@@ -7,7 +7,7 @@ import { Node, mergeAttributes, nodeInputRule } from '@tiptap/core'
 // the wire is unchanged: presets, the run contract, everything downstream stays the same.
 
 /** What a token is, which drives its chip colour and which menu inserts it. */
-export type TokenKind = 'macro' | 'action' | 'reference' | 'project'
+export type TokenKind = 'macro' | 'action' | 'reference' | 'project' | 'file'
 
 /** One insertable token: how it reads (label) and how it serializes (text). */
 export interface TokenSpec {
