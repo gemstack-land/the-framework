@@ -4,6 +4,7 @@ export {
   applyEventToMeta,
   metaFromEvents,
   listRuns,
+  readLiveMeta,
   loadRunEvents,
   runIdFromStartedAt,
   isSafeRunId,

@@ -358,6 +358,23 @@ export async function listRuns(cwd: string, fs: StoreFs = nodeStoreFs()): Promis
 }
 
 /**
+ * The live (in-progress) run's meta snapshot from `.the-framework/run.json`, or
+ * `undefined` when none/unreadable. Unlike {@link listRuns} (which reads the
+ * archived `runs/` copies written on close), this is the run the daemon is
+ * tailing right now — so the dashboard can list it with a `running` status
+ * before it finishes. Missing or torn file yields `undefined`, never throws.
+ */
+export async function readLiveMeta(cwd: string, fs: StoreFs = nodeStoreFs()): Promise<RunMeta | undefined> {
+  const path = join(cwd, FRAMEWORK_DIR, META_FILE)
+  if (!(await fs.exists(path))) return undefined
+  try {
+    return JSON.parse(await fs.read(path)) as RunMeta
+  } catch {
+    return undefined
+  }
+}
+
+/**
  * Read one archived run's event log for replay. Returns `undefined` for an
  * unknown or unsafe id; a torn trailing line is dropped (same rule as the live
  * {@link RunStore.loadEvents}).

@@ -1,4 +1,4 @@
-import { listRuns, loadRunEvents, type RunMeta } from '../store/index.js'
+import { listRuns, readLiveMeta, loadRunEvents, type RunMeta } from '../store/index.js'
 import { readLogs, type LogEntry } from '../logs.js'
 import { readDocs, type WorkspaceDoc } from '../dashboard/docs.js'
 import { collectQueue, type ProjectQueue } from '../dashboard/queue.js'
@@ -19,10 +19,22 @@ async function projectPath(projectId: string): Promise<string | undefined> {
   return contextProjects().resolvePath(projectId)
 }
 
-/** The project's archived runs, most-recent first (or `[]`). */
+/**
+ * The project's runs, most-recent first (or `[]`). The archived (finished) runs
+ * from `runs/`, plus the live run prepended when one is going — so the sidebar
+ * shows the in-progress run with a `running` status the moment it starts, not
+ * only after it closes. The live run is skipped once it has been archived under
+ * the same id (it then appears from `listRuns` instead), so there is no double.
+ */
 export async function onRuns(projectId: string): Promise<RunMeta[]> {
   const cwd = await projectPath(projectId)
-  return cwd ? listRuns(cwd).catch(() => []) : []
+  if (!cwd) return []
+  const archived = await listRuns(cwd).catch(() => [])
+  const live = await readLiveMeta(cwd).catch(() => undefined)
+  if (live && live.status === 'running' && !archived.some(r => r.id === live.id)) {
+    return [live, ...archived]
+  }
+  return archived
 }
 
 /** One archived run's event log for replay (or `[]` when the run or project is gone). */

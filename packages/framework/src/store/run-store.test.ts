@@ -6,6 +6,7 @@ import {
   applyEventToMeta,
   metaFromEvents,
   listRuns,
+  readLiveMeta,
   loadRunEvents,
   RUN_META_VERSION,
   type StoreFs,
@@ -184,6 +185,22 @@ test('listRuns returns archived runs newest-first with intent + status (#303)', 
   assert.equal(runs[1]!.intent, 'a blog with comments')
   assert.equal(runs[1]!.status, 'done')
   assert.equal(runs[1]!.sessionLink, 'https://ex.com/s/sess-123')
+})
+
+test('readLiveMeta reads the in-progress run.json with a running status (before close)', async () => {
+  const fs = memFs()
+  const store = await RunStore.open(CWD, { fs, fresh: true, now: AT })
+  for (const e of RUN.slice(0, -1)) await store.append(e) // every event but the terminal `end`
+  // No close(): the run is still live. Its meta reads back as running with the intent.
+  const live = await readLiveMeta(CWD, fs)
+  assert.ok(live, 'live meta present')
+  assert.equal(live!.status, 'running')
+  assert.equal(live!.intent, 'a blog with comments')
+  assert.equal(live!.id, store.snapshot().id)
+})
+
+test('readLiveMeta yields undefined on a never-run workspace', async () => {
+  assert.equal(await readLiveMeta(CWD, memFs()), undefined)
 })
 
 test('loadRunEvents replays an archived run, and rejects unknown/unsafe ids (#303)', async () => {

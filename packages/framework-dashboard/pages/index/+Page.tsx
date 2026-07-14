@@ -25,6 +25,14 @@ export default function Page() {
   const [projectId, setProjectId] = useState<string | null>(rememberedProject)
   // null = follow the live stream; a run id = replay that archived run.
   const [runId, setRunId] = useState<string | null>(null)
+  // A just-started run: bump the tick so the Runs rail shows an optimistic `running` row
+  // with the typed prompt at once, before the spawned process writes its run.json.
+  const [runStart, setRunStart] = useState<{ tick: number; intent: string }>({ tick: 0, intent: '' })
+
+  const onRunStarted = (intent: string) => {
+    setRunId(null) // jump to the live view of the run just started
+    setRunStart(prev => ({ tick: prev.tick + 1, intent }))
+  }
 
   const selectProject = (id: string) => {
     setProjectId(id)
@@ -54,9 +62,19 @@ export default function Page() {
       </header>
       <div className="flex min-h-0 flex-1">
         <ProjectsSidebar selectedId={projectId} onSelect={selectProject} />
-        <RunHistory projectId={projectId} selectedRunId={runId} onSelect={setRunId} />
+        <RunHistory
+          projectId={projectId}
+          selectedRunId={runId}
+          onSelect={setRunId}
+          startTick={runStart.tick}
+          startIntent={runStart.intent}
+        />
         <main className="flex min-w-0 flex-1 flex-col">
-          {projectId && runId ? <RunReplay projectId={projectId} runId={runId} /> : <EventStream projectId={projectId} events={events} />}
+          {projectId && runId ? (
+            <RunReplay projectId={projectId} runId={runId} />
+          ) : (
+            <EventStream projectId={projectId} events={events} onRunStarted={onRunStarted} />
+          )}
         </main>
         <RightRail projectId={projectId} choices={choices} views={views} />
       </div>

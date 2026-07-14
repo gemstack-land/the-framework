@@ -28,7 +28,13 @@ const PRESETS: { id: string; label: string; render: () => string }[] = [
 // own `startRun` (with its one-run-per-project busy guard), posted over Telefunc. The
 // Global options (#314/#433) ride along: Autopilot, Technical control, Vanilla, and Eco
 // (with its section drops). Shown when no run is active; a `busy` result means one already is.
-export function StartRunForm({ projectId }: { projectId: string }) {
+export function StartRunForm({
+  projectId,
+  onRunStarted,
+}: {
+  projectId: string
+  onRunStarted?: ((intent: string) => void) | undefined
+}) {
   const [prompt, setPrompt] = useState('')
   const [kind, setKind] = useState<'build' | 'prompt'>('build')
   const [busy, setBusy] = useState(false)
@@ -100,6 +106,10 @@ export function StartRunForm({ projectId }: { projectId: string }) {
     try {
       const result = await sendStart(projectId, text, kind, collectOptions())
       if (result.ok) {
+        // Show the run in the Runs rail immediately (#405): the spawned process
+        // writes its run.json a beat later, so seed an optimistic row with the
+        // typed prompt until the real running meta takes over.
+        onRunStarted?.(text)
         setPrompt('')
         setKind('build')
         setNote(null)

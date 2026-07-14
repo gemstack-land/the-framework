@@ -16,10 +16,12 @@ export function EventStream({
   projectId,
   events,
   readOnly = false,
+  onRunStarted,
 }: {
   projectId: string | null
   events: FrameworkEvent[]
   readOnly?: boolean
+  onRunStarted?: (intent: string) => void
 }) {
   if (!projectId) {
     return <div className="grid flex-1 place-items-center text-sm text-muted-foreground">Select a project to watch its live run.</div>
@@ -50,7 +52,7 @@ export function EventStream({
           </Button>
         </div>
       ) : (
-        <StartRunForm projectId={projectId} />
+        <StartRunForm projectId={projectId} onRunStarted={onRunStarted} />
       )}
       {events.length > 0 ? (
         <>
