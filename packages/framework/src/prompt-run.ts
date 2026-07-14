@@ -1,8 +1,8 @@
 import type { Driver, DriverEvent, DriverSession } from './driver/index.js'
 import { hasSessionIdPlaceholder, resolveSessionLink, type ChoicePick, type ChoiceRequest, type FrameworkEvent } from './events.js'
 import { resolveAwaitGate } from './run.js'
-import { renderSystemPrompt, systemPromptBlock, type EcoOptions, type TfContext } from './system-prompt.js'
-import { AWAIT_PROTOCOL, SIGNAL_PROTOCOL, PLAN_DECLINED_MESSAGE, isDeclinedConfirmation, parseAwaitGate, parseMarkdownViews, parseSessionName, parseReadyForMerge } from './turn-gate.js'
+import { composeRunSystem, renderSystemPrompt, type EcoOptions, type TfContext } from './system-prompt.js'
+import { PLAN_DECLINED_MESSAGE, isDeclinedConfirmation, parseAwaitGate, parseMarkdownViews, parseSessionName, parseReadyForMerge } from './turn-gate.js'
 import { UsageMeter } from './usage.js'
 
 /**
@@ -84,8 +84,7 @@ export async function runPrompt(opts: RunPromptOptions): Promise<RunPromptResult
     prompt: opts.prompt,
     params: { autopilot: opts.autopilot === true, ...(opts.eco ? { eco: opts.eco } : {}) },
   }
-  const promptBlock = systemPromptBlock({ antiLazyPill: opts.antiLazyPill, user: opts.systemPrompt, tf, context: opts.context, bootstrap: opts.bootstrap })
-  const system = [...(promptBlock ? [promptBlock] : []), AWAIT_PROTOCOL, SIGNAL_PROTOCOL].join('\n\n')
+  const system = composeRunSystem({ antiLazyPill: opts.antiLazyPill, user: opts.systemPrompt, tf, context: opts.context, bootstrap: opts.bootstrap })
   // The template's `# User prompt` half carries the prompt (today it renders to
   // exactly `opts.prompt`; any framing Rom adds around the slot rides along). With
   // the built-in prompt off, the raw prompt is sent as-is.

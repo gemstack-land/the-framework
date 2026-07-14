@@ -5,12 +5,14 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
   BOOTSTRAP_PREAMBLE,
+  composeRunSystem,
   loadUserSystemPrompt,
   renderSystemPrompt,
   systemPromptBlock,
   SYSTEM_PROMPT_FILE,
   SYSTEM_PROMPT_TEMPLATE,
 } from './system-prompt.js'
+import { AWAIT_PROTOCOL, SIGNAL_PROTOCOL } from './turn-gate.js'
 
 test('loadUserSystemPrompt reads and trims SYSTEM.md', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'system-prompt-'))
@@ -165,4 +167,24 @@ test('no eco flags renders every section, and eco never touches the template', (
 test('vanilla (antiLazyPill false) wins over eco: no built-in prompt at all (#314)', () => {
   const block = systemPromptBlock({ antiLazyPill: false, tf: { prompt: 'x', params: { eco: { autoResearch: true } } } })
   assert.equal(block, '')
+})
+
+test('composeRunSystem: the built-in block, then both emit protocols, then framing, in order (#501)', () => {
+  const system = composeRunSystem({ framing: ['PERSONA-A', 'SKILL-B'] })
+  // The one assembly path both runFramework and runPrompt go through.
+  const expected = [renderSystemPrompt().system, AWAIT_PROTOCOL, SIGNAL_PROTOCOL, 'PERSONA-A', 'SKILL-B'].join('\n\n')
+  assert.equal(system, expected)
+})
+
+test('composeRunSystem keeps the emit protocols even with the built-in prompt off (#500/#501)', () => {
+  // The drift that #500 fixed, now pinned at the single assembly point: --vanilla drops the
+  // #326 block, but the agent still gets the AWAIT + SIGNAL emit contract.
+  const system = composeRunSystem({ antiLazyPill: false })
+  assert.ok(!system.includes('# System prompt'), 'built-in #326 prompt is off')
+  assert.equal(system, [AWAIT_PROTOCOL, SIGNAL_PROTOCOL].join('\n\n'))
+})
+
+test('composeRunSystem drops empty framing entries (e.g. an absent memory block) (#501)', () => {
+  const system = composeRunSystem({ antiLazyPill: false, framing: ['PERSONA-A', '', 'SKILL-B'] })
+  assert.equal(system, [AWAIT_PROTOCOL, SIGNAL_PROTOCOL, 'PERSONA-A', 'SKILL-B'].join('\n\n'))
 })
