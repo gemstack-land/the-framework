@@ -5,7 +5,7 @@ import { registerDashboardTelefunctions } from '../dashboard-rpc/register.js'
 import type { ProjectsProvider } from './projects.js'
 import type { FrameworkEvent } from '../events.js'
 import type { PreferencesStore } from '../registry.js'
-import { isSameOriginRequest, type AddProjectResult, type StartRunKind, type StartRunOptions, type StartRunResult } from './server.js'
+import { isSameOriginRequest, type AddProjectResult, type PreviewResult, type PreviewStatus, type StartRunKind, type StartRunOptions, type StartRunResult } from './server.js'
 
 /** Wired by the daemon so `sendStart` can reach the daemon's own `startRun` closure. */
 export type StartRunHandler = (
@@ -17,6 +17,13 @@ export type StartRunHandler = (
 
 /** Wired by the daemon so `sendAddProject` can install + register a repo (#433). */
 export type AddProjectHandler = (path: string, directory: boolean) => AddProjectResult | Promise<AddProjectResult>
+
+/** Wired by the daemon so the Preview RPCs can serve/stop/report a project's app (#475). */
+export interface PreviewHandlers {
+  start: (projectId?: string) => PreviewResult | Promise<PreviewResult>
+  stop: (projectId?: string) => void | Promise<void>
+  status: (projectId?: string) => PreviewStatus | Promise<PreviewStatus>
+}
 
 /** Resolve a project id to its live event stream (#426): the relay feeds `onEvents` from
  * its own in-memory stream rather than a file on disk. */
@@ -32,6 +39,8 @@ export type EventsSource = (projectId: string) => AsyncIterable<FrameworkEvent> 
 export interface DashboardContext {
   startRun?: StartRunHandler
   addProject?: AddProjectHandler
+  /** The Preview handler set (#475); the daemon wires it, other hosts leave it unset. */
+  preview?: PreviewHandlers
   projects?: ProjectsProvider
   eventsSource?: EventsSource
   /** The user-preferences store (#410). The daemon/foreground wire the real registry file;
@@ -67,6 +76,7 @@ export function makeTelefuncMount(
   eventsSource?: EventsSource,
   addProject?: AddProjectHandler,
   preferences?: PreferencesStore,
+  preview?: PreviewHandlers,
 ): (req: IncomingMessage, res: ServerResponse) => Promise<boolean> {
   return async (req, res) => {
     if (!isSameOriginRequest(req)) {
@@ -78,6 +88,7 @@ export function makeTelefuncMount(
     const context: DashboardContext = {
       ...(startRun ? { startRun } : {}),
       ...(addProject ? { addProject } : {}),
+      ...(preview ? { preview } : {}),
       ...(projects ? { projects } : {}),
       ...(eventsSource ? { eventsSource } : {}),
       ...(preferences ? { preferences } : {}),

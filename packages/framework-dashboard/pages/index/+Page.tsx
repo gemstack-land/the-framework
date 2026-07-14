@@ -13,14 +13,23 @@ import { pendingChoices, agentViews } from '../../lib/live-state.js'
 // past-run replay) | Docs/Log rail. Everything over the wire is Telefunc — the
 // Projects RPC, run history, run replay, docs, log, and the live stream (a Channel).
 // A projection of the same .the-framework files the daemon writes.
+// Remember the selected project across reloads so a refresh returns you to the same one
+// (#475): otherwise the dashboard resets to auto-selecting the first project, and anything
+// keyed to the selection — a running Preview, the live stream — looks empty for the project
+// you were actually on. `window` is absent during prerender (ssr:false), so this is browser-only.
+const SELECTED_PROJECT_KEY = 'the-framework.selectedProjectId'
+const rememberedProject = (): string | null =>
+  typeof window === 'undefined' ? null : window.localStorage.getItem(SELECTED_PROJECT_KEY)
+
 export default function Page() {
-  const [projectId, setProjectId] = useState<string | null>(null)
+  const [projectId, setProjectId] = useState<string | null>(rememberedProject)
   // null = follow the live stream; a run id = replay that archived run.
   const [runId, setRunId] = useState<string | null>(null)
 
   const selectProject = (id: string) => {
     setProjectId(id)
     setRunId(null) // switching projects always returns to live
+    if (typeof window !== 'undefined') window.localStorage.setItem(SELECTED_PROJECT_KEY, id)
   }
 
   // The live run feed is owned here so both the main view and the right rail's choice gates

@@ -23,7 +23,10 @@ export function ProjectsSidebar({
     (autoSelect: boolean) => {
       void onProjects().then(list => {
         setProjects(list)
-        if (autoSelect && list[0] && !selectedId) onSelect(list[0].id) // auto-select the first
+        // Auto-select the first project when nothing is selected, or when the remembered
+        // selection (#475) points at a project that no longer exists.
+        const selectionExists = selectedId !== null && list.some(p => p.id === selectedId)
+        if (autoSelect && list[0] && !selectionExists) onSelect(list[0].id)
       })
     },
     [selectedId, onSelect],
