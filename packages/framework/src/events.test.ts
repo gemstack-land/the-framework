@@ -84,6 +84,18 @@ test('formatFrameworkEvent renders a system-prompt line by length (#343)', () =>
   assert.equal(formatFrameworkEvent({ kind: 'system-prompt', text: 'abcde' }), '  system prompt sent (5 chars)')
 })
 
+test('formatFrameworkEvent shows a preview of the driver prompt, not just "prompt sent" (#476)', () => {
+  assert.equal(
+    formatFrameworkEvent({ kind: 'driver', event: { type: 'start', prompt: 'Build this app end to end' } }),
+    '  › prompt: Build this app end to end',
+  )
+  // Long prompts are truncated for the one-line feed (the dashboard shows the full text).
+  const long = 'x'.repeat(300)
+  const line = formatFrameworkEvent({ kind: 'driver', event: { type: 'start', prompt: long } })!
+  assert.ok(line.startsWith('  › prompt: '))
+  assert.ok(line.length < 160 && line.endsWith('…'))
+})
+
 test('formatFrameworkEvent renders a preview line', () => {
   assert.equal(
     formatFrameworkEvent({ kind: 'preview', url: 'http://localhost:3000', command: 'npm run dev' }),

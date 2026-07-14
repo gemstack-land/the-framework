@@ -209,7 +209,7 @@ export function formatFrameworkEvent(event: FrameworkEvent): string {
 function formatDriverEvent(event: DriverEvent): string {
   switch (event.type) {
     case 'start':
-      return `  › prompt sent`
+      return `  › prompt: ${truncate(event.prompt, 140)}`
     case 'text':
       return `    ${truncate(event.text)}`
     case 'action':
