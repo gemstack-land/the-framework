@@ -59,6 +59,8 @@ test('startOptionFlags maps only enabled Global options to CLI flags (#314)', ()
   assert.deepEqual(startOptionFlags({ bootstrap: true }), ['--bootstrap'])
   // Post-merge quality suite (#326): maps to --post-merge.
   assert.deepEqual(startOptionFlags({ postMerge: true }), ['--post-merge'])
+  // Browser via chrome-devtools-mcp (#452): maps to --browser.
+  assert.deepEqual(startOptionFlags({ browser: true }), ['--browser'])
 })
 
 const logEvent = (message: string): FrameworkEvent => ({ kind: 'log', message })

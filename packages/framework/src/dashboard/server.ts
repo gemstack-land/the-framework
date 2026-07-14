@@ -79,6 +79,8 @@ export interface StartRunOptions {
   bootstrap?: boolean
   /** Post-merge quality suite (#326): on setReadyForMerge(), fire maintainability/readability/security-audit; maps to `--post-merge`. */
   postMerge?: boolean
+  /** Give the agent a real browser via chrome-devtools-mcp during the run (#452); maps to `--browser`. */
+  browser?: boolean
 }
 
 /**

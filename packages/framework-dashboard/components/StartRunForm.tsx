@@ -45,6 +45,7 @@ export function StartRunForm({ projectId }: { projectId: string }) {
   const ecoResearch = preferences.ecoResearch ?? false
   const ecoMaintenance = preferences.ecoMaintenance ?? false
   const postMergeQuality = preferences.postMergeQuality ?? false
+  const browser = preferences.browser ?? false
 
   // Context selector (#439/#314): the agent can reach every registered repo, so ticking a
   // subset narrows its focus — the picked paths become one `Context:` line in the system
@@ -84,6 +85,7 @@ export function StartRunForm({ projectId }: { projectId: string }) {
       ...(vanilla ? { vanilla: true } : {}),
       ...(eco && !vanilla && Object.keys(ecoOpts).length ? { eco: ecoOpts } : {}),
       ...(postMergeQuality ? { postMerge: true } : {}),
+      ...(browser ? { browser: true } : {}),
       ...(context.size ? { context: [...context] } : {}),
     }
   }
@@ -169,6 +171,9 @@ export function StartRunForm({ projectId }: { projectId: string }) {
         </label>
         <label className="flex cursor-pointer items-center gap-1.5" title="When the run signals it's ready for merge, run maintainability, readability, and security-audit passes">
           <input type="checkbox" checked={postMergeQuality} onChange={e => updatePreferences({ postMergeQuality: e.target.checked })} disabled={busy} /> Post-merge cleanup
+        </label>
+        <label className="flex cursor-pointer items-center gap-1.5" title="Give the agent a real browser via chrome-devtools-mcp: navigate pages, read console + network, inspect the DOM, and screenshot">
+          <input type="checkbox" checked={browser} onChange={e => updatePreferences({ browser: e.target.checked })} disabled={busy} /> Browser
         </label>
       </div>
 

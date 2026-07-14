@@ -34,6 +34,8 @@ export interface Preferences {
   ecoMaintenance?: boolean
   /** Post-merge quality suite (#326): fire maintainability/readability/security-audit on setReadyForMerge(). */
   postMergeQuality?: boolean
+  /** Give the agent a real browser via chrome-devtools-mcp during the run (#452); maps to `--browser`. */
+  browser?: boolean
 }
 
 /**
@@ -144,6 +146,7 @@ const PREFERENCE_KEYS = [
   'ecoResearch',
   'ecoMaintenance',
   'postMergeQuality',
+  'browser',
 ] as const
 
 /** Keep only the known boolean preference fields, so a hand-edited or browser-supplied
