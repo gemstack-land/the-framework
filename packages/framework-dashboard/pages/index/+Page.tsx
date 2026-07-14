@@ -1,18 +1,21 @@
 import { useState } from 'react'
 import { ProjectsSidebar } from '../../components/ProjectsSidebar.js'
 import { RunHistory } from '../../components/RunHistory.js'
-import { EventStream } from '../../components/EventStream.js'
+import { ProjectHome } from '../../components/ProjectHome.js'
+import { RunLive } from '../../components/RunLive.js'
 import { RunReplay } from '../../components/RunReplay.js'
 import { RightRail } from '../../components/RightRail.js'
 import { RelayView } from '../../components/RelayView.js'
 import { Badge } from '../../components/ui/badge.js'
 import { useLiveEvents } from '../../lib/use-live-events.js'
+import { useRuns } from '../../lib/use-runs.js'
 import { pendingChoices, agentViews } from '../../lib/live-state.js'
 
-// The dashboard shell (#405 phase 2): Projects | Runs | main (live event stream or a
-// past-run replay) | Docs/Log rail. Everything over the wire is Telefunc — the
-// Projects RPC, run history, run replay, docs, log, and the live stream (a Channel).
-// A projection of the same .the-framework files the daemon writes.
+// The dashboard shell (#405 phase 2): Projects | Runs | main | Docs/Log rail. The main pane
+// is one of three views chosen by the Runs-rail selection: the project home/launcher (Live,
+// the default — Start form + cards), a running run's own live output (RunLive), or a finished
+// run's replay (RunReplay). Everything over the wire is Telefunc. A projection of the same
+// .the-framework files the daemon writes.
 // Remember the selected project across reloads so a refresh returns you to the same one
 // (#475): otherwise the dashboard resets to auto-selecting the first project, and anything
 // keyed to the selection — a running Preview, the live stream — looks empty for the project
@@ -23,20 +26,24 @@ const rememberedProject = (): string | null =>
 
 export default function Page() {
   const [projectId, setProjectId] = useState<string | null>(rememberedProject)
-  // null = follow the live stream; a run id = replay that archived run.
+  // null = the project home/launcher (Live); a run id = that run's view.
   const [runId, setRunId] = useState<string | null>(null)
-  // A just-started run: bump the tick so the Runs rail shows an optimistic `running` row
+  // A just-started run: bump the tick so the Runs rail shows an optimistic "starting…" row
   // with the typed prompt at once, before the spawned process writes its run.json.
   const [runStart, setRunStart] = useState<{ tick: number; intent: string }>({ tick: 0, intent: '' })
 
+  const { runs, reload } = useRuns(projectId)
+
   const onRunStarted = (intent: string) => {
-    setRunId(null) // jump to the live view of the run just started
+    // Stay on the home launcher (it must stay visible so you can launch again); the new run
+    // just appends to the rail. Reload so its real row replaces the optimistic one quickly.
     setRunStart(prev => ({ tick: prev.tick + 1, intent }))
+    reload()
   }
 
   const selectProject = (id: string) => {
     setProjectId(id)
-    setRunId(null) // switching projects always returns to live
+    setRunId(null) // switching projects always returns to the home launcher
     if (typeof window !== 'undefined') window.localStorage.setItem(SELECTED_PROJECT_KEY, id)
   }
 
@@ -53,6 +60,19 @@ export default function Page() {
   const relayRun = typeof window === 'undefined' ? null : new URLSearchParams(window.location.search).get('run')
   if (relayRun) return <RelayView runId={relayRun} />
 
+  // Route the main pane: home when nothing is selected; a running run gets its live output;
+  // a finished run replays. (One project streams one live feed today; per-run streams land
+  // with worktrees, #453.)
+  const selectedRun = runId ? runs.find(run => run.id === runId) : undefined
+  const renderMain = () => {
+    if (!projectId) {
+      return <div className="grid flex-1 place-items-center text-sm text-muted-foreground">Select a project to start a run.</div>
+    }
+    if (runId === null) return <ProjectHome projectId={projectId} events={events} onRunStarted={onRunStarted} />
+    if (selectedRun?.status === 'running') return <RunLive projectId={projectId} events={events} />
+    return <RunReplay projectId={projectId} runId={runId} />
+  }
+
   return (
     <div className="flex h-screen flex-col">
       <header className="flex items-center gap-3 border-b border-border px-4 py-3">
@@ -64,18 +84,13 @@ export default function Page() {
         <ProjectsSidebar selectedId={projectId} onSelect={selectProject} />
         <RunHistory
           projectId={projectId}
+          runs={runs}
           selectedRunId={runId}
           onSelect={setRunId}
           startTick={runStart.tick}
           startIntent={runStart.intent}
         />
-        <main className="flex min-w-0 flex-1 flex-col">
-          {projectId && runId ? (
-            <RunReplay projectId={projectId} runId={runId} />
-          ) : (
-            <EventStream projectId={projectId} events={events} onRunStarted={onRunStarted} />
-          )}
-        </main>
+        <main className="flex min-w-0 flex-1 flex-col">{renderMain()}</main>
         <RightRail projectId={projectId} choices={choices} views={views} />
       </div>
     </div>
