@@ -1,4 +1,4 @@
-import { Node, mergeAttributes } from '@tiptap/core'
+import { Node, mergeAttributes, nodeInputRule } from '@tiptap/core'
 
 // The prompt editor's tokens (#470). A token is an inline chip that reads as a pill in the
 // editor but serializes back to the EXACT plain text the agent already parses today — an
@@ -40,9 +40,13 @@ export const ACTION_TOKENS: TokenSpec[] = [
 /** Match any insertable token in free text, so a loaded preset can be chip-ified (tokenize.ts). */
 export const TOKEN_PATTERN = /<[A-Z][A-Z0-9_]*>|show[A-Za-z]+\(\)/g
 
-/** The token spec for a matched string, or a bare macro/action chip when it is not catalogued. */
+/**
+ * The token spec for a matched string. A catalogued macro/action matches case-insensitively
+ * and normalizes to its canonical form (so a typed `<await>` becomes the `<AWAIT>` the agent
+ * expects); anything else keeps exactly what was typed.
+ */
 export function specForText(text: string): TokenSpec {
-  const known = [...MACRO_TOKENS, ...ACTION_TOKENS].find(t => t.text === text)
+  const known = [...MACRO_TOKENS, ...ACTION_TOKENS].find(t => t.text.toLowerCase() === text.toLowerCase())
   if (known) return known
   if (text.endsWith('()')) return { kind: 'action', label: text, text }
   return { kind: 'macro', label: text.replace(/^<|>$/g, ''), text }
@@ -86,6 +90,19 @@ export const Token = Node.create({
   // Plain-text extraction (editor.getText) — mirrors the markdown serialization below.
   renderText({ node }) {
     return node.attrs.text
+  },
+
+  // Auto-convert a fully typed token into a chip: `<NAME>` when the closing `>` lands, and
+  // `showX()` when the closing `)` lands. specForText normalizes a known token's case.
+  addInputRules() {
+    const toAttrs = (match: RegExpMatchArray) => {
+      const spec = specForText(match[0])
+      return { kind: spec.kind, label: spec.label, text: spec.text }
+    }
+    return [
+      nodeInputRule({ find: /<([A-Za-z][A-Za-z0-9_]*)>$/, type: this.type, getAttributes: toAttrs }),
+      nodeInputRule({ find: /(show[A-Za-z]+\(\))$/, type: this.type, getAttributes: toAttrs }),
+    ]
   },
 
   addStorage() {
