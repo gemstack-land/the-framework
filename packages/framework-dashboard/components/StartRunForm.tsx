@@ -44,6 +44,7 @@ export function StartRunForm({ projectId }: { projectId: string }) {
   const ecoPlanning = preferences.ecoPlanning ?? false
   const ecoResearch = preferences.ecoResearch ?? false
   const ecoMaintenance = preferences.ecoMaintenance ?? false
+  const postMergeQuality = preferences.postMergeQuality ?? false
 
   // Context selector (#439/#314): the agent can reach every registered repo, so ticking a
   // subset narrows its focus — the picked paths become one `Context:` line in the system
@@ -82,6 +83,7 @@ export function StartRunForm({ projectId }: { projectId: string }) {
       ...(technical ? { technical: true } : {}),
       ...(vanilla ? { vanilla: true } : {}),
       ...(eco && !vanilla && Object.keys(ecoOpts).length ? { eco: ecoOpts } : {}),
+      ...(postMergeQuality ? { postMerge: true } : {}),
       ...(context.size ? { context: [...context] } : {}),
     }
   }
@@ -164,6 +166,9 @@ export function StartRunForm({ projectId }: { projectId: string }) {
         </label>
         <label className={cn('flex items-center gap-1.5', ecoDisabled ? 'opacity-40' : 'cursor-pointer')} title="Trim the built-in system prompt to save tokens">
           <input type="checkbox" checked={eco && !ecoDisabled} onChange={e => updatePreferences({ eco: e.target.checked })} disabled={busy || ecoDisabled} /> Eco
+        </label>
+        <label className="flex cursor-pointer items-center gap-1.5" title="When the run signals it's ready for merge, run maintainability, readability, and security-audit passes">
+          <input type="checkbox" checked={postMergeQuality} onChange={e => updatePreferences({ postMergeQuality: e.target.checked })} disabled={busy} /> Post-merge cleanup
         </label>
       </div>
 

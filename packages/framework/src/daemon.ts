@@ -68,6 +68,7 @@ export function startOptionFlags(options: StartRunOptions): string[] {
   if (options.eco?.autoMaintenance) flags.push('--eco-auto-maintenance')
   for (const dir of options.context ?? []) if (typeof dir === 'string' && dir.trim()) flags.push('--context', dir)
   if (options.bootstrap) flags.push('--bootstrap')
+  if (options.postMerge) flags.push('--post-merge')
   return flags
 }
 

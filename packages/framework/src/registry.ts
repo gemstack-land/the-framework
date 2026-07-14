@@ -32,6 +32,8 @@ export interface Preferences {
   ecoPlanning?: boolean
   ecoResearch?: boolean
   ecoMaintenance?: boolean
+  /** Post-merge quality suite (#326): fire maintainability/readability/security-audit on setReadyForMerge(). */
+  postMergeQuality?: boolean
 }
 
 /**
@@ -141,6 +143,7 @@ const PREFERENCE_KEYS = [
   'ecoPlanning',
   'ecoResearch',
   'ecoMaintenance',
+  'postMergeQuality',
 ] as const
 
 /** Keep only the known boolean preference fields, so a hand-edited or browser-supplied

@@ -18,10 +18,13 @@ import {
   frameworkVersion,
   mergeRunConfig,
   parseArgs,
+  promptRunArgs,
   resolveDomainPreset,
   runCli,
   runLogEntry,
   runLogKind,
+  runPostMergeSuite,
+  POST_MERGE_PASSES,
   workspaceSummary,
   type CliIO,
 } from './cli.js'
@@ -59,6 +62,41 @@ test('parseArgs collects repeatable --context directories (#439)', () => {
 test('parseArgs reads --bootstrap (#297/#448)', () => {
   assert.equal(parseArgs(['x']).bootstrap, false)
   assert.equal(parseArgs(['--bootstrap', 'x']).bootstrap, true)
+})
+
+test('parseArgs reads --post-merge (#326)', () => {
+  assert.equal(parseArgs(['x']).postMerge, false)
+  assert.equal(parseArgs(['--post-merge', 'x']).postMerge, true)
+})
+
+test('promptRunArgs runs a headless prompt and carries NO --post-merge (recursion guard, #326)', () => {
+  const args = promptRunArgs('audit this', '/work/app', '/bin/framework', 3)
+  assert.deepEqual(args, ['/bin/framework', 'prompt', 'audit this', '--no-dashboard', '--cwd', '/work/app', '--max-cost', '3'])
+  // The guard: a quality pass must not trigger its own post-merge suite.
+  assert.equal(args.includes('--post-merge'), false)
+  // maxCost is optional.
+  assert.equal(promptRunArgs('x', '/w', '/bin/f').includes('--max-cost'), false)
+})
+
+test('runPostMergeSuite runs maintainability -> readability -> security-audit in order, best-effort (#326)', async () => {
+  const { io, out } = capture()
+  const seen: string[] = []
+  // Middle pass "fails" (resolves false): the suite must continue past it.
+  const run = (prompt: string) => {
+    seen.push(prompt)
+    return Promise.resolve(!/humans to read/.test(prompt)) // the readability pass "fails"
+  }
+  await runPostMergeSuite('/work/app', '/bin/framework', io, undefined, run)
+  assert.equal(seen.length, 3)
+  assert.match(seen[0]!, /maintainable/)
+  assert.match(seen[1]!, /easy as possible for humans to read/)
+  assert.match(seen[2]!, /^Security audit/)
+  assert.deepEqual(
+    POST_MERGE_PASSES.map(p => p.label),
+    ['maintainability', 'readability', 'security-audit'],
+  )
+  // The failed middle pass is reported, and the last pass still ran.
+  assert.ok(out.some(l => /readability did not complete/.test(l)))
 })
 
 test('parseArgs reads the maintain subcommand + its bounds (#298)', () => {

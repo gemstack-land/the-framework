@@ -77,6 +77,8 @@ export interface StartRunOptions {
   context?: string[]
   /** Bootstrap mode (#297/#448): a new project from an empty dir; maps to `--bootstrap`. */
   bootstrap?: boolean
+  /** Post-merge quality suite (#326): on setReadyForMerge(), fire maintainability/readability/security-audit; maps to `--post-merge`. */
+  postMerge?: boolean
 }
 
 /**
