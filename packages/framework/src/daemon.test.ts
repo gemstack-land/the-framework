@@ -57,6 +57,8 @@ test('startOptionFlags maps only enabled Global options to CLI flags (#314)', ()
   ])
   // Bootstrap mode (#297/#448): maps to --bootstrap.
   assert.deepEqual(startOptionFlags({ bootstrap: true }), ['--bootstrap'])
+  // Post-merge quality suite (#326): maps to --post-merge.
+  assert.deepEqual(startOptionFlags({ postMerge: true }), ['--post-merge'])
 })
 
 const logEvent = (message: string): FrameworkEvent => ({ kind: 'log', message })

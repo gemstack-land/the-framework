@@ -196,7 +196,7 @@ export {
   type VersionFetcher,
   type UpdateStatus,
 } from './update-check.js'
-export { runCli, parseArgs, buildDeployTarget, workspaceSummary, autoSelectPreset, type CliIO, type CliOptions } from './cli.js'
+export { runCli, parseArgs, buildDeployTarget, workspaceSummary, autoSelectPreset, runPostMergeSuite, promptRunArgs, POST_MERGE_PASSES, type PromptRunner, type CliIO, type CliOptions } from './cli.js'
 export {
   metaSelect,
   metaSelectPrompt,

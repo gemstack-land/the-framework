@@ -55,6 +55,8 @@ import {
   type RepoReview,
 } from './maintenance.js'
 import { renderMaintainabilityPrompt } from './maintainability-preset.js'
+import { renderReadabilityPrompt } from './readability-preset.js'
+import { renderSecurityAuditPrompt } from './security-audit-preset.js'
 import { runPrompt } from './prompt-run.js'
 import { renderResearchPrompt } from './research-preset.js'
 
@@ -155,6 +157,9 @@ Options:
   --bootstrap            Bootstrap mode: a brand-new project from an empty dir. Makes
                          the first turn stop for a plan (interpretations / PLAN) before
                          writing any code, instead of charging ahead.
+  --post-merge           When the run signals setReadyForMerge(), fire the post-merge
+                         quality suite: maintainability, readability, and security-audit
+                         prompts, one after another (#326).
   --kind <name>          Build event kind the preset's review loop fires for, e.g.
                          bug-fix or major-change (default: the-framework.yml's event,
                          else the preset's own, else major-change). Selects which
@@ -230,6 +235,8 @@ export interface CliOptions {
   context: string[]
   /** `--bootstrap`: bootstrap mode (#297/#448) — a new project from an empty dir; stop for a plan first. */
   bootstrap: boolean
+  /** `--post-merge`: fire the #326 post-merge quality suite (maintainability/readability/security-audit) when the run signals setReadyForMerge(). */
+  postMerge: boolean
   buildEvent?: string | undefined
   maxPasses?: number
   maxCost?: number
@@ -291,6 +298,7 @@ export function parseArgs(argv: string[]): CliOptions {
     eco: { autoPlanning: false, autoResearch: false, autoMaintenance: false },
     context: [],
     bootstrap: false,
+    postMerge: false,
     dashboard: true,
     relayServe: false,
     composeExtensions: false,
@@ -345,6 +353,9 @@ export function parseArgs(argv: string[]): CliOptions {
         break
       case '--bootstrap':
         opts.bootstrap = true
+        break
+      case '--post-merge':
+        opts.postMerge = true
         break
       case '--eco-auto-planning':
         opts.eco.autoPlanning = true
@@ -917,6 +928,9 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
   // set by a user interrupt or a budget cap (#322). Trusted over which signal
   // aborted, since a budget stop trips an internal signal the CLI never sees.
   let stoppedCleanly = false
+  // The agent signalled setReadyForMerge() this run (#326): with --post-merge on, fire the
+  // quality suite once the run settles (not mid-run — it would race the agent's own git work).
+  let sawReadyForMerge = false
   // Record the finished run in the project log `.the-framework/LOGS.md` (#379). The
   // kind + title are known up front; the session id/link arrive mid-run, and the
   // `end` event (fired once by both run paths) closes the entry. Best-effort: the
@@ -931,6 +945,7 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
       logSessionId = event.sessionId
       if (event.sessionLink) logSessionLink = event.sessionLink
     }
+    if (event.kind === 'ready-for-merge') sawReadyForMerge = true
     if (event.kind === 'end') {
       if (event.stopped) stoppedCleanly = true
       const entry = runLogEntry({
@@ -946,6 +961,15 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
     io.out(formatFrameworkEvent(event))
     void store?.append(event)
     publisher?.publish(event)
+  }
+
+  // Fire the #326 post-merge quality suite once a --post-merge run has settled and the agent
+  // signalled setReadyForMerge(). Skipped for a fake/offline run and when the run was stopped.
+  const maybeFirePostMerge = async (): Promise<void> => {
+    if (!opts.postMerge || !sawReadyForMerge || stoppedCleanly || fake) return
+    const binPath = process.argv[1]
+    if (!binPath) return
+    await runPostMergeSuite(cwd, binPath, io, opts.maxCost)
   }
 
   // AI meta-select: with no preset chosen explicitly, infer the best fit (+ modes +
@@ -1032,6 +1056,7 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
           : '\n✓ research done: see the REVIEW-PROBLEMS / TODO files it wrote.',
       )
       await store?.close()
+      await maybeFirePostMerge()
       if (dashboard) {
         io.out(`\nDashboard still live at ${dashboard.url}. Press Ctrl+C to exit.`)
         await waitForInterrupt()
@@ -1181,6 +1206,7 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
     // ledger is legible without the dashboard. Both best-effort.
     await store?.close()
     await writeDecisions(cwd, ledger, io)
+    await maybeFirePostMerge()
     // Stay up while the dashboard and/or the app are live, then tear both down.
     if (dashboard || preview) {
       if (dashboard) io.out(`\nDashboard still live at ${dashboard.url}. Press Ctrl+C to exit.`)
@@ -1366,18 +1392,72 @@ function describeReview(r: RepoReview): string {
  * Resolves true on a clean exit (0). Never re-execs a test entry (fork-bomb guard).
  */
 function spawnMaintenanceRun(review: RepoReview, binPath: string, maxCost?: number): Promise<boolean> {
+  // Scope the maintainability pass to the un-reviewed range so the agent knows what to look at.
+  const what = review.reviewedSha ? `the changes in ${short(review.reviewedSha)}..${short(review.headSha)}` : 'the recent changes'
+  return spawnPromptRun(renderMaintainabilityPrompt(what), review.path, binPath, maxCost)
+}
+
+/**
+ * Run one direct prompt by spawning `framework prompt "<prompt>" --cwd <dir> --no-dashboard`,
+ * reusing the whole run path (preflight, driver, budget cap, LOGS.md). The child inherits
+ * stdio so its run streams to the terminal. Note it carries no `--post-merge`, so a quality
+ * pass never triggers its own post-merge suite (the recursion guard). Resolves true on a
+ * clean exit (0). Never re-execs a test entry (fork-bomb guard).
+ */
+/**
+ * The argv a spawned `framework prompt` child runs with. Pure so a test can assert it:
+ * note it carries **no** `--post-merge`, which is the post-merge recursion guard (a quality
+ * pass must not trigger its own suite).
+ */
+export function promptRunArgs(prompt: string, cwd: string, binPath: string, maxCost?: number): string[] {
+  const args = [binPath, 'prompt', prompt, '--no-dashboard', '--cwd', cwd]
+  if (maxCost !== undefined) args.push('--max-cost', String(maxCost))
+  return args
+}
+
+function spawnPromptRun(prompt: string, cwd: string, binPath: string, maxCost?: number): Promise<boolean> {
   if (process.env.NODE_TEST_CONTEXT || /\.test\.[cm]?[jt]s$/.test(binPath)) {
     return Promise.resolve(false) // refuse to spawn from a test entry
   }
-  // Scope the maintainability pass to the un-reviewed range so the agent knows what to look at.
-  const what = review.reviewedSha ? `the changes in ${short(review.reviewedSha)}..${short(review.headSha)}` : 'the recent changes'
-  const args = [binPath, 'prompt', renderMaintainabilityPrompt(what), '--no-dashboard', '--cwd', review.path]
-  if (maxCost !== undefined) args.push('--max-cost', String(maxCost))
+  const args = promptRunArgs(prompt, cwd, binPath, maxCost)
   return new Promise<boolean>(resolvePromise => {
     const child = spawn(process.execPath, args, { stdio: 'inherit' })
     child.once('error', () => resolvePromise(false))
     child.once('exit', code => resolvePromise(code === 0))
   })
+}
+
+/** How the suite spawns one pass; injectable so tests observe order without spawning. */
+export type PromptRunner = (prompt: string, cwd: string, binPath: string, maxCost?: number) => Promise<boolean>
+
+/** The post-merge quality passes (#326), in the order they run. */
+export const POST_MERGE_PASSES: readonly { label: string; render: () => string }[] = [
+  { label: 'maintainability', render: () => renderMaintainabilityPrompt() },
+  { label: 'readability', render: () => renderReadabilityPrompt() },
+  { label: 'security-audit', render: () => renderSecurityAuditPrompt() },
+]
+
+/**
+ * Fire the #326 post-merge quality suite after a run signalled setReadyForMerge(): the
+ * maintainability, readability, and security-audit prompts, each a `framework prompt` child
+ * on the same workspace. Runs them **one after another** (not in parallel): the three passes
+ * edit and commit the same git tree, so concurrent writers would race on the index lock —
+ * sequential is the safe MVP (worktree-isolated parallelism is a follow-up). Best-effort:
+ * a failed pass is logged and the suite continues.
+ */
+export async function runPostMergeSuite(
+  cwd: string,
+  binPath: string,
+  io: CliIO,
+  maxCost?: number,
+  run: PromptRunner = spawnPromptRun,
+): Promise<void> {
+  io.out(`\n◆ post-merge quality suite: ${POST_MERGE_PASSES.map(p => p.label).join(' → ')}`)
+  for (const pass of POST_MERGE_PASSES) {
+    io.out(`\n◆ post-merge: ${pass.label}`)
+    const ok = await run(pass.render(), cwd, binPath, maxCost)
+    if (!ok) io.out(`  ! post-merge ${pass.label} did not complete cleanly; continuing.`)
+  }
 }
 
 async function runRelayServer(opts: CliOptions, io: CliIO): Promise<number> {
