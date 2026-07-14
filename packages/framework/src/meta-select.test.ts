@@ -92,6 +92,15 @@ test('metaSelectPrompt names the task, the workspace, and every preset', () => {
   assert.match(prompt, /data-science/)
 })
 
+test('metaSelectPrompt tells the router to pick none for a vague / goalless task (#502)', () => {
+  const prompt = metaSelectPrompt('clean this up', CATALOG(), 'a TypeScript repo')
+  // The narrowing that cut the over-fire on unclear-goal prompts: it must not guess a
+  // preset from the workspace when the task itself has no concrete goal.
+  assert.match(prompt, /no concrete goal/)
+  assert.match(prompt, /do not guess/)
+  assert.match(prompt, /a preset from the workspace alone/)
+})
+
 test('metaSelect routes one prompt through the driver and parses the reply', async () => {
   const driver = new FakeDriver({
     turns: [{ text: '```json\n{ "preset": "web-development", "modes": ["technical"], "event": "major-change", "why": "a web feature" }\n```' }],
