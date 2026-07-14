@@ -1,47 +1,56 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import type { ProjectSummary } from '@gemstack/framework'
+import { LayoutDashboard } from 'lucide-react'
 import { onProjects, sendAddProject } from '../server/projects.telefunc.js'
-import { OverviewSection } from './OverviewSection.js'
-import { QueueSection } from './QueueSection.js'
 import { Button } from './ui/button.js'
 import { cn } from '../lib/utils.js'
 
 // The Projects sidebar (#406/#314). Loads the registry over a Telefunc RPC and lets the
 // user pick which project's live stream to watch, or add a new one (#396/#433) via the
 // daemon's own install + register. A registry that is empty (no project added yet) shows
-// the how-to hint rather than a blank rail.
+// the how-to hint rather than a blank rail. The cross-project rollup that used to live here
+// (Overview/Queue) moved to the Overview dashboard page (#471); this rail is just the nav to
+// it plus the project list, so it stays a simple switcher.
 export function ProjectsSidebar({
   selectedId,
   onSelect,
+  onDashboard,
 }: {
   selectedId: string | null
   onSelect: (id: string) => void
+  onDashboard: () => void
 }) {
   const [projects, setProjects] = useState<ProjectSummary[] | null>(null)
 
-  const reload = useCallback(
-    (autoSelect: boolean) => {
-      void onProjects().then(list => {
-        setProjects(list)
-        // Auto-select the first project when nothing is selected, or when the remembered
-        // selection (#475) points at a project that no longer exists.
-        const selectionExists = selectedId !== null && list.some(p => p.id === selectedId)
-        if (autoSelect && list[0] && !selectionExists) onSelect(list[0].id)
-      })
-    },
-    [selectedId, onSelect],
-  )
+  const reload = useCallback(() => {
+    void onProjects().then(list => {
+      setProjects(list)
+      // If the remembered selection (#475) points at a project that no longer exists, fall
+      // back to the Overview page rather than showing a stale/empty project.
+      if (selectedId !== null && !list.some(p => p.id === selectedId)) onDashboard()
+    })
+  }, [selectedId, onDashboard])
 
   useEffect(() => {
-    reload(true)
+    reload()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   return (
     <aside className="flex w-64 shrink-0 flex-col border-r border-border">
+      <nav className="border-b border-border p-2">
+        <button
+          type="button"
+          onClick={onDashboard}
+          className={cn(
+            'flex w-full items-center gap-2 rounded-md px-2 py-2 text-sm font-medium hover:bg-accent hover:text-accent-foreground',
+            selectedId === null && 'bg-accent text-accent-foreground',
+          )}
+        >
+          <LayoutDashboard className="h-4 w-4" /> Overview
+        </button>
+      </nav>
       <div className="min-h-0 flex-1 overflow-y-auto">
-        <OverviewSection selectedId={selectedId} onSelect={onSelect} />
-        <QueueSection selectedId={selectedId} onSelect={onSelect} />
         <div className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Projects</div>
         <div className="px-2">
           {projects === null && <p className="px-2 py-1 text-sm text-muted-foreground">Loading…</p>}
@@ -74,7 +83,7 @@ export function ProjectsSidebar({
           ))}
         </div>
       </div>
-      <AddProject onAdded={() => reload(true)} />
+      <AddProject onAdded={reload} />
     </aside>
   )
 }

@@ -3,6 +3,7 @@ import { readLogs, type LogEntry } from '../logs.js'
 import { readDocs, type WorkspaceDoc } from '../dashboard/docs.js'
 import { collectQueue, type ProjectQueue } from '../dashboard/queue.js'
 import { buildOverview, type Overview } from '../dashboard/overview.js'
+import { buildDashboard, type DashboardData } from '../dashboard/dashboard.js'
 import { contextProjects } from './context.js'
 import type { FrameworkEvent } from '../events.js'
 
@@ -66,4 +67,10 @@ export async function onQueue(): Promise<ProjectQueue[]> {
 export async function onOverview(): Promise<Overview> {
   const projects = await contextProjects().list().catch(() => [])
   return buildOverview(projects)
+}
+
+/** The Overview dashboard page (#471): the {@link onOverview} rollup plus run counts, run-status totals, and activity. */
+export async function onDashboard(): Promise<DashboardData> {
+  const projects = await contextProjects().list().catch(() => [])
+  return buildDashboard(projects)
 }

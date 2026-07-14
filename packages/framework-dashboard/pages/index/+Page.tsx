@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { ProjectsSidebar } from '../../components/ProjectsSidebar.js'
 import { RunHistory } from '../../components/RunHistory.js'
 import { ProjectHome } from '../../components/ProjectHome.js'
+import { DashboardPage } from '../../components/DashboardPage.js'
 import { RunLive } from '../../components/RunLive.js'
 import { RunReplay } from '../../components/RunReplay.js'
 import { RightRail } from '../../components/RightRail.js'
@@ -47,6 +48,14 @@ export default function Page() {
     if (typeof window !== 'undefined') window.localStorage.setItem(SELECTED_PROJECT_KEY, id)
   }
 
+  // The Overview dashboard (#471): no project selected. Forget the remembered project so a
+  // refresh lands back on the dashboard, not the last project.
+  const showDashboard = () => {
+    setProjectId(null)
+    setRunId(null)
+    if (typeof window !== 'undefined') window.localStorage.removeItem(SELECTED_PROJECT_KEY)
+  }
+
   // The live run feed is owned here so both the main view and the right rail's choice gates
   // (#440) read one shared Telefunc Channel. Hooks run before the relay early return below.
   const events = useLiveEvents(projectId)
@@ -60,14 +69,12 @@ export default function Page() {
   const relayRun = typeof window === 'undefined' ? null : new URLSearchParams(window.location.search).get('run')
   if (relayRun) return <RelayView runId={relayRun} />
 
-  // Route the main pane: home when nothing is selected; a running run gets its live output;
-  // a finished run replays. (One project streams one live feed today; per-run streams land
-  // with worktrees, #453.)
+  // Route the main pane: the Overview dashboard when no project is selected (#471); else the
+  // project home/launcher, a running run's live output, or a finished run's replay. (One
+  // project streams one live feed today; per-run streams land with worktrees, #453.)
   const selectedRun = runId ? runs.find(run => run.id === runId) : undefined
   const renderMain = () => {
-    if (!projectId) {
-      return <div className="grid flex-1 place-items-center text-sm text-muted-foreground">Select a project to start a run.</div>
-    }
+    if (!projectId) return <DashboardPage onSelectProject={selectProject} />
     if (runId === null) return <ProjectHome projectId={projectId} events={events} onRunStarted={onRunStarted} />
     if (selectedRun?.status === 'running') return <RunLive projectId={projectId} events={events} />
     return <RunReplay projectId={projectId} runId={runId} />
@@ -81,7 +88,7 @@ export default function Page() {
         <span className="ml-auto text-xs text-muted-foreground">Vike · React · shadcn · Telefunc</span>
       </header>
       <div className="flex min-h-0 flex-1">
-        <ProjectsSidebar selectedId={projectId} onSelect={selectProject} />
+        <ProjectsSidebar selectedId={projectId} onSelect={selectProject} onDashboard={showDashboard} />
         <RunHistory
           projectId={projectId}
           runs={runs}
