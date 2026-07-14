@@ -59,7 +59,7 @@ function applyTemplate(editor: Editor, text: string): void {
 }
 
 export const PromptEditor = forwardRef<PromptEditorHandle, PromptEditorProps>(function PromptEditor(
-  { onChange, onSubmit, onPreset, onMentionProject, projects, presets, disabled = false, placeholder = 'Describe what to build…  ( / for commands, @ for references )' },
+  { onChange, onSubmit, onPreset, onMentionProject, projects, presets, disabled = false, placeholder = 'Describe what to build…  ( / commands · < tags · @ projects )' },
   ref,
 ) {
   const [isEmpty, setIsEmpty] = useState(true)
@@ -120,35 +120,38 @@ export const PromptEditor = forwardRef<PromptEditorHandle, PromptEditorProps>(fu
           if (action) insertToken(ed, range, action)
         },
       }),
-      // `@` — references: the repeated macro tags + the registered projects.
+      // `<` — tags: the repeated macros, which all read as `<NAME>`. Typing `<` opens the
+      // menu; a non-matching character or a space closes it (the suggestion ends on a space,
+      // and the menu hides when nothing matches), so a stray `<` in prose is not a trap.
       makeTrigger({
-        char: '@',
-        key: 'at',
-        items: query => {
-          const macroItems: SuggestionItem[] = MACRO_TOKENS.filter(m => m.label.toLowerCase().includes(query)).map(m => ({
+        char: '<',
+        key: 'tag',
+        items: query =>
+          MACRO_TOKENS.filter(m => m.label.toLowerCase().includes(query)).map(m => ({
             id: `macro:${m.text}`,
             label: m.label,
             hint: m.hint,
             group: 'Tags',
-          }))
-          const projectItems: SuggestionItem[] = projectsRef.current
-            .filter(p => p.name.toLowerCase().includes(query))
-            .slice(0, 6)
-            .map(p => ({ id: `project:${p.id}`, label: `@${p.name}`, hint: 'project', group: 'Projects' }))
-          return [...macroItems, ...projectItems]
-        },
+          })),
         onSelect: (item, { editor: ed, range }) => {
-          if (item.id.startsWith('macro:')) {
-            const macro = MACRO_TOKENS.find(m => `macro:${m.text}` === item.id)
-            if (macro) insertToken(ed, range, macro)
-            return
-          }
-          if (item.id.startsWith('project:')) {
-            const project = projectsRef.current.find(p => `project:${p.id}` === item.id)
-            if (project) {
-              insertToken(ed, range, { kind: 'project', label: `@${project.name}`, text: `@${project.name}` })
-              onMentionRef.current?.(project.path)
-            }
+          const macro = MACRO_TOKENS.find(m => `macro:${m.text}` === item.id)
+          if (macro) insertToken(ed, range, macro)
+        },
+      }),
+      // `@` — references: the registered projects. A mention also focuses the run on that repo.
+      makeTrigger({
+        char: '@',
+        key: 'at',
+        items: query =>
+          projectsRef.current
+            .filter(p => p.name.toLowerCase().includes(query))
+            .slice(0, 8)
+            .map(p => ({ id: `project:${p.id}`, label: `@${p.name}`, hint: 'project', group: 'Projects' })),
+        onSelect: (item, { editor: ed, range }) => {
+          const project = projectsRef.current.find(p => `project:${p.id}` === item.id)
+          if (project) {
+            insertToken(ed, range, { kind: 'project', label: `@${project.name}`, text: `@${project.name}` })
+            onMentionRef.current?.(project.path)
           }
         },
       }),

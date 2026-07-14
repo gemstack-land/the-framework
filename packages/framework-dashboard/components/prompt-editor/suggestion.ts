@@ -49,6 +49,9 @@ function makeRender() {
   let getRect: (() => DOMRect | null) | null = null
 
   const draw = (items: SuggestionItem[], command: (item: SuggestionItem) => void): void => {
+    // Close the menu when nothing matches, so a `<`/`@`/`/` with no hit (or a stray `<` in
+    // prose) is not a trap. The plugin stays active — it reappears if a later key matches.
+    if (el) el.style.display = items.length === 0 ? 'none' : ''
     root?.render(
       createElement(SuggestionList, {
         items,
