@@ -10,6 +10,8 @@ The harness runs a hand-labeled corpus (`src/meta-select-bench.ts`, `META_SELECT
 - **over-fire** — picked a preset when `none` (plain flow) was the right answer. This is the "it boxes the AI" failure Rom is worried about.
 - **miss / misroute** — fell back to `none` when a preset fit, or picked the wrong preset.
 
+The corpus has two bands: clear-cut cases (does it do the easy thing) and an **adversarial** band that actually stresses the doubt — vague / unclear-goal intents where `none` is right (so over-fire shows), trap-`none` intents dressed in domain keywords, genuinely cross-domain intents (scored against a set of defensible picks via `alsoAcceptable`), and mismatched intent-vs-workspace signals.
+
 The scoring is pure and unit-tested (`src/meta-select-bench.test.ts`); this runner just drives a live model.
 
 ### Run it

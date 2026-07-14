@@ -7,6 +7,7 @@ import {
   META_SELECT_BENCH_CASES,
   NONE,
   formatMetaSelectBenchReport,
+  isAcceptablePick,
   runMetaSelectBench,
   scoreMetaSelectBench,
   type MetaSelectBenchCase,
@@ -91,17 +92,46 @@ test('runMetaSelectBench records a misroute when the router picks the wrong pres
   assert.equal(report.results[0]!.picked, 'software-development')
 })
 
-test('the shipped corpus is well-formed: unique intents, and every label is a real preset or none', () => {
+test('isAcceptablePick: the expected label or a listed alternate counts; anything else does not', () => {
+  const c: MetaSelectBenchCase = { intent: 'i', workspace: 'w', expected: 'web-development', alsoAcceptable: ['data-science'], why: '' }
+  assert.equal(isAcceptablePick(c, 'web-development'), true)
+  assert.equal(isAcceptablePick(c, 'data-science'), true) // defensible alternate
+  assert.equal(isAcceptablePick(c, 'software-development'), false) // a real misroute
+  assert.equal(isAcceptablePick(c, NONE), false)
+})
+
+test('scoreMetaSelectBench: a defensible alternate is correct, not a misroute', () => {
+  const crossDomain: MetaSelectBenchResult = {
+    case: { intent: 'i', workspace: 'w', expected: 'web-development', alsoAcceptable: ['data-science'], why: '' },
+    selection: { preset: 'data-science', modes: [] },
+    picked: 'data-science',
+    correct: isAcceptablePick({ intent: 'i', workspace: 'w', expected: 'web-development', alsoAcceptable: ['data-science'], why: '' }, 'data-science'),
+  }
+  const report = scoreMetaSelectBench([crossDomain])
+  assert.equal(report.correct, 1)
+  assert.equal(report.misroute, 0)
+  // The report still shows it diverged from the primary label, transparently.
+  assert.match(formatMetaSelectBenchReport(report), /defensible alternates taken/)
+  assert.match(formatMetaSelectBenchReport(report), /\[web-development ~ data-science\]/)
+})
+
+test('the shipped corpus is well-formed: unique intents, real labels, valid alternates, and both bands present', () => {
   const validExpected = new Set([...CATALOG.map(p => p.name), 'data-science', 'biological-science', 'product-management', NONE])
+  const realPresets = new Set([...validExpected].filter(n => n !== NONE))
   const intents = new Set<string>()
   for (const c of META_SELECT_BENCH_CASES) {
     assert.ok(c.intent.trim() && c.workspace.trim() && c.why.trim(), `case missing fields: ${c.intent}`)
     assert.ok(!intents.has(c.intent), `duplicate intent: ${c.intent}`)
     intents.add(c.intent)
     assert.ok(validExpected.has(c.expected), `unknown expected label: ${c.expected}`)
+    for (const alt of c.alsoAcceptable ?? []) {
+      assert.ok(realPresets.has(alt), `unknown alternate: ${alt}`)
+      assert.notEqual(alt, c.expected, `alternate duplicates expected: ${c.intent}`)
+    }
   }
-  // It actually covers the contested 'none' band, not just happy presets.
+  // Both bands are present: the contested 'none' band and genuinely cross-domain cases.
   assert.ok(META_SELECT_BENCH_CASES.some(c => c.expected === NONE), 'corpus should include none cases')
+  assert.ok(META_SELECT_BENCH_CASES.some(c => (c.alsoAcceptable?.length ?? 0) > 0), 'corpus should include cross-domain cases')
 })
 
 test('formatMetaSelectBenchReport surfaces the headline number and each wrong pick', () => {

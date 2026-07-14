@@ -28,8 +28,21 @@ export interface MetaSelectBenchCase {
   workspace: string
   /** The preset name a human would pick, or {@link NONE} for the plain flow. */
   expected: string
+  /**
+   * Other picks that are also defensible for a genuinely cross-domain case (e.g. a chart of
+   * a model's output is arguably web *or* data-science). A pick in here counts as correct,
+   * so the harness tests "did it pick a defensible policy", not "did it match my one guess".
+   * Leave empty for the strict cases — the vague and trap-`none` cases have no alternate,
+   * so an off-target pick there is exactly the over-fire / misroute we want to catch.
+   */
+  alsoAcceptable?: readonly string[]
   /** Why that label — so a reviewer can contest it (the `none` calls especially). */
   why: string
+}
+
+/** True when `picked` is the case's expected label or one of its accepted alternates. */
+export function isAcceptablePick(benchCase: MetaSelectBenchCase, picked: string): boolean {
+  return picked === benchCase.expected || (benchCase.alsoAcceptable?.includes(picked) ?? false)
 }
 
 /** The outcome of running one case through {@link metaSelect}. */
@@ -89,7 +102,7 @@ export function scoreMetaSelectBench(results: readonly MetaSelectBenchResult[]):
     } else {
       missOf++
       if (r.picked === NONE) miss++
-      else if (r.picked !== exp) misroute++
+      else if (!isAcceptablePick(r.case, r.picked)) misroute++ // an accepted alternate is not a misroute
     }
   }
   const total = results.length
@@ -143,7 +156,7 @@ export async function runMetaSelectBench(opts: RunMetaSelectBenchOptions): Promi
         ...(opts.signal ? { signal: opts.signal } : {}),
       })
       const picked = pickedName(selection)
-      const result: MetaSelectBenchResult = { case: benchCase, selection, picked, correct: picked === benchCase.expected }
+      const result: MetaSelectBenchResult = { case: benchCase, selection, picked, correct: isAcceptablePick(benchCase, picked) }
       results.push(result)
       opts.onResult?.(result, index)
     } finally {
@@ -171,14 +184,31 @@ export function formatMetaSelectBenchReport(report: MetaSelectBenchReport): stri
   for (const r of wrong) {
     lines.push(`    [${r.case.expected} -> ${r.picked}] ${r.case.intent}`)
   }
+  // Correct picks that took a defensible alternate rather than the primary label: not a
+  // failure, but worth seeing on the cross-domain cases where the router had a real choice.
+  const alternates = report.results.filter(r => r.correct && r.picked !== r.case.expected)
+  if (alternates.length) {
+    lines.push('  defensible alternates taken:')
+    for (const r of alternates) {
+      lines.push(`    [${r.case.expected} ~ ${r.picked}] ${r.case.intent}`)
+    }
+  }
   return lines.join('\n')
 }
 
 /**
- * The labeled corpus. Small and hand-picked to cover each shipped preset, plus the
- * contested `none` band (a plain question; a trivial one-liner where a full domain review
- * loop is overkill). Labels are defensible, not gospel — the `why` is there to be argued
- * with. Grow it as real runs surface routing the model gets wrong.
+ * The labeled corpus. Two bands:
+ *
+ * 1. Clear-cut cases: one intent that obviously maps to one preset (or obviously to
+ *    `none`). These check the router does the easy thing.
+ * 2. Adversarial cases (#502 follow-up): the ones that actually stress Rom's doubt —
+ *    *vague / unclear-goal* intents where `none` is the honest answer (this is where
+ *    over-fire shows), *trap `none`* intents dressed in domain keywords, genuinely
+ *    *cross-domain* intents (scored with {@link MetaSelectBenchCase.alsoAcceptable}), and
+ *    *mismatched* intent-vs-workspace signals.
+ *
+ * Labels are defensible, not gospel — the `why` is there to be argued with. Grow it as
+ * real runs surface routing the model gets wrong.
  */
 export const META_SELECT_BENCH_CASES: readonly MetaSelectBenchCase[] = [
   // web-development
@@ -264,5 +294,81 @@ export const META_SELECT_BENCH_CASES: readonly MetaSelectBenchCase[] = [
     workspace: 'a small TypeScript utility library',
     expected: NONE,
     why: 'a trivial text edit; a full domain review loop adds nothing here',
+  },
+
+  // --- adversarial band (#502): the cases that actually test the doubt ---
+
+  // vague / unclear-goal: no actionable goal, so 'none' (plain flow) is right. A preset
+  // pick here is over-fire — the exact "generic step boxes the AI" failure Rom flagged.
+  {
+    intent: 'clean this up',
+    workspace: 'a mixed TypeScript repo',
+    expected: NONE,
+    why: 'no concrete goal or scope; there is nothing for a domain loop to key on',
+  },
+  {
+    intent: 'make it better',
+    workspace: 'a small web project',
+    expected: NONE,
+    why: 'no stated objective — a preset would be guessing at intent',
+  },
+  {
+    intent: 'can you take a look',
+    workspace: 'a backend service',
+    expected: NONE,
+    why: 'an open-ended ask with no task; the plain flow should handle it',
+  },
+
+  // trap 'none': trivial work wearing domain keywords. The keyword must not pull a preset.
+  {
+    intent: "Bump the version in the bioinformatics pipeline's README to 2.0",
+    workspace: 'a Snakemake genomics repo',
+    expected: NONE,
+    why: 'a one-line doc edit; "bioinformatics/genomics" should not trigger biological-science',
+  },
+  {
+    intent: "Fix the typo in the data pipeline's log message",
+    workspace: 'a pandas ETL project',
+    expected: NONE,
+    why: 'a cosmetic string fix; "data pipeline" should not trigger data-science',
+  },
+
+  // genuinely cross-domain: two defensible policies. Scored with alsoAcceptable, so the
+  // test is "did it pick a defensible one", not "did it match my single guess".
+  {
+    intent: "Add an accessible bar chart of the churn model's predictions to the dashboard",
+    workspace: 'a Next.js app that reads a trained model',
+    expected: 'web-development',
+    alsoAcceptable: ['data-science'],
+    why: 'the concrete change is accessible UI (web), but it visualizes a model (data) — either is fair',
+  },
+  {
+    intent: 'Add input validation and helpful error messages to the CSV upload form',
+    workspace: 'a Vike app with a data-import feature',
+    expected: 'web-development',
+    alsoAcceptable: ['data-science'],
+    why: 'form UX is a web concern; validating incoming data is a data concern',
+  },
+  {
+    intent: 'Write tests for the statistics module and fix the off-by-one in the p-value calc',
+    workspace: 'a genomics analysis repo',
+    expected: 'biological-science',
+    alsoAcceptable: ['software-development', 'data-science'],
+    why: 'statistical correctness in a bio context, but also plain tests + a bug fix',
+  },
+  {
+    intent: 'Define success metrics and add the analytics events to track signups',
+    workspace: 'a Next.js SaaS app',
+    expected: 'product-management',
+    alsoAcceptable: ['web-development'],
+    why: 'success metrics are a product concern; wiring the events is a web change',
+  },
+
+  // mismatched signals: a strong intent against a contradictory workspace line. Intent wins.
+  {
+    intent: 'Add k-fold cross-validation to the model training script',
+    workspace: 'a product management docs repo',
+    expected: 'data-science',
+    why: 'the intent is unmistakably data-science; the workspace label should not override it',
   },
 ]
