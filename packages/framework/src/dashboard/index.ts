@@ -1,4 +1,4 @@
-export { startDashboard, isSameOriginRequest, type Dashboard, type DashboardOptions, type StartRunKind, type StartRunOptions, type StartRunResult, type AddProjectResult } from './server.js'
+export { startDashboard, isSameOriginRequest, type Dashboard, type DashboardOptions, type StartRunKind, type StartRunOptions, type StartRunResult, type AddProjectResult, type PreviewResult, type PreviewStatus } from './server.js'
 export {
   summarizeProject,
   defaultProjectsProvider,

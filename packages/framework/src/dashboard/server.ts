@@ -38,6 +38,18 @@ export interface DashboardOptions {
    */
   onAddProject?: (path: string, directory: boolean) => Promise<AddProjectResult> | AddProjectResult
   /**
+   * Called when the browser opens a project's Preview (#475): serve its built result on
+   * demand (dev script, else a static server) and return the URL. Idempotent per project —
+   * calling it while a preview is up returns the running one. Omit to disable Preview (the
+   * per-run dashboard and the relay never serve one). {@link onStopPreview} tears it down and
+   * {@link onPreviewStatus} rehydrates the button after a reload.
+   */
+  onPreview?: (projectId?: string) => PreviewResult | Promise<PreviewResult>
+  /** Called when the browser stops a project's Preview (#475). No-op when none is running. */
+  onStopPreview?: (projectId?: string) => void | Promise<void>
+  /** Called on load to reflect whether a project's Preview is already running (#475). */
+  onPreviewStatus?: (projectId?: string) => PreviewStatus | Promise<PreviewStatus>
+  /**
    * The user-preferences store (#410): the `onPreferences` / `savePreferences` telefunctions
    * read/write it through the request context. Defaults to the real registry file (the daemon
    * and per-run foreground dashboard both want it); the public relay serves its own mount and
@@ -97,6 +109,18 @@ export type StartRunResult =
   | { ok: true }
   | { ok: false; busy?: boolean; error: string }
 
+/** The outcome of an {@link DashboardOptions.onPreview} attempt (#475): the live URL, or why not. */
+export type PreviewResult =
+  | { ok: true; url: string; command: string }
+  | { ok: false; error: string }
+
+/** Whether a project's Preview is running, and where (#475). */
+export interface PreviewStatus {
+  running: boolean
+  url?: string
+  command?: string
+}
+
 /** A running localhost dashboard: the prerendered SPA + its Telefunc mount. */
 export interface Dashboard {
   /** The URL to open. */
@@ -121,8 +145,13 @@ export function startDashboard(opts: DashboardOptions = {}): Promise<Dashboard> 
   // `projects` is passed raw (may be undefined) so the mount falls back to the global
   // registry, byte-identical to the daemon default; the per-run dashboard passes a
   // single-project provider, the relay an empty one.
+  // Bundle the three Preview callbacks (#475) into one context handler set, present only
+  // when the host wired a Preview (the daemon does; the relay/per-run dashboard do not).
+  const preview = opts.onPreview
+    ? { start: opts.onPreview, stop: opts.onStopPreview ?? (() => {}), status: opts.onPreviewStatus ?? (() => ({ running: false })) }
+    : undefined
   const telefuncMount = clientBundleDir
-    ? makeTelefuncMount(opts.onStart, opts.projects, undefined, opts.onAddProject, opts.preferences ?? registryPreferencesStore())
+    ? makeTelefuncMount(opts.onStart, opts.projects, undefined, opts.onAddProject, opts.preferences ?? registryPreferencesStore(), preview)
     : undefined
 
   const server = createServer((req, res) => {

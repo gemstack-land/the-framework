@@ -2,7 +2,7 @@ import { getContext } from 'telefunc'
 import { appendControl } from '../control.js'
 import { contextProjects } from './context.js'
 import type { ChoiceBy } from '../events.js'
-import type { StartRunKind, StartRunOptions, StartRunResult } from '../dashboard/server.js'
+import type { PreviewResult, PreviewStatus, StartRunKind, StartRunOptions, StartRunResult } from '../dashboard/server.js'
 import type { DashboardContext } from '../dashboard/telefunc-serve.js'
 
 // The write side behind the new dashboard (#405): steering a live run. The reverse of
@@ -58,4 +58,29 @@ export async function sendStart(
   const text = prompt.trim()
   if (!text && kind !== 'research') return { ok: false, error: 'a non-empty prompt is required' }
   return startRun(text, kind, options, projectId)
+}
+
+/**
+ * Open a project's Preview (#475): serve its built result on demand and return the live URL.
+ * The daemon provides the Preview handlers on the request context, so this runs in-process
+ * (like `sendStart`). Idempotent — opening while a preview is up returns the running one.
+ * Returns an error result when Preview is not enabled on this host (the relay/per-run view).
+ */
+export async function sendPreview(projectId: string): Promise<PreviewResult> {
+  const { preview } = getContext<DashboardContext>()
+  if (!preview) return { ok: false, error: 'preview is not enabled on this server' }
+  return preview.start(projectId)
+}
+
+/** Stop a project's Preview (#475). A no-op when none is running, or Preview is not enabled. */
+export async function sendStopPreview(projectId: string): Promise<void> {
+  const { preview } = getContext<DashboardContext>()
+  if (preview) await preview.stop(projectId)
+}
+
+/** Report whether a project's Preview is already running (#475), so a reload rehydrates the button. */
+export async function onPreviewStatus(projectId: string): Promise<PreviewStatus> {
+  const { preview } = getContext<DashboardContext>()
+  if (!preview) return { running: false }
+  return preview.status(projectId)
 }

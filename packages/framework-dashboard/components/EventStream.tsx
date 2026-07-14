@@ -3,6 +3,7 @@ import { sendStop } from '../server/control.telefunc.js'
 import { isRunActive } from '../lib/live-state.js'
 import { EventList } from './EventList.js'
 import { StartRunForm } from './StartRunForm.js'
+import { PreviewBar } from './PreviewBar.js'
 import { RunOverview } from './RunOverview.js'
 import { Button } from './ui/button.js'
 
@@ -41,6 +42,7 @@ export function EventStream({
   const active = isRunActive(events)
   return (
     <>
+      <PreviewBar projectId={projectId} />
       {active ? (
         <div className="flex items-center justify-end border-b border-border px-4 py-2">
           <Button variant="outline" size="sm" onClick={() => void sendStop(projectId)}>

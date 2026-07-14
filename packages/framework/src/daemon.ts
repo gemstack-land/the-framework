@@ -3,7 +3,8 @@ import { mkdir, readFile, writeFile, rm, stat } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
 import type { FrameworkEvent } from './events.js'
 import { FRAMEWORK_DIR } from './store/index.js'
-import { startDashboard, type Dashboard, type StartRunKind, type StartRunOptions, type StartRunResult, type AddProjectResult } from './dashboard/index.js'
+import { startDashboard, type Dashboard, type StartRunKind, type StartRunOptions, type StartRunResult, type AddProjectResult, type PreviewResult, type PreviewStatus } from './dashboard/index.js'
+import { startPreview, type PreviewHandle } from './preview.js'
 import { resolveDashboardBundle } from './dashboard/bundle.js'
 import { isActivated } from './project.js'
 import { addProject, listProjects, projectId } from './registry.js'
@@ -351,16 +352,56 @@ export async function runDaemon(cwd: string, opts: RunDaemonOptions = {}): Promi
     return { ok: true, added, alreadyActivated }
   }
 
+  // On-demand app preview (#475): one long-lived preview process per project, kept in the
+  // daemon so it outlives the request that opened it and the Stop that closes it. Opening is
+  // idempotent (a live preview is returned as-is); the browser polls `previewStatus` on load
+  // to rehydrate the button after a reload.
+  const activePreviews = new Map<string, PreviewHandle>()
+  const openPreview = async (targetProjectId?: string): Promise<PreviewResult> => {
+    const key = targetProjectId ?? homeId
+    const existing = activePreviews.get(key)
+    if (existing) return { ok: true, url: existing.url, command: existing.command }
+    const projectCwd = await resolveProject(targetProjectId)
+    if (!projectCwd) return { ok: false, error: `unknown project: ${targetProjectId}` }
+    try {
+      const handle = await startPreview({ cwd: projectCwd })
+      // A racing second open won the slot while we were booting: keep theirs, drop ours.
+      const raced = activePreviews.get(key)
+      if (raced) {
+        await handle.stop().catch(() => {})
+        return { ok: true, url: raced.url, command: raced.command }
+      }
+      activePreviews.set(key, handle)
+      return { ok: true, url: handle.url, command: handle.command }
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : String(err) }
+    }
+  }
+  const closePreview = async (targetProjectId?: string): Promise<void> => {
+    const key = targetProjectId ?? homeId
+    const handle = activePreviews.get(key)
+    if (!handle) return
+    activePreviews.delete(key)
+    await handle.stop().catch(() => {})
+  }
+  const previewStatus = (targetProjectId?: string): PreviewStatus => {
+    const handle = activePreviews.get(targetProjectId ?? homeId)
+    return handle ? { running: true, url: handle.url, command: handle.command } : { running: false }
+  }
+
   // The daemon serves the prerendered Vike + Telefunc dashboard (#405/#426): the SPA reads
   // each project's `.the-framework/events.jsonl` over a Telefunc Channel and steers over
   // control.jsonl, so there is no in-process event stream to feed here. `sendStart` /
-  // `sendAddProject` reach the closures above through the Telefunc request context. A
-  // missing bundle (a broken install) surfaces as a 503 from the server.
+  // `sendAddProject` / the Preview RPCs reach the closures above through the Telefunc request
+  // context. A missing bundle (a broken install) surfaces as a 503 from the server.
   const clientBundleDir = await resolveDashboardBundle()
   const dashboard: Dashboard = await startDashboard({
     port,
     onStart: startRun,
     onAddProject: addProjects,
+    onPreview: openPreview,
+    onStopPreview: closePreview,
+    onPreviewStatus: previewStatus,
     ...(clientBundleDir ? { clientBundleDir } : {}),
   })
 
@@ -380,6 +421,9 @@ export async function runDaemon(cwd: string, opts: RunDaemonOptions = {}): Promi
 
   await waitForShutdown(opts.signal)
 
+  // Tear down any live previews (#475) so their dev servers do not outlive the daemon.
+  await Promise.all([...activePreviews.values()].map(p => p.stop().catch(() => {})))
+  activePreviews.clear()
   await dashboard.close()
   await rm(daemonStatePath(env), { force: true }).catch(() => {})
 }
