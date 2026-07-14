@@ -357,6 +357,16 @@ export async function runDaemon(cwd: string, opts: RunDaemonOptions = {}): Promi
   // idempotent (a live preview is returned as-is); the browser polls `previewStatus` on load
   // to rehydrate the button after a reload.
   const activePreviews = new Map<string, PreviewHandle>()
+  // Track a preview under its key and evict it the moment it stops serving (stop, or a
+  // self-exit: crash / build error / the user killing it). Without this a dead preview
+  // lingers, so `previewStatus` reports a dead URL and the idempotent open below hands it
+  // back instead of restarting (#475).
+  const trackPreview = (key: string, handle: PreviewHandle): void => {
+    activePreviews.set(key, handle)
+    void handle.exited.then(() => {
+      if (activePreviews.get(key) === handle) activePreviews.delete(key)
+    })
+  }
   const openPreview = async (targetProjectId?: string): Promise<PreviewResult> => {
     const key = targetProjectId ?? homeId
     const existing = activePreviews.get(key)
@@ -371,7 +381,7 @@ export async function runDaemon(cwd: string, opts: RunDaemonOptions = {}): Promi
         await handle.stop().catch(() => {})
         return { ok: true, url: raced.url, command: raced.command }
       }
-      activePreviews.set(key, handle)
+      trackPreview(key, handle)
       return { ok: true, url: handle.url, command: handle.command }
     } catch (err) {
       return { ok: false, error: err instanceof Error ? err.message : String(err) }

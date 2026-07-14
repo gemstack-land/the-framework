@@ -60,6 +60,26 @@ test('startPreview falls back to a static server for a plain index.html and serv
   })
 })
 
+test('a preview handle resolves `exited` on stop, and reopening rebinds cleanly', async () => {
+  await withTmp('exit', async dir => {
+    await writeFile(join(dir, 'index.html'), '<h1>x</h1>')
+    const first = await startPreview({ cwd: dir })
+    let done = false
+    void first.exited.then(() => (done = true))
+    await first.stop()
+    // `exited` has resolved by the time stop() returns (the daemon's eviction hook fires).
+    await Promise.resolve()
+    assert.equal(done, true)
+    // A fresh open after stop works (the port was freed) — the second-click path.
+    const second = await startPreview({ cwd: dir })
+    try {
+      assert.match(second.url, /^http:\/\/localhost:\d+$/)
+    } finally {
+      await second.stop()
+    }
+  })
+})
+
 test('startPreview throws when there is nothing to serve', async () => {
   await withTmp('empty', async dir => {
     await assert.rejects(startPreview({ cwd: dir }), /nothing to preview/)

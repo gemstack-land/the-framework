@@ -24,6 +24,12 @@ export interface PreviewHandle {
   command: string
   /** Stop the preview and free its port. Idempotent. */
   stop(): Promise<void>
+  /**
+   * Resolves when the preview is no longer serving — on {@link stop}, or when the dev
+   * server exits on its own (a crash, a build error, the user killing it). The daemon
+   * watches this to evict a dead preview so the next open restarts it (#475).
+   */
+  exited: Promise<void>
 }
 
 /** Options for {@link startPreview}. */
@@ -111,7 +117,9 @@ async function startDevServer(cwd: string, script: string, waitMs: number): Prom
       child.once('exit', onExit)
       child.once('error', onError)
     })
-    return { url, command, stop: () => stopChild(child) }
+    // Resolves whether the child is killed by stop() or exits on its own (crash/build error).
+    const exited = new Promise<void>(resolvePromise => child.once('exit', () => resolvePromise()))
+    return { url, command, exited, stop: () => stopChild(child) }
   } catch (err) {
     await stopChild(child)
     throw err
@@ -152,10 +160,17 @@ async function startStaticServer(cwd: string): Promise<PreviewHandle> {
     server.listen(0, '127.0.0.1', () => resolvePromise())
   })
   const port = (server.address() as AddressInfo).port
+  const exited = new Promise<void>(resolvePromise => server.once('close', () => resolvePromise()))
   return {
     url: `http://localhost:${port}`,
     command: 'static',
-    stop: () => new Promise(resolvePromise => server.close(() => resolvePromise())),
+    exited,
+    stop: () =>
+      new Promise(resolvePromise => {
+        // Destroy any lingering keep-alive sockets so close() cannot hang on an open tab.
+        server.closeAllConnections?.()
+        server.close(() => resolvePromise())
+      }),
   }
 }
 
