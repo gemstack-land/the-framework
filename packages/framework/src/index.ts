@@ -351,3 +351,12 @@ export {
   FAKE_SIGNALS,
   FAKE_DEPLOY,
 } from './fake-script.js'
+export {
+  AGENTS,
+  AGENT_SPECS,
+  createDriver,
+  isAgentName,
+  type AgentName,
+  type AgentSpec,
+  type CreateDriverOptions,
+} from './agent.js'

@@ -14,7 +14,8 @@ import {
   type DomainPreset,
   type FrameworkSignals,
 } from '@gemstack/ai-autopilot'
-import { ClaudeCodeDriver, type ClaudeCodeDriverOptions, type Driver, type DriverSession, type McpServerSpec, type PermissionMode } from './driver/index.js'
+import { type ClaudeCodeDriverOptions, type Driver, type DriverSession, type McpServerSpec, type PermissionMode } from './driver/index.js'
+import { AGENTS, AGENT_SPECS, createDriver, isAgentName, type AgentName } from './agent.js'
 import { hostExecutor } from './host-exec.js'
 import { startDashboard, singleProjectProvider, resolveDashboardBundle, type Dashboard } from './dashboard/index.js'
 import { startRelay, relayPublisher, type RelayPublisher } from './relay.js'
@@ -74,10 +75,15 @@ export const CLAUDE_CODE_SESSION_LIST = CLAUDE_CODE_SESSION_LINK
  * The session link to show for a run: the user's `--session-link` if given, else
  * the generic Claude Code entry point for a live run (nothing for `--fake`, which
  * has no real session). Pure, so the default is unit-testable without a live run.
+ *
+ * The default is Claude Code's *own* entry point, so it is only honest on a
+ * Claude run: pointing a Codex session at claude.ai/code offers the user a link
+ * to somewhere their run isn't. Codex keeps its sessions locally with nothing
+ * equivalent to open, so another agent gets no default link at all (#542).
  */
-export function chooseSessionLink(opts: Pick<CliOptions, 'sessionLink'>, fake: boolean): string | undefined {
+export function chooseSessionLink(opts: Pick<CliOptions, 'sessionLink' | 'agent'>, fake: boolean): string | undefined {
   if (opts.sessionLink) return opts.sessionLink
-  return fake ? undefined : CLAUDE_CODE_SESSION_LIST
+  return fake || opts.agent !== 'claude' ? undefined : CLAUDE_CODE_SESSION_LIST
 }
 
 /** Where the CLI writes. Injectable so tests capture output. */
@@ -110,7 +116,7 @@ export function frameworkVersion(): string {
   return cachedVersion
 }
 
-const HELP = `The Framework — turnkey AI orchestration that wraps a coding agent (Claude Code).
+const HELP = `The Framework — turnkey AI orchestration that wraps a coding agent (Claude Code or Codex).
 
 Usage:
   framework                       Run the dashboard in the foreground (Ctrl+C stops it; logs visible).
@@ -132,6 +138,10 @@ Usage:
 
 Options:
   --fake                 Use the fake driver + scripted run (offline / CI).
+  --agent <claude|codex> Which agent CLI drives the run, on your own subscription
+                         (default: claude). Codex reports no price and no quota,
+                         so --max-cost and the consumption limits cannot gate it;
+                         the run says so at startup rather than imply a guard.
   --cwd <dir>            Workspace the agent builds in (default: current directory).
   --model <id>           Model to pass through to the wrapped agent.
   --scope <prototype|full>   How much app to build (default: full).
@@ -224,6 +234,8 @@ export interface CliOptions {
   doctor: boolean
   skipPreflight: boolean
   intent: string
+  /** `--agent <claude|codex>`: which agent CLI drives the run (#542). Default `claude`. */
+  agent: AgentName
   cwd?: string | undefined
   model?: string | undefined
   scope: 'prototype' | 'full'
@@ -296,6 +308,7 @@ export function parseArgs(argv: string[]): CliOptions {
     doctor: false,
     skipPreflight: false,
     intent: '',
+    agent: 'claude',
     scope: 'full',
     autoPreset: true,
     autopilot: false,
@@ -410,6 +423,12 @@ export function parseArgs(argv: string[]): CliOptions {
         } else {
           opts.permissionMode = value
         }
+        break
+      }
+      case '--agent': {
+        const value = argv[++i]
+        if (!isAgentName(value)) opts.error = `invalid --agent: ${value ?? '(missing)'}. Expected: ${AGENTS.join(' | ')}`
+        else opts.agent = value
         break
       }
       case '--cwd':
@@ -563,6 +582,34 @@ export function withBrowser(base: ClaudeCodeDriverOptions, browser: boolean): Cl
   return { ...base, mcpServers: { ...base.mcpServers, ...BROWSER_MCP_SERVERS } }
 }
 
+/**
+ * The flags the picked agent cannot honor (#542), as lines to print at startup.
+ *
+ * A flag that silently does nothing is worse than one that errors. `--agent
+ * codex --max-cost 5` reads as capped and isn't: the cap is only ever checked on
+ * a turn that reports a price, and Codex reports none (#540). The consumption
+ * limits go the same way — no quota to read means no gate. So the run says which
+ * guards are not in force, rather than letting the flag imply they are.
+ */
+export function unguardedNotices(
+  opts: Pick<CliOptions, 'agent' | 'maxCost' | 'browser' | 'permissionMode' | 'skipPermissions'>,
+): string[] {
+  const spec = AGENT_SPECS[opts.agent]
+  const notices: string[] = []
+  if (opts.maxCost != null && !spec.reportsCost) {
+    notices.push(`--max-cost $${opts.maxCost} cannot be enforced: ${spec.label} reports no price per turn, so the spend cap never fires (#540).`)
+  }
+  if (opts.agent !== 'claude') {
+    if (opts.browser) {
+      notices.push(`--browser has no effect on ${spec.label}: the browser tools are wired through Claude Code's MCP config.`)
+    }
+    if (opts.permissionMode !== undefined || opts.skipPermissions) {
+      notices.push(`--permission-mode / --dangerously-skip-permissions have no effect on ${spec.label}: it sandboxes with its own policy (workspace-write).`)
+    }
+  }
+  return notices
+}
+
 /** The active Open Loop modes from the mode flags, in a stable order. */
 export function activeModes(opts: Pick<CliOptions, 'autopilot' | 'technical'>): string[] {
   const modes: string[] = []
@@ -686,17 +733,22 @@ export async function autoSelectPreset(opts: {
   cwd: string
   signals: FrameworkSignals
   claudeOpts: ClaudeCodeDriverOptions
+  /** The agent to route through (#542). Default `claude`. */
+  agent?: AgentName
   signal?: AbortSignal
   io: CliIO
-  /** The driver to route the pick through. Defaults to a Claude Code driver; injected in tests. */
+  /** The driver to route the pick through. Defaults to the picked agent's; injected in tests. */
   driver?: Driver
   /** Narrate the routing turn to the dashboard + terminal (#310), so it isn't a blank while the pick runs. */
   onEvent?: (event: FrameworkEvent) => void
 }): Promise<MetaSelection | undefined> {
   const catalog = presetCatalog(await builtinDomainPresets())
   if (catalog.length === 0) return undefined
-  const driver = opts.driver ?? new ClaudeCodeDriver(opts.claudeOpts)
-  // The routing turn is a real Claude turn that emits no run events, so without
+  // The routing turn runs on the same agent as the build (#542) — picking a preset
+  // with one agent and building with another would be a surprise, and it would
+  // silently need Claude installed for an `--agent codex` run.
+  const driver = opts.driver ?? createDriver({ agent: opts.agent ?? 'claude', claudeOpts: opts.claudeOpts })
+  // The routing turn is a real agent turn that emits no run events, so without
   // this the dashboard sits blank for its first few seconds (#310).
   opts.onEvent?.({ kind: 'log', message: '◆ auto-selecting the best-fit preset from your prompt + workspace…' })
   let session: DriverSession | undefined
@@ -741,7 +793,7 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
     return 0
   }
   if (opts.doctor) {
-    const result = await preflight()
+    const result = await preflight({ agent: opts.agent })
     for (const check of result.checks) io.out(`${check.ok ? '✓' : '✗'} ${check.name}: ${check.detail}`)
     io.out(result.ok ? '\nAll good. You are ready to build.' : '\nSome checks failed. Fix them, then try again.')
     return result.ok ? 0 : 1
@@ -823,12 +875,21 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
   // Fail early and clearly if a live run's prerequisites are missing — before
   // auto-select and the run, which both need the wrapped agent.
   if (!fake && !opts.skipPreflight) {
-    const pre = await preflight()
+    const pre = await preflight({ agent: opts.agent })
     if (!pre.ok) {
       for (const check of pre.checks.filter(c => !c.ok)) io.err(`✗ ${check.name}: ${check.detail}`)
       io.err('Preflight failed. Fix the above, or pass --skip-preflight, or try `framework --fake`.')
       return 2
     }
+  }
+
+  // Which agent is about to spend the user's subscription, and which guards are
+  // not in force while it does — said *before* the first turn (the auto-select
+  // one below is already a real, billed turn). A cap that turns out not to apply
+  // is worth knowing before the spending, not after (#542).
+  if (!fake) {
+    if (opts.agent !== 'claude') io.out(`◆ agent: ${AGENT_SPECS[opts.agent].label}`)
+    for (const note of unguardedNotices(opts)) io.err(`note: ${note}`)
   }
 
   const claudeOpts = claudeDriverOptions(opts)
@@ -1003,7 +1064,7 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
   // build event) from the intent + workspace, then resolve it with the active modes.
   // Narrates through onEvent so the routing turn is visible on the dashboard (#310).
   if (!fake && opts.autoPreset && !presetName && !opts.research && !opts.directPrompt) {
-    const selection = await autoSelectPreset({ intent, cwd, signals, claudeOpts, signal: controller.signal, io, onEvent })
+    const selection = await autoSelectPreset({ intent, cwd, signals, claudeOpts, agent: opts.agent, signal: controller.signal, io, onEvent })
     if (selection?.preset) {
       presetName = selection.preset
       modeList = [...new Set([...modeList, ...selection.modes])]
@@ -1032,15 +1093,18 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
     io.err(`note: --sandbox docker has no effect without --serve.`)
   }
 
-  const driver: Driver = fake ? fakeDriver() : new ClaudeCodeDriver(withBrowser(claudeOpts, opts.browser))
+  const driver: Driver = fake ? fakeDriver() : createDriver({ agent: opts.agent, claudeOpts: withBrowser(claudeOpts, opts.browser) })
 
   // The consumption limits (#519/#531). Read from the user's own file rather than
   // taken as a flag: unlike autopilot or eco, a limit is not a per-run choice, so
   // a run started from a terminal is guarded exactly like one started from the
-  // dashboard. `undefined` when the agent can't report a quota (the fake driver),
-  // which leaves the run ungated — the fail-open Rom confirmed.
+  // dashboard. `undefined` when the agent can't report a quota (the fake driver,
+  // or Codex), which leaves the run ungated — the fail-open Rom confirmed.
   const guard = startConsumptionGuard({ driver, limits: resolveConsumptionLimits(await readPreferences()) })
   if (guard) io.out('◆ consumption limits: on')
+  else if (!fake) {
+    io.out(`◆ consumption limits: off — ${AGENT_SPECS[opts.agent].label} reports no quota, so nothing gates your subscription spend.`)
+  }
 
   // `framework research [what]` (#331) and `framework prompt <text>` (#353): the
   // direct prompt path — run one prompt through runPrompt, which honors its gates
