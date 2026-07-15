@@ -25,12 +25,14 @@ import {
   runLogKind,
   runPostMergeSuite,
   POST_MERGE_PASSES,
+  unguardedNotices,
   withBrowser,
   BROWSER_MCP_SERVERS,
   workspaceSummary,
   type CliIO,
 } from './cli.js'
 import { readLogs } from './logs.js'
+import { createDriver } from './agent.js'
 import { FakeDriver } from './driver/index.js'
 import type { FrameworkEvent } from './events.js'
 
@@ -254,6 +256,42 @@ test('parseArgs flags unknown options and bad values', () => {
   assert.match(parseArgs(['--max-cost', '0']).error!, /max-cost/)
   assert.match(parseArgs(['--max-cost', 'abc']).error!, /max-cost/)
   assert.match(parseArgs(['--permission-mode', 'wat']).error!, /permission-mode/)
+  assert.match(parseArgs(['--agent', 'gemini']).error!, /invalid --agent/)
+  assert.match(parseArgs(['--agent']).error!, /invalid --agent/)
+})
+
+test('parseArgs reads --agent, defaulting to claude (#542)', () => {
+  assert.equal(parseArgs(['x']).agent, 'claude')
+  assert.equal(parseArgs(['--agent', 'claude', 'x']).agent, 'claude')
+  assert.equal(parseArgs(['--agent', 'codex', 'x']).agent, 'codex')
+})
+
+test('createDriver builds the agent --agent picked (#542)', () => {
+  assert.equal(createDriver({ agent: 'claude' }).name, 'claude-code')
+  assert.equal(createDriver({ agent: 'codex' }).name, 'codex')
+})
+
+test('unguardedNotices says --max-cost cannot gate an agent with no price (#542/#540)', () => {
+  // The whole point: the cap is only checked on a turn that reports a price, so
+  // on Codex it silently never fires. Saying nothing would read as capped.
+  const notes = unguardedNotices({ agent: 'codex', maxCost: 5, browser: false, permissionMode: undefined, skipPermissions: false })
+  assert.equal(notes.length, 1)
+  assert.match(notes[0]!, /--max-cost \$5 cannot be enforced/)
+  assert.match(notes[0]!, /Codex/)
+})
+
+test('unguardedNotices is silent when the guards really do apply (#542)', () => {
+  const claude = unguardedNotices({ agent: 'claude', maxCost: 5, browser: true, permissionMode: 'plan', skipPermissions: true })
+  assert.deepEqual(claude, [])
+  const noFlags = unguardedNotices({ agent: 'codex', browser: false, permissionMode: undefined, skipPermissions: false })
+  assert.deepEqual(noFlags, [])
+})
+
+test('unguardedNotices flags the Claude-only flags on another agent (#542)', () => {
+  const notes = unguardedNotices({ agent: 'codex', browser: true, permissionMode: 'plan', skipPermissions: false })
+  assert.equal(notes.length, 2)
+  assert.match(notes[0]!, /--browser has no effect/)
+  assert.match(notes[1]!, /--permission-mode/)
 })
 
 test('parseArgs reads --max-cost as a positive USD budget (#322)', () => {
@@ -467,16 +505,22 @@ test('runCli notes --sandbox docker given without --serve (#229)', async () => {
 })
 
 test('chooseSessionLink defaults a live run to the claude.ai/code session list (#212)', () => {
-  assert.equal(chooseSessionLink({ sessionLink: undefined }, false), CLAUDE_CODE_SESSION_LIST)
+  assert.equal(chooseSessionLink({ sessionLink: undefined, agent: 'claude' }, false), CLAUDE_CODE_SESSION_LIST)
   assert.equal(CLAUDE_CODE_SESSION_LIST, 'https://claude.ai/code')
 })
 
 test('chooseSessionLink honors an explicit --session-link over the default', () => {
-  assert.equal(chooseSessionLink({ sessionLink: 'https://x/s/{sessionId}' }, false), 'https://x/s/{sessionId}')
+  assert.equal(chooseSessionLink({ sessionLink: 'https://x/s/{sessionId}', agent: 'claude' }, false), 'https://x/s/{sessionId}')
+  // An explicit link is the user's own, so it stands whatever agent runs.
+  assert.equal(chooseSessionLink({ sessionLink: 'https://x/s/{sessionId}', agent: 'codex' }, false), 'https://x/s/{sessionId}')
 })
 
 test('chooseSessionLink gives no link for a fake run (no real session)', () => {
-  assert.equal(chooseSessionLink({ sessionLink: undefined }, true), undefined)
+  assert.equal(chooseSessionLink({ sessionLink: undefined, agent: 'claude' }, true), undefined)
+})
+
+test('chooseSessionLink does not point a non-Claude session at claude.ai (#542)', () => {
+  assert.equal(chooseSessionLink({ sessionLink: undefined, agent: 'codex' }, false), undefined)
 })
 
 test('runCli --help prints usage and exits 0', async () => {
@@ -559,8 +603,17 @@ test('runCli doctor reports checks and exits by their outcome', async () => {
   const code = await runCli(['doctor'], io)
   const text = out.join('\n')
   assert.match(text, /node:/)
-  assert.match(text, /claude-code:/)
+  assert.match(text, /claude:/)
   assert.ok(code === 0 || code === 1) // depends on whether claude is installed here
+})
+
+test('runCli doctor checks the agent you asked for (#542)', async () => {
+  const { io, out } = capture()
+  const code = await runCli(['doctor', '--agent', 'codex'], io)
+  const text = out.join('\n')
+  assert.match(text, /codex:/)
+  assert.doesNotMatch(text, /claude:/)
+  assert.ok(code === 0 || code === 1) // depends on whether codex is installed here
 })
 
 test('runCli --fake skips preflight (offline never needs the agent CLI)', async () => {
