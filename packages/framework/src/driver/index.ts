@@ -14,6 +14,7 @@ export type {
 export { isTransientQuotaReason } from './types.js'
 export { readClaudeQuota, parseQuotaReadout, type ReadClaudeQuotaOptions } from './claude-code-quota.js'
 export { FakeDriver, FakeDriverSession, type FakeTurn, type FakeDriverOptions } from './fake.js'
+export { CodexDriver, CodexSession, CodexJsonParser, type CodexDriverOptions, type CodexSandbox } from './codex.js'
 export {
   ClaudeCodeDriver,
   ClaudeCodeSession,
@@ -24,4 +25,7 @@ export {
   type PermissionMode,
   type SpawnLike,
   type SpawnedProcess,
+  runAgentCli,
+  type AgentCliParser,
+  type RunAgentCliOptions,
 } from './claude-code.js'
