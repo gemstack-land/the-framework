@@ -188,7 +188,21 @@ export class ClaudeCodeSession implements DriverSession {
   }
 }
 
-interface RunClaudeOptions {
+/**
+ * The slice of a driver's output parser {@link runAgentCli} drives: fed one line
+ * at a time, asked for the turn at the end. Each wrapped agent speaks its own
+ * dialect ({@link StreamJsonParser} for Claude Code, `CodexJsonParser` for
+ * Codex), but the process handling around it is identical.
+ */
+export interface AgentCliParser {
+  /** Fold one line of the agent's output in, and surface anything worth emitting. */
+  push(line: string): DriverEvent[]
+  /** The turn the lines added up to. */
+  result(): DriverTurn
+}
+
+/** How to run one agent-CLI invocation. */
+export interface RunAgentCliOptions {
   bin: string
   args: string[]
   cwd: string
@@ -197,14 +211,35 @@ interface RunClaudeOptions {
   spawn: SpawnLike
   emit: (event: DriverEvent) => void
   signals: AbortSignal[]
+  /** The agent's own output dialect. */
+  parser: AgentCliParser
+  /** The agent's name, for error messages. Default `"claude-code"`. */
+  agent?: string
 }
+
+/** @deprecated Use {@link RunAgentCliOptions}. */
+export type RunClaudeOptions = Omit<RunAgentCliOptions, 'parser' | 'agent'>
 
 /** Spawn one Claude Code invocation and resolve with its final turn. */
 export function runClaude(opts: RunClaudeOptions): Promise<DriverTurn> {
+  return runAgentCli({ ...opts, parser: new StreamJsonParser() })
+}
+
+/**
+ * Spawn one agent-CLI invocation and resolve with its final turn.
+ *
+ * Everything here is about the *process*, not the agent: its own process group
+ * so an interrupt kills the whole tree rather than orphaning it, a SIGTERM/
+ * SIGKILL grace window, abort wiring, and a non-zero exit failing the turn even
+ * when text was streamed first. Only {@link RunAgentCliOptions.parser} knows
+ * which agent is on the other end — a second agent gets all of this for free
+ * rather than a second copy of it.
+ */
+export function runAgentCli(opts: RunAgentCliOptions): Promise<DriverTurn> {
   return new Promise<DriverTurn>((resolvePromise, rejectPromise) => {
     for (const s of opts.signals) {
       if (s.aborted) {
-        rejectPromise(new Error('[framework] claude-code prompt aborted'))
+        rejectPromise(new Error(`[framework] ${opts.agent ?? 'claude-code'} prompt aborted`))
         return
       }
     }
@@ -216,7 +251,8 @@ export function runClaude(opts: RunClaudeOptions): Promise<DriverTurn> {
     const child = opts.spawn(opts.bin, opts.args, { cwd: opts.cwd, env: opts.env, detached: true })
     const pid = child.pid
     if (pid != null) registerChild(pid)
-    const parser = new StreamJsonParser()
+    const parser = opts.parser
+    const agent = opts.agent ?? 'claude-code'
     let settled = false
     let hardKillTimer: ReturnType<typeof setTimeout> | undefined
     const stderrChunks: string[] = []
@@ -251,7 +287,7 @@ export function runClaude(opts: RunClaudeOptions): Promise<DriverTurn> {
       const handler = () => {
         if (settled) return
         terminate()
-        finish(() => rejectPromise(new Error('[framework] claude-code prompt aborted')))
+        finish(() => rejectPromise(new Error(`[framework] ${agent} prompt aborted`)))
       }
       signal.addEventListener('abort', handler)
       return { signal, handler }
@@ -281,7 +317,7 @@ export function runClaude(opts: RunClaudeOptions): Promise<DriverTurn> {
       if (code !== 0) {
         const detail = stderrChunks.join('').trim() || turn.text.trim() || `exit code ${code ?? 'null'}`
         opts.emit({ type: 'error', message: detail })
-        finish(() => rejectPromise(new Error(`[framework] claude-code exited (${code ?? 'null'}): ${detail}`)))
+        finish(() => rejectPromise(new Error(`[framework] ${agent} exited (${code ?? 'null'}): ${detail}`)))
         return
       }
       opts.emit({
