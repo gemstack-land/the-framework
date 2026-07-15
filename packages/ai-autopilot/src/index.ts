@@ -12,15 +12,6 @@
  * - {@link agentPlanner} — turn a planning agent into a {@link Planner}
  * - {@link agentSynthesizer} / {@link defaultSynthesize} — combine results
  *
- * Personas add the stack-aware knowledge layer: reusable roles that know the
- * GemStack stack (Vike/Next + Prisma), materialized into worker agents.
- *
- * - {@link definePersona} — define a stack-aware role
- * - {@link personaAgent} / {@link personaWorkers} — materialize personas for a run
- * - {@link personaRoster} — describe personas to a planner
- * - {@link stackPersonas} — the built-in Vike + Prisma personas
- * - {@link sharedPersonas} — the framework-neutral core (data layer + intent UI)
- *
  * The runner is the pluggable execution seam: a workspace (filesystem + shell +
  * optional preview) where autopilot builds and runs an app. Shaped after Flue's
  * `sandbox` so WebContainer / Docker / Flue drop in behind one interface.
@@ -87,21 +78,19 @@
  *   and wire the maintainer into the loop
  *
  * Presets are the web-app layer: detect the app's framework (Vike flagship,
- * Next.js second) and point at its {@link Skill} (page builder + `llms.txt`), on
- * top of the agnostic core.
+ * Next.js second), on top of the agnostic core. A preset is a pure detector.
  *
  * - {@link PresetRegistry} — register presets, {@link PresetRegistry.select} one
  * - {@link detectFramework} — score a project's deps/files against presets
  * - {@link vikePreset} / {@link nextPreset} — the built-ins
- * - {@link presetPersonas} — its framework skill's page builder + the shared neutral ones
  *
  * Domain presets are the Open Loop bundle unit (#204): one selectable, composable
- * bundle of {loops, prompts, skills}. Author in code or load a directory of `.md`
- * files; compose several into one (presets-of-presets). Distinct from the
- * framework `Preset` above — this is the user-picked domain, not a detector.
+ * bundle of {loops, prompts}. Author in code or load a directory of `.md` files;
+ * compose several into one (presets-of-presets). Distinct from the framework
+ * `Preset` above — this is the user-picked domain, not a detector.
  *
  * - {@link defineDomainPreset} / {@link loadDomainPreset} — author, or load from a directory
- * - {@link composeDomainPresets} — merge presets into one (later wins on prompt/skill id)
+ * - {@link composeDomainPresets} — merge presets into one (later wins on prompt id)
  * - {@link builtinDomainPresets} / {@link loadDomainPresetsFrom} — enumerate a set (the picker primitive)
  * - {@link selectPreset} — pick the user's chosen domain by name
  * - {@link softwareDevelopmentPreset} — the shipped, stack-agnostic built-in
@@ -111,30 +100,6 @@
 export { Supervisor } from './supervisor.js'
 export { agentPlanner, type AgentPlannerOptions } from './planner.js'
 export { agentSynthesizer, defaultSynthesize } from './synthesizer.js'
-export {
-  definePersona,
-  PersonaError,
-  personaInstructions,
-  personaTools,
-  personaAgent,
-  personaWorkers,
-  personaRoster,
-  vikePageBuilder,
-  nextPageBuilder,
-  dataModeler,
-  uiIntentDesigner,
-  vikeAuthComposer,
-  vikeDataModeler,
-  vikeRbacComposer,
-  vikeCrudComposer,
-  vikeShellComposer,
-  sharedPersonas,
-  vikeExtensionPersonas,
-  stackPersonas,
-  type Persona,
-  type PersonaSpec,
-  type PersonaAgentOptions,
-} from './personas/index.js'
 export {
   FakeRunner,
   FakeRunnerSession,
@@ -315,7 +280,6 @@ export {
   vikePreset,
   nextPreset,
   builtinPresets,
-  presetPersonas,
   PresetRegistry,
   builtinPresetRegistry,
   type Preset,
@@ -334,7 +298,6 @@ export {
   loadDomainPresetsFrom,
   builtinDomainPresets,
   loadLoopsFrom,
-  loadSkillsFrom,
   builtinPresetsDir,
   softwareDevelopmentPreset,
   selectWinners,
@@ -346,48 +309,6 @@ export {
   type DomainPresetSpec,
   type DomainPresetMeta,
 } from './preset/index.js'
-export {
-  defineFrameworkExtension,
-  defineSkill,
-  ExtensionError,
-  matchSignals,
-  selectActive,
-  ExtensionRegistry,
-  SkillRegistry,
-  builtinExtensionRegistry,
-  builtinSkillRegistry,
-  composePersonas,
-  composeSkills,
-  skillPersonas,
-  skillInstructions,
-  frameworkAuth,
-  frameworkData,
-  frameworkRbac,
-  frameworkCrud,
-  frameworkShell,
-  builtinExtensions,
-  builtinExtensionNames,
-  vikeSkill,
-  nextSkill,
-  builtinSkills,
-  neutralPersonas,
-  EXTENSION_NAME_RE,
-  extensionPackageNames,
-  isFrameworkExtension,
-  loadExtensionsFromModules,
-  type MatchOptions,
-  type ComposePersonasInput,
-  type NeutralPersona,
-  type LoadedExtension,
-  type FailedExtension,
-  type DiscoverResult,
-  type FrameworkExtension,
-  type FrameworkExtensionSpec,
-  type Skill,
-  type SkillSpec,
-  type ExtensionSignals,
-  type SignalMatch,
-} from './extensions/index.js'
 export type {
   Subtask,
   PlannedSubtask,

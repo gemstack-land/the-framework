@@ -17,7 +17,7 @@ pnpm --filter @gemstack/example-bootstrap-quickstart start
 
 No API key: `AiFake` scripts the model and `FakeRunner` is an in-memory sandbox,
 so the run is deterministic. You'll see the narration stream live, the files the
-persona workers wrote, the checklist blocking once and then clearing, the app
+workers wrote, the checklist blocking once and then clearing, the app
 shipped to a Cloudflare URL, and the generated `CODE-OVERVIEW.md`. The deploy runs
 the real `cloudflareTarget` adapter over a simulated `wrangler`, so the whole flow
 ends at a live-looking URL with no credentials.
@@ -25,9 +25,9 @@ ends at a live-looking URL with no credentials.
 ## What it shows
 
 - **Presets (#115)** — the framework is detected from the project deps (Vike here),
-  so the build's workers are that framework's personas plus the shared neutral ones.
+  so the build's workers are briefed on the right one.
 - **Bootstrap (#116)** — one scoping question, then a **build** scaffolds the app
-  with the persona workers inside a **runner**, the **full-fledged loop** repeats the
+  with those workers inside a **runner**, the **full-fledged loop** repeats the
   production-grade checklist until its `{ blockers }` verdict is empty, and a
   **deploy** is decided and shipped through the `DeployTarget` seam — here the real
   `cloudflareTarget` (SSR → Workers), run over a simulated `wrangler` offline.

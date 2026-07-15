@@ -1,30 +1,21 @@
-import { sharedPersonas } from '../personas/library.js'
-import { vikeSkill, nextSkill } from '../extensions/library.js'
-import type { Persona } from '../personas/types.js'
 import { definePreset } from './define.js'
 import { detectFramework } from './detect.js'
 import type { FrameworkDetection, FrameworkSignals, Preset } from './types.js'
 
-/**
- * The flagship preset: Vike (Vite + SSR), renderer-agnostic. Detection points at
- * the {@link vikeSkill}, whose page builder plus the shared neutral personas make
- * up the Vike stack.
- */
+/** The flagship preset: Vike (Vite + SSR), renderer-agnostic. */
 export const vikePreset: Preset = definePreset({
   name: 'vike',
   framework: 'Vike',
-  skill: vikeSkill,
   signals: {
     dependencies: ['vike', 'vike-react', 'vike-vue', 'vike-solid'],
     files: [/(^|\/)\+Page(\.[\w-]+)?\.[jt]sx?$/, /(^|\/)\+config\.[jt]s$/],
   },
 })
 
-/** The second preset: Next.js (App Router + React Server Components). Points at {@link nextSkill}. */
+/** The second preset: Next.js (App Router + React Server Components). */
 export const nextPreset: Preset = definePreset({
   name: 'next',
   framework: 'Next.js',
-  skill: nextSkill,
   signals: {
     dependencies: ['next'],
     files: [/(^|\/)next\.config\.[cm]?[jt]s$/, /(^|\/)app\/.*\/page\.[jt]sx?$/, /(^|\/)app\/layout\.[jt]sx?$/],
@@ -37,20 +28,8 @@ export function builtinPresets(): Preset[] {
 }
 
 /**
- * The full worker roster for a preset: its framework skill's page builder (plus
- * any extra preset personas) followed by the shared, framework-neutral ones (data
- * layer + intent UI). This is what you hand to `personaWorkers` / a planner
- * roster, so only the page builder changes between frameworks while the rest of
- * the stack stays put.
- */
-export function presetPersonas(preset: Preset, shared: readonly Persona[] = sharedPersonas): Persona[] {
-  return [...(preset.skill?.personas ?? []), ...preset.personas, ...shared]
-}
-
-/**
  * A set of {@link Preset}s with detection. Register the built-ins (or your own),
  * then {@link select} the preset for a project by its {@link FrameworkSignals}.
- * One shared core; the registry only decides which framework knowledge to layer.
  */
 export class PresetRegistry {
   private readonly byName = new Map<string, Preset>()

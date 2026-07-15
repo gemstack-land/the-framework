@@ -9,28 +9,24 @@ const CASES = [
   {
     name: 'web-development',
     title: 'Web Development',
-    skillUrl: 'https://web.dev/',
     majorRun: ['accessibility-review', 'performance-budget', 'web-security'],
     technicalRun: ['accessibility-review'],
   },
   {
     name: 'data-science',
     title: 'Data Science',
-    skillUrl: 'https://developers.google.com/machine-learning/guides/rules-of-ml',
     majorRun: ['reproducibility-review', 'data-validation', 'methodology-review'],
     technicalRun: ['reproducibility-review'],
   },
   {
     name: 'product-management',
     title: 'Product Management',
-    skillUrl: 'https://basecamp.com/shapeup',
     majorRun: ['requirements-review', 'user-experience-review', 'metrics-review'],
     technicalRun: ['requirements-review'],
   },
   {
     name: 'biological-science',
     title: 'Biological Science',
-    skillUrl: 'https://doi.org/10.1371/journal.pcbi.1003285',
     majorRun: ['experimental-design-review', 'data-provenance-review', 'statistical-rigor-review'],
     technicalRun: ['experimental-design-review'],
   },
@@ -41,15 +37,13 @@ const majorLoop = (p: { loops: readonly { on: readonly string[]; run: readonly s
 
 for (const c of CASES) {
   describe(`${c.name} (shipped built-in)`, () => {
-    it('loads the {loops, prompts, skills} bundle from the shipped directory', async () => {
+    it('loads the {loops, prompts} bundle from the shipped directory', async () => {
       const preset = selectPreset(await builtinDomainPresets(), c.name)
       assert.ok(preset, `${c.name} is discovered`)
       assert.equal(preset!.title, c.title)
       assert.ok(preset!.description.length > 0)
       assert.equal(preset!.loops.length, 2) // major-change + bug-fix
       assert.ok(preset!.prompts.length >= 5)
-      assert.equal(preset!.skills.length, 1)
-      assert.equal(preset!.skills[0]!.url, c.skillUrl)
     })
 
     it('targets non-web loop events (major-change, bug-fix)', async () => {

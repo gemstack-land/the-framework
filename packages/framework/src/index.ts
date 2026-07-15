@@ -27,8 +27,8 @@
  * - {@link driverBuild} / {@link driverChecklist} / {@link driverImprove}
  *
  * ## Run + product shell
- * - {@link runFramework} — detect the preset, frame the agent with its personas,
- *   drive the whole bootstrap flow, and stream {@link FrameworkEvent}s
+ * - {@link runFramework} — detect the preset, drive the whole bootstrap flow, and
+ *   stream {@link FrameworkEvent}s
  * - {@link startDashboard} — the localhost UI over the event stream
  * - {@link runCli} / {@link parseArgs} — the `framework` command
  */
@@ -95,11 +95,6 @@ export {
   type RelayOptions,
   type RelayPublisher,
 } from './relay.js'
-export {
-  discoverExtensions,
-  readProjectSignals,
-  type DiscoverExtensionsResult,
-} from './extensions.js'
 export { hostExecutor, type HostExecutorOptions } from './host-exec.js'
 export {
   type FrameworkEvent,
@@ -176,6 +171,7 @@ export {
   nodeProjectFs,
   crawlRepoFiles,
   nodeGitRunner,
+  readProjectSignals,
   type ProjectFs,
   type GitRunner,
 } from './project.js'
@@ -223,13 +219,6 @@ export {
   FRAMEWORK_CONFIG_FILES,
   type FrameworkFileConfig,
 } from './config.js'
-export {
-  loadRepoMemory,
-  memoryFraming,
-  MEMORY_FILES,
-  type MemoryFile,
-  type LoadedMemory,
-} from './memory.js'
 export {
   systemPromptBlock,
   composeRunSystem,

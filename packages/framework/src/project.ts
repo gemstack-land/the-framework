@@ -1,12 +1,31 @@
+import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import type { FrameworkSignals } from '@gemstack/ai-autopilot'
 import { THE_FRAMEWORK_DIR } from './logs.js'
 
 /**
  * Project-level repo helpers (#380): the `.the-framework/` activation marker
- * check and a `git ls-files` crawl. Read-only building blocks for the #314
- * sidebars; activation/install (creating the dir, the install commit) is a
- * separate, deferred concern.
+ * check, a `git ls-files` crawl, and the project's detection signals. Read-only
+ * building blocks for the #314 sidebars; activation/install (creating the dir,
+ * the install commit) is a separate, deferred concern.
  */
+
+/**
+ * Read a project's detection signals from its `package.json`: the union of
+ * `dependencies` + `devDependencies` names. Returns empty signals when there is
+ * no `package.json` (a from-scratch build in an empty workspace) so preset
+ * detection simply finds nothing rather than throwing.
+ */
+export function readProjectSignals(cwd: string): FrameworkSignals {
+  let pkg: { dependencies?: Record<string, string>; devDependencies?: Record<string, string> }
+  try {
+    pkg = JSON.parse(readFileSync(join(cwd, 'package.json'), 'utf8'))
+  } catch {
+    return {}
+  }
+  const dependencies = { ...(pkg.dependencies ?? {}), ...(pkg.devDependencies ?? {}) }
+  return { dependencies }
+}
 
 /** The `.the-framework/` path under a project root. */
 export function theFrameworkDir(cwd: string): string {

@@ -9,10 +9,7 @@ import {
   LoopEngine,
   definePrompt,
   defineLoop,
-  personaInstructions,
-  personaTools,
   builtinPresetRegistry,
-  presetPersonas,
   CodeOverviewMaintainer,
   FakeRunner,
   runnerTools,
@@ -32,10 +29,10 @@ import {
  *     scope → build → full-fledged loop → deploy
  *   → scale mode (CODE-OVERVIEW.md)
  *
- * A **preset** is picked from the project's dependencies, so the build's workers
- * are the right framework's personas. **Bootstrap** then sequences the flow: it
- * asks one scoping question, **builds** the app with the persona workers inside a
- * **runner** sandbox, runs the **full-fledged loop** until the production-grade
+ * A **preset** detects the project's framework from its dependencies, so the
+ * build's workers are briefed on the right one. **Bootstrap** then sequences the
+ * flow: it asks one scoping question, **builds** the app with those workers inside
+ * a **runner** sandbox, runs the **full-fledged loop** until the production-grade
  * checklist's `{ blockers }` verdict is empty, and **decides a deploy** behind the
  * `DeployTarget` seam. What stack to build on is the build agent's call, not ours.
  * Every phase streams as narration over the generic **surface**. Finally **scale
@@ -53,7 +50,7 @@ export const INTENT = 'A paginated Orders page backed by an orders table, with s
 /** The project we detect a framework from — Vike here, so the Vike preset wins. */
 const PROJECT_DEPS = { 'vike-react': '1.0.0', react: '18.0.0', '@prisma/client': '1.0.0' }
 
-/** Each build subtask, the persona that owns it, and the file it writes. */
+/** Each build subtask, the worker that owns it, and the file it writes. */
 const WORK = [
   {
     worker: 'data-modeler',
@@ -62,13 +59,13 @@ const WORK = [
     contents: "export const orders = table('orders', { id: id(), total: integer(), createdAt: timestamp() })\n",
   },
   {
-    worker: 'vike-page-builder',
+    worker: 'page-builder',
     description: 'Build the /orders page that lists orders, paginated',
     file: 'pages/orders/+Page.jsx',
     contents: "export default function Page({ orders }) { return <OrderList orders={orders} /> }\n",
   },
   {
-    worker: 'ui-intent-designer',
+    worker: 'ui-designer',
     description: 'Express the orders list as intent, not hardcoded markup',
     file: 'pages/orders/+config.js',
     contents: "export default { meta: { OrderList: { env: { server: true, client: true } } } }\n",
@@ -99,15 +96,19 @@ function scriptModel(fake: AiFake): void {
 /** A static planner: the build subtasks, in the order the fake scripts them. */
 const staticPlanner: Planner = () => WORK.map(w => ({ description: w.description, worker: w.worker }))
 
-/** Build one worker agent per preset persona, each with hands inside the sandbox. */
-function presetWorkers(session: RunnerSession, personas: ReturnType<typeof presetPersonas>) {
+/** The worker roster: the role name the plan routes to, and how that agent is briefed. */
+function roster(framework: string) {
+  return [
+    { name: 'data-modeler', role: 'Design database schemas and migrations.' },
+    { name: 'page-builder', role: `Build pages and their routing for ${framework}.` },
+    { name: 'ui-designer', role: 'Design the UI for a page.' },
+  ]
+}
+
+/** Build one worker agent per role, each with hands inside the sandbox. */
+function buildWorkers(session: RunnerSession, framework: string) {
   const sandbox = runnerTools(session)
-  return Object.fromEntries(
-    personas.map(p => [
-      p.name,
-      agent({ instructions: personaInstructions(p), tools: [...personaTools(p), ...sandbox] }),
-    ]),
-  )
+  return Object.fromEntries(roster(framework).map(w => [w.name, agent({ instructions: w.role, tools: sandbox })]))
 }
 
 /** The full-fledged loop: the checklist blocks once, then clears after the fix. */
@@ -169,9 +170,8 @@ export async function runCapstone(write: (line: string) => void = () => {}): Pro
   const fake = AiFake.fake()
   scriptModel(fake)
   try {
-    // 0. Preset: detect the framework from the project's deps, pick its personas.
+    // 0. Preset: detect the framework from the project's deps to brief the workers.
     const { preset, detection } = builtinPresetRegistry().select({ dependencies: PROJECT_DEPS })
-    const personas = presetPersonas(preset)
 
     // Runner: an in-memory sandbox seeded with a minimal project. `wrangler` is
     // simulated (prints a live-looking URL) so the real cloudflareTarget adapter
@@ -202,7 +202,7 @@ export async function runCapstone(write: (line: string) => void = () => {}): Pro
         },
         steps: {
           scope: () => ({ scope: 'full', intent: INTENT }),
-          build: supervisorBuild({ plan: staticPlanner, workers: presetWorkers(session, personas), concurrency: 1 }),
+          build: supervisorBuild({ plan: staticPlanner, workers: buildWorkers(session, preset.framework), concurrency: 1 }),
           checklist: loopChecklist({ loop }),
           improve: loopImprove({ loop }),
           deploy: agentDeploy(agent({ instructions: 'deployer' }), { target: deployTarget }),

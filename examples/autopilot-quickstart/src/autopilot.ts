@@ -2,10 +2,6 @@ import { AiFake, agent, type ToolCall } from '@gemstack/ai-sdk'
 import {
   Supervisor,
   agentPlanner,
-  stackPersonas,
-  personaRoster,
-  personaInstructions,
-  personaTools,
   FakeRunner,
   runnerTools,
   terminalSink,
@@ -18,13 +14,16 @@ import {
 /**
  * The end-to-end shape of the ai-autopilot epic, in one flow:
  *
- *   personas  →  Supervisor  →  runner (sandbox)  →  surfaces
+ *   workers  →  Supervisor  →  runner (sandbox)  →  surfaces
  *
- * A lead planner decomposes a build task and routes each subtask to a
- * stack-aware **persona**; the **Supervisor** dispatches them; each persona
- * worker acts inside a **runner** sandbox (writing Vike/ORM files via
- * `runnerTools`); progress is rendered through the **surfaces** (a terminal
- * sink plus a background handle with a live stream).
+ * A lead planner decomposes a build task and routes each subtask to one of the
+ * **worker** agents defined below; the **Supervisor** dispatches them; each
+ * worker acts inside a **runner** sandbox (writing files via `runnerTools`);
+ * progress is rendered through the **surfaces** (a terminal sink plus a
+ * background handle with a live stream).
+ *
+ * The roster is the app's own: autopilot orchestrates whatever agents you hand
+ * it and never injects instructions of its own.
  *
  * It runs offline: `AiFake` scripts the model, so there is no API key and the
  * output is deterministic. Swapping `FakeRunner` for a real runner and dropping
@@ -34,7 +33,14 @@ import {
 /** The feature we ask autopilot to build. */
 export const TASK = 'Add a paginated Orders page backed by an orders table'
 
-/** Each subtask, the persona that should own it, and the file it writes. */
+/** The worker roster: the role name the planner routes to, and how that agent is briefed. */
+const WORKERS = [
+  { name: 'data-modeler', role: 'Design database schemas and migrations.' },
+  { name: 'page-builder', role: 'Build pages and their routing.' },
+  { name: 'ui-designer', role: 'Design the UI for a page.' },
+] as const
+
+/** Each subtask, the worker that should own it, and the file it writes. */
 const WORK = [
   {
     worker: 'data-modeler',
@@ -43,13 +49,13 @@ const WORK = [
     contents: "export const orders = table('orders', { id: id(), total: integer(), createdAt: timestamp() })\n",
   },
   {
-    worker: 'vike-page-builder',
+    worker: 'page-builder',
     description: 'Build the /orders page that lists orders, paginated',
     file: 'pages/orders/+Page.jsx',
     contents: "export default function Page({ orders }) { return <OrderList orders={orders} /> }\n",
   },
   {
-    worker: 'ui-intent-designer',
+    worker: 'ui-designer',
     description: 'Express the orders list as intent, not hardcoded markup',
     file: 'pages/orders/+config.js',
     contents: "export default { meta: { OrderList: { env: { server: true, client: true } } } }\n",
@@ -70,15 +76,15 @@ function scriptModel(fake: AiFake): void {
   fake.respondWithSequence([{ text: plannerOutput }, ...workerSteps])
 }
 
-/** Build one worker agent per persona, each with hands inside the sandbox. */
-function personaWorkersWithSandbox(session: RunnerSession): Record<string, ReturnType<typeof agent>> {
+/** The roster, as a line per worker, so the planner knows who it can route to. */
+function roster(): string {
+  return WORKERS.map(w => `- ${w.name}: ${w.role}`).join('\n')
+}
+
+/** Build one worker agent per role, each with hands inside the sandbox. */
+function workersWithSandbox(session: RunnerSession): Record<string, ReturnType<typeof agent>> {
   const sandbox = runnerTools(session)
-  return Object.fromEntries(
-    stackPersonas.map(p => [
-      p.name,
-      agent({ instructions: personaInstructions(p), tools: [...personaTools(p), ...sandbox] }),
-    ]),
-  )
+  return Object.fromEntries(WORKERS.map(w => [w.name, agent({ instructions: w.role, tools: sandbox })]))
 }
 
 export interface QuickstartResult {
@@ -102,7 +108,7 @@ export async function runQuickstart(write: (line: string) => void = () => {}): P
   const fake = AiFake.fake()
   scriptModel(fake)
   try {
-    // Runner: an in-memory sandbox seeded with a minimal Vike project.
+    // Runner: an in-memory sandbox seeded with a minimal project.
     const runner = new FakeRunner({
       onExec: cmd =>
         cmd.includes('build')
@@ -111,14 +117,14 @@ export async function runQuickstart(write: (line: string) => void = () => {}): P
     })
     const session = await runner.boot({ files: { 'package.json': '{ "name": "shop" }\n' } })
 
-    // Personas → Supervisor. The planner is told the roster so it routes by role.
+    // Workers → Supervisor. The planner is told the roster so it routes by role.
     const planner = agentPlanner(
-      agent(`You are the lead engineer. Decompose the task and route each subtask to a persona.\n\n${personaRoster(stackPersonas)}`),
+      agent(`You are the lead engineer. Decompose the task and route each subtask to a worker.\n\n${roster()}`),
     )
     const start = (onEvent: (e: SupervisorEvent) => void) =>
       new Supervisor({
         plan: planner,
-        workers: personaWorkersWithSandbox(session),
+        workers: workersWithSandbox(session),
         concurrency: 1,
         onEvent,
       }).run(TASK)

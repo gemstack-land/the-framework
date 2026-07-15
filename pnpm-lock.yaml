@@ -115,34 +115,6 @@ importers:
         specifier: ^5.4.0
         version: 5.9.3
 
-  examples/framework-discovery-demo:
-    dependencies:
-      '@gemstack/ai-autopilot':
-        specifier: workspace:^
-        version: link:../../packages/ai-autopilot
-      '@gemstack/framework':
-        specifier: workspace:^
-        version: link:../../packages/framework
-      framework-hello:
-        specifier: workspace:^
-        version: link:../framework-hello
-    devDependencies:
-      '@types/node':
-        specifier: ^20.0.0
-        version: 20.19.43
-      tsx:
-        specifier: ^4.19.0
-        version: 4.22.4
-      typescript:
-        specifier: ^5.4.0
-        version: 5.9.3
-
-  examples/framework-hello:
-    dependencies:
-      '@gemstack/ai-autopilot':
-        specifier: workspace:^
-        version: link:../../packages/ai-autopilot
-
   examples/mcp-quickstart:
     dependencies:
       '@gemstack/mcp':

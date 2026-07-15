@@ -130,7 +130,7 @@ The enduring design rule:
 What shipped, built up from that seed (the state layer + the loop are the moat, not the prompts):
 
 - **Supervisor** — the seed topology: plan -> dispatch subagents (bounded concurrency + token budget + per-subtask isolation) -> synthesize.
-- **Personas** — reusable, stack-aware roles materialized into worker agents; **presets** (Vike flagship, Next.js) select the framework-specific ones by detecting the project's framework, on top of a framework-neutral core.
+- **Presets** — framework detection (Vike flagship, Next.js) from a project's dependencies, so a run can narrate what it is working in.
 - **Runner** — a pluggable sandbox seam (`FakeRunner` + a real `LocalRunner`; Docker/WebContainer/Flue are infra-gated adapters) where agents build and run an app.
 - **Surfaces** — the same run in a terminal, an in-page UI, or a detached background handle, over one replayable event stream.
 - **The loop** — an event-to-prompt-chain policy (a major change fires review + code-quality + security; a new UI flow fires QA + UX), gating on a `{ blockers }` verdict, with a data-driven **prompt library**.

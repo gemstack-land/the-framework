@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { loadDomainPreset, loadLoopsFrom, loadSkillsFrom } from './load.js'
+import { loadDomainPreset, loadLoopsFrom } from './load.js'
 import { DomainPresetError } from './define.js'
 
 async function writeFixture(root: string) {
@@ -25,11 +25,6 @@ async function writeFixture(root: string) {
     join(root, 'prompts', 'review.technical.md'),
     `---\nname: review-technical\ndescription: Review a change (technical mode).\nmetadata:\n  loopId: review\n  conditions: technical\n---\nDeep technical review: trace every path.\n`,
   )
-  await mkdir(join(root, 'skills'))
-  await writeFile(
-    join(root, 'skills', 'vike.md'),
-    `---\nname: vike\ndescription: Vike page/routing knowledge.\nmetadata:\n  title: Vike\n  url: https://vike.dev/llms.txt\n---\n`,
-  )
 }
 
 describe('loadDomainPreset', () => {
@@ -42,7 +37,7 @@ describe('loadDomainPreset', () => {
     await rm(dir, { recursive: true, force: true })
   })
 
-  it('loads {loops, prompts, skills} from a directory of .md files', async () => {
+  it('loads {loops, prompts} from a directory of .md files', async () => {
     const preset = await loadDomainPreset(dir)
     assert.equal(preset.name, 'software-development')
     assert.equal(preset.title, 'Software Development')
@@ -55,11 +50,6 @@ describe('loadDomainPreset', () => {
     assert.equal(preset.prompts.length, 1)
     assert.equal(preset.prompts[0]!.id, 'review')
     assert.match(preset.prompts[0]!.instructions, /correctness/)
-
-    assert.equal(preset.skills.length, 1)
-    assert.equal(preset.skills[0]!.name, 'vike')
-    assert.equal(preset.skills[0]!.url, 'https://vike.dev/llms.txt')
-    assert.equal(preset.skills[0]!.title, 'Vike')
   })
 
   it('loads only base files when no mode is active', async () => {
@@ -85,10 +75,9 @@ describe('loadDomainPreset', () => {
   })
 })
 
-describe('loadLoopsFrom / loadSkillsFrom', () => {
-  it('return [] for a directory that does not exist', async () => {
+describe('loadLoopsFrom', () => {
+  it('returns [] for a directory that does not exist', async () => {
     assert.deepEqual(await loadLoopsFrom(join(tmpdir(), 'no-such-loops-dir-xyz')), [])
-    assert.deepEqual(await loadSkillsFrom(join(tmpdir(), 'no-such-skills-dir-xyz')), [])
   })
 })
 

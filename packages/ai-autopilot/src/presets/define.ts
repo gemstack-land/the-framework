@@ -23,8 +23,6 @@ export function definePreset(spec: PresetSpec): Preset {
   return Object.freeze({
     name,
     framework: spec.framework.trim(),
-    ...(spec.skill ? { skill: spec.skill } : {}),
-    personas: Object.freeze([...(spec.personas ?? [])]),
     signals: Object.freeze({
       dependencies: Object.freeze([...(spec.signals?.dependencies ?? [])]),
       files: Object.freeze([...(spec.signals?.files ?? [])]),

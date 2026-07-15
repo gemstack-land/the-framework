@@ -1,6 +1,6 @@
 import { strict as assert } from 'node:assert'
 import { test } from 'node:test'
-import { defineDomainPreset, defineLoop, defineSkill } from '@gemstack/ai-autopilot'
+import { defineDomainPreset, defineLoop } from '@gemstack/ai-autopilot'
 import { runFramework } from './run.js'
 import { FAKE_INTENT, FAKE_SIGNALS, fakeDriver } from './fake-script.js'
 import type { Driver } from './driver/index.js'
@@ -26,10 +26,9 @@ const domainPreset = defineDomainPreset({
   description: 'General engineering.',
   loops: [defineLoop({ on: 'major-change', run: ['code-review'] })],
   prompts: [{ id: 'code-review', name: 'code-review', title: 'Code review', description: '', instructions: 'Review the change for correctness.', passes: 1, appliesTo: [] }],
-  skills: [defineSkill({ name: 'eng-practices', title: 'Engineering Practices', description: 'Code review guidelines.', url: 'https://google.github.io/eng-practices/' })],
 })
 
-test('a domain preset frames the run and is narrated', async () => {
+test('a domain preset drives the run and is narrated', async () => {
   const events: FrameworkEvent[] = []
   const { driver, system } = recordingDriver()
   const { result } = await runFramework({
@@ -42,11 +41,7 @@ test('a domain preset frames the run and is narrated', async () => {
     onEvent: e => events.push(e),
   })
 
-  // The preset's skill framed the session system prompt.
-  assert.match(system(), /Skill: Engineering Practices/)
-  assert.match(system(), /google\.github\.io\/eng-practices/)
-
-  // That exact system prompt is surfaced for transparency (#343), not just handed
+  // The exact system prompt is surfaced for transparency (#343), not just handed
   // to the driver.
   const sys = events.find(e => e.kind === 'system-prompt')
   assert.ok(sys, 'a system-prompt event is emitted')

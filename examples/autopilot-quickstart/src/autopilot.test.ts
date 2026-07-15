@@ -3,19 +3,16 @@ import assert from 'node:assert/strict'
 import { runQuickstart, TASK } from './autopilot.js'
 
 describe('autopilot quickstart: the four layers compose end-to-end', () => {
-  it('plans by persona, dispatches, acts in the sandbox, and surfaces progress', async () => {
+  it('plans by role, dispatches, acts in the sandbox, and surfaces progress', async () => {
     const lines: string[] = []
     const result = await runQuickstart(line => lines.push(line))
 
-    // Supervisor: three subtasks, each routed to a stack persona, all succeeded.
+    // Supervisor: three subtasks, each routed to a worker, all succeeded.
     assert.equal(result.run.plan.length, 3)
-    assert.deepEqual(
-      result.run.plan.map(s => s.worker).sort(),
-      ['data-modeler', 'ui-intent-designer', 'vike-page-builder'],
-    )
+    assert.deepEqual(result.run.plan.map(s => s.worker).sort(), ['data-modeler', 'page-builder', 'ui-designer'])
     assert.ok(result.run.results.every(r => r.ok), 'every subtask succeeded')
 
-    // Runner: each persona worker wrote its file into the sandbox via runnerTools.
+    // Runner: each worker wrote its file into the sandbox via runnerTools.
     assert.ok('database/schema.ts' in result.files)
     assert.ok('pages/orders/+Page.jsx' in result.files)
     assert.match(result.files['database/schema.ts']!, /orders/)

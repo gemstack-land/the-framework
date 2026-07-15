@@ -11,11 +11,8 @@ import { composeRunSystem, type EcoOptions } from '@gemstack/framework/client'
  * is the whole point: no second copy of the wrapping logic to drift from the real
  * one.
  *
- * What it honestly cannot show is the rest of a build run's prompt. Personas,
- * skills, the detected preset and the repo's own memory files are read off disk
- * and appended at run time, and on a build run they can dwarf this block. So the
- * caveat below says so, and the run's own `system-prompt` event carries the true
- * final text into the event log the moment a run starts.
+ * Since #547 nothing is read off disk and appended at run time, so this is the
+ * whole prompt for every run kind, not a preview of most of it.
  */
 export function SystemPromptDisclosure({
   prompt,
@@ -72,9 +69,8 @@ export function SystemPromptDisclosure({
                 {text}
               </pre>
               <p>
-                {text.length.toLocaleString()} characters. A build run also appends this project&apos;s memory files and
-                the personas and skills for its detected stack, which are read at run time — the run&apos;s{' '}
-                <code>system prompt</code> entry in the event log below carries the final text in full.
+                {text.length.toLocaleString()} characters. This is the whole system prompt: nothing else is appended
+                when the run starts.
               </p>
             </>
           ) : (

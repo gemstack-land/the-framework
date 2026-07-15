@@ -9,10 +9,7 @@ import {
   LoopEngine,
   definePrompt,
   defineLoop,
-  personaInstructions,
-  personaTools,
   builtinPresetRegistry,
-  presetPersonas,
   CodeOverviewMaintainer,
   LocalRunner,
   runnerTools,
@@ -47,12 +44,12 @@ const MODEL = process.env['GEMSTACK_MODEL'] ?? 'anthropic/claude-haiku-4-5-20251
 /** The project we detect a framework from — Vike here, so the Vike preset wins. */
 const PROJECT_DEPS = { 'vike-react': '1.0.0', react: '18.0.0', '@prisma/client': '1.0.0' }
 
-/** The build plan: three subtasks, each owned by a preset persona (by name). The real
+/** The build plan: three subtasks, each owned by a worker (by name). The real
  *  worker decides the file contents; only the decomposition is fixed. */
 const WORK = [
   { worker: 'data-modeler', description: 'Define the orders schema and a migration in database/schema.ts' },
-  { worker: 'vike-page-builder', description: 'Build pages/orders/+Page.jsx: a server-rendered, paginated list of orders' },
-  { worker: 'ui-intent-designer', description: 'Express the orders list as intent (a +config.js meta), not hardcoded markup' },
+  { worker: 'page-builder', description: 'Build pages/orders/+Page.jsx: a server-rendered, paginated list of orders' },
+  { worker: 'ui-designer', description: 'Express the orders list as intent (a +config.js meta), not hardcoded markup' },
 ] as const
 const livePlanner: Planner = () => WORK.map(w => ({ description: w.description, worker: w.worker }))
 
@@ -64,13 +61,22 @@ export function registerModel(): void {
   AiRegistry.register(new AnthropicProvider({ apiKey }))
 }
 
-/** One real worker agent per preset persona, each with hands (runner tools) in the sandbox. */
-function presetWorkers(session: RunnerSession, personas: ReturnType<typeof presetPersonas>) {
+/** The worker roster: the role name the plan routes to, and how that agent is briefed. */
+function roster(framework: string) {
+  return [
+    { name: 'data-modeler', role: 'You design database schemas and migrations.' },
+    { name: 'page-builder', role: `You build pages and their routing for ${framework}.` },
+    { name: 'ui-designer', role: 'You design the UI for a page.' },
+  ]
+}
+
+/** One real worker agent per role, each with hands (runner tools) in the sandbox. */
+function buildWorkers(session: RunnerSession, framework: string) {
   const sandbox = runnerTools(session)
   return Object.fromEntries(
-    personas.map(p => [
-      p.name,
-      agent({ model: MODEL, instructions: personaInstructions(p), tools: [...personaTools(p), ...sandbox] }),
+    roster(framework).map(w => [
+      w.name,
+      agent({ model: MODEL, instructions: `${w.role} Write your work to disk with your tools.`, tools: sandbox }),
     ]),
   )
 }
@@ -127,9 +133,8 @@ async function snapshot(session: RunnerSession): Promise<Record<string, string>>
 export async function runLiveCapstone(write: (line: string) => void = () => {}): Promise<CapstoneResult> {
   registerModel()
 
-  // 0. Preset: detect the framework from the project's deps, pick its personas.
+  // 0. Preset: detect the framework from the project's deps to brief the workers.
   const { preset, detection } = builtinPresetRegistry().select({ dependencies: PROJECT_DEPS })
-  const personas = presetPersonas(preset)
 
   // Runner: a REAL isolated workspace on the host filesystem, seeded with a minimal project.
   const runner = new LocalRunner()
@@ -146,7 +151,7 @@ export async function runLiveCapstone(write: (line: string) => void = () => {}):
         },
         steps: {
           scope: () => ({ scope: 'full', intent: INTENT }),
-          build: supervisorBuild({ plan: livePlanner, workers: presetWorkers(session, personas), concurrency: 1 }),
+          build: supervisorBuild({ plan: livePlanner, workers: buildWorkers(session, preset.framework), concurrency: 1 }),
           checklist: loopChecklist({ loop }),
           improve: loopImprove({ loop }),
           // Real Cloudflare deploy when CLOUDFLARE_API_TOKEN is set, else plan-only.
