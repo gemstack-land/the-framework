@@ -2,6 +2,7 @@ import { strict as assert } from 'node:assert'
 import { test } from 'node:test'
 import { renderPostMergePrompt, POST_MERGE_PROMPT_TEMPLATE } from './post-merge-prompt.js'
 import { TemplateFragmentError } from './prompt-template.js'
+import { KNOWLEDGE_DOCS } from './system-prompt.js'
 
 test('POST_MERGE_PROMPT_TEMPLATE carries the #326 post-merge block', () => {
   assert.ok(POST_MERGE_PROMPT_TEMPLATE.includes('TODO_FILE: `TODO_<SESSION_NAME>.agent.md`'))
@@ -9,6 +10,29 @@ test('POST_MERGE_PROMPT_TEMPLATE carries the #326 post-merge block', () => {
   for (const preset of ['maintainability', 'readability', 'security_audit']) {
     assert.ok(POST_MERGE_PROMPT_TEMPLATE.includes(`Apply preset \`${preset}\``), `missing ${preset}`)
   }
+})
+
+test('the business-knowledge section names every knowledge doc (#537)', () => {
+  // The two halves of #537 are authored apart: `## Context` lists the docs from the
+  // KNOWLEDGE_DOCS const, this prompt names them as markdown. Pin them together, or the
+  // agent gets told to read one set of files and update another.
+  assert.ok(POST_MERGE_PROMPT_TEMPLATE.includes('## Business knowledge'))
+  for (const doc of KNOWLEDGE_DOCS) {
+    assert.ok(POST_MERGE_PROMPT_TEMPLATE.includes(doc), `missing ${doc}`)
+  }
+})
+
+test('eco.autoMaintenance drops the maintenance section and keeps the rest (#314/#537)', () => {
+  const prompt = renderPostMergePrompt({ session_name: 'add-oauth' }, { autoMaintenance: true })
+  assert.ok(!prompt.includes('## Maintenance'))
+  assert.ok(!prompt.includes('Apply preset'), 'the preset entries go with the section')
+  // The flag names maintenance only, so business knowledge must survive it.
+  assert.ok(prompt.includes('## Business knowledge'))
+  assert.ok(prompt.includes('add-oauth'))
+  assert.ok(!prompt.includes('${{'), 'the dropped section takes its fragments with it')
+  // Absent/off eco leaves the prompt whole.
+  assert.ok(renderPostMergePrompt({ session_name: 'x' }, {}).includes('## Maintenance'))
+  assert.ok(renderPostMergePrompt({ session_name: 'x' }).includes('## Maintenance'))
 })
 
 test('the template never nests a fragment inside another (#556)', () => {

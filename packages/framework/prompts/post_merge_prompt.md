@@ -7,3 +7,13 @@ If the changes introduced by ${{ tf.session_name }} aren't trivial and have refa
 ${{ tf.settings.technical_control ? '- "Apply preset `readability` on the changes introduced by ' + tf.session_name + '"\n' : '' }}
 If the changes introduced by ${{ tf.session_name }} can potentially lead to security issues, add the following to <TODO_FILE>
 - "Apply preset `security_audit` on the changes introduced by ${{ tf.session_name }}"
+
+
+## Business knowledge
+
+Consider whether the changes introduced by ${{ tf.session_name }} taught you something that belongs in these documents, and update them if so (create one if it doesn't exist yet):
+- `.the-framework/README.md` (whole repo overview)
+- `.the-framework/DECISIONS.md` (decisions taken, and why)
+- `.the-framework/KNOWLEDGE-BASE.md` (business knowledge about the project)
+
+Only write what a future agent would need and cannot get from the code itself.

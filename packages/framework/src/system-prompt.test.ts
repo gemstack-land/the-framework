@@ -5,11 +5,15 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
   composeRunSystem,
+  KNOWLEDGE_DOCS,
   renderSystemPrompt,
   systemPromptBlock,
   SYSTEM_PROMPT_TEMPLATE,
 } from './system-prompt.js'
 import { loadUserSystemPrompt, SYSTEM_PROMPT_FILE } from './system-prompt-file.js'
+
+/** The `Context:` line the #537 knowledge docs stand up on their own, with no dirs picked. */
+const KNOWLEDGE_CONTEXT = `Context: ${KNOWLEDGE_DOCS.join(', ')}`
 import { AWAIT_PROTOCOL, SIGNAL_PROTOCOL } from './turn-gate.js'
 
 test('loadUserSystemPrompt reads and trims SYSTEM.md', async () => {
@@ -80,13 +84,13 @@ test('renderSystemPrompt is not confused by a user prompt containing the heading
   assert.equal(user, sneaky)
 })
 
-test('systemPromptBlock defaults to the built-in #326 prompt alone', () => {
-  assert.equal(systemPromptBlock(), renderSystemPrompt().system)
+test('systemPromptBlock defaults to the knowledge-doc context line + the built-in #326 prompt', () => {
+  assert.equal(systemPromptBlock(), [KNOWLEDGE_CONTEXT, renderSystemPrompt().system].join('\n\n'))
 })
 
 test('systemPromptBlock appends the user prompt after the built-in one', () => {
   const block = systemPromptBlock({ user: 'Ship small PRs.' })
-  assert.ok(block.startsWith('# System prompt'))
+  assert.ok(block.startsWith(`${KNOWLEDGE_CONTEXT}\n\n# System prompt`))
   assert.ok(block.endsWith('Ship small PRs.'))
   assert.match(block, /AWAIT[\s\S]*Ship small PRs\./) // built-in first, then user
 })
@@ -103,16 +107,32 @@ test('systemPromptBlock prepends a Context line for the selected directories (#4
   assert.equal(systemPromptBlock({ antiLazyPill: false, user: 'x', context: ['  '] }), 'x') // blank entries dropped
 })
 
+test('systemPromptBlock puts the knowledge docs in context, after the user dirs (#537)', () => {
+  const block = systemPromptBlock({ user: 'Only mine.', context: ['/work/api'] })
+  assert.ok(block.startsWith(`Context: /work/api, ${KNOWLEDGE_DOCS.join(', ')}\n\n`))
+  // No dirs picked: the docs still stand up a Context line of their own.
+  assert.ok(systemPromptBlock({}).startsWith(`Context: ${KNOWLEDGE_DOCS.join(', ')}\n\n`))
+})
+
+test('systemPromptBlock adds no knowledge docs when antiLazyPill is false (#537/#547)', () => {
+  // `--vanilla` is "Disable system prompt": the docs are framework-authored context, so
+  // they go with the built-in prompt. Only the user's own dirs survive it.
+  assert.equal(systemPromptBlock({ antiLazyPill: false }), '')
+  assert.equal(systemPromptBlock({ antiLazyPill: false, context: ['/work/api'] }), 'Context: /work/api')
+})
+
 test('systemPromptBlock is the #326 prompt and the user prompt, in that order, and nothing else (#457)', () => {
   // The bootstrap preamble was the last text here that was neither the #326 doc nor the
   // user's own. Measured on four live runs: #326 alone already stops an empty-dir build
   // for a plan, so the override earned nothing and outranked the doc.
+  // The knowledge docs (#537) join the Context line, which is paths, not prompt text.
   const block = systemPromptBlock({ user: 'Ship small PRs.', context: ['/work/api'] })
-  assert.equal(block, ['Context: /work/api', renderSystemPrompt().system, 'Ship small PRs.'].join('\n\n'))
+  const context = `Context: ${['/work/api', ...KNOWLEDGE_DOCS].join(', ')}`
+  assert.equal(block, [context, renderSystemPrompt().system, 'Ship small PRs.'].join('\n\n'))
 })
 
 test('systemPromptBlock ignores a whitespace-only user prompt', () => {
-  assert.equal(systemPromptBlock({ user: '   ' }), renderSystemPrompt().system)
+  assert.equal(systemPromptBlock({ user: '   ' }), [KNOWLEDGE_CONTEXT, renderSystemPrompt().system].join('\n\n'))
   assert.equal(systemPromptBlock({ antiLazyPill: false, user: '  \n ' }), '')
 })
 
@@ -198,9 +218,10 @@ test('vanilla (antiLazyPill false) wins over eco: no built-in prompt at all (#31
 
 test('composeRunSystem is exactly the #326 block + both emit protocols, and nothing else (#547)', () => {
   // The one assembly path both runFramework and runPrompt go through. Exact equality is
-  // the point: no persona, skill, or memory framing may ever be appended again.
+  // the point: no persona, skill, or memory framing may ever be appended again. The #537
+  // knowledge docs are in front of that, on the #439 context line: paths, not prompt text.
   const system = composeRunSystem()
-  assert.equal(system, [renderSystemPrompt().system, AWAIT_PROTOCOL, SIGNAL_PROTOCOL].join('\n\n'))
+  assert.equal(system, [KNOWLEDGE_CONTEXT, renderSystemPrompt().system, AWAIT_PROTOCOL, SIGNAL_PROTOCOL].join('\n\n'))
 })
 
 test('composeRunSystem appends nothing after the protocols, whatever the options (#547)', () => {
