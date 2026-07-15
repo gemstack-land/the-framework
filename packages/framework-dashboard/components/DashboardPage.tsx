@@ -4,6 +4,7 @@ import { FolderGit2, Zap, ListChecks, History } from 'lucide-react'
 import { onDashboard } from '../server/reads.telefunc.js'
 import { ActivityChart } from './ActivityChart.js'
 import { RunOutcomes } from './RunOutcomes.js'
+import { UsagePanel } from './UsagePanel.js'
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card.js'
 import { cn } from '../lib/utils.js'
 
@@ -97,12 +98,7 @@ export function DashboardPage({ onSelectProject }: { onSelectProject: (id: strin
               </CardContent>
             </Card>
 
-            <Card className="border-dashed">
-              <CardContent className="flex items-center gap-3 text-sm text-muted-foreground">
-                <span className="font-medium text-foreground">Usage &amp; credits</span>
-                <span>Token usage and credit metering will appear here once runs report cost.</span>
-              </CardContent>
-            </Card>
+            <UsagePanel />
           </>
         )}
       </div>
