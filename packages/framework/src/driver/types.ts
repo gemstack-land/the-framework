@@ -25,6 +25,15 @@ export interface Driver {
   readonly name: string
   /** Boot a session bound to a workspace directory. */
   start(opts: DriverStartOptions): Promise<DriverSession>
+  /**
+   * Ask the agent where the account's subscription quota stands (#521), for the
+   * consumption limits in #519. Account-wide and independent of any session, so
+   * it hangs off the driver rather than off {@link DriverSession}.
+   *
+   * Optional: an agent that can't report it omits the method entirely, the same
+   * way {@link DriverRateLimit} is omitted by drivers that can't emit it.
+   */
+  readQuota?(opts?: { signal?: AbortSignal }): Promise<DriverQuota>
 }
 
 /** How to boot a {@link DriverSession}. */
@@ -132,6 +141,75 @@ export interface DriverRateLimit {
   /** When the window resets, epoch **milliseconds** (the agent reports seconds). */
   resetsAt: number
 }
+
+/**
+ * One quota window and how much of it the account has burned (#521).
+ *
+ * The three concepts here are easy to confuse. {@link DriverUsage} is what *this
+ * run* spent. {@link DriverRateLimit} is a per-turn traffic light (are we still
+ * allowed to spend, and when does the window reset). This is the missing middle:
+ * the *proportion* of a window consumed, which is the only one of the three that
+ * can fill a progress bar.
+ */
+export interface DriverQuotaWindow {
+  /** The window's name exactly as the agent phrased it, e.g. `"Current session"`. */
+  label: string
+  /**
+   * Normalized window, so callers can gate without matching on prose.
+   * `session` is Claude's 5-hour window, `week` its all-models week, and
+   * `week-model` a single model's week (Opus/Sonnet get their own).
+   *
+   * Note there is deliberately no `day`: Claude measures a 5-hour session and a
+   * week, and nothing per day (#519 was specced against a daily limit that does
+   * not exist).
+   */
+  kind: 'session' | 'week' | 'week-model' | 'unknown'
+  /** How much of the window is gone, 0-100. */
+  percentUsed: number
+  /**
+   * When the window resets, as the agent worded it (`"Jul 18 at 7am
+   * (Asia/Jerusalem)"`). Prose, not a timestamp: the agent prints no year, so
+   * parsing it to an epoch would be guesswork. {@link DriverRateLimit.resetsAt}
+   * carries the exact epoch for the window it reports on.
+   */
+  resetsAtText?: string
+}
+
+/**
+ * Why a quota read came back empty.
+ *
+ * The split that matters is transient vs authoritative. `fetch-failed` and
+ * `timeout` describe *this attempt* (the agent's own usage fetch can be refused
+ * upstream, with a penalty window), so a recent reading is still worth showing.
+ * Every other reason describes the account or the install and is a statement
+ * about the setup, so a retained reading must not outlive it.
+ */
+export type DriverQuotaUnavailableReason =
+  /** The agent's own usage fetch failed, e.g. refused upstream. Transient. */
+  | 'fetch-failed'
+  /** The agent did not answer in time. Transient. */
+  | 'timeout'
+  /** The agent binary isn't installed or isn't on `PATH`. */
+  | 'agent-not-found'
+  /** The account has no subscription quota to report (e.g. API-key auth). */
+  | 'no-subscription'
+  /** The agent answered, but not in a shape we recognize (it reworded the readout). */
+  | 'unrecognized'
+
+/** Whether a {@link DriverQuotaUnavailableReason} describes this attempt rather than the setup. */
+export function isTransientQuotaReason(reason: DriverQuotaUnavailableReason): boolean {
+  return reason === 'fetch-failed' || reason === 'timeout'
+}
+
+/**
+ * Where the account's subscription quota stands (#521), as a whole reading.
+ *
+ * Modelled as available-or-not rather than as an empty window list, so a caller
+ * can't mistake "we couldn't ask" for "nothing is used".
+ */
+export type DriverQuota =
+  | { available: true; windows: DriverQuotaWindow[] }
+  | { available: false; reason: DriverQuotaUnavailableReason }
 
 /**
  * A black-box progress event from the wrapped agent. We forward these to the

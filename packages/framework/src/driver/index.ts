@@ -7,7 +7,12 @@ export type {
   DriverEvent,
   DriverUsage,
   DriverRateLimit,
+  DriverQuota,
+  DriverQuotaWindow,
+  DriverQuotaUnavailableReason,
 } from './types.js'
+export { isTransientQuotaReason } from './types.js'
+export { readClaudeQuota, parseQuotaReadout, type ReadClaudeQuotaOptions } from './claude-code-quota.js'
 export { FakeDriver, FakeDriverSession, type FakeTurn, type FakeDriverOptions } from './fake.js'
 export {
   ClaudeCodeDriver,

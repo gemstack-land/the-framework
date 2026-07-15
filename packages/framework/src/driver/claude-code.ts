@@ -5,7 +5,8 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { killTree, registerChild, unregisterChild } from './child-registry.js'
-import type { Driver, DriverEvent, DriverPromptOptions, DriverRateLimit, DriverSession, DriverStartOptions, DriverTurn, DriverUsage } from './types.js'
+import { readClaudeQuota } from './claude-code-quota.js'
+import type { Driver, DriverEvent, DriverPromptOptions, DriverQuota, DriverRateLimit, DriverSession, DriverStartOptions, DriverTurn, DriverUsage } from './types.js'
 
 /** Grace between SIGTERM and the SIGKILL that forces a hung agent tree down. */
 const TERMINATE_GRACE_MS = 5000
@@ -83,6 +84,16 @@ export class ClaudeCodeDriver implements Driver {
 
   start(opts: DriverStartOptions): Promise<DriverSession> {
     return Promise.resolve(new ClaudeCodeSession(this.opts, opts))
+  }
+
+  /** Where the account's subscription quota stands (#521). Account-wide, so no session. */
+  readQuota(opts: { signal?: AbortSignal } = {}): Promise<DriverQuota> {
+    return readClaudeQuota({
+      ...(this.opts.bin !== undefined ? { bin: this.opts.bin } : {}),
+      ...(this.opts.env !== undefined ? { env: this.opts.env } : {}),
+      ...(this.opts.spawn !== undefined ? { spawn: this.opts.spawn } : {}),
+      ...(opts.signal !== undefined ? { signal: opts.signal } : {}),
+    })
   }
 }
 

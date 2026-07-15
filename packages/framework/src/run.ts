@@ -221,8 +221,9 @@ export interface RunFrameworkOptions {
    * Stop the run once cumulative agent cost reaches this many USD (budget cap,
    * #322). Checked after each turn that reports usage: the turn that crosses the
    * cap finishes, then the run stops itself (a clean stop, not a failure). Omit
-   * for no cap. The framework infers spend from what the agent reports, since the
-   * account's usage *limit* is not retrievable under subscription auth.
+   * for no cap. This gates on what *this run* spent, which is a separate question
+   * from where the account's quota stands (readable via #517 / #521, and gated on
+   * by #519's consumption limits).
    */
   budgetUsd?: number
   /**

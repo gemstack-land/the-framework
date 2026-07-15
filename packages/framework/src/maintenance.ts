@@ -8,8 +8,9 @@ import { FRAMEWORK_DIR } from './store/index.js'
  * the maintainability loop on them. Per-repo review state is a small local file
  * (`.the-framework/maintenance.json`, gitignored) recording the last-reviewed commit,
  * so a sweep only ever acts on new work. The capacity gate is the existing budget cap
- * (`--max-cost`) — the account's usage *limit* isn't retrievable under subscription
- * auth (see usage.ts), so #298's "check the limit" half is out of reach for now.
+ * (`--max-cost`). #298's "check the limit" half is reachable after all — the agent
+ * reports the account's quota per turn (#517) and on demand (#521) — but this sweep
+ * does not gate on it yet; that is #519's consumption limits.
  */
 
 /** The per-repo review-state filename under `.the-framework/`. */
