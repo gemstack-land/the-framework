@@ -1,6 +1,7 @@
 import { strict as assert } from 'node:assert'
 import { test } from 'node:test'
 import { mkdtemp, writeFile, appendFile, rm, mkdir, readFile } from 'node:fs/promises'
+import { spawn } from 'node:child_process'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import type { FrameworkEvent } from './events.js'
@@ -182,6 +183,39 @@ test('stopDaemon reports false when nothing is running', async () => {
   try {
     assert.equal(await stopDaemon(env), false)
   } finally {
+    await rm(cwd, { recursive: true, force: true })
+  }
+})
+
+// #514: stopDaemon must not return until the process is actually gone — the port is only
+// free once it is, so an immediate restart would otherwise race it (EADDRINUSE -> "the
+// daemon did not come up in time", with the old daemon still serving a stale bundle).
+// This daemon ignores SIGTERM, standing in for a wedged shutdown: only the escalation ends it.
+test('stopDaemon waits for the daemon to exit, escalating past an ignored SIGTERM (#514)', async () => {
+  const cwd = await tmpWorkspace()
+  const env = await configEnv(cwd)
+  const child = spawn(
+    process.execPath,
+    ['-e', "process.on('SIGTERM', () => {}); console.log('ready'); setInterval(() => {}, 1000)"],
+    { stdio: ['ignore', 'pipe', 'ignore'] },
+  )
+  // Wait until it prints ready: before that its SIGTERM handler is not installed yet and the
+  // default action would kill it, which would pass this test for the wrong reason.
+  await new Promise<void>(resolvePromise => child.stdout!.once('data', () => resolvePromise()))
+  try {
+    await writeFile(
+      daemonStatePath(env),
+      JSON.stringify({ pid: child.pid, port: 4200, url: 'http://127.0.0.1:4200', startedAt: '2026-01-01T00:00:00.000Z' }),
+    )
+    assert.equal(await stopDaemon(env, { timeoutMs: 300 }), true)
+    // The contract: once stopDaemon returns, the daemon is gone (so its port is free).
+    assert.equal(isProcessAlive(child.pid!), false)
+  } finally {
+    try {
+      child.kill('SIGKILL')
+    } catch {
+      // already reaped
+    }
     await rm(cwd, { recursive: true, force: true })
   }
 })
