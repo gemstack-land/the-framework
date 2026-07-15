@@ -67,6 +67,22 @@ export {
 } from './run.js'
 export { snapshotWorkspace, SANDBOX_IGNORE, type SnapshotOptions } from './sandbox.js'
 export {
+  ConsumptionMeter,
+  consumptionStatus,
+  budgetsFrom,
+  DEFAULT_CONSUMPTION_LIMITS,
+  FIVE_HOURS_MS,
+  ONE_DAY_MS,
+  type QuotaSample,
+  type RollingConsumption,
+  type ConsumptionLimit,
+  type ConsumptionLimits,
+  type ConsumptionBudgets,
+  type ConsumptionWindow,
+  type ConsumptionStatus,
+  type LimitStatus,
+} from './consumption.js'
+export {
   startRelay,
   relayPublisher,
   type Relay,
