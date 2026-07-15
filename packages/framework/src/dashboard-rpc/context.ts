@@ -2,6 +2,7 @@ import { getContext } from 'telefunc'
 import { defaultProjectsProvider, type ProjectsProvider } from '../dashboard/projects.js'
 import type { EventsSource } from '../dashboard/telefunc-serve.js'
 import type { PreferencesStore } from '../registry.js'
+import type { QuotaSource } from '../dashboard/quota.js'
 
 /**
  * The {@link ProjectsProvider} a telefunction should read a project id against (#427).
@@ -41,6 +42,19 @@ export function contextEventsSource(): EventsSource | undefined {
 export function contextPreferences(): PreferencesStore | undefined {
   try {
     return getContext<{ preferences?: PreferencesStore }>()?.preferences
+  } catch {
+    return undefined
+  }
+}
+
+/**
+ * The quota source on the context, or undefined (#533). The daemon wires a live
+ * poller; a public host (the relay) leaves it unset, since it has no agent to ask
+ * and no business reading someone else's account.
+ */
+export function contextQuota(): QuotaSource | undefined {
+  try {
+    return getContext<{ quota?: QuotaSource }>()?.quota
   } catch {
     return undefined
   }

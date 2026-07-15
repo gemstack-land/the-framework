@@ -3,6 +3,7 @@ import type { AddressInfo } from 'node:net'
 import type { EcoOptions } from '../system-prompt.js'
 import type { ProjectsProvider } from './projects.js'
 import { registryPreferencesStore, type PreferencesStore } from '../registry.js'
+import { defaultQuotaSource, type QuotaSource } from './quota.js'
 import { serveClientBundle } from './static.js'
 import { makeTelefuncMount } from './telefunc-serve.js'
 
@@ -56,6 +57,11 @@ export interface DashboardOptions {
    * never wires one, so preferences stay inert there.
    */
   preferences?: PreferencesStore
+  /**
+   * Where the usage panel reads the quota from (#533). Defaults to the daemon's
+   * own poller; the relay passes nothing and mounts no panel.
+   */
+  quota?: QuotaSource
   /**
    * Serve the new dashboard bundle (#405) from this directory — the prerendered Vike SPA
    * (`index.html` + `assets/**`). The daemon also mounts the dashboard's Telefunc surface
@@ -150,8 +156,19 @@ export function startDashboard(opts: DashboardOptions = {}): Promise<Dashboard> 
   const preview = opts.onPreview
     ? { start: opts.onPreview, stop: opts.onStopPreview ?? (() => {}), status: opts.onPreviewStatus ?? (() => ({ running: false })) }
     : undefined
+  // The usage panel polls for the dashboard's whole life, not just during a run:
+  // it has to show where the account stands while nothing is running (#533).
+  const quota = clientBundleDir ? (opts.quota ?? defaultQuotaSource()) : undefined
   const telefuncMount = clientBundleDir
-    ? makeTelefuncMount(opts.onStart, opts.projects, undefined, opts.onAddProject, opts.preferences ?? registryPreferencesStore(), preview)
+    ? makeTelefuncMount(
+        opts.onStart,
+        opts.projects,
+        undefined,
+        opts.onAddProject,
+        opts.preferences ?? registryPreferencesStore(),
+        preview,
+        quota,
+      )
     : undefined
 
   const server = createServer((req, res) => {
@@ -175,7 +192,15 @@ export function startDashboard(opts: DashboardOptions = {}): Promise<Dashboard> 
       server.removeListener('error', rejectPromise)
       const address = server.address() as AddressInfo
       const url = `http://${host}:${address.port}`
-      resolvePromise({ url, close: () => closeServer(server) })
+      resolvePromise({
+        url,
+        close: async () => {
+          // Stop polling with the server: the poller outlives every run by design,
+          // so nothing else would ever end it.
+          quota?.stop()
+          await closeServer(server)
+        },
+      })
     })
   })
 }

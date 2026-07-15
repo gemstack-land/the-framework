@@ -5,6 +5,7 @@ import { registerDashboardTelefunctions } from '../dashboard-rpc/register.js'
 import type { ProjectsProvider } from './projects.js'
 import type { FrameworkEvent } from '../events.js'
 import type { PreferencesStore } from '../registry.js'
+import type { QuotaSource } from './quota.js'
 import { isSameOriginRequest, type AddProjectResult, type PreviewResult, type PreviewStatus, type StartRunKind, type StartRunOptions, type StartRunResult } from './server.js'
 
 /** Wired by the daemon so `sendStart` can reach the daemon's own `startRun` closure. */
@@ -46,6 +47,9 @@ export interface DashboardContext {
   /** The user-preferences store (#410). The daemon/foreground wire the real registry file;
    * a public host (the relay) leaves it unset so `onPreferences`/`savePreferences` are inert. */
   preferences?: PreferencesStore
+  /** The quota source behind the usage panel (#533). The daemon wires a live poller;
+   * a public host (the relay) leaves it unset, so `onQuota` reports it has no reading. */
+  quota?: QuotaSource
 }
 
 let instance: Telefunc | undefined
@@ -77,6 +81,7 @@ export function makeTelefuncMount(
   addProject?: AddProjectHandler,
   preferences?: PreferencesStore,
   preview?: PreviewHandlers,
+  quota?: QuotaSource,
 ): (req: IncomingMessage, res: ServerResponse) => Promise<boolean> {
   return async (req, res) => {
     if (!isSameOriginRequest(req)) {
@@ -92,6 +97,7 @@ export function makeTelefuncMount(
       ...(projects ? { projects } : {}),
       ...(eventsSource ? { eventsSource } : {}),
       ...(preferences ? { preferences } : {}),
+      ...(quota ? { quota } : {}),
     }
     // Never let a telefunc failure become an unhandled rejection that kills the daemon:
     // telefunc 0.2.22 throws on a bare `GET /_telefunc` (it passes the request as a body,
