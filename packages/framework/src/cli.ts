@@ -30,13 +30,6 @@ import {
 } from './run.js'
 import { FAKE_DEPLOY, FAKE_INTENT, FAKE_SIGNALS, fakeDriver } from './fake-script.js'
 import { discoverExtensions, readProjectSignals } from './extensions.js'
-import {
-  META_SELECT_SYSTEM,
-  metaSelect,
-  presetCatalog,
-  type MetaSelection,
-} from './meta-select.js'
-import { isWorkspaceEmpty } from './steps.js'
 import { loadFrameworkConfig, type FrameworkFileConfig } from './config.js'
 import { loadRepoMemory } from './memory.js'
 import { type EcoOptions } from './system-prompt.js'
@@ -148,10 +141,6 @@ Options:
   --scope <prototype|full>   How much app to build (default: full).
   --preset <name>        Run under an Open Loop domain preset (its loops + prompts
                          + skills frame the build), e.g. software-development.
-                         Omit it and a live run auto-picks the best-fit preset +
-                         modes from your prompt + workspace (--no-auto-preset off).
-  --no-auto-preset       Do not auto-pick a preset; run the plain framework flow
-                         unless --preset / the-framework.yml sets one.
   --autopilot            Activate the preset's Autopilot mode variants.
   --technical            Activate the preset's Technical mode variants.
                          (--preset / --autopilot / --technical / --kind can also be
@@ -241,7 +230,6 @@ export interface CliOptions {
   model?: string | undefined
   scope: 'prototype' | 'full'
   preset?: string | undefined
-  autoPreset: boolean
   autopilot: boolean
   technical: boolean
   /** `--vanilla`: remove the built-in #326 system prompt entirely (antiLazyPill off, #314). */
@@ -311,7 +299,6 @@ export function parseArgs(argv: string[]): CliOptions {
     intent: '',
     agent: 'claude',
     scope: 'full',
-    autoPreset: true,
     autopilot: false,
     technical: false,
     vanilla: false,
@@ -359,9 +346,6 @@ export function parseArgs(argv: string[]): CliOptions {
         break
       case '--preset':
         opts.preset = argv[++i]
-        break
-      case '--no-auto-preset':
-        opts.autoPreset = false
         break
       case '--autopilot':
         opts.autopilot = true
@@ -712,67 +696,6 @@ export async function resolveDomainPreset(
   return { preset }
 }
 
-/** A one-line summary of the workspace for the meta-select router: empty vs existing + a few deps. */
-export function workspaceSummary(cwd: string, signals: FrameworkSignals): string {
-  if (isWorkspaceEmpty(cwd)) return 'empty (a from-scratch build)'
-  const deps = signals.dependencies
-  const names = Array.isArray(deps) ? deps : Object.keys(deps ?? {})
-  if (names.length === 0) return 'an existing project'
-  const shown = names.slice(0, 12).join(', ')
-  return `an existing project (dependencies: ${shown}${names.length > 12 ? ', …' : ''})`
-}
-
-/**
- * AI meta-select (#204): infer the best-fit domain preset (+ modes + build event)
- * from the intent + workspace when the user did not pick one. Spins up a
- * short-lived driver session for a single routing prompt, then disposes it. Any
- * failure (agent error, junk reply) degrades to `undefined` = the plain flow, so
- * a run is never blocked by the auto-pick.
- */
-export async function autoSelectPreset(opts: {
-  intent: string
-  cwd: string
-  signals: FrameworkSignals
-  claudeOpts: ClaudeCodeDriverOptions
-  /** The agent to route through (#542). Default `claude`. */
-  agent?: AgentName
-  signal?: AbortSignal
-  io: CliIO
-  /** The driver to route the pick through. Defaults to the picked agent's; injected in tests. */
-  driver?: Driver
-  /** Narrate the routing turn to the dashboard + terminal (#310), so it isn't a blank while the pick runs. */
-  onEvent?: (event: FrameworkEvent) => void
-}): Promise<MetaSelection | undefined> {
-  const catalog = presetCatalog(await builtinDomainPresets())
-  if (catalog.length === 0) return undefined
-  // The routing turn runs on the same agent as the build (#542) — picking a preset
-  // with one agent and building with another would be a surprise, and it would
-  // silently need Claude installed for an `--agent codex` run.
-  const driver = opts.driver ?? createDriver({ agent: opts.agent ?? 'claude', claudeOpts: opts.claudeOpts })
-  // The routing turn is a real agent turn that emits no run events, so without
-  // this the dashboard sits blank for its first few seconds (#310).
-  opts.onEvent?.({ kind: 'log', message: '◆ auto-selecting the best-fit preset from your prompt + workspace…' })
-  let session: DriverSession | undefined
-  try {
-    session = await driver.start({
-      cwd: opts.cwd,
-      system: META_SELECT_SYSTEM,
-      ...(opts.signal ? { signal: opts.signal } : {}),
-    })
-    return await metaSelect(session, {
-      intent: opts.intent,
-      catalog,
-      workspace: workspaceSummary(opts.cwd, opts.signals),
-      ...(opts.signal ? { signal: opts.signal } : {}),
-    })
-  } catch (err) {
-    opts.io.err(`auto-select skipped (${err instanceof Error ? err.message : String(err)}); using the plain framework flow.`)
-    return undefined
-  } finally {
-    await session?.dispose()
-  }
-}
-
 /**
  * The `framework` command. Wires the parsed options into {@link runFramework}
  * over a live dashboard + terminal narration, and resolves with an exit code.
@@ -850,10 +773,8 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
   const fromFile = describeConfigSource(opts, fileConfig)
   if (fromFile) io.out(`◆ the-framework.yml: ${fromFile}`)
 
-  // Resolve which Open Loop domain preset (+ modes + build event) to run under.
-  // Precedence: an explicit --preset / the-framework.yml wins; else, on a live run,
-  // AI meta-select infers the best fit from the intent + workspace (#204). CLI mode
-  // flags still OR in on top of an inferred preset; --no-auto-preset / --fake skip it.
+  // Resolve which Open Loop domain preset (+ modes + build event) to run under:
+  // --preset / the-framework.yml, or none at all (#545). Nothing infers one.
   const merged = mergeRunConfig(opts, fileConfig)
   let presetName = merged.presetName
   let modeList = activeModes(merged)
@@ -873,8 +794,8 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
     domainPreset = resolved.preset
   }
 
-  // Fail early and clearly if a live run's prerequisites are missing — before
-  // auto-select and the run, which both need the wrapped agent.
+  // Fail early and clearly if a live run's prerequisites are missing — before the
+  // run, which needs the wrapped agent.
   if (!fake && !opts.skipPreflight) {
     const pre = await preflight({ agent: opts.agent })
     if (!pre.ok) {
@@ -885,9 +806,8 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
   }
 
   // Which agent is about to spend the user's subscription, and which guards are
-  // not in force while it does — said *before* the first turn (the auto-select
-  // one below is already a real, billed turn). A cap that turns out not to apply
-  // is worth knowing before the spending, not after (#542).
+  // not in force while it does — said *before* the first turn. A cap that turns
+  // out not to apply is worth knowing before the spending, not after (#542).
   if (!fake) {
     if (opts.agent !== 'claude') io.out(`◆ agent: ${AGENT_SPECS[opts.agent].label}`)
     for (const note of unguardedNotices(opts)) io.err(`note: ${note}`)
@@ -895,10 +815,10 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
 
   const claudeOpts = claudeDriverOptions(opts)
   // Detection signals: fixed for the fake demo, read from the project otherwise.
-  // Computed once here, reused by auto-select, extension discovery, and the run.
+  // Computed once here, reused by extension discovery and the run.
   const signals = fake ? FAKE_SIGNALS : readProjectSignals(cwd)
-  // One controller for the whole run (and the auto-select turn before it): the
-  // dashboard Stop button aborts it once wired below.
+  // One controller for the whole run: the dashboard Stop button aborts it once
+  // wired below.
   const controller = new AbortController()
 
   // Ctrl+C / SIGTERM during a live run must abort the run — not let default
@@ -924,9 +844,7 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
 
   // The dashboard Stop button aborts the run-wide controller created above.
   // runFramework checks the signal between phases and the driver kills its current
-  // turn on it, so a stop takes effect promptly. Started here — before the AI
-  // meta-select turn — so that routing turn narrates into a live dashboard instead
-  // of leaving it blank for its first few seconds (#310).
+  // turn on it, so a stop takes effect promptly.
   //
   // Interactive choices (#304): the run's requestChoice handler parks a resolver
   // here keyed by the choice id; the dashboard's Accept / autopilot POSTs the pick
@@ -1059,24 +977,6 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
     const binPath = process.argv[1]
     if (!binPath) return
     await runPostMergeSuite(cwd, binPath, io, opts.maxCost)
-  }
-
-  // AI meta-select: with no preset chosen explicitly, infer the best fit (+ modes +
-  // build event) from the intent + workspace, then resolve it with the active modes.
-  // Narrates through onEvent so the routing turn is visible on the dashboard (#310).
-  if (!fake && opts.autoPreset && !presetName && !opts.research && !opts.directPrompt) {
-    const selection = await autoSelectPreset({ intent, cwd, signals, claudeOpts, agent: opts.agent, signal: controller.signal, io, onEvent })
-    if (selection?.preset) {
-      presetName = selection.preset
-      modeList = [...new Set([...modeList, ...selection.modes])]
-      buildEvent = buildEvent ?? selection.buildEvent
-      domainPreset = (await resolveDomainPreset(presetName, modeList)).preset
-      const modeNote = modeList.length ? ` (modes: ${modeList.join(', ')})` : ''
-      const kindNote = selection.buildEvent && !merged.buildEvent ? `, ${selection.buildEvent}` : ''
-      onEvent({ kind: 'log', message: `◆ auto-selected preset: ${presetName}${modeNote}${kindNote}${selection.why ? ` — ${selection.why}` : ''}` })
-    } else {
-      onEvent({ kind: 'log', message: `◆ auto-select: no preset fits${selection?.why ? ` (${selection.why})` : ''}; using the plain framework flow.` })
-    }
   }
 
   // A mode/kind given with no preset in effect has nothing to act on: note it.

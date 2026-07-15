@@ -270,8 +270,7 @@ function truncate(text: string, max = 100): string {
 
 /**
  * The Open Loop modes a run can activate, in the order the dashboard shows them.
- * The single source of truth for both the mode checkboxes (#272) and the
- * meta-select router's validation ({@link import('./meta-select.js').META_SELECT_MODES}).
+ * The single source of truth for the mode checkboxes (#272).
  */
 export const OPEN_LOOP_MODES = ['autopilot', 'technical'] as const
 

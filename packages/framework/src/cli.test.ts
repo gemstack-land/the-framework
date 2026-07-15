@@ -9,7 +9,6 @@ import { EVENTS_FILE, FRAMEWORK_DIR } from './store/index.js'
 import {
   activeModes,
   antiLazyPillOff,
-  autoSelectPreset,
   buildDeployTarget,
   chooseSessionLink,
   claudeDriverOptions,
@@ -28,7 +27,6 @@ import {
   unguardedNotices,
   withBrowser,
   BROWSER_MCP_SERVERS,
-  workspaceSummary,
   type CliIO,
 } from './cli.js'
 import { readLogs } from './logs.js'
@@ -343,11 +341,6 @@ test('parseArgs reads --kind as the build event (#265)', () => {
   assert.equal(parseArgs(['x']).buildEvent, undefined)
 })
 
-test('parseArgs defaults autoPreset on, and --no-auto-preset turns it off (#204)', () => {
-  assert.equal(parseArgs(['x']).autoPreset, true)
-  assert.equal(parseArgs(['--no-auto-preset', 'x']).autoPreset, false)
-})
-
 test('parseArgs reads --sandbox and rejects an unknown value (#229)', () => {
   assert.equal(parseArgs(['--sandbox', 'docker', 'x']).sandbox, 'docker')
   assert.equal(parseArgs(['--sandbox', 'local', 'x']).sandbox, 'local')
@@ -367,62 +360,6 @@ test('parseArgs reads the relay subcommand and --share (#230)', () => {
   assert.equal(parseArgs(['x']).share, undefined)
 })
 
-test('workspaceSummary describes an empty vs an existing workspace', async () => {
-  const empty = await mkdtemp(join(tmpdir(), 'framework-ws-'))
-  try {
-    assert.match(workspaceSummary(empty, {}), /empty/)
-    await writeFile(join(empty, 'index.ts'), 'export const x = 1\n')
-    const summary = workspaceSummary(empty, { dependencies: { react: '^19', vite: '^5' } })
-    assert.match(summary, /existing project/)
-    assert.match(summary, /react/)
-    assert.match(summary, /vite/)
-  } finally {
-    await rm(empty, { recursive: true, force: true })
-  }
-})
-
-test('autoSelectPreset routes the pick through an injected driver and returns the selection (#204)', async () => {
-  const empty = await mkdtemp(join(tmpdir(), 'framework-ws-'))
-  try {
-    const driver = new FakeDriver({
-      turns: [{ text: '```json\n{ "preset": "software-development", "modes": ["technical"], "event": "bug-fix", "why": "a fix" }\n```' }],
-    })
-    const { io } = capture()
-    const selection = await autoSelectPreset({ intent: 'fix a crash', cwd: empty, signals: {}, claudeOpts: {}, io, driver })
-    assert.deepEqual(selection, { preset: 'software-development', modes: ['technical'], buildEvent: 'bug-fix', why: 'a fix' })
-  } finally {
-    await rm(empty, { recursive: true, force: true })
-  }
-})
-
-test('autoSelectPreset narrates the routing turn through onEvent so the dashboard is not blank (#310)', async () => {
-  const empty = await mkdtemp(join(tmpdir(), 'framework-ws-'))
-  try {
-    const driver = new FakeDriver({
-      turns: [{ text: '```json\n{ "preset": "none", "modes": [], "why": "n/a" }\n```' }],
-    })
-    const { io } = capture()
-    const events: FrameworkEvent[] = []
-    await autoSelectPreset({ intent: 'anything', cwd: empty, signals: {}, claudeOpts: {}, io, driver, onEvent: e => events.push(e) })
-    // Emitted before the routing turn resolves, so the dashboard shows activity during it.
-    assert.ok(events.some(e => e.kind === 'log' && /auto-selecting the best-fit preset/.test(e.message)))
-  } finally {
-    await rm(empty, { recursive: true, force: true })
-  }
-})
-
-test('autoSelectPreset degrades to undefined when the driver errors', async () => {
-  const empty = await mkdtemp(join(tmpdir(), 'framework-ws-'))
-  try {
-    const driver = new FakeDriver({ respond: () => { throw new Error('agent unavailable') } })
-    const { io, err } = capture()
-    const selection = await autoSelectPreset({ intent: 'anything', cwd: empty, signals: {}, claudeOpts: {}, io, driver })
-    assert.equal(selection, undefined)
-    assert.ok(err.some(l => /auto-select skipped/.test(l)))
-  } finally {
-    await rm(empty, { recursive: true, force: true })
-  }
-})
 
 test('activeModes maps the mode flags to Open Loop mode names', () => {
   assert.deepEqual(activeModes({ autopilot: false, technical: false }), [])
