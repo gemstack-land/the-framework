@@ -1,4 +1,5 @@
 import { renderPresetPrompt, type PresetParam } from './preset-params.js'
+import { PRESETS_SECURITY_AUDIT } from './prompts.generated.js'
 
 /**
  * The [Security audit] preset (#461): Rom's exhaustive security pass, shipped as
@@ -17,11 +18,7 @@ export const SECURITY_AUDIT_PARAMS: readonly PresetParam[] = [
 ]
 
 /** The prompt template, verbatim from #461 (with `<PARAM:what>` as the blank). */
-export const SECURITY_AUDIT_PROMPT_TEMPLATE = `Security audit <PARAM:what>
-- Scrutinize the entire code for potential security issues
-- Make it exhaustive (100% coverage)
-- List every aspect you considered and, for each aspect, include a verdict as well as an explanation for non-obvious verdicts
-- If you see any security issue, fix each security issue in a separate commit`
+export const SECURITY_AUDIT_PROMPT_TEMPLATE = PRESETS_SECURITY_AUDIT
 
 /**
  * Render the Security audit prompt for a target. A blank / omitted `what` falls

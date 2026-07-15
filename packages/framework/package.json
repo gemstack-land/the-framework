@@ -50,12 +50,13 @@
     }
   },
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
-    "dev": "tsc -p tsconfig.build.json --watch",
-    "typecheck": "tsc --noEmit",
-    "test": "tsc -p tsconfig.test.json && cd dist-test && node --test",
+    "build": "node scripts/gen-prompts.mjs && tsc -p tsconfig.build.json",
+    "dev": "node scripts/gen-prompts.mjs && tsc -p tsconfig.build.json --watch",
+    "typecheck": "node scripts/gen-prompts.mjs && tsc --noEmit",
+    "test": "node scripts/gen-prompts.mjs && tsc -p tsconfig.test.json && cd dist-test && node --test",
     "bundle:dashboard": "node scripts/bundle-dashboard.mjs",
-    "clean": "rm -rf dist dist-test"
+    "clean": "rm -rf dist dist-test src/prompts.generated.ts",
+    "gen:prompts": "node scripts/gen-prompts.mjs"
   },
   "dependencies": {
     "@gemstack/ai-autopilot": "workspace:^",

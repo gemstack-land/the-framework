@@ -1,4 +1,5 @@
 import { renderPresetPrompt, type PresetParam } from './preset-params.js'
+import { PRESETS_MAINTAINABILITY } from './prompts.generated.js'
 
 /**
  * The [Maintainability] preset (#361): Rom's refactor-for-future-changes pass,
@@ -15,9 +16,8 @@ export const MAINTAINABILITY_PARAMS: readonly PresetParam[] = [
   { name: 'what', default: 'this PR', description: 'What to refactor for maintainability' },
 ]
 
-/** The prompt template, verbatim from #361 (with `<PARAM:what>` as the blank). */
-export const MAINTAINABILITY_PROMPT_TEMPLATE = `Refactor <PARAM:what> to make it as maintainable as possible:
-- Look for maintainability red flags, and fix them.`
+/** The prompt template, verbatim from #361, in `prompts/presets/maintainability.md` (#551). */
+export const MAINTAINABILITY_PROMPT_TEMPLATE = PRESETS_MAINTAINABILITY
 
 /**
  * Render the Maintainability prompt for a target. A blank / omitted `what`

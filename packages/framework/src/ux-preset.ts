@@ -1,4 +1,5 @@
 import { renderPresetPrompt, type PresetParam } from './preset-params.js'
+import { PRESETS_UX } from './prompts.generated.js'
 
 /**
  * The [UX] preset (#472): Rom's usability review, shipped like [Research] (#331)
@@ -19,12 +20,7 @@ export const UX_PARAMS: readonly PresetParam[] = [
 ]
 
 /** The prompt template, from #472 (with `<PARAM:what>` as the blank, `<AWAIT>` as the gate). */
-export const UX_PROMPT_TEMPLATE = `Thoroughly review UX of <PARAM:what> and make proposals to improve. Focus your review from a usability perspective: is using the UI and all the functionalities a nice user experience?
-1. Enumerate *all* your findings (in a sensible order and categorized), with reference numbers (so that it's easy to reference each point in follow up conversations), and make it a list of choices shown via \`showChoices()\`
-2. <AWAIT>
-3. Work on all accepted proposals
-
-AWAIT: Stop, await user answer before resuming`
+export const UX_PROMPT_TEMPLATE = PRESETS_UX
 
 /**
  * Render the UX prompt for a target. A blank / omitted `what` falls back to the

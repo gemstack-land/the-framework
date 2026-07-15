@@ -1,3 +1,4 @@
+import { PROTOCOLS_AWAIT, PROTOCOLS_SIGNAL } from './prompts.generated.js'
 import type { ChoicesOption } from './run.js'
 import type { MultiSelectOption } from './run.js'
 
@@ -9,34 +10,9 @@ import type { MultiSelectOption } from './run.js'
  * is a signal in the turn's final message. This appends one to the system prompt: it
  * does not restate the macros, it pins *how* to emit an awaited choice so the
  * turn-boundary gate can detect it. Kept minimal and self-contained so it survives the
- * #326 wording still being written.
+ * #326 wording still being written. The text lives in `prompts/protocols/await.md` (#551).
  */
-export const AWAIT_PROTOCOL = [
-  '## Awaiting a choice',
-  'When these instructions tell you to showChoices() / showMultiSelect() / showMarkdown() and then AWAIT, do not decide for the user.',
-  'End your turn with one fenced code block, then stop.',
-  'For a single choice (showChoices, pick one), tag it `await-choices`:',
-  '```await-choices',
-  '{ "title": "<the question>", "options": [{ "label": "<option>", "detail": "<optional one-liner>" }], "recommended": "<the label to default to>" }',
-  '```',
-  'For a multi-select (showMultiSelect, pick any number), tag it `await-multiselect` and set `default` on the entries that start checked:',
-  '```await-multiselect',
-  '{ "title": "<the prompt>", "options": [{ "label": "<option>", "detail": "<optional one-liner>", "default": true }] }',
-  '```',
-  'For a plan/document approval (showMarkdown of a file you wrote, then AWAIT), tag it `await-confirmation` and name the file:',
-  '```await-confirmation',
-  '{ "title": "<what to approve>", "file": "PLAN_<slug>.agent.md" }',
-  '```',
-  'The framework shows it, waits for the user, and re-prompts you with their answer. Do not continue past it on your own.',
-  '',
-  '## Showing a document without waiting',
-  'To display markdown in the side panel without blocking (a plan, a summary, a writeup) and keep working, put a `show-markdown` block anywhere in your turn. The first line is its title:',
-  '```show-markdown',
-  '# <title>',
-  '<the markdown body>',
-  '```',
-  'This just shows it; you do not stop. Re-emit the same title to update that view in place.',
-].join('\n')
+export const AWAIT_PROTOCOL = PROTOCOLS_AWAIT
 
 /**
  * The session-lifecycle protocol (#326): the code side of the `setSessionName()` and
@@ -44,21 +20,10 @@ export const AWAIT_PROTOCOL = [
  * it does not restate *when* to act — the system prompt owns that — it only pins *how* to
  * emit the signal so the turn-boundary can detect it. Both are non-blocking: the agent
  * emits the block and keeps going (the framework records it and reflects it in the
- * dashboard). Injected alongside AWAIT_PROTOCOL.
+ * dashboard). Injected alongside AWAIT_PROTOCOL. The text lives in
+ * `prompts/protocols/signal.md` (#551).
  */
-export const SIGNAL_PROTOCOL = [
-  '## Session name',
-  'When you call setSessionName(<name>) (after creating and checking out the `the-framework/<name>` branch), also emit a `set-session-name` block naming it, so the dashboard shows which session this is. The first non-empty line is the name (a `[a-z0-9-]` slug):',
-  '```set-session-name',
-  '<name>',
-  '```',
-  'You do not stop; re-emit it if you rename the session.',
-  '',
-  '## Ready for merge',
-  'When you call setReadyForMerge() — you believe the work is complete and ready for human review — emit an empty `ready-for-merge` block. This flips the dashboard status from building to ready; it does not stop your turn.',
-  '```ready-for-merge',
-  '```',
-].join('\n')
+export const SIGNAL_PROTOCOL = PROTOCOLS_SIGNAL
 
 /** A single-select choice an agent stopped to ask, parsed from an `await-choices` block (#337). */
 export interface ParsedChoicesGate {

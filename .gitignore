@@ -18,3 +18,6 @@ test-results/
 
 # VitePress dev cache (build output goes to .vitepress/dist, covered by dist/)
 docs/.vitepress/cache/
+
+# Generated from packages/framework/prompts/**/*.md by its gen-prompts script (#551).
+packages/framework/src/prompts.generated.ts
