@@ -185,3 +185,57 @@ test('ClaudeCodeDriver writes an --mcp-config file for mcpServers and cleans it 
   await session.dispose()
   assert.ok(!existsSync(configPath))
 })
+
+test('StreamJsonParser surfaces the rate-limit telemetry the agent emits per turn (#517)', () => {
+  const p = new StreamJsonParser()
+  // Real payload shape, captured from `claude -p --output-format stream-json`.
+  const events = p.push(
+    JSON.stringify({
+      type: 'rate_limit_event',
+      rate_limit_info: {
+        status: 'allowed',
+        resetsAt: 1784079000,
+        rateLimitType: 'five_hour',
+        overageStatus: 'rejected',
+        isUsingOverage: false,
+      },
+      session_id: 'sess-1',
+    }),
+  )
+  assert.deepEqual(events, [
+    // Seconds in, millis out.
+    { type: 'rate-limit', limit: { status: 'allowed', window: 'five_hour', resetsAt: 1784079000_000 } },
+  ])
+  // Telemetry must not disturb the turn itself.
+  assert.deepEqual(p.result(), { text: '', sessionId: 'sess-1' })
+})
+
+test('StreamJsonParser passes through rate-limit values it has never seen (#517)', () => {
+  const p = new StreamJsonParser()
+  // We have only ever observed status=allowed / window=five_hour. An unknown
+  // value is the signal we are capturing for, so it must not be dropped.
+  const events = p.push(
+    JSON.stringify({
+      type: 'rate_limit_event',
+      rate_limit_info: { status: 'allowed_warning', resetsAt: 1784079000, rateLimitType: 'seven_day_opus' },
+    }),
+  )
+  assert.deepEqual(events, [
+    { type: 'rate-limit', limit: { status: 'allowed_warning', window: 'seven_day_opus', resetsAt: 1784079000_000 } },
+  ])
+})
+
+test('StreamJsonParser stays silent on a malformed rate_limit_event (#517)', () => {
+  const p = new StreamJsonParser()
+  // Reporting a bogus reset time is worse than reporting nothing.
+  assert.deepEqual(p.push(JSON.stringify({ type: 'rate_limit_event' })), [])
+  assert.deepEqual(p.push(JSON.stringify({ type: 'rate_limit_event', rate_limit_info: null })), [])
+  assert.deepEqual(
+    p.push(JSON.stringify({ type: 'rate_limit_event', rate_limit_info: { status: 'allowed', rateLimitType: 'five_hour' } })),
+    [],
+  )
+  assert.deepEqual(
+    p.push(JSON.stringify({ type: 'rate_limit_event', rate_limit_info: { status: 'allowed', rateLimitType: 'five_hour', resetsAt: 'soon' } })),
+    [],
+  )
+})

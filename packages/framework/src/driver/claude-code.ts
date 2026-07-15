@@ -5,7 +5,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { killTree, registerChild, unregisterChild } from './child-registry.js'
-import type { Driver, DriverEvent, DriverPromptOptions, DriverSession, DriverStartOptions, DriverTurn, DriverUsage } from './types.js'
+import type { Driver, DriverEvent, DriverPromptOptions, DriverRateLimit, DriverSession, DriverStartOptions, DriverTurn, DriverUsage } from './types.js'
 
 /** Grace between SIGTERM and the SIGKILL that forces a hung agent tree down. */
 const TERMINATE_GRACE_MS = 5000
@@ -317,6 +317,10 @@ export class StreamJsonParser {
     const type = obj['type']
 
     if (type === 'assistant') return this.handleAssistant(obj)
+    if (type === 'rate_limit_event') {
+      const limit = parseRateLimit(obj)
+      return limit ? [{ type: 'rate-limit', limit }] : []
+    }
     if (type === 'result') {
       const result = obj['result']
       if (typeof result === 'string') this.finalText = result
@@ -355,6 +359,26 @@ export class StreamJsonParser {
       ...(this.usage ? { usage: this.usage } : {}),
     }
   }
+}
+
+/**
+ * Pull the account's quota standing off a `rate_limit_event` line (#517):
+ * `{status, resetsAt, rateLimitType}`. The agent emits one per turn, so this is
+ * free telemetry — no extra call, no polling. Returns undefined when the payload
+ * is missing the parts we'd gate on, so a malformed line stays silent rather
+ * than reporting a bogus reset.
+ */
+function parseRateLimit(obj: Record<string, unknown>): DriverRateLimit | undefined {
+  const raw = obj['rate_limit_info']
+  if (typeof raw !== 'object' || raw === null) return undefined
+  const info = raw as Record<string, unknown>
+  const status = info['status']
+  const window = info['rateLimitType']
+  const resetsAt = info['resetsAt']
+  if (typeof status !== 'string' || typeof window !== 'string') return undefined
+  if (typeof resetsAt !== 'number' || !Number.isFinite(resetsAt)) return undefined
+  // The agent reports epoch seconds; the rest of the framework speaks millis.
+  return { status, window, resetsAt: resetsAt * 1000 }
 }
 
 /**

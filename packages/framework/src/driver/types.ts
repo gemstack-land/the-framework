@@ -110,6 +110,30 @@ export interface DriverUsage {
 }
 
 /**
+ * Where the account's subscription quota stands, as reported by the wrapped
+ * agent (#517). Claude Code emits one of these per turn on its `stream-json`
+ * output; drivers that cannot report it simply omit it. This is the account
+ * limit, not this run's spend — {@link DriverUsage} covers the latter.
+ */
+export interface DriverRateLimit {
+  /**
+   * Whether the account may still spend against this window: `allowed`,
+   * `allowed_warning`, or `rejected`. Left open rather than a union — only
+   * `allowed` has been observed, and a status we don't know is the signal we're
+   * capturing for, so it must surface rather than be dropped.
+   */
+  status: string
+  /**
+   * Which quota window this reports on (`five_hour`, `seven_day`,
+   * `seven_day_opus`, `seven_day_sonnet`, `weekly`). Left open for the same
+   * reason: the agent adds windows as plans change.
+   */
+  window: string
+  /** When the window resets, epoch **milliseconds** (the agent reports seconds). */
+  resetsAt: number
+}
+
+/**
  * A black-box progress event from the wrapped agent. We forward these to the
  * dashboard for visibility but never gate on them: the loop gates on the code /
  * outcome, not on which tool the agent reached for.
@@ -123,5 +147,7 @@ export type DriverEvent =
   | { type: 'action'; label: string }
   /** The turn settled with this final text. */
   | { type: 'result'; text: string; sessionId?: string; usage?: DriverUsage }
+  /** Where the account's subscription quota stands (#517). */
+  | { type: 'rate-limit'; limit: DriverRateLimit }
   /** The agent (or its transport) errored. */
   | { type: 'error'; message: string }

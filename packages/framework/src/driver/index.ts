@@ -6,6 +6,7 @@ export type {
   DriverTurn,
   DriverEvent,
   DriverUsage,
+  DriverRateLimit,
 } from './types.js'
 export { FakeDriver, FakeDriverSession, type FakeTurn, type FakeDriverOptions } from './fake.js'
 export {
