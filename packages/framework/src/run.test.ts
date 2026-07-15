@@ -118,7 +118,8 @@ test('runFramework accumulates per-turn usage and emits a running total (#322)',
   if (last.kind !== 'usage') return
   // One usage event per turn that reported usage; totals grow monotonically.
   assert.equal(last.turns, usage.length)
-  assert.ok(Math.abs(last.costUsd - last.turns * 0.02) < 1e-9)
+  // The fake driver prices its turns, so the total carries a cost.
+  assert.ok(Math.abs(last.costUsd! - last.turns * 0.02) < 1e-9)
   assert.ok(last.cacheReadTokens > 0)
   // No cap was set, so the total carries no budget and the run finished cleanly.
   assert.equal(last.budgetUsd, undefined)

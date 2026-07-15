@@ -447,7 +447,9 @@ export async function runFramework(opts: RunFrameworkOptions): Promise<RunFramew
     emit({ kind: 'usage', ...totals, ...(opts.budgetUsd != null ? { budgetUsd: opts.budgetUsd } : {}) })
     // The turn that crosses the cap has already run (its cost is spent); stop the
     // run before the next one. Signalled once — the next phase's check ends it.
-    if (opts.budgetUsd != null && totals.costUsd >= opts.budgetUsd && !budgetController.signal.aborted) {
+    // An agent that reports no price leaves `costUsd` undefined and so can never
+    // trip the cap; the CLI says so up front rather than let it look capped (#540).
+    if (opts.budgetUsd != null && totals.costUsd !== undefined && totals.costUsd >= opts.budgetUsd && !budgetController.signal.aborted) {
       emit({ kind: 'log', message: `Budget reached: $${totals.costUsd.toFixed(4)} of $${opts.budgetUsd} — stopping the run.` })
       budgetController.abort(new Error('[framework] budget reached'))
     }

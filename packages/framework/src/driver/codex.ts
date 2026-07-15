@@ -2,7 +2,7 @@ import { spawn as nodeSpawn } from 'node:child_process'
 import { readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { runAgentCli, type AgentCliParser, type SpawnLike } from './claude-code.js'
-import type { Driver, DriverEvent, DriverPromptOptions, DriverSession, DriverStartOptions, DriverTurn } from './types.js'
+import type { Driver, DriverEvent, DriverPromptOptions, DriverSession, DriverStartOptions, DriverTurn, DriverUsage } from './types.js'
 
 /**
  * Codex's sandbox policy for the shell commands the model writes.
@@ -40,11 +40,10 @@ export interface CodexDriverOptions {
  *
  * - **No system-prompt flag.** Codex has no `--append-system-prompt`, so the
  *   framing is prepended to the prompt instead. Same words reach the agent.
- * - **No usage.** Codex reports token counts but never a price, and nothing
- *   about the subscription's remaining quota. So it omits {@link DriverTurn.usage}
- *   entirely rather than claim a run cost `$0`, which would read as free. The
- *   budget cap (#322) and the consumption limits (#519) are Claude-only until
- *   that's resolved (#540).
+ * - **Tokens, no price.** Codex reports token counts but never a price, so usage
+ *   carries the counts and omits `costUsd` rather than claim a turn cost `$0`,
+ *   which would read as free (#540). The budget cap (#322) gates on a price, so
+ *   it cannot fire here; the CLI says so at startup instead of implying it.
  * - **No quota read.** No `readQuota`, for the same reason: the seam is optional
  *   precisely so an agent that can't report one simply doesn't.
  */
@@ -136,6 +135,7 @@ export class CodexSession implements DriverSession {
 export class CodexJsonParser implements AgentCliParser {
   private text = ''
   private sessionId: string | undefined
+  private usage: DriverUsage | undefined
 
   push(line: string): DriverEvent[] {
     let obj: Record<string, unknown>
@@ -149,6 +149,12 @@ export class CodexJsonParser implements AgentCliParser {
     if (type === 'thread.started') {
       const id = obj['thread_id']
       if (typeof id === 'string') this.sessionId = id
+      return []
+    }
+
+    if (type === 'turn.completed') {
+      const usage = parseCodexUsage(obj['usage'])
+      if (usage) this.usage = usage
       return []
     }
 
@@ -175,8 +181,46 @@ export class CodexJsonParser implements AgentCliParser {
   }
 
   result(): DriverTurn {
-    // No `usage`, deliberately: Codex reports tokens but no price, and a `$0`
-    // would read as free rather than as "we don't know" (#540).
-    return { text: this.text, ...(this.sessionId ? { sessionId: this.sessionId } : {}) }
+    // Tokens but no `costUsd`: Codex prices nothing, and a `$0` would read as free
+    // rather than as "we don't know" (#540).
+    return {
+      text: this.text,
+      ...(this.sessionId ? { sessionId: this.sessionId } : {}),
+      ...(this.usage ? { usage: this.usage } : {}),
+    }
+  }
+}
+
+/**
+ * Map Codex's `turn.completed` usage onto {@link DriverUsage}. The dialect is
+ * OpenAI's Responses API shape, flattened:
+ * `{input_tokens, cached_input_tokens, output_tokens, reasoning_output_tokens}`.
+ *
+ * Two things that shape the mapping, both verified against codex-cli 0.144.4:
+ *
+ * - `input_tokens` is the **total** input, cached included. Repeating one prompt
+ *   held it at 12218 while `cached_input_tokens` rose 9984 -> 12032; a non-cached
+ *   count would have fallen. So the uncached part is the difference, which is what
+ *   `inputTokens` means here.
+ * - `reasoning_output_tokens` is a **subset** of `output_tokens` (as
+ *   `cached_input_tokens` is of `input_tokens`), so adding it would double-count.
+ *
+ * No price, and no cache-*write* count: OpenAI caches implicitly and bills no
+ * separate write, so `cacheCreationTokens` is honestly 0 rather than a guess.
+ */
+export function parseCodexUsage(raw: unknown): DriverUsage | undefined {
+  if (typeof raw !== 'object' || raw === null) return undefined
+  const usage = raw as Record<string, unknown>
+  const num = (key: string): number => {
+    const value = usage[key]
+    return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : 0
+  }
+  const input = num('input_tokens')
+  const cached = Math.min(num('cached_input_tokens'), input)
+  return {
+    inputTokens: input - cached,
+    outputTokens: num('output_tokens'),
+    cacheReadTokens: cached,
+    cacheCreationTokens: 0,
   }
 }

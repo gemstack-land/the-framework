@@ -104,10 +104,23 @@ export interface DriverTurn {
  * Token and cost accounting for one turn, as reported by the wrapped agent (#322).
  * Claude Code emits this on its final `result` line; drivers that cannot report
  * it simply omit it. Costs are whatever the agent computed, in USD.
+ *
+ * Tokens are the part every agent reports; the price is the part only some do
+ * (#540). So `costUsd` is optional and the tokens are not: Codex reports counts
+ * and no price, and an agent that can't price a turn reports the tokens it does
+ * know rather than nothing at all.
  */
 export interface DriverUsage {
-  /** Cost of the turn in USD, as reported by the agent. */
-  costUsd: number
+  /**
+   * Cost of the turn in USD, when the agent prices its own turns. Omitted when it
+   * doesn't — never `0`, which would read as free rather than as unknown.
+   *
+   * Note this is a notional price under a subscription: the user pays a flat fee,
+   * and the agent reports what the turn would have cost on metered API pricing.
+   * What a subscription actually spends is quota, which {@link DriverQuota}
+   * carries and the consumption limits (#519) gate on.
+   */
+  costUsd?: number
   /** Non-cached input tokens. */
   inputTokens: number
   /** Output tokens. */

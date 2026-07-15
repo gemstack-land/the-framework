@@ -238,6 +238,25 @@ test('runPrompt stops itself at the budget cap and reports a clean stop (#322)',
   assert.match(end.detail ?? '', /budget reached/)
 })
 
+test('runPrompt cannot cap an agent that reports no price, and says so in tokens (#540)', async () => {
+  const events: FrameworkEvent[] = []
+  // Codex's shape: tokens, no costUsd. Same script as the cap test above, so the
+  // only difference is the missing price.
+  const usage = { inputTokens: 10, outputTokens: 10, cacheReadTokens: 0, cacheCreationTokens: 0 }
+  const driver = new FakeDriver({ turns: [{ text: multiGateTurn, usage }, { text: 'second turn ran', usage }] })
+  const { text } = await runPrompt({ prompt: 'go', driver, cwd: '/ws', budgetUsd: 0.5, onEvent: e => events.push(e) })
+  // The cap never fires: there is no price to compare against it.
+  assert.equal(text, 'second turn ran')
+  assert.equal(events.some(e => e.kind === 'log' && e.message.startsWith('Budget reached:')), false)
+  // The tokens are still metered and reported, which is the point of #540.
+  const usageEvents = events.filter(e => e.kind === 'usage')
+  assert.equal(usageEvents.length, 2)
+  const last = usageEvents.at(-1)!
+  assert.equal(last.kind === 'usage' && last.costUsd, undefined)
+  assert.equal(last.kind === 'usage' && last.inputTokens, 20)
+  assert.equal(last.kind === 'usage' && last.turns, 2)
+})
+
 test('runPrompt pauses at a consumption limit and reports a clean stop (#531)', async () => {
   const events: FrameworkEvent[] = []
   const usage = { inputTokens: 10, outputTokens: 10, cacheReadTokens: 0, cacheCreationTokens: 0, costUsd: 0.01 }

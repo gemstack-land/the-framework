@@ -126,10 +126,13 @@ export type FrameworkEvent =
    * Cumulative token + cost usage for the run so far (#322). Emitted after each
    * agent turn that reports usage; the dashboard renders a live spend readout and
    * the run stops itself once `costUsd` reaches the budget cap, if one is set.
+   *
+   * `costUsd` is absent when the agent reports tokens but no price (#540), which
+   * is also when no budget cap can fire.
    */
   | {
       kind: 'usage'
-      costUsd: number
+      costUsd?: number
       inputTokens: number
       outputTokens: number
       cacheReadTokens: number
@@ -181,10 +184,16 @@ export function formatFrameworkEvent(event: FrameworkEvent): string {
       return `  session: ${event.name}`
     case 'ready-for-merge':
       return `✓ ready for merge`
-    case 'usage':
-      return `  spend: $${event.costUsd.toFixed(4)}${
-        event.budgetUsd ? ` / $${event.budgetUsd}` : ''
-      } over ${event.turns} turn${event.turns === 1 ? '' : 's'}`
+    case 'usage': {
+      const turns = `over ${event.turns} turn${event.turns === 1 ? '' : 's'}`
+      // No price to show: report the tokens the agent *did* report, rather than a
+      // `$0.0000` that would read as free (#540).
+      if (event.costUsd === undefined) {
+        const tokens = event.inputTokens + event.cacheReadTokens + event.outputTokens
+        return `  tokens: ${tokens.toLocaleString('en-US')} (${event.outputTokens.toLocaleString('en-US')} out) ${turns} — no price reported`
+      }
+      return `  spend: $${event.costUsd.toFixed(4)}${event.budgetUsd ? ` / $${event.budgetUsd}` : ''} ${turns}`
+    }
     case 'modes': {
       const shown = event.all.map(m => `${event.active.includes(m) ? '[x]' : '[ ]'} ${m}`).join('  ')
       return `  modes: ${shown}`

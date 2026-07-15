@@ -10,8 +10,12 @@ export interface UsageTotals extends DriverUsage {
   turns: number
 }
 
+/**
+ * The starting total. `costUsd` is absent rather than `0`: an agent that never
+ * prices a turn must not accumulate a total that reads as "this run was free"
+ * (#540). It appears as soon as one turn reports a price.
+ */
 const ZERO: UsageTotals = {
-  costUsd: 0,
   inputTokens: 0,
   outputTokens: 0,
   cacheReadTokens: 0,
@@ -31,10 +35,15 @@ const ZERO: UsageTotals = {
 export class UsageMeter {
   private totalsState: UsageTotals = { ...ZERO }
 
-  /** Fold one turn's usage into the running total. */
+  /**
+   * Fold one turn's usage into the running total. A turn that reports no price
+   * still counts its tokens; it just leaves the cost total where it was, so an
+   * unpriced run totals `undefined` rather than `$0` (#540).
+   */
   add(usage: DriverUsage): void {
+    const costUsd = usage.costUsd === undefined ? this.totalsState.costUsd : (this.totalsState.costUsd ?? 0) + usage.costUsd
     this.totalsState = {
-      costUsd: this.totalsState.costUsd + usage.costUsd,
+      ...(costUsd === undefined ? {} : { costUsd }),
       inputTokens: this.totalsState.inputTokens + usage.inputTokens,
       outputTokens: this.totalsState.outputTokens + usage.outputTokens,
       cacheReadTokens: this.totalsState.cacheReadTokens + usage.cacheReadTokens,

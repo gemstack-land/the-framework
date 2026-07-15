@@ -1,7 +1,7 @@
 import { strict as assert } from 'node:assert'
 import { test } from 'node:test'
 import { Readable, Writable } from 'node:stream'
-import { CodexDriver, CodexJsonParser } from './codex.js'
+import { CodexDriver, CodexJsonParser, parseCodexUsage } from './codex.js'
 import type { SpawnLike, SpawnedProcess } from './claude-code.js'
 import type { Driver, DriverEvent } from './types.js'
 
@@ -20,7 +20,9 @@ test('CodexJsonParser takes the last message as the turn (#539)', () => {
   const p = new CodexJsonParser()
   for (const line of REAL_RUN) p.push(line)
   // Codex narrates as it goes; the last message is its answer, not the first.
-  assert.deepEqual(p.result(), { text: 'Created hello.txt', sessionId: '019f660b-bf69-7d62-a96c-34aad1f083db' })
+  const turn = p.result()
+  assert.equal(turn.text, 'Created hello.txt')
+  assert.equal(turn.sessionId, '019f660b-bf69-7d62-a96c-34aad1f083db')
 })
 
 test('CodexJsonParser streams text and surfaces tool kinds only (#539)', () => {
@@ -33,11 +35,52 @@ test('CodexJsonParser streams text and surfaces tool kinds only (#539)', () => {
   ])
 })
 
-test('CodexJsonParser reports no usage rather than a free-looking zero (#539)', () => {
+test('CodexJsonParser reports the tokens but never a price (#540)', () => {
   const p = new CodexJsonParser()
   for (const line of REAL_RUN) p.push(line)
-  // Codex reports tokens but never a price. `costUsd: 0` would read as free.
-  assert.equal(p.result().usage, undefined)
+  const usage = p.result().usage
+  // The tokens are real and reported; `costUsd: 0` would read as free, so it is absent.
+  assert.deepEqual(usage, {
+    inputTokens: 2226, // 12210 total - 9984 cached
+    outputTokens: 5,
+    cacheReadTokens: 9984,
+    cacheCreationTokens: 0,
+  })
+  assert.equal(usage?.costUsd, undefined)
+  assert.equal('costUsd' in usage!, false)
+})
+
+test('parseCodexUsage splits the cached tokens out of the inclusive input total (#540)', () => {
+  // Verbatim from codex-cli 0.144.4. `input_tokens` is the whole input, cached
+  // included: repeating one prompt held it at 12218 while cached rose to 12032.
+  const usage = parseCodexUsage({ input_tokens: 12218, cached_input_tokens: 12032, output_tokens: 6, reasoning_output_tokens: 0 })
+  assert.deepEqual(usage, {
+    inputTokens: 186,
+    outputTokens: 6,
+    cacheReadTokens: 12032,
+    cacheCreationTokens: 0,
+  })
+})
+
+test('parseCodexUsage does not double-count reasoning tokens (#540)', () => {
+  // reasoning_output_tokens is a subset of output_tokens, as cached_input_tokens
+  // is of input_tokens — adding it would inflate the count.
+  const usage = parseCodexUsage({ input_tokens: 100, cached_input_tokens: 0, output_tokens: 500, reasoning_output_tokens: 400 })
+  assert.equal(usage?.outputTokens, 500)
+})
+
+test('parseCodexUsage survives a missing or malformed payload (#540)', () => {
+  assert.equal(parseCodexUsage(undefined), undefined)
+  assert.equal(parseCodexUsage('nonsense'), undefined)
+  // Absent fields read as 0 rather than NaN, and a nonsense cache count can never
+  // push the uncached input negative.
+  assert.deepEqual(parseCodexUsage({}), { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0 })
+  assert.deepEqual(parseCodexUsage({ input_tokens: 10, cached_input_tokens: 999 }), {
+    inputTokens: 0,
+    outputTokens: 0,
+    cacheReadTokens: 10,
+    cacheCreationTokens: 0,
+  })
 })
 
 test('CodexJsonParser ignores noise that is not an event (#539)', () => {

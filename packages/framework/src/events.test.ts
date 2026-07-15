@@ -126,6 +126,20 @@ test('formatFrameworkEvent renders a usage spend line, with the cap when set (#3
   assert.equal(formatFrameworkEvent({ ...base, costUsd: 0.02, turns: 1, budgetUsd: 5 }), '  spend: $0.0200 / $5 over 1 turn')
 })
 
+test('formatFrameworkEvent reports tokens when the agent reported no price (#540)', () => {
+  // Codex's shape. A `$0.0000` spend line would read as free rather than unknown.
+  const line = formatFrameworkEvent({
+    kind: 'usage',
+    inputTokens: 186,
+    outputTokens: 6,
+    cacheReadTokens: 12032,
+    cacheCreationTokens: 0,
+    turns: 1,
+  })
+  assert.equal(line, '  tokens: 12,224 (6 out) over 1 turn — no price reported')
+  assert.doesNotMatch(line!, /\$/)
+})
+
 test('formats the rate-limit line by how much the quota actually matters (#517)', () => {
   const at = Date.UTC(2026, 6, 15, 4, 30)
   const line = (status: string) => formatFrameworkEvent({ kind: 'driver', event: { type: 'rate-limit', limit: { status, window: 'five_hour', resetsAt: at } } })!

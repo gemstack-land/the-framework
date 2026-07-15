@@ -137,7 +137,8 @@ export async function runPrompt(opts: RunPromptOptions): Promise<RunPromptResult
     usage.add(event.usage)
     const totals = usage.totals()
     emit({ kind: 'usage', ...totals, ...(opts.budgetUsd != null ? { budgetUsd: opts.budgetUsd } : {}) })
-    if (opts.budgetUsd != null && totals.costUsd >= opts.budgetUsd && !budgetController.signal.aborted) {
+    // No price reported means no cap to cross — see the same gate in run.ts (#540).
+    if (opts.budgetUsd != null && totals.costUsd !== undefined && totals.costUsd >= opts.budgetUsd && !budgetController.signal.aborted) {
       emit({ kind: 'log', message: `Budget reached: $${totals.costUsd.toFixed(4)} of $${opts.budgetUsd} — stopping the run.` })
       budgetController.abort(new Error('[framework] budget reached'))
     }
