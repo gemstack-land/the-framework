@@ -95,7 +95,7 @@ test('runPostMerge queues the follow-ups in ONE run instead of running the prese
     seen.push(prompt)
     return Promise.resolve(true)
   }
-  await runPostMerge('/work/app', '/bin/framework', io, { session_name: 'add-oauth' }, undefined, run)
+  await runPostMerge('/work/app', '/bin/framework', io, { session_name: 'add-oauth' }, undefined, undefined, run)
   // One child run, not three: it asks for TODO entries rather than doing the passes.
   assert.equal(seen.length, 1)
   const prompt = seen[0]!
@@ -117,6 +117,7 @@ test('runPostMerge gates the readability entry on technical_control (#326)', asy
       io,
       { session_name: 'add-oauth', settings: { technical_control } },
       undefined,
+      undefined,
       p => {
         seen.push(p)
         return Promise.resolve(true)
@@ -130,7 +131,7 @@ test('runPostMerge gates the readability entry on technical_control (#326)', asy
 
 test('runPostMerge is best-effort: a failed queueing run is reported, never thrown (#326)', async () => {
   const { io, out } = capture()
-  await runPostMerge('/work/app', '/bin/framework', io, { session_name: 'add-oauth' }, undefined, () =>
+  await runPostMerge('/work/app', '/bin/framework', io, { session_name: 'add-oauth' }, undefined, undefined, () =>
     Promise.resolve(false),
   )
   assert.ok(out.some(l => /post-merge queueing did not complete/.test(l)))

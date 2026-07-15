@@ -957,10 +957,9 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
   // signalled setReadyForMerge(). Skipped for a fake/offline run and when the run was stopped.
   const maybeFirePostMerge = async (): Promise<void> => {
     if (!opts.postMerge || !sawReadyForMerge || stoppedCleanly || fake) return
-    // The post-merge prompt is exactly the maintenance section, so --eco-auto-maintenance
-    // (#314) leaves nothing to queue. This is the flag's target now that #326 moved that
-    // section out of the system prompt, where it had gone inert (#555).
-    if (opts.eco.autoMaintenance) return
+    // --eco-auto-maintenance (#314) no longer skips the whole run: since #537 this prompt
+    // also carries `## Business knowledge`, which the flag does not name. It drops just
+    // `## Maintenance` inside renderPostMergePrompt() instead.
     // Every line of the prompt names the session, so there is nothing to queue without one.
     // An agent that made changes has one; this is the agent that ignored the instruction.
     if (!sessionName) {
@@ -975,6 +974,7 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
       io,
       { session_name: sessionName, settings: { technical_control: opts.technical } },
       opts.maxCost,
+      opts.eco,
     )
   }
 
@@ -1424,10 +1424,11 @@ export async function runPostMerge(
   io: CliIO,
   tf: PostMergeContext,
   maxCost?: number,
+  eco?: EcoOptions,
   run: PromptRunner = spawnPromptRun,
 ): Promise<void> {
   io.out(`\n◆ post-merge: queueing quality follow-ups for ${tf.session_name}`)
-  const ok = await run(renderPostMergePrompt(tf), cwd, binPath, maxCost)
+  const ok = await run(renderPostMergePrompt(tf, eco), cwd, binPath, maxCost)
   if (!ok) io.out(`  ! post-merge queueing did not complete cleanly.`)
 }
 

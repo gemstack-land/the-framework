@@ -42,10 +42,10 @@ export interface EcoOptions {
   /** Drop `### Alternatives` (the variability-rating research section). */
   autoResearch?: boolean | undefined
   /**
-   * Drop the maintenance section. Nothing to drop *here*: #326 moved that section out of
-   * the system prompt and into the post-merge prompt, so this flag acts on that prompt
-   * instead (#556) and the CLI skips it wholesale, the post-merge prompt being exactly the
-   * maintenance section. Listed here because it is still an {@link EcoOptions} flag.
+   * Drop `## Maintenance`. Nothing to drop *here*: #326 moved that section out of the
+   * system prompt and into the post-merge prompt, so this flag acts on that prompt
+   * instead (#556) — see {@link ./post-merge-prompt.renderPostMergePrompt}. Listed here
+   * because it is still an {@link EcoOptions} flag.
    */
   autoMaintenance?: boolean | undefined
 }
@@ -88,6 +88,18 @@ export interface TfContext {
 /** The neutral context used when a caller has none: empty prompt, no modes. */
 const DEFAULT_TF: TfContext = { prompt: '', params: {} }
 
+/**
+ * The project-knowledge documents (#537): what the repo knows about itself, as markdown
+ * that travels with the code. {@link systemPromptBlock} puts them in front of every run
+ * as in-context paths; the post-merge prompt asks the agent to update them, which is what
+ * keeps them current. Workspace-relative, because that is the agent's cwd.
+ */
+export const KNOWLEDGE_DOCS: readonly string[] = [
+  '.the-framework/README.md',
+  '.the-framework/DECISIONS.md',
+  '.the-framework/KNOWLEDGE-BASE.md',
+]
+
 /** The two halves of the rendered {@link SYSTEM_PROMPT_TEMPLATE}. */
 export interface RenderedSystemPrompt {
   /** The `# System prompt` half: frames the session's system channel. */
@@ -108,7 +120,7 @@ const USER_PROMPT_HEADING = '\n# User prompt\n'
  * `### Scope` has to stop at the next `###` sibling rather than run on to the next `##`
  * and swallow it.
  */
-function dropSection(md: string, heading: string): string {
+export function dropSection(md: string, heading: string): string {
   const at = md.indexOf(`\n${heading}`)
   if (at === -1) return md
   const level = /^#+/.exec(heading)?.[0].length ?? 2
@@ -183,8 +195,11 @@ export function systemPromptBlock(opts: SystemPromptOptions = {}): string {
   const parts: string[] = []
   // The #439 context line goes first, so it frames whatever prompt follows (or stands
   // alone under `--vanilla`, where there is no built-in prompt to frame).
-  const context = opts.context?.map(d => d.trim()).filter(Boolean)
-  if (context && context.length) parts.push(`Context: ${context.join(', ')}`)
+  const context = opts.context?.map(d => d.trim()).filter(Boolean) ?? []
+  // The knowledge docs ride with the built-in prompt, not with the user's dirs: they are
+  // ours, and `--vanilla` means no framework-authored prompt at all (#547 rule 3).
+  const inContext = opts.antiLazyPill === false ? context : [...context, ...KNOWLEDGE_DOCS]
+  if (inContext.length) parts.push(`Context: ${inContext.join(', ')}`)
   if (opts.antiLazyPill !== false) parts.push(renderSystemPrompt(opts.tf).system)
   const user = opts.user?.trim()
   if (user) parts.push(user)
