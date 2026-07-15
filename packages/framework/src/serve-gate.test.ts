@@ -23,11 +23,7 @@ function freePort(): Promise<number> {
   })
 }
 
-const CLEAN_REVIEW = [
-  { text: '```json\n{"stack":"Node HTTP","narration":"n","decisions":[]}\n```' },
-  { text: 'built the app' },
-  { text: 'reviewed\n```json\n{"blockers":[]}\n```' },
-]
+const CLEAN_REVIEW = [{ text: 'built the app' }, { text: 'reviewed\n```json\n{"blockers":[]}\n```' }]
 
 test('serve gate: production-grade only when the agent review AND the real server pass', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'fw-serve-'))

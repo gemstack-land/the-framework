@@ -133,9 +133,8 @@ What shipped, built up from that seed (the state layer + the loop are the moat, 
 - **Personas** — reusable, stack-aware roles materialized into worker agents; **presets** (Vike flagship, Next.js) select the framework-specific ones by detecting the project's framework, on top of a framework-neutral core.
 - **Runner** — a pluggable sandbox seam (`FakeRunner` + a real `LocalRunner`; Docker/WebContainer/Flue are infra-gated adapters) where agents build and run an app.
 - **Surfaces** — the same run in a terminal, an in-page UI, or a detached background handle, over one replayable event stream.
-- **Decisions ledger** — durable memory of rejected ideas + settled choices (round-trips `DECISIONS.md`) so a run stops re-pitching what was turned down.
 - **The loop** — an event-to-prompt-chain policy (a major change fires review + code-quality + security; a new UI flow fires QA + UX), gating on a `{ blockers }` verdict, with a data-driven **prompt library**.
-- **Bootstrap** — the spine that sequences the above into scope -> architect -> build -> full-fledged loop -> deploy, taking an app from nothing to production-grade.
+- **Bootstrap** — the spine that sequences the above into scope -> build -> full-fledged loop -> deploy, taking an app from nothing to production-grade.
 - **Scale mode** — a self-maintaining `CODE-OVERVIEW.md`, refreshed only on material change.
 - **Durability = in-process first.** Reuses `SubAgentRunStore` + resume primitives for pause/resume; a durable/queue-backed runner arrives as an optional adapter, not core.
 

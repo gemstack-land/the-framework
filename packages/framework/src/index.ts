@@ -5,7 +5,7 @@
  * dashboard that foregrounds the orchestration the agent's own chat cannot show.
  *
  * The whole product is built on `@gemstack/ai-autopilot`'s already-shipped
- * spine (bootstrap, the loop, the decisions ledger, presets, deploy targets);
+ * spine (bootstrap, the loop, presets, deploy targets);
  * this package adds the two missing pieces from #166: the **driver** seam that
  * wraps the agent, and the **product shell** (CLI + dashboard) that drives it.
  *
@@ -21,10 +21,10 @@
  *
  * ## Driver-backed steps
  * ai-autopilot's `Bootstrap` steps, re-implemented to run everything *through*
- * the driver (option A): the architect is a structured JSON decision, build /
- * improve are prompts, the checklist gates on the `{ blockers }` verdict.
+ * the driver (option A): build / improve are prompts, the checklist gates on the
+ * `{ blockers }` verdict.
  *
- * - {@link driverArchitect} / {@link driverBuild} / {@link driverChecklist} / {@link driverImprove}
+ * - {@link driverBuild} / {@link driverChecklist} / {@link driverImprove}
  *
  * ## Run + product shell
  * - {@link runFramework} — detect the preset, frame the agent with its personas,
@@ -34,15 +34,11 @@
  */
 export * from './driver/index.js'
 export {
-  driverArchitect,
-  reArchitect,
   driverBuild,
   driverChecklist,
   driverImprove,
   decideDeploy,
   deployWith,
-  parseArchitectPlan,
-  architectPrompt,
   buildPrompt,
   extendPrompt,
   improvePrompt,
@@ -119,13 +115,9 @@ export {
   OPEN_LOOP_MODES,
 } from './events.js'
 export {
-  architectPlan,
-  decisionLedger,
   loopStatus,
   sessionInfo,
   runProgress,
-  type ArchitectPlan,
-  type Decision,
   type LoopStatus,
   type SessionInfo,
   type RunProgress,

@@ -244,8 +244,6 @@ function formatBootstrapEvent(event: BootstrapEvent): string {
   switch (event.type) {
     case 'scope':
       return `▶ scope: ${event.scope} — "${event.intent}"`
-    case 'architect':
-      return `▶ architect: ${event.stack}\n${event.decisions.map(d => `    · ${d.choice} — ${d.why}`).join('\n')}`
     case 'narrate':
       return `  ${event.message}`
     case 'build':

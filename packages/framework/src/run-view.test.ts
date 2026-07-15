@@ -1,6 +1,6 @@
 import { strict as assert } from 'node:assert'
 import { test } from 'node:test'
-import { architectPlan, decisionLedger, loopStatus, sessionInfo, deployPlan, runProgress } from './run-view.js'
+import { loopStatus, sessionInfo, deployPlan, runProgress } from './run-view.js'
 import type { FrameworkEvent } from './events.js'
 
 test('runProgress starts building with no name and flips to ready on setReadyForMerge (#326)', () => {
@@ -17,51 +17,6 @@ test('runProgress takes the latest session name when the agent renames it (#326)
     { kind: 'session-name', name: 'better-name' },
   ]
   assert.equal(runProgress(events).sessionName, 'better-name')
-})
-
-const architect = (stack: string, extra: Record<string, unknown> = {}): FrameworkEvent => ({
-  kind: 'bootstrap',
-  event: { type: 'architect', stack, decisions: [], ...extra } as never,
-})
-
-test('architectPlan returns the chosen stack + rationale from the architect event (#431)', () => {
-  const events: FrameworkEvent[] = [
-    { kind: 'log', message: 'hi' },
-    architect('Vike + Prisma', {
-      decisions: [{ choice: 'Prisma on Postgres', why: 'relational catalog' }],
-      pros: ['edge deploy'],
-      cons: ['smaller ecosystem'],
-      alternatives: [{ option: 'Next.js', whyNot: 'constrained edge deploy' }],
-    }),
-  ]
-  const plan = architectPlan(events)
-  assert.equal(plan?.stack, 'Vike + Prisma')
-  assert.deepEqual(plan?.pros, ['edge deploy'])
-  assert.deepEqual(plan?.cons, ['smaller ecosystem'])
-  assert.deepEqual(plan?.decisions, [{ choice: 'Prisma on Postgres', why: 'relational catalog' }])
-  assert.deepEqual(plan?.alternatives, [{ option: 'Next.js', whyNot: 'constrained edge deploy' }])
-})
-
-test('architectPlan is null before the architect runs; latest wins on re-architect', () => {
-  assert.equal(architectPlan([{ kind: 'log', message: 'x' }]), null)
-  const plan = architectPlan([architect('Vike'), architect('Next.js')])
-  assert.equal(plan?.stack, 'Next.js') // #324 re-architect supersedes
-})
-
-test('decisionLedger accumulates decisions then lists rejected alternatives (#431)', () => {
-  const events: FrameworkEvent[] = [
-    architect('Vike', { decisions: [{ choice: 'Vike for SSR', why: 'SEO' }] }),
-    architect('Vike + auth', {
-      decisions: [{ choice: 'vike-auth', why: 'sessions' }],
-      alternatives: [{ option: 'Next.js', whyNot: 'edge deploy' }],
-    }),
-  ]
-  const ledger = decisionLedger(events)
-  assert.deepEqual(ledger, [
-    { choice: 'Vike for SSR', why: 'SEO', rejected: false },
-    { choice: 'vike-auth', why: 'sessions', rejected: false },
-    { choice: 'Next.js', why: 'edge deploy', rejected: true },
-  ])
 })
 
 test('loopStatus tracks the latest checklist verdict and closes on done (#431)', () => {

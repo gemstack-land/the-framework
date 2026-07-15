@@ -5,7 +5,7 @@ project's dependencies to a scaffolded, production-grade, deploy-decided app.
 
 ```
 detect framework (preset)
-  → Bootstrap: scope → architect → build → full-fledged loop → deploy
+  → Bootstrap: scope → build → full-fledged loop → deploy
   → scale mode: CODE-OVERVIEW.md
 ```
 
@@ -26,12 +26,12 @@ ends at a live-looking URL with no credentials.
 
 - **Presets (#115)** — the framework is detected from the project deps (Vike here),
   so the build's workers are that framework's personas plus the shared neutral ones.
-- **Bootstrap (#116)** — one scoping question, then an **architect** picks the stack
-  and records its choices to the **decisions ledger**, a **build** scaffolds the app
+- **Bootstrap (#116)** — one scoping question, then a **build** scaffolds the app
   with the persona workers inside a **runner**, the **full-fledged loop** repeats the
   production-grade checklist until its `{ blockers }` verdict is empty, and a
   **deploy** is decided and shipped through the `DeployTarget` seam — here the real
   `cloudflareTarget` (SSR → Workers), run over a simulated `wrangler` offline.
+  What stack to build on is the build agent's call, not the framework's.
 - **Surfaces (#100/#120)** — every phase streams as narration over the generic
   `launchAutopilot<BootstrapEvent, BootstrapResult>` handle.
 - **Scale mode (#114)** — `CODE-OVERVIEW.md` is generated from the scaffold.
@@ -40,8 +40,8 @@ ends at a live-looking URL with no credentials.
 
 The offline run above verifies the flow structurally. `src/live.ts` runs the same
 flow for real — a real model via `@gemstack/ai-sdk` and a real `LocalRunner`
-workspace on the host filesystem, so the architect, the build workers, and the
-deploy decision are all model-driven and the workers write **real files to disk**:
+workspace on the host filesystem, so the build workers and the deploy decision are
+all model-driven and the workers write **real files to disk**:
 
 ```bash
 ANTHROPIC_API_KEY=sk-... pnpm --filter @gemstack/example-bootstrap-quickstart start:live

@@ -4,14 +4,10 @@
 // sandbox, node:fs/http, …) into the browser bundle. Types come from the root entry.
 export { formatFrameworkEvent, pickedIds } from './events.js'
 export {
-  architectPlan,
-  decisionLedger,
   loopStatus,
   sessionInfo,
   deployPlan,
   runProgress,
-  type ArchitectPlan,
-  type Decision,
   type LoopStatus,
   type SessionInfo,
   type DeployPlan,

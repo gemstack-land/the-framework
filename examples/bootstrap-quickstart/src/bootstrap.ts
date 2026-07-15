@@ -1,7 +1,6 @@
 import { AiFake, agent, type ToolCall } from '@gemstack/ai-sdk'
 import {
   Bootstrap,
-  agentArchitect,
   supervisorBuild,
   loopChecklist,
   loopImprove,
@@ -15,7 +14,6 @@ import {
   builtinPresetRegistry,
   presetPersonas,
   CodeOverviewMaintainer,
-  DecisionLedger,
   FakeRunner,
   runnerTools,
   launchAutopilot,
@@ -31,18 +29,17 @@ import {
  * The capstone: the whole AI-framework epic in one offline flow.
  *
  *   detect framework (preset)  →  Bootstrap
- *     scope → architect → build → full-fledged loop → deploy
+ *     scope → build → full-fledged loop → deploy
  *   → scale mode (CODE-OVERVIEW.md)
  *
  * A **preset** is picked from the project's dependencies, so the build's workers
  * are the right framework's personas. **Bootstrap** then sequences the flow: it
- * asks one scoping question, has an **architect** choose the stack and record its
- * choices to the **decisions ledger**, **builds** the app with the persona workers
- * inside a **runner** sandbox, runs the **full-fledged loop** until the
- * production-grade checklist's `{ blockers }` verdict is empty, and **decides a
- * deploy** behind the `DeployTarget` seam. Every phase streams as narration over
- * the generic **surface**. Finally **scale mode** generates `CODE-OVERVIEW.md`
- * from the scaffold.
+ * asks one scoping question, **builds** the app with the persona workers inside a
+ * **runner** sandbox, runs the **full-fledged loop** until the production-grade
+ * checklist's `{ blockers }` verdict is empty, and **decides a deploy** behind the
+ * `DeployTarget` seam. What stack to build on is the build agent's call, not ours.
+ * Every phase streams as narration over the generic **surface**. Finally **scale
+ * mode** generates `CODE-OVERVIEW.md` from the scaffold.
  *
  * It runs offline: `AiFake` scripts the model and `FakeRunner` is an in-memory
  * sandbox, so there is no API key and the output is deterministic. `live.ts` runs
@@ -78,16 +75,6 @@ const WORK = [
   },
 ] as const
 
-/** The architect's structured decision (what `agentArchitect` parses). */
-const ARCHITECT_PLAN = {
-  stack: 'Vike + Prisma on Postgres, with vike-auth',
-  narration: 'Server-rendered orders app: Vike pages, a Prisma data layer, sessions via vike-auth.',
-  decisions: [
-    { choice: 'Prisma on Postgres', why: 'the orders catalog is relational and needs typed queries' },
-    { choice: 'SSR over SPA', why: 'orders need per-request data and auth on the server' },
-  ],
-}
-
 /** The deploy decision (what `agentDeploy` parses). SSR → Cloudflare Workers. */
 const DEPLOY_DECISION = { render: 'ssr', target: 'cloudflare', reason: 'per-request orders data + server-side auth' }
 
@@ -95,9 +82,9 @@ const DEPLOY_DECISION = { render: 'ssr', target: 'cloudflare', reason: 'per-requ
 const DEPLOY_URL = 'https://orders-app.gemstack.workers.dev'
 
 /**
- * Script the fake provider. Order (concurrency 1) is: the architect's plan, then
- * each build worker's (write-file tool call, final text) pair, then the deploy
- * decision. The full-fledged loop uses scripted local prompts, not the model.
+ * Script the fake provider. Order (concurrency 1) is: each build worker's
+ * (write-file tool call, final text) pair, then the deploy decision. The
+ * full-fledged loop uses scripted local prompts, not the model.
  */
 function scriptModel(fake: AiFake): void {
   const workerSteps = WORK.flatMap((w, i) => {
@@ -106,11 +93,7 @@ function scriptModel(fake: AiFake): void {
     ]
     return [{ toolCalls }, { text: `Wrote ${w.file}` }]
   })
-  fake.respondWithSequence([
-    { text: JSON.stringify(ARCHITECT_PLAN) },
-    ...workerSteps,
-    { text: JSON.stringify(DEPLOY_DECISION) },
-  ])
+  fake.respondWithSequence([...workerSteps, { text: JSON.stringify(DEPLOY_DECISION) }])
 }
 
 /** A static planner: the build subtasks, in the order the fake scripts them. */
@@ -160,8 +143,6 @@ export function formatBootstrapEvent(event: BootstrapEvent): string {
   switch (event.type) {
     case 'scope':
       return `▶ scope: ${event.scope} — "${event.intent}"`
-    case 'architect':
-      return `▶ architect: ${event.stack}\n${event.decisions.map(d => `    · ${d.choice} — ${d.why}`).join('\n')}`
     case 'narrate':
       return `  ${event.message}`
     case 'build':
@@ -204,7 +185,6 @@ export async function runCapstone(write: (line: string) => void = () => {}): Pro
     const session = await runner.boot({ files: { 'package.json': JSON.stringify({ name: 'orders-app' }) + '\n' } })
 
     const loop = buildLoop()
-    const ledger = new DecisionLedger()
     // The real Cloudflare adapter, run over the simulated wrangler above. A fake
     // token lets it proceed offline; the live capstone passes a real one.
     const deployTarget = cloudflareTarget({
@@ -216,14 +196,12 @@ export async function runCapstone(write: (line: string) => void = () => {}): Pro
     // Surfaces: run bootstrap detached; the terminal prints as events stream.
     const handle = launchAutopilot<BootstrapEvent, BootstrapResult>(onEvent =>
       new Bootstrap({
-        ledger,
         onEvent: e => {
           write(formatBootstrapEvent(e))
           onEvent(e)
         },
         steps: {
           scope: () => ({ scope: 'full', intent: INTENT }),
-          architect: agentArchitect(agent({ instructions: 'architect' })),
           build: supervisorBuild({ plan: staticPlanner, workers: presetWorkers(session, personas), concurrency: 1 }),
           checklist: loopChecklist({ loop }),
           improve: loopImprove({ loop }),

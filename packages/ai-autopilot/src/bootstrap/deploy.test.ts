@@ -5,7 +5,6 @@ import { agentDeploy, planOnlyTarget, FakeDeployTarget, DEFAULT_DEPLOY_TARGETS }
 import type { DeployContext } from './types.js'
 
 const ctx = (over: Partial<DeployContext> = {}): DeployContext => ({
-  plan: { stack: 'Vike + universal-orm', narration: '', decisions: [] },
   scope: 'full',
   intent: 'a shop',
   productionGrade: true,

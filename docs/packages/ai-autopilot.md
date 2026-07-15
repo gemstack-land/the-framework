@@ -17,7 +17,7 @@ The Supervisor (below) is the seed topology. Built up from it, the package is a 
 - **Surfaces** — the same run in a terminal, an in-page UI, or a detached background handle, over one replayable event stream (`launchAutopilot`).
 - **Decisions ledger** — durable memory of rejected ideas + settled choices (round-trips `DECISIONS.md`) so a run stops re-pitching what was turned down.
 - **The loop** — an event-to-prompt-chain policy (a major change fires review + code-quality + security; a new UI flow fires QA + UX), gating on a `{ blockers }` verdict, with a data-driven built-in **prompt library**.
-- **Bootstrap** — the spine that sequences all of the above into scope → architect → build → full-fledged loop → deploy, taking an app from nothing to production-grade.
+- **Bootstrap** — the spine that sequences all of the above into scope → build → full-fledged loop → deploy, taking an app from nothing to production-grade.
 - **Scale mode** — a self-maintaining `CODE-OVERVIEW.md`, refreshed only on material change.
 
 See [`examples/bootstrap-quickstart`](https://github.com/gemstack-land/gemstack/tree/main/examples/bootstrap-quickstart) for all of it wired together offline.

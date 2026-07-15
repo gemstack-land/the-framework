@@ -1,95 +1,14 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import { AiFake, agent } from '@gemstack/ai-sdk'
-import { agentArchitect, supervisorBuild, loopChecklist, loopImprove } from './steps.js'
+import { supervisorBuild, loopChecklist, loopImprove } from './steps.js'
 import { agentDeploy, FakeDeployTarget } from './deploy.js'
 import { Bootstrap } from './bootstrap.js'
-import { DecisionLedger } from '../decisions/ledger.js'
 import { LoopEngine } from '../loop/loop.js'
 import { definePrompt, defineLoop } from '../loop/define.js'
 import type { BootstrapEvent } from './types.js'
 import type { SupervisorEvent } from '../types.js'
-import type { ArchitectContext, BuildContext, LoopPassContext } from './types.js'
-
-const architectCtx = (over: Partial<ArchitectContext> = {}): ArchitectContext => ({
-  intent: 'a bookstore',
-  scope: 'full',
-  ledger: new DecisionLedger(),
-  ...over,
-})
-
-describe('agentArchitect (default step over an ai-sdk agent)', () => {
-  it('parses a structured plan and prepends the decisions briefing', async () => {
-    const fake = AiFake.fake()
-    try {
-      fake.respondWithSequence([
-        {
-          text: JSON.stringify({
-            stack: 'Vike + universal-orm',
-            narration: 'A server-rendered bookstore',
-            decisions: [{ choice: 'Postgres', why: 'relational catalog' }],
-          }),
-        },
-      ])
-      const ledger = new DecisionLedger()
-      ledger.reject('Use a NoSQL document store', 'the catalog is relational')
-
-      const step = agentArchitect(agent({ instructions: 'architect' }))
-      const plan = await step(architectCtx({ ledger }))
-
-      assert.equal(plan.stack, 'Vike + universal-orm')
-      assert.equal(plan.decisions[0]?.choice, 'Postgres')
-      // the rejected idea reached the model as a briefing so it will not re-pitch it
-      const sent = JSON.stringify(fake.getCalls()[0])
-      assert.match(sent, /NoSQL document store/)
-      // the architect is asked to justify the stack, grounded in the objective tradeoffs
-      assert.match(sent, /PROS and its CONS/)
-      assert.match(sent, /renderer-agnostic/)
-    } finally {
-      fake.restore()
-    }
-  })
-
-  it('parses the stack rationale (pros/cons/alternatives) when the model returns it', async () => {
-    const fake = AiFake.fake()
-    try {
-      fake.respondWithSequence([
-        {
-          text: JSON.stringify({
-            stack: 'Vike + universal-orm',
-            narration: 'n',
-            decisions: [],
-            pros: ['edge deploy'],
-            cons: ['smaller ecosystem'],
-            alternatives: [{ option: 'Next.js', whyNot: 'constrained edge deploy' }],
-          }),
-        },
-      ])
-      const step = agentArchitect(agent({ instructions: 'architect' }))
-      const plan = await step(architectCtx({ ledger: new DecisionLedger() }))
-      assert.deepEqual(plan.pros, ['edge deploy'])
-      assert.deepEqual(plan.cons, ['smaller ecosystem'])
-      assert.deepEqual(plan.alternatives, [{ option: 'Next.js', whyNot: 'constrained edge deploy' }])
-    } finally {
-      fake.restore()
-    }
-  })
-
-  it('omits rationale fields when the model returns none (backward compatible)', async () => {
-    const fake = AiFake.fake()
-    try {
-      fake.respondWithSequence([
-        { text: JSON.stringify({ stack: 'Vike', narration: 'n', decisions: [] }) },
-      ])
-      const step = agentArchitect(agent({ instructions: 'architect' }))
-      const plan = await step(architectCtx({ ledger: new DecisionLedger() }))
-      assert.equal('pros' in plan, false)
-      assert.equal('alternatives' in plan, false)
-    } finally {
-      fake.restore()
-    }
-  })
-})
+import type { BuildContext, LoopPassContext } from './types.js'
 
 describe('supervisorBuild (default step over the Supervisor)', () => {
   it('runs the Supervisor and forwards its events as narration', async () => {
@@ -103,7 +22,6 @@ describe('supervisorBuild (default step over the Supervisor)', () => {
         concurrency: 1,
       })
       const ctx: BuildContext = {
-        plan: { stack: 'Vike + universal-orm', narration: '', decisions: [] },
         scope: 'full',
         intent: 'a bookstore',
         onEvent: e => events.push(e),
@@ -123,7 +41,7 @@ describe('supervisorBuild (default step over the Supervisor)', () => {
     controller.abort()
     const step = supervisorBuild({ plan: () => [], workers: agent({ instructions: 'w' }) })
     await assert.rejects(
-      async () => step({ plan: { stack: '', narration: '', decisions: [] }, scope: 'full', intent: '', onEvent: () => {}, signal: controller.signal }),
+      async () => step({ scope: 'full', intent: '', onEvent: () => {}, signal: controller.signal }),
       /aborted before start/,
     )
   })
@@ -132,7 +50,6 @@ describe('supervisorBuild (default step over the Supervisor)', () => {
 describe('loopChecklist / loopImprove (default full-fledged loop steps)', () => {
   const passCtx = (over: Partial<LoopPassContext> = {}): LoopPassContext => ({
     pass: 1,
-    plan: { stack: 'Vike + universal-orm', narration: '', decisions: [] },
     intent: 'a bookstore',
     blockers: [],
     ...over,
@@ -169,18 +86,11 @@ describe('loopChecklist / loopImprove (default full-fledged loop steps)', () => 
 })
 
 describe('Bootstrap end-to-end with the default steps (offline)', () => {
-  it('runs scope → architect → build → full-fledged loop against real primitives', async () => {
+  it('runs scope → build → full-fledged loop against real primitives', async () => {
     const fake = AiFake.fake()
     try {
-      // Three model calls, in order: the architect plan, the build worker, the deploy decision.
+      // Two model calls, in order: the build worker, then the deploy decision.
       fake.respondWithSequence([
-        {
-          text: JSON.stringify({
-            stack: 'Vike + universal-orm',
-            narration: 'A server-rendered bookstore with a Postgres data layer',
-            decisions: [{ choice: 'universal-orm on Postgres', why: 'typed, relational catalog' }],
-          }),
-        },
         { text: 'scaffolded the catalog page and orders schema' },
         { text: JSON.stringify({ render: 'ssr', target: 'dokploy', reason: 'per-request catalog + auth' }) },
       ])
@@ -200,15 +110,12 @@ describe('Bootstrap end-to-end with the default steps (offline)', () => {
         ],
       })
 
-      const ledger = new DecisionLedger()
       const deployTarget = new FakeDeployTarget({ result: { deployed: true, url: 'https://bookstore.example' } })
       const events: BootstrapEvent[] = []
       const boot = new Bootstrap({
-        ledger,
         onEvent: e => events.push(e),
         steps: {
           scope: () => ({ scope: 'full', intent: 'a bookstore' }),
-          architect: agentArchitect(agent({ instructions: 'architect' })),
           build: supervisorBuild({
             plan: () => [{ description: 'scaffold the app', worker: 'w' }],
             workers: { w: agent({ instructions: 'worker' }) },
@@ -222,13 +129,11 @@ describe('Bootstrap end-to-end with the default steps (offline)', () => {
 
       const result = await boot.run()
 
-      assert.equal(result.plan.stack, 'Vike + universal-orm')
       assert.equal(result.run.results[0]?.ok, true)
       assert.equal(result.passes, 2)
       assert.deepEqual(result.blockers, [])
       assert.equal(result.productionGrade, true)
       assert.equal(improved, 1) // improved once, between the two checks
-      assert.equal(ledger.size, 1) // architect choice recorded
       // deploy ran last: decided SSR/dokploy and reached the (fake) target
       assert.deepEqual(result.deploy?.plan, { render: 'ssr', target: 'dokploy', reason: 'per-request catalog + auth' })
       assert.equal(result.deploy?.result.url, 'https://bookstore.example')

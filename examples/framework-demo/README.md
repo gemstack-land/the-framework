@@ -5,8 +5,8 @@ deterministic, in a couple of seconds.
 
 This runs the real product (`@gemstack/framework`'s `runFramework`) with the
 built-in **fake driver**: no Claude Code, no model, no API keys. Same code a live
-run executes — preset detection, architect decisions, the full-fledged
-production-grade loop, deploy — just with scripted agent turns so it is instant
+run executes — preset detection, the full-fledged production-grade loop,
+deploy — just with scripted agent turns so it is instant
 and repeatable. Two things are genuinely real, not narrated:
 
 - **the app boots and serves** — the serve gate starts a real HTTP server and the
@@ -29,10 +29,6 @@ Prompt:  "A paginated orders page backed by an orders table, with sign-in."
 ◆ fake in /tmp/framework-demo-xxxx
   Detected Vike (confidence 2); framing with 3 persona(s)
 ▶ scope: full — "A paginated orders page backed by an orders table, with sign-in."
-▶ architect: Vike + universal-orm on Postgres, with vike-auth
-    · universal-orm on Postgres — the orders catalog is relational and needs typed queries
-    · SSR over SPA — orders need per-request data and auth on the server
-  Building on Vike + universal-orm on Postgres, with vike-auth
   Checking the app is production-grade
   serve: start: node server.js
   serve: fetch http://localhost:50106/ -> 200
@@ -68,5 +64,5 @@ npx @gemstack/framework "a paginated orders page with sign-in"
 ```
 
 That opens the localhost dashboard, wraps Claude Code as the coding agent, and runs
-the identical scope → architect → build → production-grade loop → deploy — writing
+the identical scope → build → production-grade loop → deploy — writing
 real files and, with `--serve`, leaving the real app running behind a preview link.

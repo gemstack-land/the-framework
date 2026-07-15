@@ -8,7 +8,7 @@ import type { LoopPassContext } from './types.js'
 import type { Verdict } from '../loop/verdict.js'
 
 /** A minimal loop-pass context — serveCheck ignores it, but the contract needs one. */
-const ctx: LoopPassContext = { pass: 1, plan: { stack: '', narration: '', decisions: [] }, intent: '', blockers: [] }
+const ctx: LoopPassContext = { pass: 1, intent: '', blockers: [] }
 
 function freePort(): Promise<number> {
   return new Promise((resolve, reject) => {

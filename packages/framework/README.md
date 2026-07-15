@@ -4,8 +4,8 @@
 
 It wraps a coding-agent CLI (Claude Code today) as a **black box** and takes you
 from an idea to a running app, with a localhost dashboard that foregrounds the
-orchestration the agent's own chat cannot show: the chosen stack and its
-rationale, the loop status, and the decisions ledger.
+orchestration the agent's own chat cannot show: the loop status, the review
+passes, and the run's own event stream.
 
 ```bash
 npm i -g @gemstack/framework
@@ -23,9 +23,8 @@ produced, and gates on the **outcome** (builds / serves / review-passes), then
 re-prompts. The seam is the code, never the agent's individual tool calls, so the
 wrapped agent keeps its subscription-based auth and stays swappable.
 
-It runs on `@gemstack/ai-autopilot`'s spine (bootstrap flow, the loop, the
-decisions ledger, framework presets, deploy targets) and adds the two missing
-pieces:
+It runs on `@gemstack/ai-autopilot`'s spine (bootstrap flow, the loop, framework
+presets, deploy targets) and adds the two missing pieces:
 
 - **The driver seam** ([`Driver`](./src/driver/types.ts)) - the one abstraction
   we wrap an agent CLI behind. [`ClaudeCodeDriver`](./src/driver/claude-code.ts)
@@ -39,10 +38,10 @@ pieces:
   aborts the same signal Ctrl+C does); the run ends cleanly as *stopped*, and a
   persisted run reflects that so `--resume` shows it stopped.
 
-Everything runs *through* the driver (single execution path): the architect is a
-small structured JSON decision the agent returns; build and improve are prompts;
-the production-grade checklist gates on the `{ blockers }` verdict the agent ends
-its output with.
+Everything runs *through* the driver (single execution path): build and improve
+are prompts; the production-grade checklist gates on the `{ blockers }` verdict
+the agent ends its output with. What stack to build on is the agent's own call -
+The Framework does not pick one for it.
 
 **From-scratch or existing project.** Point `--cwd` at an empty directory and the
 agent scaffolds the whole app from scratch. Point it at a project that already has
@@ -114,12 +113,12 @@ The live path needs the Claude Code CLI installed (`claude` on `PATH`). The
 
 ### Persistence + resume
 
-The orchestration state (the stack rationale, loop status, and decisions ledger)
-is our part of the run, not the agent's chat transcript, so we persist it. Each
-run appends its event stream to `.the-framework/events.jsonl` in the workspace, with a
-small `run.json` snapshot beside it and a human-readable `DECISIONS.md` at the
-root. Because the dashboard is a pure projection of that stream, a restart can
-replay it: `framework --resume` reopens the last run's dashboard read-only, exactly
+The orchestration state (the loop status and the run's event stream) is our part
+of the run, not the agent's chat transcript, so we persist it. Each run appends
+its event stream to `.the-framework/events.jsonl` in the workspace, with a small
+`run.json` snapshot beside it. Because the dashboard is a pure projection of that
+stream, a restart can replay it: `framework --resume` reopens the last run's
+dashboard read-only, exactly
 as it looked, without running the agent again. Add `--cwd <dir>` to resume a run
 from another workspace. Pass `--no-persist` to skip writing state. We do not
 persist the agent's transcript; Claude Code owns that.

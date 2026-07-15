@@ -1,7 +1,6 @@
 import { AiRegistry, AnthropicProvider, agent } from '@gemstack/ai-sdk'
 import {
   Bootstrap,
-  agentArchitect,
   supervisorBuild,
   loopChecklist,
   loopImprove,
@@ -15,7 +14,6 @@ import {
   builtinPresetRegistry,
   presetPersonas,
   CodeOverviewMaintainer,
-  DecisionLedger,
   LocalRunner,
   runnerTools,
   launchAutopilot,
@@ -29,10 +27,10 @@ import { INTENT, formatBootstrapEvent, type CapstoneResult } from './bootstrap.j
 /**
  * The LIVE half of the capstone (#124): the same flow as `bootstrap.ts`, but with
  * the fakes swapped for real infra — a real model via `@gemstack/ai-sdk` and a real
- * `LocalRunner` sandbox on the host filesystem. The architect, the build workers,
- * and the deploy decision are all model-driven; the workers write REAL files into a
- * real temp workspace. This is the honest "zero to a scaffolded app" proof that the
- * offline run (AiFake + FakeRunner) can only assert structurally.
+ * `LocalRunner` sandbox on the host filesystem. The build workers and the deploy
+ * decision are all model-driven; the workers write REAL files into a real temp
+ * workspace. This is the honest "zero to a scaffolded app" proof that the offline
+ * run (AiFake + FakeRunner) can only assert structurally.
  *
  * Scoped for a first, bounded, cheap proof: the production-grade loop keeps the same
  * scripted verdict as the offline example (blocks once on "no auth", then clears),
@@ -139,18 +137,15 @@ export async function runLiveCapstone(write: (line: string) => void = () => {}):
 
   try {
     const loop = buildLoop()
-    const ledger = new DecisionLedger()
 
     const handle = launchAutopilot<BootstrapEvent, BootstrapResult>(onEvent =>
       new Bootstrap({
-        ledger,
         onEvent: e => {
           write(formatBootstrapEvent(e))
           onEvent(e)
         },
         steps: {
           scope: () => ({ scope: 'full', intent: INTENT }),
-          architect: agentArchitect(agent({ model: MODEL, instructions: 'architect' })),
           build: supervisorBuild({ plan: livePlanner, workers: presetWorkers(session, personas), concurrency: 1 }),
           checklist: loopChecklist({ loop }),
           improve: loopImprove({ loop }),

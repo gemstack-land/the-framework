@@ -565,7 +565,8 @@ test('runCli --fake --no-dashboard runs the whole flow offline to production-gra
   const code = await runCli(['--fake', '--no-dashboard'], io)
   assert.equal(code, 0)
   const text = out.join('\n')
-  assert.match(text, /architect:/)
+  assert.match(text, /scope: full/) // the run opens on scope now that the architect is gone
+  assert.match(text, /Build this app end to end/)
   assert.match(text, /checklist pass 1/)
   assert.match(text, /production-grade/)
   assert.match(text, /deploy: SSR/)
@@ -591,9 +592,8 @@ test('a live daemon steers a dashboard-less run through its gates via control.js
     let settled = false
     const done = runCli(['--fake', '--no-dashboard', '--cwd', cwd], io).finally(() => (settled = true))
 
-    // Play the daemon: tail events.jsonl for parked gates (plan-approval, then the
-    // build's await-choices) and answer each with its recommended pick, exactly as
-    // the daemon page's Accept button would.
+    // Play the daemon: tail events.jsonl for the build's parked await-choices gate and
+    // answer it with its recommended pick, exactly as the daemon page's Accept button would.
     const answered = new Set<string>()
     const eventsPath = join(cwd, FRAMEWORK_DIR, EVENTS_FILE)
     for (let i = 0; i < 500 && !settled; i++) {
@@ -613,16 +613,15 @@ test('a live daemon steers a dashboard-less run through its gates via control.js
     }
 
     assert.equal(await done, 0)
-    assert.ok(answered.has('plan-approval'), 'the plan gate parked and was steered')
     assert.ok(answered.has('await-choices'), 'the build await gate parked and was steered')
     assert.match(out.join('\n'), /production-grade/)
-    // Both resolutions were attributed to the steering user, not a headless auto-accept.
+    // The resolution was attributed to the steering user, not a headless auto-accept.
     const resolved = (await readFile(eventsPath, 'utf8'))
       .split('\n')
       .filter(Boolean)
       .map(l => JSON.parse(l))
       .filter((e: { kind: string }) => e.kind === 'choice-resolved')
-    assert.equal(resolved.length, 2)
+    assert.equal(resolved.length, 1)
     assert.ok(resolved.every((e: { by: string }) => e.by === 'user'))
   } finally {
     if (prevAwait === undefined) delete process.env.FRAMEWORK_FAKE_AWAIT

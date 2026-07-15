@@ -1,7 +1,6 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import { Bootstrap, createBootstrap, BootstrapAborted } from './bootstrap.js'
-import { DecisionLedger } from '../decisions/ledger.js'
 import type { BootstrapEvent, BootstrapSteps, ScopeAnswer } from './types.js'
 import type { SupervisorRun } from '../types.js'
 import type { Verdict } from '../loop/verdict.js'
@@ -13,11 +12,6 @@ const fakeRun: SupervisorRun = { text: 'built', plan: [], results: [], usage: ze
 function stubSteps(over: Partial<BootstrapSteps> = {}): BootstrapSteps {
   return {
     scope: () => ({ scope: 'full', intent: 'a shop' }) satisfies ScopeAnswer,
-    architect: () => ({
-      stack: 'Vike + universal-orm',
-      narration: 'Server-rendered shop with a Postgres data layer',
-      decisions: [{ choice: 'Use Vike for SSR', why: 'SEO + fast first paint' }],
-    }),
     build: () => fakeRun,
     checklist: () => ({ blockers: [] }) satisfies Verdict,
     ...over,
@@ -25,76 +19,38 @@ function stubSteps(over: Partial<BootstrapSteps> = {}): BootstrapSteps {
 }
 
 describe('Bootstrap — happy path (full scope, passes first checklist)', () => {
-  it('sequences scope → architect → build → loop and returns a production-grade result', async () => {
+  it('sequences scope → build → loop and returns a production-grade result', async () => {
     const events: BootstrapEvent[] = []
     const boot = new Bootstrap({ steps: stubSteps(), onEvent: e => events.push(e) })
     const result = await boot.run()
 
     assert.equal(result.scope, 'full')
     assert.equal(result.intent, 'a shop')
-    assert.equal(result.plan.stack, 'Vike + universal-orm')
     assert.equal(result.run, fakeRun)
     assert.equal(result.passes, 1)
     assert.deepEqual(result.blockers, [])
     assert.equal(result.productionGrade, true)
     assert.equal(result.stoppedEarly, false)
 
-    // narration order: scope, architect, its narration, build narration, loop, checklist, done
+    // narration order: scope, loop narration, checklist, done
     const types = events.map(e => e.type)
-    assert.deepEqual(types, ['scope', 'architect', 'narrate', 'narrate', 'narrate', 'checklist', 'done'])
+    assert.deepEqual(types, ['scope', 'narrate', 'checklist', 'done'])
     const scoped = events[0]
     assert.ok(scoped?.type === 'scope' && scoped.scope === 'full')
   })
 
-  it('records the architect decisions to the ledger', async () => {
-    const ledger = new DecisionLedger()
-    const boot = new Bootstrap({ steps: stubSteps(), ledger })
-    await boot.run()
-    assert.equal(boot.decisions, ledger)
-    assert.equal(ledger.size, 1)
-    assert.equal(ledger.all()[0]?.status, 'accepted')
-    assert.match(ledger.all()[0]!.title, /Vike for SSR/)
-  })
-
-  it('emits the stack rationale (pros/cons/alternatives) and records alternatives as ledger rejections', async () => {
-    const events: BootstrapEvent[] = []
-    const ledger = new DecisionLedger()
+  it('hands the scope and intent to the build step', async () => {
+    let seen: { scope: string; intent: string } | undefined
     const boot = new Bootstrap({
       steps: stubSteps({
-        architect: () => ({
-          stack: 'Vike + universal-orm',
-          narration: 'n',
-          decisions: [{ choice: 'Use Vike for SSR', why: 'SEO' }],
-          pros: ['edge deploy'],
-          cons: ['smaller ecosystem'],
-          alternatives: [{ option: 'Next.js', whyNot: 'constrained edge deploy' }],
-        }),
+        build: ({ scope, intent }) => {
+          seen = { scope, intent }
+          return fakeRun
+        },
       }),
-      ledger,
-      onEvent: e => events.push(e),
     })
     await boot.run()
-
-    const arch = events.find(e => e.type === 'architect')
-    assert.ok(arch?.type === 'architect')
-    assert.deepEqual(arch.pros, ['edge deploy'])
-    assert.deepEqual(arch.cons, ['smaller ecosystem'])
-    assert.deepEqual(arch.alternatives, [{ option: 'Next.js', whyNot: 'constrained edge deploy' }])
-
-    // The rejected alternative is in the ledger, honestly marked rejected.
-    const rejected = ledger.all().find(d => d.status === 'rejected')
-    assert.ok(rejected, 'expected a rejected alternative in the ledger')
-    assert.match(rejected!.title, /Next\.js/)
-  })
-
-  it('omits rationale fields on the architect event when the plan has none', async () => {
-    const events: BootstrapEvent[] = []
-    const boot = new Bootstrap({ steps: stubSteps(), onEvent: e => events.push(e) })
-    await boot.run()
-    const arch = events.find(e => e.type === 'architect')
-    assert.ok(arch?.type === 'architect')
-    assert.equal('pros' in arch, false)
-    assert.equal('alternatives' in arch, false)
+    assert.deepEqual(seen, { scope: 'full', intent: 'a shop' })
   })
 })
 
@@ -230,9 +186,9 @@ describe('Bootstrap — interrupt + isolation', () => {
     const boot = new Bootstrap({
       signal: controller.signal,
       steps: stubSteps({
-        architect: () => {
-          controller.abort() // user interrupts during the architect phase
-          return { stack: 'x', narration: '', decisions: [] }
+        build: () => {
+          controller.abort() // user interrupts during the build phase
+          return fakeRun
         },
       }),
     })
@@ -267,7 +223,7 @@ describe('Bootstrap — construction', () => {
     // @ts-expect-error missing steps
     assert.throws(() => new Bootstrap({}), /requires `steps`/)
     // @ts-expect-error missing build
-    assert.throws(() => new Bootstrap({ steps: { scope: () => ({ scope: 'full', intent: '' }), architect: () => ({ stack: '', narration: '', decisions: [] }) } }), /`build` step/)
+    assert.throws(() => new Bootstrap({ steps: { scope: () => ({ scope: 'full', intent: '' }) } }), /`build` step/)
     assert.throws(() => new Bootstrap({ steps: stubSteps(), maxPasses: 0 }), /maxPasses/)
   })
 })

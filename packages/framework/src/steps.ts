@@ -1,13 +1,8 @@
 import { readdirSync } from 'node:fs'
 import { join } from 'node:path'
-import { definePrompt, LoopEngine, parseVerdict, promptInstructions, renderTask, STACK_TRADEOFFS } from '@gemstack/ai-autopilot'
+import { definePrompt, LoopEngine, parseVerdict, promptInstructions, renderTask } from '@gemstack/ai-autopilot'
 import type {
-  ArchitectAlternative,
-  ArchitectContext,
-  ArchitectDecision,
-  ArchitectPlan,
   BuildContext,
-  DecisionLedger,
   DeployContext,
   DeployOutcome,
   DeployTarget,
@@ -28,40 +23,14 @@ import { parseAwaitGate, type ParsedAwaitGate } from './turn-gate.js'
  * Driver-backed {@link https://github.com/gemstack-land/gemstack | Bootstrap} steps.
  *
  * These implement the injectable steps of ai-autopilot's `Bootstrap` by running
- * everything *through* a {@link DriverSession} (option A, #166): the architect is
- * a structured decision the driver returns as JSON; build / improve are prompts
- * that let the wrapped agent's own loop do the work; the checklist re-prompts and
- * gates on the `{ blockers }` verdict the agent ends its output with. Reusing the
- * `Bootstrap` spine keeps scope, narration, the decisions ledger, the loop gate,
- * and deploy for free; only *who runs the inner loop* changes.
+ * everything *through* a {@link DriverSession} (option A, #166): build / improve
+ * are prompts that let the wrapped agent's own loop do the work; the checklist
+ * re-prompts and gates on the `{ blockers }` verdict the agent ends its output
+ * with. Reusing the `Bootstrap` spine keeps scope, narration, the loop gate, and
+ * deploy for free; only *who runs the inner loop* changes.
  */
 
 const ZERO_USAGE = { promptTokens: 0, completionTokens: 0, totalTokens: 0 }
-
-/**
- * Compose the architect prompt for an intent. Exported so callers can override.
- * `steer` is an optional extra constraint (e.g. the user overrode the stack at the
- * plan-approval gate, #304), inserted right after the intent so it frames the whole
- * decision.
- */
-export function architectPrompt(intent: string, steer?: string): string {
-  return [
-    'You are the architect for a new app. Decide the stack and the key architectural choices.',
-    `What the user wants: ${intent}`,
-    ...(steer ? [steer] : []),
-    'Prefer a modern, well-supported stack. Keep the choices minimal and justified.',
-    'Justify the stack honestly: give its real PROS and its CONS, and name the main',
-    'alternative you rejected and why it lost. This is shown to the user as the rationale.',
-    STACK_TRADEOFFS,
-    ARCHITECT_JSON_SHAPE,
-  ].join('\n')
-}
-
-/** The architect's answer contract, restated on every architect (re-)prompt. */
-const ARCHITECT_JSON_SHAPE = [
-  'Respond with ONLY a fenced ```json block of the shape:',
-  '{ "stack": "<one line>", "narration": "<what you are building and why>", "decisions": [{ "choice": "<one line>", "why": "<one line>" }], "pros": ["<upside>"], "cons": ["<downside>"], "alternatives": [{ "option": "<rejected stack>", "whyNot": "<one line>" }] }',
-].join('\n')
 
 /**
  * Resolve an agent-authored await gate (#337/#339) to the user's answer text.
@@ -69,52 +38,13 @@ const ARCHITECT_JSON_SHAPE = [
  */
 export type AwaitResolver = (gate: ParsedAwaitGate, round: number) => Promise<string>
 
-/** How many times an architect turn may stop to ask before its latest text is parsed as-is. */
-const MAX_ARCHITECT_AWAIT_ROUNDS = 5
-
-/**
- * Run an architect prompt, honoring agent-authored await gates (#356): an
- * architect turn that stops to ask (e.g. the #326 unclear-scope flow) is resolved
- * through `resolveAwait` and re-prompted with the answer, instead of the question
- * being swallowed into a stub plan by {@link parseArchitectPlan}'s fallbacks.
- * Without a resolver (headless) the first turn's text is returned unchanged.
- */
-async function architectTurns(
-  session: DriverSession,
-  firstPrompt: string,
-  opts: { system?: string | undefined; signal?: AbortSignal | undefined; resolveAwait?: AwaitResolver | undefined },
-): Promise<string> {
-  const promptOpts = {
-    ...(opts.system ? { system: opts.system } : {}),
-    ...(opts.signal ? { signal: opts.signal } : {}),
-  }
-  let turn = await session.prompt(firstPrompt, promptOpts)
-  if (!opts.resolveAwait) return turn.text
-  for (let round = 0; round < MAX_ARCHITECT_AWAIT_ROUNDS; round++) {
-    const gate = parseAwaitGate(turn.text)
-    if (!gate) return turn.text
-    const answer = await opts.resolveAwait(gate, round)
-    turn = await session.prompt(
-      [
-        `You paused to ask: "${gate.title}". The user chose: ${answer}.`,
-        'Continue the architect decision with that answer, and do not ask again unless a genuinely new choice comes up.',
-        ARCHITECT_JSON_SHAPE,
-      ].join('\n'),
-      promptOpts,
-    )
-  }
-  return turn.text
-}
-
-/** Compose the build prompt from the architect's plan. */
-export function buildPrompt(plan: ArchitectPlan, intent: string): string {
+/** Compose the build prompt for an intent. The stack is the agent's call (#545). */
+export function buildPrompt(intent: string): string {
   return [
     `Build this app end to end: ${intent}`,
-    `Stack: ${plan.stack}`,
-    plan.narration,
     'The workspace may be empty — if so, scaffold the whole project from scratch:',
     'create package.json with scripts, all config, and every source file, install',
-    'the dependencies, and make the app run. Follow the stack conventions.',
+    'the dependencies, and make the app run.',
     'When done, summarize what you built in one short paragraph.',
   ].join('\n')
 }
@@ -126,11 +56,9 @@ export function buildPrompt(plan: ArchitectPlan, intent: string): string {
  * pointed the framework at a project that already exists (#185). Chosen when the
  * workspace already holds source at build time.
  */
-export function extendPrompt(plan: ArchitectPlan, intent: string): string {
+export function extendPrompt(intent: string): string {
   return [
     `Work within the existing codebase in this workspace to deliver: ${intent}`,
-    `Detected stack: ${plan.stack}`,
-    plan.narration,
     'This project already exists — do NOT re-scaffold or rebuild it, and do not',
     'replace its structure or swap its stack. Read the existing code first, follow',
     'its conventions, and make the smallest coherent set of changes that adds what',
@@ -145,11 +73,9 @@ export function extendPrompt(plan: ArchitectPlan, intent: string): string {
  * {@link improvePrompt} ("smallest changes / no unrelated features") would
  * wrongly discourage scaffolding (#182).
  */
-export function scaffoldPrompt(plan: ArchitectPlan, intent: string): string {
+export function scaffoldPrompt(intent: string): string {
   return [
     `The workspace is empty — no app exists here yet. You must create the entire app now from scratch: ${intent}`,
-    `Stack: ${plan.stack}`,
-    plan.narration,
     'This is a from-scratch build, not an edit: do not wait for existing code, and do',
     'not refuse because the directory is empty — that is expected. Scaffold the full',
     'project (package.json with scripts, config, and every source file), install',
@@ -225,46 +151,6 @@ export interface DriverStepOptions {
 }
 
 /**
- * The architect step: ask the driver for a structured stack decision and parse
- * it. A single small structured decision, exactly what option A reserves this
- * shape for (returned as JSON by the black box rather than a separate agent).
- */
-export function driverArchitect(
-  session: DriverSession,
-  opts: { prompt?: (intent: string) => string; resolveAwait?: AwaitResolver } & DriverStepOptions = {},
-): (ctx: ArchitectContext) => Promise<ArchitectPlan> {
-  const compose = opts.prompt ?? architectPrompt
-  return async ctx => {
-    const text = await architectTurns(session, compose(ctx.intent), {
-      system: opts.system,
-      signal: ctx.signal,
-      resolveAwait: opts.resolveAwait,
-    })
-    return parseArchitectPlan(text, ctx.intent)
-  }
-}
-
-/**
- * Re-run the architect after the user overrode the stack at the plan-approval gate
- * (#304): same intent, same app goal, but steered to build around the alternative
- * they picked instead of the stack originally chosen. Returns a fresh plan.
- */
-export async function reArchitect(
-  session: DriverSession,
-  ctx: ArchitectContext,
-  fromStack: string,
-  toOption: string,
-  opts: { resolveAwait?: AwaitResolver } = {},
-): Promise<ArchitectPlan> {
-  const steer = `The user reviewed your first choice (${fromStack}) and prefers ${toOption}. Re-decide the stack around ${toOption}, keeping the same app goal.`
-  const text = await architectTurns(session, architectPrompt(ctx.intent, steer), {
-    signal: ctx.signal,
-    resolveAwait: opts.resolveAwait,
-  })
-  return parseArchitectPlan(text, ctx.intent)
-}
-
-/**
  * Resume the build after the agent stopped to ask (#337): the turn-boundary choice
  * gate re-prompts the driver with the user's pick so it continues from the decision
  * rather than deciding for itself. A fresh turn (option A), so the agent re-reads the
@@ -295,7 +181,7 @@ export function continueAfterChoice(
 export function driverBuild(
   session: DriverSession,
   opts: {
-    prompt?: (plan: ArchitectPlan, intent: string) => string
+    prompt?: (intent: string) => string
     /**
      * Guarantee the build produced files: after the build turn, if the workspace
      * is still empty (the agent stalled instead of scaffolding), re-prompt once
@@ -318,10 +204,10 @@ export function driverBuild(
     // greenfield path and stays deterministic. A caller-supplied prompt wins.
     const existing = opts.verifyWorkspace === true && !isWorkspaceEmpty(session.cwd)
     const firstPrompt = composeOverride
-      ? composeOverride(ctx.plan, ctx.intent)
+      ? composeOverride(ctx.intent)
       : existing
-        ? extendPrompt(ctx.plan, ctx.intent)
-        : buildPrompt(ctx.plan, ctx.intent)
+        ? extendPrompt(ctx.intent)
+        : buildPrompt(ctx.intent)
     const subtask: PlannedSubtask = {
       id: 'build-1',
       description: existing ? 'Extend the existing codebase' : 'Build with the wrapped agent',
@@ -342,7 +228,7 @@ export function driverBuild(
     if (opts.verifyWorkspace && isWorkspaceEmpty(session.cwd) && !parseAwaitGate(turn.text)) {
       const retry: PlannedSubtask = { id: 'build-2', description: 'Scaffold the app from scratch (workspace was empty)' }
       ctx.onEvent({ type: 'dispatch-start', subtask: retry })
-      turn = await session.prompt(scaffoldPrompt(ctx.plan, ctx.intent), { ...promptOpts, ...signalOpt })
+      turn = await session.prompt(scaffoldPrompt(ctx.intent), { ...promptOpts, ...signalOpt })
       const retryResult: SubtaskResult = { subtask: retry, text: turn.text, ok: true, usage: ZERO_USAGE }
       results.push(retryResult)
       ctx.onEvent({ type: 'dispatch-result', result: retryResult })
@@ -444,7 +330,7 @@ export function driverImprove(
   const compose = opts.prompt ?? improvePrompt
   return async ctx => {
     const scaffold = opts.verifyWorkspace && isWorkspaceEmpty(session.cwd)
-    const text = scaffold ? scaffoldPrompt(ctx.plan, ctx.intent) : compose(ctx.blockers)
+    const text = scaffold ? scaffoldPrompt(ctx.intent) : compose(ctx.blockers)
     await session.prompt(text, {
       ...(opts.system ? { system: opts.system } : {}),
       ...(ctx.signal ? { signal: ctx.signal } : {}),
@@ -456,20 +342,20 @@ export function driverImprove(
  * Materialize a domain preset's {@link Prompt} bodies into driver-backed
  * {@link LoopPrompt}s so its loops can run through the wrapped agent. Each pass is
  * one fresh {@link DriverSession.prompt} call (the driver's fresh-context unit),
- * prompted with the composed instructions (body + decisions briefing) and the
- * rendered {@link renderTask | loop event}, returning the agent's text.
+ * prompted with the prompt body and the rendered {@link renderTask | loop event},
+ * returning the agent's text.
  */
 export function driverLoopPrompts(
   session: DriverSession,
   prompts: readonly Prompt[],
-  opts: { ledger?: DecisionLedger; signal?: AbortSignal } & DriverStepOptions = {},
+  opts: { signal?: AbortSignal } & DriverStepOptions = {},
 ): LoopPrompt[] {
   return prompts.map(prompt =>
     definePrompt({
       id: prompt.id,
       passes: prompt.passes,
       run: async ctx => {
-        const instructions = promptInstructions(prompt, opts.ledger ? { ledger: opts.ledger } : {})
+        const instructions = promptInstructions(prompt)
         const framing = opts.system ? `${opts.system}\n\n${instructions}` : instructions
         const turn = await session.prompt(`${framing}\n\n${renderTask(ctx.event)}`, {
           ...(opts.signal ? { signal: opts.signal } : {}),
@@ -508,53 +394,9 @@ export function deployWith(
   }
 }
 
-/**
- * Parse the architect's JSON out of a driver turn, with safe fallbacks so a
- * loose reply never crashes the flow. Exported for testing.
- */
-export function parseArchitectPlan(text: string, intent: string): ArchitectPlan {
-  const obj = lastJsonObject(text)
-  const stack = typeof obj?.['stack'] === 'string' && obj['stack'].trim() ? obj['stack'].trim() : `A sensible stack for: ${intent}`
-  const narration =
-    typeof obj?.['narration'] === 'string' && obj['narration'].trim() ? obj['narration'].trim() : `Building: ${intent}`
-  const decisions = Array.isArray(obj?.['decisions'])
-    ? (obj['decisions'] as unknown[]).flatMap(coerceDecision)
-    : []
-  const pros = coerceStrings(obj?.['pros'])
-  const cons = coerceStrings(obj?.['cons'])
-  const alternatives = Array.isArray(obj?.['alternatives'])
-    ? (obj['alternatives'] as unknown[]).flatMap(coerceAlternative)
-    : []
-  // Omit empty rationale fields so a plan without them stays clean.
-  return {
-    stack,
-    narration,
-    decisions,
-    ...(pros.length ? { pros } : {}),
-    ...(cons.length ? { cons } : {}),
-    ...(alternatives.length ? { alternatives } : {}),
-  }
-}
-
-function coerceDecision(value: unknown): ArchitectDecision[] {
-  if (typeof value !== 'object' || value === null) return []
-  const obj = value as Record<string, unknown>
-  const choice = typeof obj['choice'] === 'string' ? obj['choice'].trim() : ''
-  const why = typeof obj['why'] === 'string' ? obj['why'].trim() : ''
-  return choice && why ? [{ choice, why }] : []
-}
-
 function coerceStrings(value: unknown): string[] {
   if (!Array.isArray(value)) return []
   return value.filter((v): v is string => typeof v === 'string' && v.trim() !== '').map(v => v.trim())
-}
-
-function coerceAlternative(value: unknown): ArchitectAlternative[] {
-  if (typeof value !== 'object' || value === null) return []
-  const obj = value as Record<string, unknown>
-  const option = typeof obj['option'] === 'string' ? obj['option'].trim() : ''
-  const whyNot = typeof obj['whyNot'] === 'string' ? obj['whyNot'].trim() : ''
-  return option && whyNot ? [{ option, whyNot }] : []
 }
 
 const FENCE = /```(?:[a-zA-Z0-9]*)\n([\s\S]*?)```/g

@@ -44,10 +44,6 @@ test('runFramework drives the whole flow through the driver, offline, to product
   assert.equal(result.passes, 2)
   assert.deepEqual(result.blockers, [])
 
-  // The architect's choices were recorded and narrated.
-  const architect = events.find(e => e.kind === 'bootstrap' && e.event.type === 'architect')
-  assert.ok(architect)
-
   // The deploy phase decided SSR -> cloudflare.
   assert.equal(result.deploy?.plan.target, 'cloudflare')
 
@@ -129,7 +125,7 @@ test('runFramework accumulates per-turn usage and emits a running total (#322)',
 
 test('runFramework stops itself once the budget cap is reached (#322)', async () => {
   const events: FrameworkEvent[] = []
-  // $0.01 cap trips on the very first $0.02 turn (the architect).
+  // $0.01 cap trips on the very first $0.02 turn (the build).
   await assert.rejects(
     runFramework({
       intent: FAKE_INTENT,
@@ -155,26 +151,6 @@ test('runFramework stops itself once the budget cap is reached (#322)', async ()
   assert.match(end.detail ?? '', /budget reached/)
   // The run stopped early: it never reached the deploy/production-grade tail.
   assert.ok(!events.some(e => e.kind === 'bootstrap' && e.event.type === 'done'))
-})
-
-test('a plan-approval gate parked for a pick unblocks when the budget trips (#322)', async () => {
-  const events: FrameworkEvent[] = []
-  // The gate awaits a pick that never arrives; the budget cap trips on the first
-  // (architect) turn and must unblock it rather than hang the run.
-  await assert.rejects(
-    runFramework({
-      intent: FAKE_INTENT,
-      driver: fakeDriver(),
-      cwd: '/tmp/ws',
-      signals: FAKE_SIGNALS,
-      budgetUsd: 0.01,
-      requestChoice: () => new Promise<never>(() => {}),
-      onEvent: e => events.push(e),
-    }),
-  )
-  assert.ok(events.some(e => e.kind === 'choice'))
-  const end = events.at(-1)!
-  assert.equal(end.kind === 'end' && end.stopped, true)
 })
 
 test('runFramework shows a literal session link immediately (no template)', async () => {
@@ -277,16 +253,12 @@ test('repo memory files frame the agent: contents + a maintain instruction (#260
     driver,
     cwd: '/tmp/ws',
     signals: FAKE_SIGNALS,
-    memory: [
-      { name: 'CODE-OVERVIEW.md', purpose: 'a map of the codebase', content: 'A blog with comments.' },
-      { name: 'DECISIONS.md', purpose: 'the decision log', agentMaintained: false },
-    ],
+    memory: [{ name: 'CODE-OVERVIEW.md', purpose: 'a map of the codebase', content: 'A blog with comments.' }],
     onEvent: () => {},
   })
   assert.match(system(), /Project memory/)
   assert.match(system(), /A blog with comments\./) // contents inlined as context
   assert.match(system(), /Keep these up to date[\s\S]*CODE-OVERVIEW\.md/)
-  assert.match(system(), /Read-only[\s\S]*DECISIONS\.md/) // agent must not clobber our ledger write
 })
 
 test('no memory option leaves the framing unchanged (#260)', async () => {
@@ -319,7 +291,6 @@ test("a domain preset's loop drives the production-grade review phase (#252)", a
   const events: FrameworkEvent[] = []
   const driver = new FakeDriver({
     turns: [
-      { text: '```json\n{"stack":"X","narration":"n","decisions":[]}\n```' }, // architect
       { text: 'Built the app.' }, // build
       { text: 'Reviewed.\n```json\n{"blockers":[]}\n```' }, // the domain review prompt, clean
     ],
@@ -342,7 +313,6 @@ test("a domain preset's loop drives the production-grade review phase (#252)", a
 test('the domain review loop blocks, improve runs, then it clears (#252)', async () => {
   const driver = new FakeDriver({
     turns: [
-      { text: '```json\n{"stack":"X","narration":"n","decisions":[]}\n```' }, // architect
       { text: 'Built the app.' }, // build
       { text: 'Reviewed.\n```json\n{"blockers":["needs error handling"]}\n```' }, // review, pass 1: blocks
       { text: 'Added error handling.' }, // improve
@@ -391,7 +361,6 @@ function promptRecordingDriver(): { driver: Driver; prompts: () => string[] } {
   const sent: string[] = []
   const inner = new FakeDriver({
     turns: [
-      { text: '```json\n{"stack":"X","narration":"n","decisions":[]}\n```' }, // architect
       { text: 'Built the app.' }, // build
       { text: 'Reviewed.\n```json\n{"blockers":[]}\n```' }, // review, clean
     ],
@@ -507,152 +476,6 @@ test('runFramework prototype scope skips the full-fledged loop', async () => {
   assert.equal(result.productionGrade, false)
 })
 
-test('the plan-approval gate (#304) pauses on a choice, proceeds, and keeps the plan', async () => {
-  const events: FrameworkEvent[] = []
-  const seen: ChoiceRequest[] = []
-  const { result } = await runFramework({
-    intent: FAKE_INTENT,
-    driver: fakeDriver(),
-    cwd: '/tmp/ws',
-    signals: FAKE_SIGNALS,
-    deploy: FAKE_DEPLOY,
-    onEvent: e => events.push(e),
-    requestChoice: async req => {
-      seen.push(req)
-      return { picked: 'proceed', by: 'user' }
-    },
-  })
-
-  // The gate emitted one choice, offering "proceed" (recommended) plus the
-  // architect's alternative as "Use Next.js instead".
-  assert.equal(seen.length, 1)
-  const choice = events.find(e => e.kind === 'choice')
-  assert.ok(choice && choice.kind === 'choice')
-  assert.equal(choice.recommended, 'proceed')
-  assert.ok(choice.options.some(o => o.id === 'proceed'))
-  assert.ok(choice.options.some(o => o.id === 'alt:0' && /Next\.js/.test(o.label)))
-
-  // It resolved to the pick, and the choice came before the architect narration.
-  const resolved = events.find(e => e.kind === 'choice-resolved')
-  assert.ok(resolved && resolved.kind === 'choice-resolved')
-  assert.equal(resolved.picked, 'proceed')
-  assert.equal(resolved.by, 'user')
-  const ci = events.findIndex(e => e.kind === 'choice')
-  const ai = events.findIndex(e => e.kind === 'bootstrap' && e.event.type === 'architect')
-  assert.ok(ci >= 0 && ai > ci)
-
-  // Proceeding kept the original stack and still reached production-grade.
-  const architect = events.find(e => e.kind === 'bootstrap' && e.event.type === 'architect')
-  assert.ok(architect && architect.kind === 'bootstrap' && architect.event.type === 'architect')
-  assert.match(architect.event.stack, /Vike \+ Prisma/)
-  assert.equal(result.productionGrade, true)
-})
-
-test('without a requestChoice handler no choice events are emitted (#304)', async () => {
-  const events: FrameworkEvent[] = []
-  await runFramework({
-    intent: FAKE_INTENT,
-    driver: fakeDriver(),
-    cwd: '/tmp/ws',
-    signals: FAKE_SIGNALS,
-    onEvent: e => events.push(e),
-  })
-  assert.equal(events.some(e => e.kind === 'choice'), false)
-  assert.equal(events.some(e => e.kind === 'choice-resolved'), false)
-})
-
-test('picking an alternative re-architects the run around it (#304)', async () => {
-  const first = {
-    stack: 'Vike + Prisma',
-    narration: 'first plan',
-    decisions: [{ choice: 'SSR', why: 'per-request data' }],
-    alternatives: [{ option: 'Next.js', whyNot: 'edge deploy is more constrained' }],
-  }
-  const second = {
-    stack: 'Next.js + Postgres',
-    narration: 'second plan',
-    decisions: [{ choice: 'App Router', why: 'the user chose it' }],
-    alternatives: [],
-  }
-  // A driver that answers by prompt: the steered re-architect returns the Next.js
-  // plan, the first architect the Vike plan, the checklist passes clean.
-  const driver = new FakeDriver({
-    respond: (prompt: string): string => {
-      if (/You are the architect/.test(prompt) && /prefers Next\.js/.test(prompt))
-        return '```json\n' + JSON.stringify(second) + '\n```'
-      if (/You are the architect/.test(prompt)) return '```json\n' + JSON.stringify(first) + '\n```'
-      if (/production-grade checklist/.test(prompt)) return 'Reviewed.\n```json\n{ "blockers": [] }\n```'
-      return 'done'
-    },
-    sessionId: 'fake-realt',
-  })
-
-  const events: FrameworkEvent[] = []
-  const { result } = await runFramework({
-    intent: FAKE_INTENT,
-    driver,
-    cwd: '/tmp/ws',
-    signals: FAKE_SIGNALS,
-    onEvent: e => events.push(e),
-    requestChoice: async () => ({ picked: 'alt:0', by: 'user' }),
-  })
-
-  // Re-architecting was narrated, and the final narrated stack is the alternative.
-  assert.ok(events.some(e => e.kind === 'log' && /Re-architecting around your choice: Next\.js/.test(e.message)))
-  const architect = events.find(e => e.kind === 'bootstrap' && e.event.type === 'architect')
-  assert.ok(architect && architect.kind === 'bootstrap' && architect.event.type === 'architect')
-  assert.match(architect.event.stack, /Next\.js \+ Postgres/)
-  assert.equal(result.productionGrade, true)
-})
-
-test('the gate re-fires to approve the re-architected plan (#324)', async () => {
-  const first = {
-    stack: 'Vike + Prisma',
-    narration: 'first plan',
-    decisions: [{ choice: 'SSR', why: 'per-request data' }],
-    alternatives: [{ option: 'Next.js', whyNot: 'edge deploy is more constrained' }],
-  }
-  const second = {
-    stack: 'Next.js + Postgres',
-    narration: 'second plan',
-    decisions: [{ choice: 'App Router', why: 'the user chose it' }],
-    alternatives: [{ option: 'Remix', whyNot: 'smaller ecosystem' }],
-  }
-  const driver = new FakeDriver({
-    respond: (prompt: string): string => {
-      if (/You are the architect/.test(prompt) && /prefers Next\.js/.test(prompt))
-        return '```json\n' + JSON.stringify(second) + '\n```'
-      if (/You are the architect/.test(prompt)) return '```json\n' + JSON.stringify(first) + '\n```'
-      if (/production-grade checklist/.test(prompt)) return 'Reviewed.\n```json\n{ "blockers": [] }\n```'
-      return 'done'
-    },
-    sessionId: 'refire',
-  })
-
-  const events: FrameworkEvent[] = []
-  // Round 0: pick the alternative (Next.js). Round 1: approve the re-architected plan.
-  const picks = ['alt:0', 'proceed']
-  let round = 0
-  const { result } = await runFramework({
-    intent: FAKE_INTENT,
-    driver,
-    cwd: '/tmp/ws',
-    signals: FAKE_SIGNALS,
-    onEvent: e => events.push(e),
-    requestChoice: async () => ({ picked: picks[round++] ?? 'proceed', by: 'user' as const }),
-  })
-
-  // The gate fired twice: once on the initial plan, once on the re-architected one.
-  const choices = events.filter(e => e.kind === 'choice')
-  assert.equal(choices.length, 2)
-  assert.equal(choices[0]!.kind === 'choice' && choices[0]!.id, 'plan-approval')
-  assert.equal(choices[1]!.kind === 'choice' && choices[1]!.id, 'plan-approval-1')
-  // The second gate offered the re-architected (Next.js) plan for approval.
-  assert.ok(choices[1]!.kind === 'choice' && /Next\.js \+ Postgres/.test(choices[1]!.options[0]!.label))
-  assert.ok(events.some(e => e.kind === 'log' && /Re-architecting around your choice: Next\.js/.test(e.message)))
-  assert.equal(result.productionGrade, true)
-})
-
 const MS_OPTS: MultiSelectOption[] = [
   { id: 'p0', label: 'auth flow', default: true },
   { id: 'p1', label: 'routing' },
@@ -719,19 +542,12 @@ test('requestMultiSelect can resolve to an empty set when the user checks nothin
 })
 
 test('a build turn that stops to ask fires a live gate and resumes on the pick (#337)', async () => {
-  const plan = {
-    stack: 'Vike + Prisma',
-    narration: 'a plan',
-    decisions: [{ choice: 'SSR', why: 'per-request data' }],
-    alternatives: [],
-  }
   const awaitBlock =
     'I need a decision first.\n```await-choices\n' +
     '{ "title": "Which data store?", "options": [{ "id": "sqlite", "label": "SQLite" }, { "id": "pg", "label": "Postgres" }], "recommended": "sqlite" }\n' +
     '```'
   const driver = new FakeDriver({
     respond: (prompt: string): string => {
-      if (/You are the architect/.test(prompt)) return '```json\n' + JSON.stringify(plan) + '\n```'
       if (/Build this app end to end/.test(prompt)) return awaitBlock // the build stops to ask
       if (/You paused to ask/.test(prompt)) return 'Built it with Postgres. Done.' // the resume
       if (/production-grade checklist/.test(prompt)) return 'Reviewed.\n```json\n{ "blockers": [] }\n```'
@@ -755,7 +571,6 @@ test('a build turn that stops to ask fires a live gate and resumes on the pick (
   })
 
   // The agent-authored choice surfaced as a live gate with the offered options.
-  // (The architect plan-approval gate #304 also fires first; find ours by id.)
   const choice = events.find(e => e.kind === 'choice' && e.id === 'await-choices')
   assert.ok(choice && choice.kind === 'choice')
   assert.equal(choice.title, 'Which data store?')
@@ -767,14 +582,12 @@ test('a build turn that stops to ask fires a live gate and resumes on the pick (
 })
 
 test('a build turn that stops to showMultiSelect fires a checklist gate and resumes (#339)', async () => {
-  const plan = { stack: 'Vike', narration: 'p', decisions: [{ choice: 'x', why: 'y' }], alternatives: [] }
   const awaitBlock =
     'Rated the problems.\n```await-multiselect\n' +
     '{ "title": "Which problems to deep-dive?", "options": [{ "id": "auth", "label": "auth", "default": true }, { "id": "routing", "label": "routing" }] }\n' +
     '```'
   const driver = new FakeDriver({
     respond: (prompt: string): string => {
-      if (/You are the architect/.test(prompt)) return '```json\n' + JSON.stringify(plan) + '\n```'
       if (/Build this app end to end/.test(prompt)) return awaitBlock
       if (/You paused to ask/.test(prompt)) return 'Added the picks to TODO. Done.'
       if (/production-grade checklist/.test(prompt)) return 'Reviewed.\n```json\n{ "blockers": [] }\n```'
@@ -807,14 +620,12 @@ test('a build turn that stops to showMultiSelect fires a checklist gate and resu
 })
 
 test('a build turn that stops for plan approval resumes on Approve (#358)', async () => {
-  const plan = { stack: 'Vike', narration: 'p', decisions: [{ choice: 'x', why: 'y' }], alternatives: [] }
   const awaitBlock =
     'The scope is large, so I wrote a plan.\n```await-confirmation\n' +
     '{ "title": "Approve the orders plan?", "file": "PLAN_orders.agent.md" }\n' +
     '```'
   const driver = new FakeDriver({
     respond: (prompt: string): string => {
-      if (/You are the architect/.test(prompt)) return '```json\n' + JSON.stringify(plan) + '\n```'
       if (/Build this app end to end/.test(prompt)) return awaitBlock
       if (/You paused to ask/.test(prompt)) return 'Built the plan out. Done.'
       if (/production-grade checklist/.test(prompt)) return 'Reviewed.\n```json\n{ "blockers": [] }\n```'
@@ -851,12 +662,10 @@ test('a build turn that stops for plan approval resumes on Approve (#358)', asyn
 })
 
 test('a declined plan stops the run cleanly instead of building on (#358)', async () => {
-  const plan = { stack: 'Vike', narration: 'p', decisions: [{ choice: 'x', why: 'y' }], alternatives: [] }
   const awaitBlock = 'Plan written.\n```await-confirmation\n{ "title": "Approve?", "file": "PLAN_x.agent.md" }\n```'
   let resumed = false
   const driver = new FakeDriver({
     respond: (prompt: string): string => {
-      if (/You are the architect/.test(prompt)) return '```json\n' + JSON.stringify(plan) + '\n```'
       if (/Build this app end to end/.test(prompt)) return awaitBlock
       if (/You paused to ask/.test(prompt)) resumed = true
       if (/production-grade checklist/.test(prompt)) resumed = true // a declined plan must not be reviewed either
@@ -886,61 +695,9 @@ test('a declined plan stops the run cleanly instead of building on (#358)', asyn
   assert.equal(end.detail, 'plan declined')
 })
 
-test('a re-architect turn that stops to ask fires a live gate instead of a stub plan (#356)', async () => {
-  const first = {
-    stack: 'Vike + Prisma',
-    narration: 'first plan',
-    decisions: [{ choice: 'SSR', why: 'data' }],
-    alternatives: [{ option: 'Next.js', whyNot: 'coupling' }],
-  }
-  const steered = { stack: 'Next.js + Postgres', narration: 'steered plan', decisions: [{ choice: 'RSC', why: 'fits' }], alternatives: [] }
-  const awaitBlock =
-    'One call before I re-decide.\n```await-choices\n' +
-    '{ "title": "Server components?", "options": [{ "id": "yes", "label": "Yes" }, { "id": "no", "label": "No" }], "recommended": "yes" }\n' +
-    '```'
-  const driver = new FakeDriver({
-    respond: (prompt: string): string => {
-      // Order matters: the re-architect prompt also matches "You are the architect".
-      if (/You paused to ask/.test(prompt)) return '```json\n' + JSON.stringify(steered) + '\n```'
-      if (/The user reviewed your first choice/.test(prompt)) return awaitBlock // re-architect stops to ask
-      if (/You are the architect/.test(prompt)) return '```json\n' + JSON.stringify(first) + '\n```'
-      if (/Build this app end to end/.test(prompt)) return 'built'
-      if (/production-grade checklist/.test(prompt)) return 'ok\n```json\n{ "blockers": [] }\n```'
-      return 'done'
-    },
-    sessionId: 'rearch356',
-  })
-
-  const events: FrameworkEvent[] = []
-  await runFramework({
-    intent: FAKE_INTENT,
-    driver,
-    cwd: '/tmp/ws',
-    signals: FAKE_SIGNALS,
-    onEvent: e => events.push(e),
-    requestChoice: async req => {
-      if (req.id === 'plan-approval') return { picked: 'alt:0', by: 'user' } // steer to Next.js -> reArchitect
-      if (req.id === 'await-choices') return { picked: 'no', by: 'user' } // answer the agent's question
-      return { picked: 'proceed', by: 'user' } // approve the re-architected plan
-    },
-  })
-
-  // The agent's mid-re-architect question surfaced as a live gate...
-  const gate = events.find(e => e.kind === 'choice' && e.id === 'await-choices')
-  assert.ok(gate && gate.kind === 'choice')
-  assert.equal(gate.title, 'Server components?')
-  assert.ok(events.some(e => e.kind === 'log' && /Continuing with your choice: No/.test(e.message)))
-  // ...and the re-approval gate (#324) offered the REAL steered plan, not the stub fallback.
-  const reApproval = events.find(e => e.kind === 'choice' && e.id === 'plan-approval-1')
-  assert.ok(reApproval && reApproval.kind === 'choice')
-  assert.ok(reApproval.options.some(o => o.label === 'Proceed: Next.js + Postgres'))
-})
-
 test('without a requestChoice handler a build that asks is not gated (#337 headless)', async () => {
-  const plan = { stack: 'Vike', narration: 'p', decisions: [{ choice: 'x', why: 'y' }], alternatives: [] }
   const driver = new FakeDriver({
     respond: (prompt: string): string => {
-      if (/You are the architect/.test(prompt)) return '```json\n' + JSON.stringify(plan) + '\n```'
       if (/Build this app end to end/.test(prompt)) return 'built it\n```await-choices\n{ "options": [{ "label": "A" }] }\n```'
       if (/production-grade checklist/.test(prompt)) return 'Reviewed.\n```json\n{ "blockers": [] }\n```'
       return 'done'

@@ -3,17 +3,13 @@ import assert from 'node:assert/strict'
 import { runCapstone, INTENT } from './bootstrap.js'
 
 describe('bootstrap capstone: the whole epic composes end-to-end (offline)', () => {
-  it('detects the preset, runs scope → architect → build → loop → deploy, and maps the code', async () => {
+  it('detects the preset, runs scope → build → loop → deploy, and maps the code', async () => {
     const lines: string[] = []
     const { detection, result, events, files, overview } = await runCapstone(line => lines.push(line))
 
     // Preset: the Vike framework was detected from the project deps.
     assert.equal(detection.preset?.name, 'vike')
     assert.equal(detection.framework, 'Vike')
-
-    // Architect: chose the stack and recorded its choices to the ledger.
-    assert.match(result.plan.stack, /Vike \+ Prisma/)
-    assert.equal(result.plan.decisions.length, 2)
 
     // Build: each preset persona wrote its file into the sandbox.
     assert.ok('database/schema.ts' in files)

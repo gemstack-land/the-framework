@@ -7,8 +7,6 @@ import {
   builtinDomainPresets,
   cloudflareTarget,
   dokployTarget,
-  nodeLedgerFs,
-  saveLedger,
   selectPreset,
   type DeployTarget,
   type DomainPreset,
@@ -213,8 +211,7 @@ Options:
 
 The Framework drives the wrapped agent as a black box: it prompts, reads the code,
 and gates on the outcome (builds / serves / review-passes), then re-prompts. The
-localhost dashboard foregrounds the stack rationale, the loop status, and the
-decisions ledger beside the agent's own session.`
+localhost dashboard foregrounds the loop status beside the agent's own session.`
 
 /** Parsed CLI options. */
 export interface CliOptions {
@@ -1196,7 +1193,7 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
   }
 
   try {
-    const { result, preview, ledger } = await runFramework(runOpts)
+    const { result, preview } = await runFramework(runOpts)
     // Run settled: hand Ctrl+C back to the post-run dashboard/app wait below.
     clearInterrupt()
     io.out(
@@ -1205,10 +1202,8 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
         : `\n• prototype ready${result.stoppedEarly ? ` (stopped with ${result.blockers.length} blocker(s))` : ''}.`,
     )
     if (preview) io.out(`\n▶ Your app is running at ${preview.url} — open it in a browser.`)
-    // Flush the event log, and drop a human-readable DECISIONS.md beside it so the
-    // ledger is legible without the dashboard. Both best-effort.
+    // Flush the event log. Best-effort.
     await store?.close()
-    await writeDecisions(cwd, ledger, io)
     await maybeFirePostMerge()
     // Stay up while the dashboard and/or the app are live, then tear both down.
     if (dashboard || preview) {
@@ -1527,20 +1522,6 @@ async function resumeRun(opts: CliOptions, io: CliIO): Promise<number> {
     await dashboard.close()
   }
   return 0
-}
-
-/**
- * Persist the decisions ledger as a human-readable `DECISIONS.md` at the
- * workspace root, reusing ai-autopilot's markdown store. Best-effort: a write
- * failure is reported but never fails the run.
- */
-async function writeDecisions(cwd: string, ledger: RunFrameworkResult['ledger'], io: CliIO): Promise<void> {
-  if (ledger.all().length === 0) return
-  try {
-    await saveLedger(nodeLedgerFs(), ledger, join(cwd, 'DECISIONS.md'))
-  } catch (err) {
-    io.err(`could not write DECISIONS.md (${err instanceof Error ? err.message : String(err)})`)
-  }
 }
 
 /**

@@ -18,7 +18,6 @@ async function main(): Promise<void> {
   console.log(`  scope: ${result.scope}`)
   console.log(`  production-grade: ${result.productionGrade} (after ${result.passes} checklist pass(es))`)
   console.log(`  deploy: ${result.deploy?.plan.render.toUpperCase()} → ${result.deploy?.plan.target}`)
-  console.log(`  decisions recorded: ${result.plan.decisions.length}`)
 
   console.log('\n--- scale mode: CODE-OVERVIEW.md ---')
   console.log(`  ${overview?.summary}`)

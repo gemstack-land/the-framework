@@ -66,12 +66,12 @@
  * - {@link promptInstructions} — compose a body with the decisions briefing
  *
  * Bootstrap mode is the spine that sequences all of the above into one flow:
- * scope → architect → build → full-fledged loop, taking a user from nothing to a
+ * scope → build → full-fledged loop, taking a user from nothing to a
  * running, production-grade app. It narrates each phase and repeats the
  * production-grade checklist until its `{ blockers }` verdict is empty.
  *
  * - {@link Bootstrap} — the orchestrator over the injectable steps
- * - {@link agentArchitect} / {@link supervisorBuild} — the default step wirings
+ * - {@link supervisorBuild} — the default build step wiring
  * - {@link loopChecklist} / {@link loopImprove} — the full-fledged loop steps
  * - {@link agentDeploy} + the {@link DeployTarget} seam ({@link planOnlyTarget},
  *   {@link FakeDeployTarget}, {@link cloudflareTarget}, {@link dokployTarget}) — the
@@ -243,8 +243,6 @@ export {
   Bootstrap,
   createBootstrap,
   BootstrapAborted,
-  agentArchitect,
-  STACK_TRADEOFFS,
   supervisorBuild,
   loopChecklist,
   loopImprove,
@@ -262,7 +260,6 @@ export {
   type DeployExecutor,
   type DokployTargetOptions,
   type FetchLike,
-  type ArchitectAgentOptions,
   type SupervisorBuildOptions,
   type LoopStepOptions,
   type LoopChecklistOptions,
@@ -272,9 +269,6 @@ export {
   type BootstrapScope,
   type BootstrapPhase,
   type ScopeAnswer,
-  type ArchitectDecision,
-  type ArchitectAlternative,
-  type ArchitectPlan,
   type RenderMode,
   type DeployPlan,
   type DeployResult,
@@ -286,7 +280,6 @@ export {
   type BootstrapSteps,
   type BootstrapOptions,
   type BuildContext,
-  type ArchitectContext,
   type DeployContext,
   type LoopPassContext,
 } from './bootstrap/index.js'

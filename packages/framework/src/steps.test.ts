@@ -3,21 +3,17 @@ import { test } from 'node:test'
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { DecisionLedger, LoopEngine, defineLoop, definePrompt, type DeployTarget, type SupervisorEvent } from '@gemstack/ai-autopilot'
+import { LoopEngine, defineLoop, definePrompt, type DeployTarget, type SupervisorEvent } from '@gemstack/ai-autopilot'
 import { FakeDriver } from './driver/index.js'
 import {
-  architectPrompt,
   deployWith,
   domainLoopChecklist,
-  driverArchitect,
   driverBuild,
   driverChecklist,
   driverImprove,
   extendPrompt,
   isWorkspaceEmpty,
   MISSING_VERDICT_BLOCKER,
-  parseArchitectPlan,
-  reArchitect,
   verdictFromLoopRun,
 } from './steps.js'
 
@@ -32,8 +28,6 @@ function makeWorkspace(files: Record<string, string> = {}): string {
   return dir
 }
 
-const PLAN = { stack: 'Vike + universal-orm', narration: 'orders app', decisions: [] }
-
 test('domainLoopChecklist dispatches a review event and unions the prompts blockers (#252)', async () => {
   const loop = new LoopEngine({
     loops: [defineLoop({ on: 'major-change', run: ['a', 'b'] })],
@@ -42,7 +36,7 @@ test('domainLoopChecklist dispatches a review event and unions the prompts block
       definePrompt({ id: 'b', run: async () => 'reviewed\n```json\n{"blockers":[]}\n```' }),
     ],
   })
-  const verdict = await domainLoopChecklist(loop)({ pass: 1, plan: PLAN, intent: 'build a thing', blockers: [] })
+  const verdict = await domainLoopChecklist(loop)({ pass: 1, intent: 'build a thing', blockers: [] })
   assert.deepEqual(verdict.blockers, ['fix X']) // union across the chain (b reported none)
 })
 
@@ -58,7 +52,7 @@ test('domainLoopChecklist falls back to the built-in checklist when no loop matc
       return { blockers: ['from built-in'] }
     },
   })
-  const verdict = await checklist({ pass: 1, plan: PLAN, intent: 'x', blockers: [] })
+  const verdict = await checklist({ pass: 1, intent: 'x', blockers: [] })
   assert.equal(fellBack, true)
   assert.deepEqual(verdict.blockers, ['from built-in'])
 })
@@ -75,127 +69,10 @@ test('verdictFromLoopRun surfaces a review that failed to execute as a blocker',
   assert.deepEqual(blockers, ['review "a" did not complete'])
 })
 
-test('parseArchitectPlan reads a fenced json plan', () => {
-  const text = 'Here is the plan:\n```json\n{"stack":"Vike","narration":"n","decisions":[{"choice":"SSR","why":"data"}]}\n```'
-  const plan = parseArchitectPlan(text, 'an app')
-  assert.equal(plan.stack, 'Vike')
-  assert.deepEqual(plan.decisions, [{ choice: 'SSR', why: 'data' }])
-})
-
-test('parseArchitectPlan falls back safely on garbage', () => {
-  const plan = parseArchitectPlan('no json here', 'a blog')
-  assert.match(plan.stack, /a blog/)
-  assert.deepEqual(plan.decisions, [])
-})
-
-test('parseArchitectPlan reads the stack rationale (pros/cons/alternatives)', () => {
-  const text =
-    '```json\n' +
-    JSON.stringify({
-      stack: 'Vike',
-      narration: 'n',
-      decisions: [{ choice: 'SSR', why: 'data' }],
-      pros: ['edge deploy', 'renderer-agnostic'],
-      cons: ['smaller ecosystem'],
-      alternatives: [{ option: 'Next.js', whyNot: 'constrained edge deploy' }],
-    }) +
-    '\n```'
-  const plan = parseArchitectPlan(text, 'an app')
-  assert.deepEqual(plan.pros, ['edge deploy', 'renderer-agnostic'])
-  assert.deepEqual(plan.cons, ['smaller ecosystem'])
-  assert.deepEqual(plan.alternatives, [{ option: 'Next.js', whyNot: 'constrained edge deploy' }])
-})
-
-test('parseArchitectPlan omits rationale fields when absent (backward compatible)', () => {
-  const plan = parseArchitectPlan('```json\n{"stack":"Vike","narration":"n","decisions":[]}\n```', 'an app')
-  assert.equal('pros' in plan, false)
-  assert.equal('cons' in plan, false)
-  assert.equal('alternatives' in plan, false)
-})
-
-test('architectPrompt asks for pros/cons + the rejected alternative, grounded in the tradeoffs', () => {
-  const p = architectPrompt('a blog')
-  assert.match(p, /PROS and its CONS/)
-  assert.match(p, /"alternatives"/)
-  assert.match(p, /renderer-agnostic/) // STACK_TRADEOFFS is embedded
-})
-
-test('driverArchitect returns the parsed plan from the driver turn', async () => {
-  const session = await new FakeDriver({
-    turns: [{ text: '```json\n{"stack":"Next.js","narration":"n","decisions":[]}\n```' }],
-  }).start({ cwd: '/ws' })
-  const plan = await driverArchitect(session)({ intent: 'x', scope: 'full', ledger: new DecisionLedger() })
-  assert.equal(plan.stack, 'Next.js')
-})
-
-const ARCHITECT_AWAIT_BLOCK =
-  'I need to know what you meant.\n```await-choices\n' +
-  '{ "title": "Which did you mean?", "options": [{ "id": "blog", "label": "A blog" }, { "id": "shop", "label": "A shop" }] }\n' +
-  '```'
-
-test('driverArchitect resolves an await gate and re-prompts before parsing (#356)', async () => {
-  const session = await new FakeDriver({
-    respond: (prompt: string) =>
-      /You paused to ask/.test(prompt)
-        ? '```json\n' + JSON.stringify(PLAN) + '\n```'
-        : ARCHITECT_AWAIT_BLOCK, // the architect stops to ask first
-  }).start({ cwd: '/ws' })
-  const asked: string[] = []
-  const plan = await driverArchitect(session, {
-    resolveAwait: async gate => {
-      asked.push(gate.title)
-      return 'A shop'
-    },
-  })({ intent: 'x', scope: 'full', ledger: new DecisionLedger() })
-  assert.deepEqual(asked, ['Which did you mean?'])
-  assert.equal(plan.stack, PLAN.stack) // the real plan, not the stub fallback
-})
-
-test('driverArchitect without a resolver keeps the stub fallback (headless, #356)', async () => {
-  const session = await new FakeDriver({ turns: [{ text: ARCHITECT_AWAIT_BLOCK }] }).start({ cwd: '/ws' })
-  const plan = await driverArchitect(session)({ intent: 'a shop', scope: 'full', ledger: new DecisionLedger() })
-  assert.equal(plan.stack, 'A sensible stack for: a shop')
-})
-
-test('reArchitect resolves an await gate and re-prompts before parsing (#356)', async () => {
-  const steered = { stack: 'Next.js + Postgres', narration: 'steered', decisions: [] }
-  const prompts: string[] = []
-  const session = await new FakeDriver({
-    respond: (prompt: string) => {
-      prompts.push(prompt)
-      return /You paused to ask/.test(prompt) ? '```json\n' + JSON.stringify(steered) + '\n```' : ARCHITECT_AWAIT_BLOCK
-    },
-  }).start({ cwd: '/ws' })
-  const plan = await reArchitect(
-    session,
-    { intent: 'x', scope: 'full', ledger: new DecisionLedger() },
-    'Vike',
-    'Next.js',
-    { resolveAwait: async () => 'A shop' },
-  )
-  assert.equal(plan.stack, 'Next.js + Postgres')
-  // The continuation restates the answer contract so the reply is parseable.
-  assert.ok(prompts.some(p => /You paused to ask.*chose: A shop[\s\S]*ONLY a fenced/.test(p)))
-})
-
-test('an architect that keeps asking past the round limit falls back to the latest text (#356)', async () => {
-  const session = await new FakeDriver({ respond: () => ARCHITECT_AWAIT_BLOCK }).start({ cwd: '/ws' })
-  let rounds = 0
-  const plan = await driverArchitect(session, {
-    resolveAwait: async () => {
-      rounds++
-      return 'A shop'
-    },
-  })({ intent: 'a shop', scope: 'full', ledger: new DecisionLedger() })
-  assert.equal(rounds, 5) // bounded, no infinite loop
-  assert.equal(plan.stack, 'A sensible stack for: a shop')
-})
-
 test('driverBuild emits supervisor events and returns the driver summary', async () => {
   const session = await new FakeDriver({ turns: [{ text: 'Built the app.' }] }).start({ cwd: '/ws' })
   const events: SupervisorEvent[] = []
   const run = await driverBuild(session)({
-    plan: PLAN,
     scope: 'full',
     intent: 'orders app',
     onEvent: e => events.push(e),
@@ -211,13 +88,13 @@ test('driverChecklist parses the { blockers } verdict', async () => {
   const session = await new FakeDriver({
     turns: [{ text: 'review\n```json\n{"blockers":["no auth"]}\n```' }],
   }).start({ cwd: '/ws' })
-  const verdict = await driverChecklist(session)({ pass: 1, plan: PLAN, intent: 'x', blockers: [] })
+  const verdict = await driverChecklist(session)({ pass: 1, intent: 'x', blockers: [] })
   assert.deepEqual(verdict.blockers, ['no auth'])
 })
 
 test('driverChecklist fails closed on a verdict-less reply (not passing)', async () => {
   const session = await new FakeDriver({ turns: [{ text: 'looks fine to me' }] }).start({ cwd: '/ws' })
-  const verdict = await driverChecklist(session)({ pass: 1, plan: PLAN, intent: 'x', blockers: [] })
+  const verdict = await driverChecklist(session)({ pass: 1, intent: 'x', blockers: [] })
   assert.deepEqual(verdict.blockers, [MISSING_VERDICT_BLOCKER])
 })
 
@@ -231,7 +108,6 @@ test('deployWith runs the target against the decided plan and uses its name', as
     },
   }
   const outcome = await deployWith({ render: 'ssr', reason: 'per-request data' }, target)({
-    plan: PLAN,
     scope: 'full',
     intent: 'orders app',
     productionGrade: true,
@@ -244,7 +120,7 @@ test('deployWith runs the target against the decided plan and uses its name', as
 
 test('driverImprove prompts the driver with the blockers', async () => {
   const session = await new FakeDriver({ turns: [{ text: 'fixed' }] }).start({ cwd: '/ws' })
-  await driverImprove(session)({ pass: 1, plan: PLAN, intent: 'x', blockers: ['add auth'] })
+  await driverImprove(session)({ pass: 1, intent: 'x', blockers: ['add auth'] })
   assert.match(session.prompts[0]!, /add auth/)
 })
 
@@ -274,7 +150,6 @@ test('driverBuild re-prompts to scaffold from scratch when the workspace stays e
     }).start({ cwd })
     const events: SupervisorEvent[] = []
     const run = await driverBuild(session, { verifyWorkspace: true })({
-      plan: PLAN,
       scope: 'full',
       intent: 'a blog',
       onEvent: e => events.push(e),
@@ -297,7 +172,6 @@ test('driverBuild does not re-prompt when the build produced files', async () =>
   try {
     const session = await new FakeDriver({ turns: [{ text: 'built it' }] }).start({ cwd })
     const run = await driverBuild(session, { verifyWorkspace: true })({
-      plan: PLAN,
       scope: 'full',
       intent: 'a blog',
       onEvent: () => {},
@@ -315,7 +189,6 @@ test('driverBuild extends an existing project instead of rebuilding it (#185)', 
     const session = await new FakeDriver({ turns: [{ text: 'added the feature' }] }).start({ cwd })
     const events: SupervisorEvent[] = []
     await driverBuild(session, { verifyWorkspace: true })({
-      plan: PLAN,
       scope: 'full',
       intent: 'add a search box',
       onEvent: e => events.push(e),
@@ -337,7 +210,6 @@ test('driverBuild uses greenfield framing for an empty workspace (#185)', async 
   try {
     const session = await new FakeDriver({ turns: [{ text: 'scaffolded it' }] }).start({ cwd })
     await driverBuild(session, { verifyWorkspace: true })({
-      plan: PLAN,
       scope: 'full',
       intent: 'a blog',
       onEvent: () => {},
@@ -349,10 +221,9 @@ test('driverBuild uses greenfield framing for an empty workspace (#185)', async 
   }
 })
 
-test('extendPrompt names the intent and the detected stack, and forbids a rebuild', () => {
-  const prompt = extendPrompt({ stack: 'Next.js', narration: 'n', decisions: [] }, 'add a settings page')
+test('extendPrompt names the intent and forbids a rebuild', () => {
+  const prompt = extendPrompt('add a settings page')
   assert.match(prompt, /add a settings page/)
-  assert.match(prompt, /Next\.js/)
   assert.match(prompt, /do NOT re-scaffold|do not.*swap its stack/i)
 })
 
@@ -361,13 +232,13 @@ test('driverImprove scaffolds from scratch when the workspace is empty, else fix
   const builtCwd = makeWorkspace({ 'src/app.ts': 'export {}' })
   try {
     const s1 = await new FakeDriver({ turns: [{ text: 'scaffolded' }] }).start({ cwd: emptyCwd })
-    await driverImprove(s1, { verifyWorkspace: true })({ pass: 1, plan: PLAN, intent: 'a blog', blockers: ['add auth'] })
+    await driverImprove(s1, { verifyWorkspace: true })({ pass: 1, intent: 'a blog', blockers: ['add auth'] })
     // Empty workspace: it scaffolds instead of making the "smallest change".
     assert.match(s1.prompts[0]!, /from scratch|empty/i)
     assert.doesNotMatch(s1.prompts[0]!, /add auth/)
 
     const s2 = await new FakeDriver({ turns: [{ text: 'fixed' }] }).start({ cwd: builtCwd })
-    await driverImprove(s2, { verifyWorkspace: true })({ pass: 1, plan: PLAN, intent: 'a blog', blockers: ['add auth'] })
+    await driverImprove(s2, { verifyWorkspace: true })({ pass: 1, intent: 'a blog', blockers: ['add auth'] })
     assert.match(s2.prompts[0]!, /add auth/)
   } finally {
     rmSync(emptyCwd, { recursive: true, force: true })

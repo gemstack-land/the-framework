@@ -14,7 +14,7 @@ import type { LoopPassContext } from './types.js'
 const skip = (await dockerAvailable()) ? false : 'no docker daemon available'
 
 /** A minimal loop-pass context — serveCheck ignores it, but the contract needs one. */
-const ctx: LoopPassContext = { pass: 1, plan: { stack: '', narration: '', decisions: [] }, intent: '', blockers: [] }
+const ctx: LoopPassContext = { pass: 1, intent: '', blockers: [] }
 
 /** A server bound to 0.0.0.0 so the container's published port reaches it from the host. */
 const server = (port: number, status: number, body: string): string =>

@@ -1,6 +1,5 @@
 import {
   Bootstrap,
-  DecisionLedger,
   DockerRunner,
   ExtensionRegistry,
   LocalRunner,
@@ -17,8 +16,6 @@ import {
   serveCheck,
   skillInstructions,
   skillPersonas,
-  type ArchitectContext,
-  type ArchitectPlan,
   type BootstrapEvent,
   type BootstrapResult,
   type BootstrapScope,
@@ -43,7 +40,7 @@ import { AWAIT_PROTOCOL, CONFIRM_APPROVED, CONFIRM_DECLINED, PLAN_DECLINED_MESSA
 // Value import from todo-loop.js is a benign cycle: todo-loop.js only calls
 // run.js's hoisted function declarations (requestChoices / resolveAwaitGate).
 import { leaveResumeNote, runTodoLoop, type TodoLoopResult } from './todo-loop.js'
-import { continueAfterChoice, decideDeploy, deployWith, domainLoopChecklist, driverArchitect, driverBuild, driverChecklist, driverImprove, driverLoopPrompts, reArchitect, type AwaitResolver } from './steps.js'
+import { continueAfterChoice, decideDeploy, deployWith, domainLoopChecklist, driverBuild, driverChecklist, driverImprove, driverLoopPrompts } from './steps.js'
 import { hasSessionIdPlaceholder, OPEN_LOOP_MODES, pickedIds, resolveSessionLink, type ChoicePick, type ChoiceRequest, type FrameworkEvent } from './events.js'
 import { UsageMeter } from './usage.js'
 
@@ -210,12 +207,11 @@ export interface RunFrameworkOptions {
   /** Interrupt the run between phases. */
   signal?: AbortSignal
   /**
-   * Pause the run on an interactive choice and await a pick (#304). Called at the
-   * plan-approval gate right after the architect decides the stack: the run emits a
-   * `choice` event, calls this, and resumes on the returned option — proceeding as
-   * planned, or re-architecting around a picked alternative. Omit for a headless
-   * run: the gate then auto-accepts the recommended option without pausing. The CLI
-   * wires this to the dashboard's Accept button + autopilot countdown.
+   * Pause the run on an interactive choice and await a pick (#304). Called when a
+   * build turn stops to ask (#337/#358): the run emits a `choice` event, calls
+   * this, and resumes on the returned option. Omit for a headless run: the gate
+   * then auto-accepts the recommended option without pausing. The CLI wires this
+   * to the dashboard's Accept button + autopilot countdown.
    */
   requestChoice?: (req: ChoiceRequest) => Promise<ChoicePick>
   /**
@@ -269,7 +265,6 @@ export interface RunFrameworkResult {
   result: BootstrapResult
   detection: FrameworkDetection
   events: FrameworkEvent[]
-  ledger: DecisionLedger
   /**
    * The generated app, left running when a {@link ServeConfig} was supplied and
    * the run finished. The caller owns its lifecycle: show {@link AppPreview.url},
@@ -292,7 +287,7 @@ export interface RunFrameworkResult {
 /**
  * Run the whole turnkey flow: detect the framework preset, frame the wrapped
  * agent with its framework skill (page builder + docs), then drive ai-autopilot's `Bootstrap`
- * (scope → architect → build → full-fledged loop → deploy) entirely *through*
+ * (scope → build → full-fledged loop → deploy) entirely *through*
  * the driver (option A). Every phase, plus the agent's own progress, streams as
  * a {@link FrameworkEvent}. Reversible: swap in a real deploy target, or a
  * different `Driver`, without touching this wiring.
@@ -481,16 +476,13 @@ export async function runFramework(opts: RunFrameworkOptions): Promise<RunFramew
     onEvent: onDriverEvent,
   })
 
-  const ledger = new DecisionLedger()
-
   // Materialize the domain preset's review policy against this run's driver: its
-  // loops, with its prompts as driver-backed passes sharing the run's ledger and
-  // abort signal. Exposed on the result, and driven as the review phase below (#252).
+  // loops, with its prompts as driver-backed passes sharing the run's abort signal.
+  // Exposed on the result, and driven as the review phase below (#252).
   const loop = domainPreset
     ? new LoopEngine({
         loops: [...domainPreset.loops],
         prompts: driverLoopPrompts(session, domainPreset.prompts, {
-          ledger,
           signal: runSignal,
         }),
       })
@@ -546,46 +538,21 @@ export async function runFramework(opts: RunFrameworkOptions): Promise<RunFramew
   const verifyWorkspace = opts.driver.name !== 'fake'
   const workspaceOpt = verifyWorkspace ? { verifyWorkspace: true } : {}
 
-  // The shared deps of every agent-facing gate, plus the architect-side await
-  // resolver (#356) built on them when an interactive handler is wired.
+  // The shared deps of every agent-facing gate.
   const gateDeps = {
     ...(opts.requestChoice ? { requestChoice: opts.requestChoice } : {}),
     emit,
     signal: runSignal,
     onDecline: () => declineController.abort(new Error('[framework] plan declined')),
   }
-  const architectAwait: { resolveAwait?: AwaitResolver } = opts.requestChoice
-    ? {
-        resolveAwait: async (gate, round) => {
-          const answer = await resolveAwaitGate(gate, round, gateDeps)
-          if (isDeclinedConfirmation(gate, answer)) {
-            emit({ kind: 'log', message: PLAN_DECLINED_MESSAGE })
-            gateDeps.onDecline()
-            return answer
-          }
-          emit({ kind: 'log', message: `Continuing with your choice: ${answer}` })
-          return answer
-        },
-      }
-    : {}
-
   let preview: AppPreview | undefined
   try {
     const bootstrap = new Bootstrap({
-      ledger,
       maxPasses: opts.maxPasses ?? DEFAULT_MAX_PASSES,
       signal: runSignal,
       onEvent: (event: BootstrapEvent) => emit({ kind: 'bootstrap', event }),
       steps: {
         scope: () => ({ scope: opts.scope ?? 'full', intent: opts.intent }),
-        // An architect turn may itself stop to ask (#356, e.g. the #326
-        // unclear-scope flow): resolve it through the same gates instead of
-        // letting the stub-plan fallback swallow the question. Only when someone
-        // can answer, so a headless run stays byte-identical.
-        architect: planApprovalGate(driverArchitect(session, architectAwait), session, {
-          ...gateDeps,
-          ...architectAwait,
-        }),
         build: agentAwaitGate(driverBuild(session, workspaceOpt), session, gateDeps),
         checklist,
         improve: driverImprove(session, workspaceOpt),
@@ -622,7 +589,7 @@ export async function runFramework(opts: RunFrameworkOptions): Promise<RunFramew
     // process a caller that ignores `preview` would never stop.
     if (runner && s?.keepAlive) preview = await startAppPreview(runner, s, emit)
     emit({ kind: 'end', ok: true })
-    return { result, detection, events, ledger, ...(preview ? { preview } : {}), ...(loop ? { loop } : {}), ...(todo ? { todo } : {}) }
+    return { result, detection, events, ...(preview ? { preview } : {}), ...(loop ? { loop } : {}), ...(todo ? { todo } : {}) }
   } catch (err) {
     // A user interrupt (the dashboard Stop button / Ctrl+C) or a budget cap (#322)
     // is a clean stop, not a failure — mark it so surfaces show "stopped". Budget is
@@ -653,77 +620,6 @@ export async function runFramework(opts: RunFrameworkOptions): Promise<RunFramew
     if (runner && !preview) await runner.dispose()
   }
 }
-
-/**
- * The plan-approval gate (#304): the AWAIT point of Rom's plan-then-AWAIT flow.
- * Wraps the architect step so that once the stack is decided, the run pauses on a
- * `choice` — "Approve this plan?", recommended = proceed, plus each architect
- * alternative as "Use <X> instead" — and resumes on the pick. Picking an
- * alternative re-architects around it (a fresh, coherent plan, not just a swapped
- * name). A no-op unless a {@link RunFrameworkOptions.requestChoice} handler is
- * wired, so a headless / programmatic run is byte-identical to before.
- */
-function planApprovalGate(
-  base: (ctx: ArchitectContext) => Promise<ArchitectPlan>,
-  session: DriverSession,
-  deps: {
-    requestChoice?: (req: ChoiceRequest) => Promise<ChoicePick>
-    emit: (event: FrameworkEvent) => void
-    /** The run signal; a gate parked for a pick unblocks (proceed) if the run aborts. */
-    signal?: AbortSignal
-    /** Resolver for a re-architect turn that stops to ask (#356). */
-    resolveAwait?: AwaitResolver
-  },
-): (ctx: ArchitectContext) => Promise<ArchitectPlan> {
-  return async ctx => {
-    const { requestChoice, emit } = deps
-    let plan = await base(ctx)
-    if (!requestChoice) return plan
-
-    // Re-fire the gate after each re-architect so the user approves the FINAL plan,
-    // not just the first (#324): a picked alternative can differ a lot from what was
-    // rejected, and an autopilot run should still get one look at it. Bounded so a
-    // run of alt-picks can't loop forever.
-    for (let round = 0; round < MAX_PLAN_ROUNDS; round++) {
-      const alternatives = plan.alternatives ?? []
-      const options: ChoicesOption[] = [
-        { id: 'proceed', label: `Proceed: ${plan.stack}` },
-        ...alternatives.map((a, i) => ({
-          id: `alt:${i}`,
-          label: `Use ${a.option} instead`,
-          ...(a.whyNot ? { detail: a.whyNot } : {}),
-        })),
-      ]
-      // Round 0 keeps the stable `plan-approval` id; later rounds get a unique id so
-      // a dashboard never confuses a re-approval with the pick it just resolved.
-      const id = round === 0 ? 'plan-approval' : `plan-approval-${round}`
-      // The shared single-select gate (#335): emits `choice`, parks for the pick, and
-      // falls back to the recommended `proceed` if the handler rejects or the run aborts
-      // (user stop / budget cap #322), so the gate never hangs.
-      const picked = await requestChoices({
-        id,
-        title: 'Approve this plan?',
-        options,
-        recommended: 'proceed',
-        requestChoice,
-        emit,
-        ...(deps.signal ? { signal: deps.signal } : {}),
-      })
-      const altMatch = /^alt:(\d+)$/.exec(picked)
-      const chosen = altMatch ? alternatives[Number(altMatch[1])] : undefined
-      if (!chosen) return plan // proceed (or an unknown pick) approves the current plan
-      emit({ kind: 'log', message: `Re-architecting around your choice: ${chosen.option}` })
-      plan = await reArchitect(session, ctx, plan.stack, chosen.option, deps.resolveAwait ? { resolveAwait: deps.resolveAwait } : {})
-    }
-    // Ran out of rounds still picking alternatives: proceed with the latest plan
-    // rather than loop forever.
-    emit({ kind: 'log', message: 'Proceeding with the latest plan (re-architect limit reached).' })
-    return plan
-  }
-}
-
-/** How many times a run may re-architect at the plan-approval gate before proceeding (#324). */
-const MAX_PLAN_ROUNDS = 5
 
 /** How many times a build may stop to ask (and be resumed) before it just proceeds (#337). */
 const MAX_AWAIT_ROUNDS = 5

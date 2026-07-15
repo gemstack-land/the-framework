@@ -26,17 +26,13 @@ test('memoryFraming is empty for an empty list', () => {
   assert.equal(memoryFraming([]), '')
 })
 
-test('memoryFraming separates agent-owned files from framework-owned, and shows current contents', () => {
+test('memoryFraming lists every file to keep up to date, and shows current contents', () => {
   const framing = memoryFraming([
     { name: 'CODE-OVERVIEW.md', purpose: 'a map of the codebase', content: 'It is a blog.' },
     { name: 'KNOWLEDGE-BASE.md', purpose: 'durable facts' }, // absent
-    { name: 'DECISIONS.md', purpose: 'the decision log', agentMaintained: false },
   ])
-  // agent-owned files land under the "keep up to date" instruction
-  assert.match(framing, /Keep these up to date[\s\S]*CODE-OVERVIEW\.md/)
-  // DECISIONS.md is flagged read-only so the agent will not clobber our ledger write
-  assert.match(framing, /Read-only[\s\S]*DECISIONS\.md/)
-  assert.doesNotMatch(framing.split('Read-only')[0]!, /DECISIONS\.md/) // not in the owned list
+  // every file is agent-maintained: one list under the "keep up to date" instruction
+  assert.match(framing, /Keep these up to date[\s\S]*CODE-OVERVIEW\.md[\s\S]*KNOWLEDGE-BASE\.md/)
   // present contents are inlined
   assert.match(framing, /### CODE-OVERVIEW\.md\nIt is a blog\./)
 })

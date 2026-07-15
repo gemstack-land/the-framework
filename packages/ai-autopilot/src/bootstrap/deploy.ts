@@ -100,12 +100,10 @@ export function agentDeploy(deployer: Agent, opts: AgentDeployOptions = {}): Non
   })
   const output = Output.object({ schema })
 
-  return async ({ plan: architecture, scope, intent, productionGrade, signal }) => {
+  return async ({ scope, intent, productionGrade, signal }) => {
     const context = [
       `# What the user wanted (${scope})`,
       intent,
-      `# Stack`,
-      architecture.stack,
       `# Production-grade`,
       productionGrade ? 'the app passed the production-grade checklist' : 'not yet fully production-grade',
       `# Allowed targets`,
