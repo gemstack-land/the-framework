@@ -6,7 +6,7 @@ import { driverArchitect } from './steps.js'
  * A benchmark for the architect prompt (`architectPrompt` in `steps.ts`) — the turn that
  * decides an app's stack. Rom's line on #485: the system prompt is the most critical part
  * of The Framework, and #499 already had to strip a Vike nudge from this one because a
- * biased stack pick erodes trust. So, like the meta-select benchmark (#502), measure it
+ * biased stack pick erodes trust. So measure it
  * rather than assume: does the architect pick a *sane* stack for the app, does it give the
  * *honest tradeoffs* the prompt demands (pros AND cons AND a rejected alternative), and —
  * the trust check — on genuinely framework-agnostic web apps, is it *balanced* across

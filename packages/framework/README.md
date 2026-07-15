@@ -79,7 +79,6 @@ framework relay                Host a run relay so teammates can watch a run (se
   --scope <prototype|full>   How much app to build (default: full).
   --max-passes <n>       Loop pass budget for a full build (default: 5).
   --preset <name>        Run under an Open Loop domain preset (see below).
-  --no-auto-preset       Do not auto-pick a preset on a live run; use the plain flow.
   --autopilot            Activate the preset's Autopilot mode variants.
   --technical            Activate the preset's Technical mode variants.
   --kind <name>          Build event kind the preset's review loop fires for
@@ -203,9 +202,8 @@ loop's prompts are what gate each pass:
 framework --preset software-development "Add an orders page with sign-in"
 ```
 
-On a live run with no `--preset` (and none in `the-framework.yml`), the framework
-**auto-picks** the best-fit preset, modes, and build event kind from your prompt and
-the workspace, then runs under it. `--no-auto-preset` opts out and uses the plain flow.
+A run only builds under a preset when you ask for one: `--preset` or
+`the-framework.yml`. With neither, the plain framework flow runs.
 
 **Modes** tune a preset without swapping it. `--autopilot` and `--technical`
 activate a preset's mode variants (e.g. a leaner review chain under `--technical`).
