@@ -35,14 +35,14 @@ import {
   type Verdict,
 } from '@gemstack/ai-autopilot'
 import { snapshotWorkspace } from './sandbox.js'
-import type { ConsumptionWindow } from './consumption.js'
+import { CONSUMPTION_LIMIT_LABEL, type ConsumptionWindow } from './consumption.js'
 import type { Driver, DriverEvent, DriverSession } from './driver/index.js'
 import { memoryFraming, type LoadedMemory } from './memory.js'
 import { composeRunSystem, type EcoOptions, type TfContext } from './system-prompt.js'
 import { AWAIT_PROTOCOL, CONFIRM_APPROVED, CONFIRM_DECLINED, PLAN_DECLINED_MESSAGE, isDeclinedConfirmation, parseAwaitGate, parseMarkdownViews, parseSessionName, parseReadyForMerge, type ParsedAwaitGate } from './turn-gate.js'
 // Value import from todo-loop.js is a benign cycle: todo-loop.js only calls
 // run.js's hoisted function declarations (requestChoices / resolveAwaitGate).
-import { appendTodoEntry, runTodoLoop, type TodoLoopResult } from './todo-loop.js'
+import { leaveResumeNote, runTodoLoop, type TodoLoopResult } from './todo-loop.js'
 import { continueAfterChoice, decideDeploy, deployWith, domainLoopChecklist, driverArchitect, driverBuild, driverChecklist, driverImprove, driverLoopPrompts, reArchitect, type AwaitResolver } from './steps.js'
 import { hasSessionIdPlaceholder, OPEN_LOOP_MODES, pickedIds, resolveSessionLink, type ChoicePick, type ChoiceRequest, type FrameworkEvent } from './events.js'
 import { UsageMeter } from './usage.js'
@@ -297,33 +297,6 @@ export interface RunFrameworkResult {
  * a {@link FrameworkEvent}. Reversible: swap in a real deploy target, or a
  * different `Driver`, without touching this wiring.
  */
-/** How each limit reads in a log line and a stop reason. */
-const CONSUMPTION_LIMIT_LABEL: Record<ConsumptionWindow, string> = {
-  session: 'Session',
-  'five-hour': '5h',
-  daily: 'Daily',
-}
-
-/**
- * Leave a "resume me" entry on the workspace's backlog, so a later run picks the
- * paused work back up (Rom's call on #519). The backlog is already what a run
- * drains, so this needs no machinery of its own.
- *
- * Named after the session when the agent gave itself one, since that is what the
- * user recognizes; an unnamed run says so plainly rather than inventing an id.
- */
-async function leaveResumeNote(
-  cwd: string,
-  events: FrameworkEvent[],
-  emit: (event: FrameworkEvent) => void,
-): Promise<string | undefined> {
-  const named = [...events].reverse().find((e): e is Extract<FrameworkEvent, { kind: 'session-name' }> => e.kind === 'session-name')
-  const entry = `Resume ${named?.name ?? 'the paused run'}`
-  const file = await appendTodoEntry(cwd, entry)
-  if (file) emit({ kind: 'log', message: `Left "${entry}" on ${file} to pick up when the limit resets.` })
-  return file
-}
-
 export async function runFramework(opts: RunFrameworkOptions): Promise<RunFrameworkResult> {
   const events: FrameworkEvent[] = []
   const emit = (event: FrameworkEvent) => {

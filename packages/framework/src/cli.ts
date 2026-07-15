@@ -46,7 +46,8 @@ import { RunStore } from './store/index.js'
 import { daemonStatus, ensureDaemon, runDaemon, stopDaemon, DEFAULT_DAEMON_PORT } from './daemon.js'
 import { resetControl, watchControl, type ControlWatcher } from './control.js'
 import { isActivated, nodeGitRunner } from './project.js'
-import { addProject, listProjects } from './registry.js'
+import { addProject, listProjects, readPreferences, resolveConsumptionLimits } from './registry.js'
+import { startConsumptionGuard } from './consumption-guard.js'
 import {
   planMaintenanceSweep,
   maintainSweep,
@@ -1033,6 +1034,14 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
 
   const driver: Driver = fake ? fakeDriver() : new ClaudeCodeDriver(withBrowser(claudeOpts, opts.browser))
 
+  // The consumption limits (#519/#531). Read from the user's own file rather than
+  // taken as a flag: unlike autopilot or eco, a limit is not a per-run choice, so
+  // a run started from a terminal is guarded exactly like one started from the
+  // dashboard. `undefined` when the agent can't report a quota (the fake driver),
+  // which leaves the run ungated — the fail-open Rom confirmed.
+  const guard = startConsumptionGuard({ driver, limits: resolveConsumptionLimits(await readPreferences()) })
+  if (guard) io.out('◆ consumption limits: on')
+
   // `framework research [what]` (#331) and `framework prompt <text>` (#353): the
   // direct prompt path — run one prompt through runPrompt, which honors its gates
   // (#337/#339) but skips the scope -> architect -> build scaffolding entirely.
@@ -1064,6 +1073,7 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
           : {}),
         ...(opts.model ? { model: opts.model } : {}),
         ...(opts.maxCost ? { budgetUsd: opts.maxCost } : {}),
+        ...(guard ? { consumptionGate: guard.gate } : {}),
         ...(userSystemPrompt ? { systemPrompt: userSystemPrompt } : {}),
         ...(noBuiltinPrompt ? { antiLazyPill: false } : {}),
         ...(eco ? { eco } : {}),
@@ -1107,6 +1117,7 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
     } finally {
       clearInterrupt()
       control?.close()
+      guard?.stop()
       if (publisher) await publisher.flush()
     }
   }
@@ -1193,6 +1204,7 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
     ...(opts.model ? { model: opts.model } : {}),
     ...(opts.maxPasses ? { maxPasses: opts.maxPasses } : {}),
     ...(opts.maxCost ? { budgetUsd: opts.maxCost } : {}),
+    ...(guard ? { consumptionGate: guard.gate } : {}),
     ...(opts.todoLoop ? {} : { todoLoop: false }),
     ...(opts.todoMaxItems ? { todoMaxItems: opts.todoMaxItems } : {}),
     ...(deploy ? { deploy } : {}),
@@ -1263,6 +1275,7 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
   } finally {
     clearInterrupt()
     control?.close()
+    guard?.stop()
     // Make sure every event (including the final `end`) reached the relay before exit.
     if (publisher) await publisher.flush()
   }

@@ -57,6 +57,7 @@ export class QuotaPoller {
   readonly meter: ConsumptionMeter
   private envelope: QuotaEnvelope = { latest: undefined, lastGood: undefined, lastGoodAt: undefined, lastFailureAt: undefined }
   private timer: ReturnType<typeof setTimeout> | undefined
+  private running = false
   private currentIntervalMs: number
   private stopped = false
   private readonly now: () => number
@@ -104,15 +105,22 @@ export class QuotaPoller {
     return quota
   }
 
-  /** Begin polling. Idempotent. */
+  /**
+   * Begin polling, starting with a read right now rather than one interval from
+   * now: a poller whose first reading lands five minutes in is no use to a run
+   * that just started, and the session's own measurement needs a baseline. Not
+   * awaited — the read takes ~5s and nothing should wait on it. Idempotent.
+   */
   start(): void {
-    if (this.timer || this.stopped) return
-    this.schedule()
+    if (this.running || this.stopped) return
+    this.running = true
+    void this.poll().finally(() => this.schedule())
   }
 
   /** Stop polling. Idempotent. */
   stop(): void {
     this.stopped = true
+    this.running = false
     if (this.timer) clearTimeout(this.timer)
     this.timer = undefined
   }

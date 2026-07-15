@@ -138,6 +138,13 @@ export class ConsumptionMeter {
 /** One of Rom's three limits. */
 export type ConsumptionWindow = 'session' | 'five-hour' | 'daily'
 
+/** How each limit reads in a log line and a stop reason. */
+export const CONSUMPTION_LIMIT_LABEL: Record<ConsumptionWindow, string> = {
+  session: 'Session',
+  'five-hour': '5h',
+  daily: 'Daily',
+}
+
 /** A single limit: a share, and whether it's on. */
 export interface ConsumptionLimit {
   enabled: boolean

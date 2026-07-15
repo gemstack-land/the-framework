@@ -4,6 +4,8 @@ import { resolveAwaitGate } from './run.js'
 import { composeRunSystem, renderSystemPrompt, type EcoOptions, type TfContext } from './system-prompt.js'
 import { PLAN_DECLINED_MESSAGE, isDeclinedConfirmation, parseAwaitGate, parseMarkdownViews, parseSessionName, parseReadyForMerge } from './turn-gate.js'
 import { UsageMeter } from './usage.js'
+import { CONSUMPTION_LIMIT_LABEL, type ConsumptionWindow } from './consumption.js'
+import { leaveResumeNote } from './todo-loop.js'
 
 /**
  * The direct prompt path (#331): run *one prompt* through the driver and honor
@@ -48,6 +50,12 @@ export interface RunPromptOptions {
   bootstrap?: boolean
   /** Stop the run once the agent has spent this much, in USD (#322). */
   budgetUsd?: number
+  /**
+   * Consult the consumption limits between turns (#531): return the limit that
+   * has been reached to pause the run, or `null` to carry on. Same seam and same
+   * fail-open as a build run — see `RunFrameworkOptions.consumptionGate`.
+   */
+  consumptionGate?: () => ConsumptionWindow | null
   /** Session link template for the dashboard, `{sessionId}` resolved when known. */
   sessionLink?: string
 }
@@ -106,7 +114,15 @@ export async function runPrompt(opts: RunPromptOptions): Promise<RunPromptResult
   // Usage accounting + the self-stopping budget cap, the same wiring as a build
   // run (#322): the run signal composes the caller's abort with the budget abort.
   const budgetController = new AbortController()
-  const runSignal = opts.signal ? AbortSignal.any([opts.signal, budgetController.signal]) : budgetController.signal
+  // A consumption limit (#531) is the other self-stop: the account's quota ran
+  // out rather than this run's spend.
+  const consumptionController = new AbortController()
+  let consumptionTrip: ConsumptionWindow | undefined
+  const runSignal = AbortSignal.any([
+    ...(opts.signal ? [opts.signal] : []),
+    budgetController.signal,
+    consumptionController.signal,
+  ])
   let lastSessionId: string | undefined
   const usage = new UsageMeter()
   const onDriverEvent = (event: DriverEvent): void => {
@@ -124,6 +140,20 @@ export async function runPrompt(opts: RunPromptOptions): Promise<RunPromptResult
     if (opts.budgetUsd != null && totals.costUsd >= opts.budgetUsd && !budgetController.signal.aborted) {
       emit({ kind: 'log', message: `Budget reached: $${totals.costUsd.toFixed(4)} of $${opts.budgetUsd} — stopping the run.` })
       budgetController.abort(new Error('[framework] budget reached'))
+    }
+    if (opts.consumptionGate && !consumptionController.signal.aborted) {
+      let reached: ConsumptionWindow | null = null
+      try {
+        reached = opts.consumptionGate()
+      } catch (err) {
+        // Fail open: an unreadable quota must not stop the work (Rom on #519).
+        console.error('[framework] consumptionGate threw; carrying on:', err)
+      }
+      if (reached) {
+        consumptionTrip = reached
+        emit({ kind: 'log', message: `${CONSUMPTION_LIMIT_LABEL[reached]} consumption limit reached — pausing the run.` })
+        consumptionController.abort(new Error('[framework] consumption limit reached'))
+      }
     }
   }
 
@@ -179,8 +209,19 @@ export async function runPrompt(opts: RunPromptOptions): Promise<RunPromptResult
   } catch (err) {
     // A user interrupt or the budget cap is a clean stop, not a failure (#322).
     const budgetStopped = budgetController.signal.aborted && opts.signal?.aborted !== true
-    const stopped = opts.signal?.aborted === true || budgetController.signal.aborted
-    const detail = budgetStopped ? `budget reached ($${opts.budgetUsd})` : err instanceof Error ? err.message : String(err)
+    const paused = consumptionController.signal.aborted && opts.signal?.aborted !== true
+    const stopped = opts.signal?.aborted === true || budgetController.signal.aborted || consumptionController.signal.aborted
+    // Written here, not at the trip: the note is file I/O and the trip is a sync
+    // event handler, so a fire-and-forget write could lose the race with the run
+    // unwinding.
+    const resumeNote = paused ? await leaveResumeNote(opts.cwd, events, emit) : undefined
+    const detail = budgetStopped
+      ? `budget reached ($${opts.budgetUsd})`
+      : paused
+        ? `${CONSUMPTION_LIMIT_LABEL[consumptionTrip ?? 'session']} consumption limit reached${resumeNote ? `; will resume from ${resumeNote}` : ''}`
+        : err instanceof Error
+          ? err.message
+          : String(err)
     emit({ kind: 'end', ok: false, ...(stopped ? { stopped: true } : {}), detail })
     throw err
   } finally {

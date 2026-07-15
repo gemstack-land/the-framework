@@ -119,6 +119,28 @@ export async function findTodoBacklog(cwd: string): Promise<TodoBacklog | undefi
   return undefined
 }
 
+/**
+ * Leave a "resume me" entry on the workspace's backlog, so a later run picks the
+ * paused work back up (Rom's call on #519). The backlog is already what a run
+ * drains, so this needs no machinery of its own.
+ *
+ * Named after the session when the agent gave itself one, since that is what the
+ * user recognizes; an unnamed run says so plainly rather than inventing an id.
+ */
+export async function leaveResumeNote(
+  cwd: string,
+  events: readonly FrameworkEvent[],
+  emit: (event: FrameworkEvent) => void,
+): Promise<string | undefined> {
+  const named = [...events]
+    .reverse()
+    .find((e): e is Extract<FrameworkEvent, { kind: 'session-name' }> => e.kind === 'session-name')
+  const entry = `Resume ${named?.name ?? 'the paused run'}`
+  const file = await appendTodoEntry(cwd, entry)
+  if (file) emit({ kind: 'log', message: `Left "${entry}" on ${file} to pick up when the limit resets.` })
+  return file
+}
+
 /** Why the loop ended. */
 export type TodoLoopReason =
   /** The backlog is empty (or was never written) — the success case. */

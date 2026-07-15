@@ -81,7 +81,9 @@ export {
   type ConsumptionWindow,
   type ConsumptionStatus,
   type LimitStatus,
+  CONSUMPTION_LIMIT_LABEL,
 } from './consumption.js'
+export { startConsumptionGuard, type ConsumptionGuard, type StartConsumptionGuardOptions } from './consumption-guard.js'
 export {
   QuotaPoller,
   DEFAULT_POLL_MS,
