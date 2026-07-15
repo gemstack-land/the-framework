@@ -93,8 +93,6 @@ export interface StartRunOptions {
   eco?: EcoOptions
   /** In-context directories (#439): each becomes a `--context <dir>` flag on the spawned run. */
   context?: string[]
-  /** Bootstrap mode (#297/#448): a new project from an empty dir; maps to `--bootstrap`. */
-  bootstrap?: boolean
   /** Post-merge quality suite (#326): on setReadyForMerge(), fire maintainability/readability/security-audit; maps to `--post-merge`. */
   postMerge?: boolean
   /** Give the agent a real browser via chrome-devtools-mcp during the run (#452); maps to `--browser`. */

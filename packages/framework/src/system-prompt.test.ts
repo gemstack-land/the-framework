@@ -4,7 +4,6 @@ import { mkdtemp, writeFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
-  BOOTSTRAP_PREAMBLE,
   composeRunSystem,
   renderSystemPrompt,
   systemPromptBlock,
@@ -90,6 +89,14 @@ test('systemPromptBlock prepends a Context line for the selected directories (#4
   assert.equal(systemPromptBlock({ antiLazyPill: false, user: 'x', context: ['  '] }), 'x') // blank entries dropped
 })
 
+test('systemPromptBlock is the #326 prompt and the user prompt, in that order, and nothing else (#457)', () => {
+  // The bootstrap preamble was the last text here that was neither the #326 doc nor the
+  // user's own. Measured on four live runs: #326 alone already stops an empty-dir build
+  // for a plan, so the override earned nothing and outranked the doc.
+  const block = systemPromptBlock({ user: 'Ship small PRs.', context: ['/work/api'] })
+  assert.equal(block, ['Context: /work/api', renderSystemPrompt().system, 'Ship small PRs.'].join('\n\n'))
+})
+
 test('systemPromptBlock ignores a whitespace-only user prompt', () => {
   assert.equal(systemPromptBlock({ user: '   ' }), renderSystemPrompt().system)
   assert.equal(systemPromptBlock({ antiLazyPill: false, user: '  \n ' }), '')
@@ -98,21 +105,6 @@ test('systemPromptBlock ignores a whitespace-only user prompt', () => {
 test('systemPromptBlock threads tf through to the template', () => {
   const block = systemPromptBlock({ tf: { prompt: 'x', params: { autopilot: true } } })
   assert.ok(block.includes('postpone a deep refactor'))
-})
-
-test('systemPromptBlock prepends the bootstrap preamble above the built-in prompt (#297/#448)', () => {
-  const off = systemPromptBlock()
-  assert.ok(!off.includes(BOOTSTRAP_PREAMBLE)) // default off: no preamble
-  const on = systemPromptBlock({ bootstrap: true })
-  assert.ok(on.startsWith(BOOTSTRAP_PREAMBLE)) // preamble first
-  assert.ok(on.includes('# System prompt')) // then the byte-identical #326 template
-  assert.ok(on.indexOf(BOOTSTRAP_PREAMBLE) < on.indexOf('# System prompt')) // preamble outranks it
-})
-
-test('systemPromptBlock keeps the bootstrap preamble after the Context line (#439/#448)', () => {
-  const block = systemPromptBlock({ bootstrap: true, context: ['/work/api'] })
-  assert.ok(block.startsWith('Context: /work/api')) // context frames everything
-  assert.ok(block.indexOf('Context: /work/api') < block.indexOf(BOOTSTRAP_PREAMBLE))
 })
 
 test('eco.autoPlanning drops only the Large scope section (#314)', () => {
@@ -180,13 +172,11 @@ test('composeRunSystem appends nothing after the protocols, whatever the options
   const system = composeRunSystem({
     user: 'Ship small PRs.',
     context: ['/work/api'],
-    bootstrap: true,
     tf: { prompt: 'build a todo app', params: { autopilot: true } },
   })
   const block = systemPromptBlock({
     user: 'Ship small PRs.',
     context: ['/work/api'],
-    bootstrap: true,
     tf: { prompt: 'build a todo app', params: { autopilot: true } },
   })
   assert.equal(system, [block, AWAIT_PROTOCOL, SIGNAL_PROTOCOL].join('\n\n'))

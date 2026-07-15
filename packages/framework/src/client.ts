@@ -25,7 +25,6 @@ export {
   composeRunSystem,
   renderSystemPrompt,
   SYSTEM_PROMPT_TEMPLATE,
-  BOOTSTRAP_PREAMBLE,
   type SystemPromptOptions,
   type RunSystemOptions,
   type TfContext,

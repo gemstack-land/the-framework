@@ -46,8 +46,6 @@ export interface RunPromptOptions {
   eco?: EcoOptions
   /** In-context directories (#439): added as one `Context:` line to the system prompt. */
   context?: readonly string[]
-  /** Bootstrap mode (#297/#448): prepend the forceful preamble so the first turn stops for a plan. Default false. */
-  bootstrap?: boolean
   /** Stop the run once the agent has spent this much, in USD (#322). */
   budgetUsd?: number
   /**
@@ -92,7 +90,7 @@ export async function runPrompt(opts: RunPromptOptions): Promise<RunPromptResult
     prompt: opts.prompt,
     params: { autopilot: opts.autopilot === true, ...(opts.eco ? { eco: opts.eco } : {}) },
   }
-  const system = composeRunSystem({ antiLazyPill: opts.antiLazyPill, user: opts.systemPrompt, tf, context: opts.context, bootstrap: opts.bootstrap })
+  const system = composeRunSystem({ antiLazyPill: opts.antiLazyPill, user: opts.systemPrompt, tf, context: opts.context })
   // The template's `# User prompt` half carries the prompt (today it renders to
   // exactly `opts.prompt`; any framing Rom adds around the slot rides along). With
   // the built-in prompt off, the raw prompt is sent as-is.

@@ -106,11 +106,6 @@ export interface RunFrameworkOptions {
   /** In-context directories (#439): added as one `Context:` line to the system prompt. */
   context?: readonly string[]
   /**
-   * Bootstrap mode (#297/#448): a brand-new project from an empty directory. Prepends a
-   * forceful preamble so the first turn stops for a plan instead of charging ahead. Default off.
-   */
-  bootstrap?: boolean
-  /**
    * A user-picked Open Loop domain preset ({loops, prompts}) to run the build
    * under (#251). Its loops + prompts are materialized into a driver-backed {@link LoopEngine}
    * exposed as {@link RunFrameworkResult.loop}. Load it with `loadDomainPreset` /
@@ -292,7 +287,6 @@ export async function runFramework(opts: RunFrameworkOptions): Promise<RunFramew
     user: opts.systemPrompt,
     tf,
     context: opts.context,
-    bootstrap: opts.bootstrap,
   })
 
   // The session id is not known until the first driver turn returns, so a

@@ -61,11 +61,6 @@ test('parseArgs collects repeatable --context directories (#439)', () => {
   assert.deepEqual(parseArgs(['--context', '/work/api', '--context', '/work/ui', 'x']).context, ['/work/api', '/work/ui'])
 })
 
-test('parseArgs reads --bootstrap (#297/#448)', () => {
-  assert.equal(parseArgs(['x']).bootstrap, false)
-  assert.equal(parseArgs(['--bootstrap', 'x']).bootstrap, true)
-})
-
 test('parseArgs reads --post-merge (#326)', () => {
   assert.equal(parseArgs(['x']).postMerge, false)
   assert.equal(parseArgs(['--post-merge', 'x']).postMerge, true)
