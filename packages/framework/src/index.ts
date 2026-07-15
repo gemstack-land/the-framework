@@ -212,7 +212,8 @@ export {
   type VersionFetcher,
   type UpdateStatus,
 } from './update-check.js'
-export { runCli, parseArgs, buildDeployTarget, runPostMergeSuite, promptRunArgs, POST_MERGE_PASSES, type PromptRunner, type CliIO, type CliOptions } from './cli.js'
+export { runCli, parseArgs, buildDeployTarget, runPostMerge, promptRunArgs, type PromptRunner, type CliIO, type CliOptions } from './cli.js'
+export { renderPostMergePrompt, POST_MERGE_PROMPT_TEMPLATE, type PostMergeContext } from './post-merge-prompt.js'
 export {
   loadFrameworkConfig,
   parseFrameworkConfig,

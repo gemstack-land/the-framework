@@ -22,8 +22,7 @@ import {
   runCli,
   runLogEntry,
   runLogKind,
-  runPostMergeSuite,
-  POST_MERGE_PASSES,
+  runPostMerge,
   unguardedNotices,
   withBrowser,
   BROWSER_MCP_SERVERS,
@@ -83,31 +82,58 @@ test('withBrowser folds chrome-devtools-mcp into driver options only when enable
 test('promptRunArgs runs a headless prompt and carries NO --post-merge (recursion guard, #326)', () => {
   const args = promptRunArgs('audit this', '/work/app', '/bin/framework', 3)
   assert.deepEqual(args, ['/bin/framework', 'prompt', 'audit this', '--no-dashboard', '--cwd', '/work/app', '--max-cost', '3'])
-  // The guard: a quality pass must not trigger its own post-merge suite.
+  // The guard: a queued pass must not trigger its own post-merge prompt.
   assert.equal(args.includes('--post-merge'), false)
   // maxCost is optional.
   assert.equal(promptRunArgs('x', '/w', '/bin/f').includes('--max-cost'), false)
 })
 
-test('runPostMergeSuite runs maintainability -> readability -> security-audit in order, best-effort (#326)', async () => {
-  const { io, out } = capture()
+test('runPostMerge queues the follow-ups in ONE run instead of running the presets (#326/#556)', async () => {
+  const { io } = capture()
   const seen: string[] = []
-  // Middle pass "fails" (resolves false): the suite must continue past it.
   const run = (prompt: string) => {
     seen.push(prompt)
-    return Promise.resolve(!/humans to read/.test(prompt)) // the readability pass "fails"
+    return Promise.resolve(true)
   }
-  await runPostMergeSuite('/work/app', '/bin/framework', io, undefined, run)
-  assert.equal(seen.length, 3)
-  assert.match(seen[0]!, /maintainable/)
-  assert.match(seen[1]!, /easy as possible for humans to read/)
-  assert.match(seen[2]!, /^Security audit/)
-  assert.deepEqual(
-    POST_MERGE_PASSES.map(p => p.label),
-    ['maintainability', 'readability', 'security-audit'],
+  await runPostMerge('/work/app', '/bin/framework', io, { session_name: 'add-oauth' }, undefined, run)
+  // One child run, not three: it asks for TODO entries rather than doing the passes.
+  assert.equal(seen.length, 1)
+  const prompt = seen[0]!
+  assert.match(prompt, /add the following to <TODO_FILE>/)
+  assert.match(prompt, /Apply preset `maintainability` on the changes introduced by add-oauth/)
+  assert.match(prompt, /Apply preset `security_audit` on the changes introduced by add-oauth/)
+  // The preset prompts themselves are not what gets sent any more.
+  assert.doesNotMatch(prompt, /easy as possible for humans to read/)
+  assert.ok(!prompt.includes('${{'), 'fully rendered')
+})
+
+test('runPostMerge gates the readability entry on technical_control (#326)', async () => {
+  const { io } = capture()
+  const render = async (technical_control: boolean) => {
+    const seen: string[] = []
+    await runPostMerge(
+      '/work/app',
+      '/bin/framework',
+      io,
+      { session_name: 'add-oauth', settings: { technical_control } },
+      undefined,
+      p => {
+        seen.push(p)
+        return Promise.resolve(true)
+      },
+    )
+    return seen[0]!
+  }
+  assert.match(await render(true), /Apply preset `readability` on the changes introduced by add-oauth/)
+  assert.doesNotMatch(await render(false), /readability/)
+})
+
+test('runPostMerge is best-effort: a failed queueing run is reported, never thrown (#326)', async () => {
+  const { io, out } = capture()
+  await runPostMerge('/work/app', '/bin/framework', io, { session_name: 'add-oauth' }, undefined, () =>
+    Promise.resolve(false),
   )
-  // The failed middle pass is reported, and the last pass still ran.
-  assert.ok(out.some(l => /readability did not complete/.test(l)))
+  assert.ok(out.some(l => /post-merge queueing did not complete/.test(l)))
 })
 
 test('parseArgs reads the maintain subcommand + its bounds (#298)', () => {

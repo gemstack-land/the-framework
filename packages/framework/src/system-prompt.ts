@@ -42,10 +42,10 @@ export interface EcoOptions {
   /** Drop `### Alternatives` (the variability-rating research section). */
   autoResearch?: boolean | undefined
   /**
-   * Drop the maintenance section. #326 moved it out of the system prompt and into the
-   * post-merge prompt, so there is nothing left here to trim and this flag currently
-   * drops nothing. It re-points at that prompt when it lands (#556); until then it stays
-   * parsed and persisted so the CLI flag and the dashboard toggle keep working.
+   * Drop the maintenance section. Nothing to drop *here*: #326 moved that section out of
+   * the system prompt and into the post-merge prompt, so this flag acts on that prompt
+   * instead (#556) and the CLI skips it wholesale, the post-merge prompt being exactly the
+   * maintenance section. Listed here because it is still an {@link EcoOptions} flag.
    */
   autoMaintenance?: boolean | undefined
 }
@@ -65,12 +65,24 @@ const ECO_SECTION_HEADINGS: Partial<Record<keyof EcoOptions, string>> = {
   autoResearch: '### Alternatives',
 }
 
-/** The `tf` context the template's `${{...}}` fragments read (#326/#350). */
+/**
+ * The `tf` context the templates' `${{...}}` fragments read (#326/#350). One shape across
+ * the prompts; each reads the subset it needs. `session_name` and `settings` are the
+ * post-merge prompt's (#556), and are snake_case because the doc writes them that way.
+ */
 export interface TfContext {
   /** The user's prompt (the run intent, or the typed prompt): fills `${{tf.prompt}}`. */
   prompt: string
   /** Run parameters the template branches on (e.g. `autopilot`, #325's mode sense; `eco`, #314). */
   params: { autopilot?: boolean; eco?: EcoOptions | undefined } & Record<string, unknown>
+  /**
+   * The session name the agent set via setSessionName(), carried on run state. Only the
+   * post-merge prompt reads it, never the system prompt: it is set before the agent makes
+   * changes and read afterwards, so it is not chicken-and-egg.
+   */
+  session_name?: string | undefined
+  /** The user's persisted settings the prompts branch on (the #314 Global options). */
+  settings?: { technical_control?: boolean | undefined } | undefined
 }
 
 /** The neutral context used when a caller has none: empty prompt, no modes. */

@@ -48,8 +48,7 @@ import {
   type RepoReview,
 } from './maintenance.js'
 import { renderMaintainabilityPrompt } from './maintainability-preset.js'
-import { renderReadabilityPrompt } from './readability-preset.js'
-import { renderSecurityAuditPrompt } from './security-audit-preset.js'
+import { renderPostMergePrompt, type PostMergeContext } from './post-merge-prompt.js'
 import { runPrompt } from './prompt-run.js'
 import { renderResearchPrompt } from './research-preset.js'
 
@@ -153,8 +152,9 @@ Options:
                          "Context: <dirs>" line to the system prompt; the agent can
                          still reach every repo, this just narrows where it looks.
   --post-merge           When the run signals setReadyForMerge(), fire the post-merge
-                         quality suite: maintainability, readability, and security-audit
-                         prompts, one after another (#326).
+                         prompt: queue the maintainability and security-audit follow-ups
+                         (plus readability under --technical) as TODO entries for the
+                         backlog loop to pick up (#326).
   --browser              Give the agent a real browser during the run via
                          chrome-devtools-mcp: navigate pages, read console + network,
                          inspect the DOM, and screenshot. Off by default (#452).
@@ -227,7 +227,7 @@ export interface CliOptions {
   eco: Required<EcoOptions>
   /** `--context <dir>` (repeatable): in-context directories added as one `Context:` line (#439). */
   context: string[]
-  /** `--post-merge`: fire the #326 post-merge quality suite (maintainability/readability/security-audit) when the run signals setReadyForMerge(). */
+  /** `--post-merge`: fire the #326 post-merge prompt when the run signals setReadyForMerge(), queueing the quality follow-ups as TODO entries. */
   postMerge: boolean
   /** `--browser`: give the agent a real browser via chrome-devtools-mcp (navigate, console, network, DOM, screenshot) during the run (#452). */
   browser: boolean
@@ -914,8 +914,12 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
   // aborted, since a budget stop trips an internal signal the CLI never sees.
   let stoppedCleanly = false
   // The agent signalled setReadyForMerge() this run (#326): with --post-merge on, fire the
-  // quality suite once the run settles (not mid-run — it would race the agent's own git work).
+  // post-merge prompt once the run settles (not mid-run — it would race the agent's own git work).
   let sawReadyForMerge = false
+  // The session the agent named via setSessionName() (#326). Carried on run state because the
+  // post-merge prompt names it on every line: it is set before the first change and read here,
+  // after the run.
+  let sessionName: string | undefined
   // Record the finished run in the project log `.the-framework/LOGS.md` (#379). The
   // kind + title are known up front; the session id/link arrive mid-run, and the
   // `end` event (fired once by both run paths) closes the entry. Best-effort: the
@@ -931,6 +935,7 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
       if (event.sessionLink) logSessionLink = event.sessionLink
     }
     if (event.kind === 'ready-for-merge') sawReadyForMerge = true
+    if (event.kind === 'session-name') sessionName = event.name
     if (event.kind === 'end') {
       if (event.stopped) stoppedCleanly = true
       const entry = runLogEntry({
@@ -948,13 +953,29 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
     publisher?.publish(event)
   }
 
-  // Fire the #326 post-merge quality suite once a --post-merge run has settled and the agent
+  // Fire the #326 post-merge prompt once a --post-merge run has settled and the agent
   // signalled setReadyForMerge(). Skipped for a fake/offline run and when the run was stopped.
   const maybeFirePostMerge = async (): Promise<void> => {
     if (!opts.postMerge || !sawReadyForMerge || stoppedCleanly || fake) return
+    // The post-merge prompt is exactly the maintenance section, so --eco-auto-maintenance
+    // (#314) leaves nothing to queue. This is the flag's target now that #326 moved that
+    // section out of the system prompt, where it had gone inert (#555).
+    if (opts.eco.autoMaintenance) return
+    // Every line of the prompt names the session, so there is nothing to queue without one.
+    // An agent that made changes has one; this is the agent that ignored the instruction.
+    if (!sessionName) {
+      io.out('  ! post-merge skipped: the run never called setSessionName().')
+      return
+    }
     const binPath = process.argv[1]
     if (!binPath) return
-    await runPostMergeSuite(cwd, binPath, io, opts.maxCost)
+    await runPostMerge(
+      cwd,
+      binPath,
+      io,
+      { session_name: sessionName, settings: { technical_control: opts.technical } },
+      opts.maxCost,
+    )
   }
 
   // A mode/kind given with no preset in effect has nothing to act on: note it.
@@ -1358,7 +1379,7 @@ function spawnMaintenanceRun(review: RepoReview, binPath: string, maxCost?: numb
  * Run one direct prompt by spawning `framework prompt "<prompt>" --cwd <dir> --no-dashboard`,
  * reusing the whole run path (preflight, driver, budget cap, LOGS.md). The child inherits
  * stdio so its run streams to the terminal. Note it carries no `--post-merge`, so a quality
- * pass never triggers its own post-merge suite (the recursion guard). Resolves true on a
+ * pass never triggers its own post-merge prompt (the recursion guard). Resolves true on a
  * clean exit (0). Never re-execs a test entry (fork-bomb guard).
  */
 /**
@@ -1384,37 +1405,30 @@ function spawnPromptRun(prompt: string, cwd: string, binPath: string, maxCost?: 
   })
 }
 
-/** How the suite spawns one pass; injectable so tests observe order without spawning. */
+/** How the post-merge prompt is spawned; injectable so tests observe it without spawning. */
 export type PromptRunner = (prompt: string, cwd: string, binPath: string, maxCost?: number) => Promise<boolean>
 
-/** The post-merge quality passes (#326), in the order they run. */
-export const POST_MERGE_PASSES: readonly { label: string; render: () => string }[] = [
-  { label: 'maintainability', render: () => renderMaintainabilityPrompt() },
-  { label: 'readability', render: () => renderReadabilityPrompt() },
-  { label: 'security-audit', render: () => renderSecurityAuditPrompt() },
-]
-
 /**
- * Fire the #326 post-merge quality suite after a run signalled setReadyForMerge(): the
- * maintainability, readability, and security-audit prompts, each a `framework prompt` child
- * on the same workspace. Runs them **one after another** (not in parallel): the three passes
- * edit and commit the same git tree, so concurrent writers would race on the index lock —
- * sequential is the safe MVP (worktree-isolated parallelism is a follow-up). Best-effort:
- * a failed pass is logged and the suite continues.
+ * Fire the #326 post-merge prompt after a run signalled setReadyForMerge(): one
+ * `framework prompt` child on the same workspace that appends the quality follow-ups to the
+ * session's TODO file, for the backlog loop (#323/#538) to pick up.
+ *
+ * It used to run maintainability, readability and security-audit inline instead, as three
+ * child runs back to back (#556). Queueing is both what the doc says and the cheaper thing:
+ * one short turn that writes a few TODO lines, rather than three full preset passes serialized
+ * on the same git index. Best-effort, like the suite was: a failure is logged, never thrown.
  */
-export async function runPostMergeSuite(
+export async function runPostMerge(
   cwd: string,
   binPath: string,
   io: CliIO,
+  tf: PostMergeContext,
   maxCost?: number,
   run: PromptRunner = spawnPromptRun,
 ): Promise<void> {
-  io.out(`\n◆ post-merge quality suite: ${POST_MERGE_PASSES.map(p => p.label).join(' → ')}`)
-  for (const pass of POST_MERGE_PASSES) {
-    io.out(`\n◆ post-merge: ${pass.label}`)
-    const ok = await run(pass.render(), cwd, binPath, maxCost)
-    if (!ok) io.out(`  ! post-merge ${pass.label} did not complete cleanly; continuing.`)
-  }
+  io.out(`\n◆ post-merge: queueing quality follow-ups for ${tf.session_name}`)
+  const ok = await run(renderPostMergePrompt(tf), cwd, binPath, maxCost)
+  if (!ok) io.out(`  ! post-merge queueing did not complete cleanly.`)
 }
 
 async function runRelayServer(opts: CliOptions, io: CliIO): Promise<number> {

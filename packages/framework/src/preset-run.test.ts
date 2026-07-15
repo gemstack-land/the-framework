@@ -119,7 +119,7 @@ test('the #326 action layer is injected even with the built-in prompt off (#500)
 
   // The built-in prompt is gone, but the emit protocols still ride the system channel —
   // else the agent never learns how to signal set-session-name / ready-for-merge, so
-  // setReadyForMerge() and the --post-merge suite silently never fire (the build path used
+  // setReadyForMerge() and the --post-merge prompt silently never fire (the build path used
   // to nest these inside the promptBlock branch; the direct-prompt path always kept them).
   assert.ok(!system().includes('# System prompt'), 'built-in #326 prompt is off')
   assert.match(system(), /## Ready for merge/) // SIGNAL_PROTOCOL (#326)

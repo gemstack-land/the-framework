@@ -1,0 +1,58 @@
+import { strict as assert } from 'node:assert'
+import { test } from 'node:test'
+import { renderPostMergePrompt, POST_MERGE_PROMPT_TEMPLATE } from './post-merge-prompt.js'
+import { TemplateFragmentError } from './prompt-template.js'
+
+test('POST_MERGE_PROMPT_TEMPLATE carries the #326 post-merge block', () => {
+  assert.ok(POST_MERGE_PROMPT_TEMPLATE.includes('TODO_FILE: `TODO_<SESSION_NAME>.agent.md`'))
+  assert.ok(POST_MERGE_PROMPT_TEMPLATE.includes('## Maintenance'))
+  for (const preset of ['maintainability', 'readability', 'security_audit']) {
+    assert.ok(POST_MERGE_PROMPT_TEMPLATE.includes(`Apply preset \`${preset}\``), `missing ${preset}`)
+  }
+})
+
+test('the template never nests a fragment inside another (#556)', () => {
+  // The one place this prompt departs from the doc, and the reason why. `renderTemplate`'s
+  // fragment regex is non-greedy, so an inner `${{ ... }}` closes the outer fragment early and
+  // the leftover is not valid JS. The doc's version throws "Unexpected identifier". Pin it:
+  // every fragment must be flat, or the whole prompt stops rendering at run time.
+  for (const fragment of POST_MERGE_PROMPT_TEMPLATE.match(/\$\{\{[\s\S]*?\}\}/g) ?? []) {
+    assert.ok(!fragment.slice(3).includes('${{'), `nested fragment: ${fragment}`)
+  }
+})
+
+test('renderPostMergePrompt names the session on every entry', () => {
+  const prompt = renderPostMergePrompt({ session_name: 'add-oauth' })
+  assert.ok(!prompt.includes('${{'), 'fully rendered')
+  assert.match(prompt, /Apply preset `maintainability` on the changes introduced by add-oauth/)
+  assert.match(prompt, /Apply preset `security_audit` on the changes introduced by add-oauth/)
+})
+
+test('renderPostMergePrompt adds the readability entry only under technical control (#326)', () => {
+  const on = renderPostMergePrompt({ session_name: 'add-oauth', settings: { technical_control: true } })
+  const off = renderPostMergePrompt({ session_name: 'add-oauth', settings: { technical_control: false } })
+  assert.match(on, /Apply preset `readability` on the changes introduced by add-oauth/)
+  assert.doesNotMatch(off, /readability/)
+  // The other two entries are unconditional either way.
+  for (const prompt of [on, off]) {
+    assert.match(prompt, /`maintainability`/)
+    assert.match(prompt, /`security_audit`/)
+  }
+})
+
+test('renderPostMergePrompt defaults absent settings to off rather than throwing (#556)', () => {
+  // The template reads `tf.settings.technical_control`, so an absent `settings` would throw
+  // on the property access rather than read as off.
+  const prompt = renderPostMergePrompt({ session_name: 'add-oauth' })
+  assert.doesNotMatch(prompt, /readability/)
+  assert.equal(prompt, renderPostMergePrompt({ session_name: 'add-oauth', settings: {} }))
+})
+
+test('renderPostMergePrompt throws a useful error when the session name is missing (#556)', () => {
+  // Rather than queueing "changes introduced by undefined". The CLI checks first; this is the
+  // backstop for any other caller.
+  assert.throws(
+    () => renderPostMergePrompt({ session_name: undefined as unknown as string }),
+    (err: unknown) => err instanceof TemplateFragmentError && /session_name/.test(err.message),
+  )
+})
