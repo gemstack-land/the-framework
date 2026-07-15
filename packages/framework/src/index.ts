@@ -83,6 +83,13 @@ export {
   type LimitStatus,
 } from './consumption.js'
 export {
+  QuotaPoller,
+  DEFAULT_POLL_MS,
+  MAX_POLL_MS,
+  type QuotaEnvelope,
+  type QuotaPollerOptions,
+} from './quota-poller.js'
+export {
   startRelay,
   relayPublisher,
   type Relay,
