@@ -33,7 +33,7 @@ export interface Preferences {
   ecoPlanning?: boolean
   ecoResearch?: boolean
   ecoMaintenance?: boolean
-  /** Post-merge quality suite (#326): fire maintainability/readability/security-audit on setReadyForMerge(). */
+  /** Post-merge prompt (#326): on setReadyForMerge(), queue the quality follow-ups as TODO entries. */
   postMergeQuality?: boolean
   /** Give the agent a real browser via chrome-devtools-mcp during the run (#452); maps to `--browser`. */
   browser?: boolean
