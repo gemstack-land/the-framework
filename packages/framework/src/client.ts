@@ -19,6 +19,7 @@ export {
 } from './run-view.js'
 // The Start-a-run presets (#433): pure prompt builders (no Node imports) the dashboard
 // prefills into the textarea, then runs verbatim as a `prompt` kind.
+export { DEFAULT_CONSUMPTION_LIMITS } from './consumption.js'
 export { renderResearchPrompt } from './research-preset.js'
 export { renderReadabilityPrompt } from './readability-preset.js'
 export { renderMaintainabilityPrompt } from './maintainability-preset.js'

@@ -7,4 +7,5 @@ export { sendStop, sendChoice, sendStart, sendPreview, sendStopPreview, onPrevie
 export { onEvents } from './events.telefunc.js'
 export { onProjects, sendAddProject } from './projects.telefunc.js'
 export { onPreferences, savePreferences, type SavePreferencesResult } from './preferences.telefunc.js'
+export { onQuota } from './quota.telefunc.js'
 export { registerDashboardTelefunctions, DASHBOARD_TELEFUNC_KEYS } from './register.js'
