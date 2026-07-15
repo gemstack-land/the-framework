@@ -1,4 +1,4 @@
-import { readdir, readFile, stat } from 'node:fs/promises'
+import { readdir, readFile, stat, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { DriverSession } from './driver/index.js'
 import type { ChoicePick, ChoiceRequest, FrameworkEvent } from './events.js'
@@ -55,17 +55,16 @@ export function parseTodoEntries(md: string): string[] {
 }
 
 /**
- * Locate the workspace's backlog: the most recently modified session-scoped
- * `TODO_<slug>.agent.md` (#323/#326), falling back to the flat `TODO.md` the
- * current pill writes (#301) — the same dual convention as the doc sidebar.
- * Returns `undefined` when no backlog exists or none has open entries.
+ * The workspace's backlog files, best first: the most recently modified
+ * session-scoped `TODO_<slug>.agent.md` (#323/#326), then the flat `TODO.md`
+ * the current pill writes (#301) — the same dual convention as the doc sidebar.
  */
-export async function findTodoBacklog(cwd: string): Promise<TodoBacklog | undefined> {
+async function backlogCandidates(cwd: string): Promise<string[]> {
   let names: string[]
   try {
     names = (await readdir(cwd, { withFileTypes: true })).filter(e => e.isFile()).map(e => e.name)
   } catch {
-    return undefined
+    return []
   }
   const scoped = names.filter(name => TODO_FILE_PATTERN.test(name))
   const candidates: string[] = []
@@ -79,7 +78,38 @@ export async function findTodoBacklog(cwd: string): Promise<TodoBacklog | undefi
     candidates.push(...scoped)
   }
   if (names.includes(FLAT_TODO_FILE)) candidates.push(FLAT_TODO_FILE)
+  return candidates
+}
 
+/**
+ * Append an open entry to this run's backlog, creating the flat {@link FLAT_TODO_FILE}
+ * when the workspace has none. Resolves with the file written, or `undefined` if
+ * it couldn't be written.
+ *
+ * This is how a paused run leaves word to pick itself up again (#529): the
+ * backlog is already the thing a later run drains, so a resume note needs no
+ * machinery of its own. Never throws — it is called while a run is already
+ * unwinding, and must not mask the reason it stopped.
+ */
+export async function appendTodoEntry(cwd: string, entry: string): Promise<string | undefined> {
+  const name = (await backlogCandidates(cwd))[0] ?? FLAT_TODO_FILE
+  const path = join(cwd, name)
+  try {
+    const existing = await readFile(path, 'utf8').catch(() => '')
+    const separator = existing === '' || existing.endsWith('\n') ? '' : '\n'
+    await writeFile(path, `${existing}${separator}- [ ] ${entry}\n`, 'utf8')
+    return name
+  } catch {
+    return undefined
+  }
+}
+
+/**
+ * Locate the workspace's backlog and its open entries. Returns `undefined` when
+ * no backlog exists or none of them has an open entry.
+ */
+export async function findTodoBacklog(cwd: string): Promise<TodoBacklog | undefined> {
+  const candidates = await backlogCandidates(cwd)
   for (const name of candidates) {
     const md = await readFile(join(cwd, name), 'utf8').catch(() => undefined)
     if (md === undefined) continue

@@ -1,5 +1,8 @@
 import { strict as assert } from 'node:assert'
 import { test } from 'node:test'
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { defineDomainPreset, defineFrameworkExtension, defineLoop, definePersona, defineSkill } from '@gemstack/ai-autopilot'
 import type { Prompt } from '@gemstack/ai-autopilot'
 import { DEFAULT_MAX_PASSES, requestChoices, requestMultiSelect, runFramework, type ChoicesOption, type MultiSelectOption } from './run.js'
@@ -1059,4 +1062,101 @@ test('runFramework runs the backlog loop after the build when opted in (#323)', 
   } finally {
     await rm(cwd, { recursive: true, force: true })
   }
+})
+
+test('runFramework pauses the run once a consumption limit is reached (#529)', async () => {
+  const events: FrameworkEvent[] = []
+  await assert.rejects(
+    runFramework({
+      intent: FAKE_INTENT,
+      driver: fakeDriver(),
+      cwd: '/tmp/ws',
+      signals: FAKE_SIGNALS,
+      consumptionGate: () => 'daily',
+      onEvent: e => events.push(e),
+    }),
+  )
+  assert.ok(events.some(e => e.kind === 'log' && e.message === 'Daily consumption limit reached — pausing the run.'))
+  const end = events.at(-1)!
+  assert.equal(end.kind, 'end')
+  // A limit is a clean stop, like the budget cap — not a failure.
+  assert.equal(end.kind === 'end' && end.stopped, true)
+  assert.ok(end.kind === 'end' && end.detail?.startsWith('Daily consumption limit reached'))
+})
+
+test('runFramework leaves a resume note on the backlog when it pauses (#529)', async () => {
+  const cwd = await mkdtemp(join(tmpdir(), 'framework-pause-'))
+  try {
+    const events: FrameworkEvent[] = []
+    await assert.rejects(
+      runFramework({
+        intent: FAKE_INTENT,
+        driver: fakeDriver(),
+        cwd,
+        signals: FAKE_SIGNALS,
+        consumptionGate: () => 'five-hour',
+        onEvent: e => events.push(e),
+      }),
+    )
+    // The backlog is what a later run drains, so the note needs no machinery of its own.
+    const todo = await readFile(join(cwd, 'TODO.md'), 'utf8')
+    assert.match(todo, /^- \[ \] Resume .+$/m)
+    assert.ok(events.some(e => e.kind === 'log' && e.message.includes('to pick up when the limit resets')))
+  } finally {
+    await rm(cwd, { recursive: true, force: true })
+  }
+})
+
+test('runFramework appends the resume note to an existing backlog (#529)', async () => {
+  const cwd = await mkdtemp(join(tmpdir(), 'framework-pause-'))
+  try {
+    await writeFile(join(cwd, 'TODO.md'), '- [ ] Something already open') // no trailing newline
+    await assert.rejects(
+      runFramework({ intent: FAKE_INTENT, driver: fakeDriver(), cwd, signals: FAKE_SIGNALS, consumptionGate: () => 'session' }),
+    )
+    const todo = await readFile(join(cwd, 'TODO.md'), 'utf8')
+    // The existing entry survives and the note lands on its own line.
+    assert.match(todo, /- \[ \] Something already open\n- \[ \] Resume /)
+  } finally {
+    await rm(cwd, { recursive: true, force: true })
+  }
+})
+
+test('runFramework carries on while the limits are clear (#529)', async () => {
+  const events: FrameworkEvent[] = []
+  let asked = 0
+  const { result } = await runFramework({
+    intent: FAKE_INTENT,
+    driver: fakeDriver(),
+    cwd: '/tmp/ws',
+    signals: FAKE_SIGNALS,
+    consumptionGate: () => {
+      asked++
+      return null
+    },
+    onEvent: e => events.push(e),
+  })
+  assert.ok(result)
+  assert.ok(asked > 0, 'the gate is consulted between turns')
+  const end = events.at(-1)!
+  assert.equal(end.kind === 'end' && end.ok, true)
+})
+
+test('runFramework carries on when the gate itself fails (#529)', async () => {
+  // Fail-open, per Rom on #519: an unreadable quota must not stop the work.
+  const { result } = await runFramework({
+    intent: FAKE_INTENT,
+    driver: fakeDriver(),
+    cwd: '/tmp/ws',
+    signals: FAKE_SIGNALS,
+    consumptionGate: () => {
+      throw new Error('quota unreadable')
+    },
+  })
+  assert.ok(result)
+})
+
+test('runFramework leaves the run ungated with no consumption gate (#529)', async () => {
+  const { result } = await runFramework({ intent: FAKE_INTENT, driver: fakeDriver(), cwd: '/tmp/ws', signals: FAKE_SIGNALS })
+  assert.ok(result)
 })
