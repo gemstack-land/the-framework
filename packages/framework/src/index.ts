@@ -198,6 +198,7 @@ export {
   REGISTRY_FILE,
   type ProjectRecord,
   type Registry,
+  resolveConsumptionLimits,
   type Preferences,
   type PreferencesStore,
   type RegistryFs,

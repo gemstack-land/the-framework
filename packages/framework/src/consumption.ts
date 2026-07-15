@@ -215,14 +215,18 @@ function statusFor(limit: ConsumptionLimit, budget: number, consumption: Rolling
   // No reading is "we don't know", never "nothing spent": treating it as zero
   // would leave every bar empty and every limit unreachable, which is exactly
   // the failure the limits exist to prevent.
-  const reached = limit.enabled && consumed !== undefined && budget > 0 && consumed >= budget
+  const measurable = consumed !== undefined
+  // A zero budget allows nothing, so it is spent the moment we can measure it.
+  // Reading it as "never reached" would make 0% a setting that quietly does
+  // nothing, which is worse than it plainly stopping the work.
+  const spent = measurable && (budget <= 0 || consumed >= budget)
   return {
     enabled: limit.enabled,
     budget,
     consumed,
-    usedPercent: consumed === undefined || budget <= 0 ? undefined : Math.min(100, (consumed / budget) * 100),
+    usedPercent: !measurable ? undefined : budget <= 0 ? 100 : Math.min(100, (consumed / budget) * 100),
     complete: consumption?.complete ?? false,
-    reached,
+    reached: limit.enabled && spent,
   }
 }
 

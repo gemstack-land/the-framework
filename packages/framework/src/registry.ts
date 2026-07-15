@@ -1,4 +1,5 @@
 import { basename, dirname, join, resolve } from 'node:path'
+import { DEFAULT_CONSUMPTION_LIMITS, type ConsumptionLimit, type ConsumptionLimits } from './consumption.js'
 
 /**
  * The multi-project registry (#390): the list of projects the user has
@@ -36,6 +37,16 @@ export interface Preferences {
   postMergeQuality?: boolean
   /** Give the agent a real browser via chrome-devtools-mcp during the run (#452); maps to `--browser`. */
   browser?: boolean
+  /**
+   * How much of the subscription The Framework may burn before it pauses itself
+   * (#527, the settings behind #519).
+   *
+   * The only preference where **absent does not mean off**: the rest are flat
+   * booleans a user opts into, but an unset limit should protect the account
+   * rather than leave it unguarded, so absent means {@link DEFAULT_CONSUMPTION_LIMITS}.
+   * Read it through {@link resolveConsumptionLimits} rather than directly.
+   */
+  consumptionLimits?: ConsumptionLimits
 }
 
 /**
@@ -149,8 +160,41 @@ const PREFERENCE_KEYS = [
   'browser',
 ] as const
 
-/** Keep only the known boolean preference fields, so a hand-edited or browser-supplied
- * object never lands junk (or non-booleans) in the user's home file. */
+const CONSUMPTION_LIMIT_KEYS = ['daily', 'fiveHour', 'session'] as const
+
+/**
+ * Read one limit out of a hand-edited or browser-supplied object.
+ *
+ * `undefined` for anything we can't trust, so the caller falls back to the
+ * default rather than to an unguarded account. The percentage is clamped rather
+ * than rejected: a plausible-but-out-of-range number is a slip, and honouring
+ * the nearest legal value beats silently reverting to something else entirely.
+ */
+function sanitizeConsumptionLimit(value: unknown): ConsumptionLimit | undefined {
+  if (typeof value !== 'object' || value === null) return undefined
+  const input = value as Record<string, unknown>
+  const percent = input['percent']
+  if (typeof input['enabled'] !== 'boolean') return undefined
+  if (typeof percent !== 'number' || !Number.isFinite(percent)) return undefined
+  return { enabled: input['enabled'], percent: Math.min(100, Math.max(0, percent)) }
+}
+
+/** Read the three limits, falling back per-limit so one bad entry can't unguard the rest. */
+function sanitizeConsumptionLimits(value: unknown): ConsumptionLimits | undefined {
+  if (typeof value !== 'object' || value === null) return undefined
+  const input = value as Record<string, unknown>
+  const limits = {} as ConsumptionLimits
+  let any = false
+  for (const key of CONSUMPTION_LIMIT_KEYS) {
+    const limit = sanitizeConsumptionLimit(input[key])
+    if (limit) any = true
+    limits[key] = limit ?? DEFAULT_CONSUMPTION_LIMITS[key]
+  }
+  return any ? limits : undefined
+}
+
+/** Keep only the known preference fields, so a hand-edited or browser-supplied
+ * object never lands junk (or the wrong type) in the user's home file. */
 function sanitizePreferences(value: unknown): Preferences {
   if (typeof value !== 'object' || value === null) return {}
   const input = value as Record<string, unknown>
@@ -158,7 +202,26 @@ function sanitizePreferences(value: unknown): Preferences {
   for (const key of PREFERENCE_KEYS) {
     if (typeof input[key] === 'boolean') preferences[key] = input[key] as boolean
   }
+  const consumptionLimits = sanitizeConsumptionLimits(input['consumptionLimits'])
+  if (consumptionLimits) preferences.consumptionLimits = consumptionLimits
   return preferences
+}
+
+/**
+ * The limits in force: what the user set, with {@link DEFAULT_CONSUMPTION_LIMITS}
+ * filling any gap.
+ *
+ * Absent means the defaults rather than "off", so a user who has never opened
+ * the settings is still guarded (#519).
+ */
+export function resolveConsumptionLimits(preferences: Preferences | undefined): ConsumptionLimits {
+  const set = preferences?.consumptionLimits
+  if (!set) return DEFAULT_CONSUMPTION_LIMITS
+  return {
+    daily: set.daily ?? DEFAULT_CONSUMPTION_LIMITS.daily,
+    fiveHour: set.fiveHour ?? DEFAULT_CONSUMPTION_LIMITS.fiveHour,
+    session: set.session ?? DEFAULT_CONSUMPTION_LIMITS.session,
+  }
 }
 
 /**
