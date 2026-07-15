@@ -35,13 +35,14 @@ import {
   type Verdict,
 } from '@gemstack/ai-autopilot'
 import { snapshotWorkspace } from './sandbox.js'
+import type { ConsumptionWindow } from './consumption.js'
 import type { Driver, DriverEvent, DriverSession } from './driver/index.js'
 import { memoryFraming, type LoadedMemory } from './memory.js'
 import { composeRunSystem, type EcoOptions, type TfContext } from './system-prompt.js'
 import { AWAIT_PROTOCOL, CONFIRM_APPROVED, CONFIRM_DECLINED, PLAN_DECLINED_MESSAGE, isDeclinedConfirmation, parseAwaitGate, parseMarkdownViews, parseSessionName, parseReadyForMerge, type ParsedAwaitGate } from './turn-gate.js'
 // Value import from todo-loop.js is a benign cycle: todo-loop.js only calls
 // run.js's hoisted function declarations (requestChoices / resolveAwaitGate).
-import { runTodoLoop, type TodoLoopResult } from './todo-loop.js'
+import { appendTodoEntry, runTodoLoop, type TodoLoopResult } from './todo-loop.js'
 import { continueAfterChoice, decideDeploy, deployWith, domainLoopChecklist, driverArchitect, driverBuild, driverChecklist, driverImprove, driverLoopPrompts, reArchitect, type AwaitResolver } from './steps.js'
 import { hasSessionIdPlaceholder, OPEN_LOOP_MODES, pickedIds, resolveSessionLink, type ChoicePick, type ChoiceRequest, type FrameworkEvent } from './events.js'
 import { UsageMeter } from './usage.js'
@@ -227,6 +228,16 @@ export interface RunFrameworkOptions {
    */
   budgetUsd?: number
   /**
+   * Consult the consumption limits between turns (#529): return the limit that
+   * has been reached to pause the run, or `null` to carry on.
+   *
+   * Must answer from a cached reading — a live quota read spawns the whole agent
+   * CLI (~5s). Compose one from a `QuotaPoller` and `consumptionStatus`. Omit to
+   * leave the run ungated, which is also what a gate that throws resolves to:
+   * an unreadable quota must never stop the user's work (Rom's call on #519).
+   */
+  consumptionGate?: () => ConsumptionWindow | null
+  /**
    * Run the backlog loop (#323) after the build settles: consume the agent's own
    * `TODO_<slug>.agent.md` / `TODO.md` one entry per turn until empty, gating
    * before each entry when {@link requestChoice} is wired. Default: on for real
@@ -286,6 +297,33 @@ export interface RunFrameworkResult {
  * a {@link FrameworkEvent}. Reversible: swap in a real deploy target, or a
  * different `Driver`, without touching this wiring.
  */
+/** How each limit reads in a log line and a stop reason. */
+const CONSUMPTION_LIMIT_LABEL: Record<ConsumptionWindow, string> = {
+  session: 'Session',
+  'five-hour': '5h',
+  daily: 'Daily',
+}
+
+/**
+ * Leave a "resume me" entry on the workspace's backlog, so a later run picks the
+ * paused work back up (Rom's call on #519). The backlog is already what a run
+ * drains, so this needs no machinery of its own.
+ *
+ * Named after the session when the agent gave itself one, since that is what the
+ * user recognizes; an unnamed run says so plainly rather than inventing an id.
+ */
+async function leaveResumeNote(
+  cwd: string,
+  events: FrameworkEvent[],
+  emit: (event: FrameworkEvent) => void,
+): Promise<string | undefined> {
+  const named = [...events].reverse().find((e): e is Extract<FrameworkEvent, { kind: 'session-name' }> => e.kind === 'session-name')
+  const entry = `Resume ${named?.name ?? 'the paused run'}`
+  const file = await appendTodoEntry(cwd, entry)
+  if (file) emit({ kind: 'log', message: `Left "${entry}" on ${file} to pick up when the limit resets.` })
+  return file
+}
+
 export async function runFramework(opts: RunFrameworkOptions): Promise<RunFrameworkResult> {
   const events: FrameworkEvent[] = []
   const emit = (event: FrameworkEvent) => {
@@ -404,10 +442,15 @@ export async function runFramework(opts: RunFrameworkOptions): Promise<RunFramew
   // A declined plan (#358) also stops the run cleanly, like the budget cap: nothing
   // downstream should review or improve work the user just declined.
   const declineController = new AbortController()
+  // A consumption limit (#529) is the third clean stop: the account's quota, not
+  // this run's spend, is what ran out.
+  const consumptionController = new AbortController()
+  let consumptionTrip: ConsumptionWindow | undefined
   const runSignal = AbortSignal.any([
     ...(opts.signal ? [opts.signal] : []),
     budgetController.signal,
     declineController.signal,
+    consumptionController.signal,
   ])
 
   // Watch the black box for its real session id (the {type:'result'} event) and
@@ -434,6 +477,23 @@ export async function runFramework(opts: RunFrameworkOptions): Promise<RunFramew
     if (opts.budgetUsd != null && totals.costUsd >= opts.budgetUsd && !budgetController.signal.aborted) {
       emit({ kind: 'log', message: `Budget reached: $${totals.costUsd.toFixed(4)} of $${opts.budgetUsd} — stopping the run.` })
       budgetController.abort(new Error('[framework] budget reached'))
+    }
+    // The consumption limits (#519). Asked only between turns and answered from a
+    // cached reading: a live quota read spawns the whole agent CLI (~5s), so it
+    // can never sit here. A gate that throws is treated as "carry on" — the
+    // fail-open Rom confirmed, since an unreadable quota must not stop the work.
+    if (opts.consumptionGate && !consumptionController.signal.aborted) {
+      let reached: ConsumptionWindow | null = null
+      try {
+        reached = opts.consumptionGate()
+      } catch (err) {
+        console.error('[framework] consumptionGate threw; carrying on:', err)
+      }
+      if (reached) {
+        consumptionTrip = reached
+        emit({ kind: 'log', message: `${CONSUMPTION_LIMIT_LABEL[reached]} consumption limit reached — pausing the run.` })
+        consumptionController.abort(new Error('[framework] consumption limit reached'))
+      }
     }
   }
 
@@ -594,14 +654,22 @@ export async function runFramework(opts: RunFrameworkOptions): Promise<RunFramew
     // its own signal, so it trips when the caller's signal did not.
     const budgetStopped = budgetController.signal.aborted && opts.signal?.aborted !== true
     const declined = declineController.signal.aborted
-    const stopped = opts.signal?.aborted === true || budgetController.signal.aborted || declined
+    const paused = consumptionController.signal.aborted && opts.signal?.aborted !== true
+    const stopped =
+      opts.signal?.aborted === true || budgetController.signal.aborted || declined || consumptionController.signal.aborted
+    // Leave word to pick this up again (#529). Written here rather than at the
+    // trip because the note is file I/O and the trip is a sync event handler; a
+    // fire-and-forget write could lose the race with the run unwinding.
+    const resumeNote = paused ? await leaveResumeNote(opts.cwd, events, emit) : undefined
     const detail = declined
       ? 'plan declined'
       : budgetStopped
         ? `budget reached ($${opts.budgetUsd})`
-        : err instanceof Error
-          ? err.message
-          : String(err)
+        : paused
+          ? `${CONSUMPTION_LIMIT_LABEL[consumptionTrip ?? 'session']} consumption limit reached${resumeNote ? `; will resume from ${resumeNote}` : ''}`
+          : err instanceof Error
+            ? err.message
+            : String(err)
     emit({ kind: 'end', ok: false, ...(stopped ? { stopped: true } : {}), detail })
     throw err
   } finally {
