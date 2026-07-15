@@ -249,18 +249,19 @@ export {
   type LoadedMemory,
 } from './memory.js'
 export {
-  loadUserSystemPrompt,
   systemPromptBlock,
   composeRunSystem,
   renderSystemPrompt,
   SYSTEM_PROMPT_TEMPLATE,
-  SYSTEM_PROMPT_FILE,
   BOOTSTRAP_PREAMBLE,
   type SystemPromptOptions,
   type RunSystemOptions,
   type TfContext,
   type RenderedSystemPrompt,
 } from './system-prompt.js'
+// Split out of system-prompt.js so the pure composition stays browser-safe (#520);
+// re-exported here, so this entry's surface is unchanged.
+export { loadUserSystemPrompt, SYSTEM_PROMPT_FILE } from './system-prompt-file.js'
 export { renderTemplate, TemplateFragmentError } from './prompt-template.js'
 export {
   extractParamNames,

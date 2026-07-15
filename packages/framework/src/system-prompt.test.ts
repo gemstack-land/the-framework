@@ -6,12 +6,11 @@ import { join } from 'node:path'
 import {
   BOOTSTRAP_PREAMBLE,
   composeRunSystem,
-  loadUserSystemPrompt,
   renderSystemPrompt,
   systemPromptBlock,
-  SYSTEM_PROMPT_FILE,
   SYSTEM_PROMPT_TEMPLATE,
 } from './system-prompt.js'
+import { loadUserSystemPrompt, SYSTEM_PROMPT_FILE } from './system-prompt-file.js'
 import { AWAIT_PROTOCOL, SIGNAL_PROTOCOL } from './turn-gate.js'
 
 test('loadUserSystemPrompt reads and trims SYSTEM.md', async () => {

@@ -1,7 +1,10 @@
-import { readFile } from 'node:fs/promises'
-import { join } from 'node:path'
 import { renderTemplate } from './prompt-template.js'
 import { AWAIT_PROTOCOL, SIGNAL_PROTOCOL } from './turn-gate.js'
+
+// No Node imports here, deliberately. This module composes the prompt and the
+// dashboard renders it in the browser (#520), so reading the user's SYSTEM.md off
+// disk lives in `system-prompt-file.ts` instead. Keep it that way: one `node:fs`
+// import here puts `node:fs` in the browser bundle.
 
 /**
  * Rom's system prompt (#326), verbatim, as a template. It supersedes the
@@ -166,25 +169,6 @@ export function renderSystemPrompt(tf: TfContext = DEFAULT_TF): RenderedSystemPr
  * injected into every prompt, so a project's own instructions travel with the
  * code (Rom's repo-as-database model, like the memory files in {@link ./memory}).
  */
-export const SYSTEM_PROMPT_FILE = 'SYSTEM.md'
-
-/**
- * Read the user's system prompt from {@link SYSTEM_PROMPT_FILE} at the workspace
- * root. Returns `undefined` when the file is absent or empty, so the caller falls
- * back to the built-in default alone.
- */
-export async function loadUserSystemPrompt(
-  dir: string,
-  file: string = SYSTEM_PROMPT_FILE,
-): Promise<string | undefined> {
-  try {
-    const content = (await readFile(join(dir, file), 'utf8')).trim()
-    return content || undefined
-  } catch {
-    return undefined
-  }
-}
-
 /** Inputs to {@link systemPromptBlock}. */
 export interface SystemPromptOptions {
   /**

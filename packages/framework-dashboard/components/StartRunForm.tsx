@@ -11,6 +11,7 @@ import { sendStart } from '../server/control.telefunc.js'
 import { onProjects } from '../server/projects.telefunc.js'
 import { usePreferences, updatePreferences, autopilotEnabled } from '../lib/preferences.js'
 import { PromptEditor, type PromptEditorHandle } from './PromptEditor.js'
+import { SystemPromptDisclosure } from './SystemPromptDisclosure.js'
 import { Button } from './ui/button.js'
 import { cn } from '../lib/utils.js'
 
@@ -85,12 +86,16 @@ export function StartRunForm({
   // left to act on.
   const ecoDisabled = vanilla
 
+  // The eco drops, hoisted: the run gets them via collectOptions, and the #520
+  // preview renders with them, so what you read is what gets sent.
+  const ecoDrops = {
+    ...(ecoPlanning ? { autoPlanning: true } : {}),
+    ...(ecoResearch ? { autoResearch: true } : {}),
+    ...(ecoMaintenance ? { autoMaintenance: true } : {}),
+  }
+
   const collectOptions = () => {
-    const ecoOpts = {
-      ...(ecoPlanning ? { autoPlanning: true } : {}),
-      ...(ecoResearch ? { autoResearch: true } : {}),
-      ...(ecoMaintenance ? { autoMaintenance: true } : {}),
-    }
+    const ecoOpts = ecoDrops
     return {
       ...(autopilot ? { autopilot: true } : {}),
       ...(technical ? { technical: true } : {}),
@@ -165,6 +170,16 @@ export function StartRunForm({
         disabled={busy}
       />
 
+      <SystemPromptDisclosure
+        prompt={prompt}
+        disabled={vanilla}
+        onDisabledChange={value => updatePreferences({ vanilla: value })}
+        autopilot={autopilot}
+        eco={eco && !vanilla ? ecoDrops : undefined}
+        context={[...context]}
+        busy={busy}
+      />
+
       <div className="mt-2 flex flex-wrap gap-1.5">
         {PRESETS.map(p => (
           <Button
@@ -190,8 +205,8 @@ export function StartRunForm({
         <label className="flex cursor-pointer items-center gap-1.5" title="Expose technical detail (e.g. tech-stack choices)">
           <input type="checkbox" checked={technical} onChange={e => updatePreferences({ technical: e.target.checked })} disabled={busy} /> Technical control
         </label>
-        <label className="flex cursor-pointer items-center gap-1.5" title="Remove all system prompts: the same as raw Claude Code">
-          <input type="checkbox" checked={vanilla} onChange={e => updatePreferences({ vanilla: e.target.checked })} disabled={busy} /> Vanilla
+        <label className="flex cursor-pointer items-center gap-1.5" title="Remove all system prompts: the same as raw Claude Code. Expand 'See actual prompt sent' to read what it removes.">
+          <input type="checkbox" checked={vanilla} onChange={e => updatePreferences({ vanilla: e.target.checked })} disabled={busy} /> Disable system prompt
         </label>
         <label className={cn('flex items-center gap-1.5', ecoDisabled ? 'opacity-40' : 'cursor-pointer')} title="Trim the built-in system prompt to save tokens">
           <input type="checkbox" checked={eco && !ecoDisabled} onChange={e => updatePreferences({ eco: e.target.checked })} disabled={busy || ecoDisabled} /> Eco
