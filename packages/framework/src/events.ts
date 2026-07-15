@@ -1,5 +1,5 @@
 import type { BootstrapEvent } from '@gemstack/ai-autopilot'
-import type { DriverEvent } from './driver/index.js'
+import type { DriverEvent, DriverRateLimit } from './driver/index.js'
 
 /** One selectable option in an interactive {@link ChoiceRequest} (#304). */
 export interface ChoiceOption {
@@ -216,9 +216,19 @@ function formatDriverEvent(event: DriverEvent): string {
       return `    · ${event.label}`
     case 'result':
       return `  ‹ turn complete`
+    case 'rate-limit':
+      return `    ${formatRateLimit(event.limit)}`
     case 'error':
       return `  ! agent error: ${event.message}`
   }
+}
+
+/** Quiet on the happy path: only worth a line when the quota is actually tight. */
+function formatRateLimit(limit: DriverRateLimit): string {
+  const resets = new Date(limit.resetsAt).toISOString()
+  if (limit.status === 'rejected') return `✗ quota exhausted (${limit.window}), resets ${resets}`
+  if (limit.status === 'allowed_warning') return `! quota running low (${limit.window}), resets ${resets}`
+  return `· quota ${limit.status} (${limit.window}), resets ${resets}`
 }
 
 function formatBootstrapEvent(event: BootstrapEvent): string {

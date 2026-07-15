@@ -21,9 +21,12 @@ const ZERO: UsageTotals = {
 
 /**
  * Accumulates per-turn {@link DriverUsage} into a running total for the whole
- * run. The framework can't retrieve the account's usage *limit* under
- * subscription auth, so it infers consumption from what the agent already
- * reports each turn (the alternative from #322) and lets a budget cap gate on it.
+ * run and lets a budget cap gate on it (#322).
+ *
+ * This tracks what *this run* spent, not where the account's subscription quota
+ * stands — the agent reports that separately, per turn, as `DriverRateLimit`
+ * (#517). An earlier version of this note claimed the account limit was
+ * unreachable under subscription auth; it isn't.
  */
 export class UsageMeter {
   private totalsState: UsageTotals = { ...ZERO }

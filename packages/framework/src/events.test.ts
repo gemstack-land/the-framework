@@ -125,3 +125,14 @@ test('formatFrameworkEvent renders a usage spend line, with the cap when set (#3
   assert.equal(formatFrameworkEvent({ ...base, costUsd: 0.04, turns: 2 }), '  spend: $0.0400 over 2 turns')
   assert.equal(formatFrameworkEvent({ ...base, costUsd: 0.02, turns: 1, budgetUsd: 5 }), '  spend: $0.0200 / $5 over 1 turn')
 })
+
+test('formats the rate-limit line by how much the quota actually matters (#517)', () => {
+  const at = Date.UTC(2026, 6, 15, 4, 30)
+  const line = (status: string) => formatFrameworkEvent({ kind: 'driver', event: { type: 'rate-limit', limit: { status, window: 'five_hour', resetsAt: at } } })!
+  assert.match(line('allowed'), /^\s+· quota allowed \(five_hour\)/)
+  assert.match(line('allowed_warning'), /^\s+! quota running low \(five_hour\)/)
+  assert.match(line('rejected'), /^\s+✗ quota exhausted \(five_hour\)/)
+  // An unseen status still renders rather than blowing up or vanishing.
+  assert.match(line('some_new_status'), /quota some_new_status/)
+  assert.ok(line('allowed').includes(new Date(at).toISOString()))
+})
