@@ -27,9 +27,8 @@ import {
   type ServeConfig,
 } from './run.js'
 import { FAKE_DEPLOY, FAKE_INTENT, FAKE_SIGNALS, fakeDriver } from './fake-script.js'
-import { discoverExtensions, readProjectSignals } from './extensions.js'
+import { readProjectSignals } from './project.js'
 import { loadFrameworkConfig, type FrameworkFileConfig } from './config.js'
-import { loadRepoMemory } from './memory.js'
 import { type EcoOptions } from './system-prompt.js'
 import { loadUserSystemPrompt, SYSTEM_PROMPT_FILE } from './system-prompt-file.js'
 import { checkForUpdate, formatUpdateStatus, nodeVersionFetcher } from './update-check.js'
@@ -166,10 +165,6 @@ Options:
                          bug-fix or major-change (default: the-framework.yml's event,
                          else the preset's own, else major-change). Selects which
                          review chain gates the run.
-  --compose-extensions   Opt the built-in capability extensions in (auth, data,
-                         rbac, crud, shell) so the agent composes them instead of
-                         hand-rolling. Vike-only; installed framework-* extensions
-                         auto-activate either way (default: off, hand-rolled + Prisma).
   --max-passes <n>       Full-fledged loop pass budget (default: 5).
   --max-cost <usd>       Stop the run once it has spent this much (USD).
   --no-todo-loop         Do not consume the agent's TODO backlog after the build
@@ -260,7 +255,6 @@ export interface CliOptions {
   dashboard: boolean
   relayServe: boolean
   share?: string | undefined
-  composeExtensions: boolean
   sessionLink?: string | undefined
   permissionMode?: PermissionMode | undefined
   skipPermissions: boolean
@@ -306,7 +300,6 @@ export function parseArgs(argv: string[]): CliOptions {
     browser: false,
     dashboard: true,
     relayServe: false,
-    composeExtensions: false,
     skipPermissions: false,
     resume: false,
     persist: true,
@@ -337,9 +330,6 @@ export function parseArgs(argv: string[]): CliOptions {
         break
       case '--no-dashboard':
         opts.dashboard = false
-        break
-      case '--compose-extensions':
-        opts.composeExtensions = true
         break
       case '--preset':
         opts.preset = argv[++i]
@@ -1119,22 +1109,6 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
       }
     : undefined
 
-  // Discover installed `framework-*` capability packages (#190) from the signals
-  // read above and register them; each still activates by signal or the
-  // --compose-extensions opt-in.
-  let discovered: RunFrameworkOptions['extensions']
-  if (!fake) {
-    const { extensions, failed } = await discoverExtensions(cwd, signals)
-    for (const f of failed) io.err(`skipped framework extension ${f.package}: ${f.error}`)
-    if (extensions.length) discovered = extensions
-  }
-
-  // The repo's own memory files (#260) frame the agent: it reads them for context
-  // and keeps the ones it owns current. Read from the run's workspace; --fake's
-  // empty tmp cwd simply has none, so the demo stays deterministic.
-  const memory = await loadRepoMemory(cwd)
-  if (memory.some(m => m.content)) io.out(`◆ project memory: ${memory.filter(m => m.content).map(m => m.name).join(', ')}`)
-
   // A user SYSTEM.md and the-framework.yml's anti-lazy-pill toggle shape the system
   // prompt injected into every prompt (#301). The built-in pill is on unless removed.
   const userSystemPrompt = await loadUserSystemPrompt(cwd)
@@ -1173,14 +1147,11 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
     ...(deployTarget ? { deployTarget } : {}),
     ...(serve ? { serve } : {}),
     ...(serve && opts.sandbox ? { sandbox: opts.sandbox } : {}),
-    ...(discovered ? { extensions: discovered } : {}),
-    ...(opts.composeExtensions ? { composeExtensions: true } : {}),
     // Modes ride along even without a domain preset: autopilot also steers the
     // #326 system prompt's maintenance stance.
     ...(domainPreset ? { preset: domainPreset } : {}),
     ...(modeList.length ? { modes: modeList } : {}),
     ...(buildEvent ? { buildEvent } : {}),
-    ...(memory.length ? { memory } : {}),
     ...(userSystemPrompt ? { systemPrompt: userSystemPrompt } : {}),
     ...(noBuiltinPrompt ? { antiLazyPill: false } : {}),
     ...(eco ? { eco } : {}),

@@ -168,11 +168,29 @@ test('vanilla (antiLazyPill false) wins over eco: no built-in prompt at all (#31
   assert.equal(block, '')
 })
 
-test('composeRunSystem: the built-in block, then both emit protocols, then framing, in order (#501)', () => {
-  const system = composeRunSystem({ framing: ['PERSONA-A', 'SKILL-B'] })
-  // The one assembly path both runFramework and runPrompt go through.
-  const expected = [renderSystemPrompt().system, AWAIT_PROTOCOL, SIGNAL_PROTOCOL, 'PERSONA-A', 'SKILL-B'].join('\n\n')
-  assert.equal(system, expected)
+test('composeRunSystem is exactly the #326 block + both emit protocols, and nothing else (#547)', () => {
+  // The one assembly path both runFramework and runPrompt go through. Exact equality is
+  // the point: no persona, skill, or memory framing may ever be appended again.
+  const system = composeRunSystem()
+  assert.equal(system, [renderSystemPrompt().system, AWAIT_PROTOCOL, SIGNAL_PROTOCOL].join('\n\n'))
+})
+
+test('composeRunSystem appends nothing after the protocols, whatever the options (#547)', () => {
+  // Every supported option feeds the #326 block; none of them can add a trailing section.
+  const system = composeRunSystem({
+    user: 'Ship small PRs.',
+    context: ['/work/api'],
+    bootstrap: true,
+    tf: { prompt: 'build a todo app', params: { autopilot: true } },
+  })
+  const block = systemPromptBlock({
+    user: 'Ship small PRs.',
+    context: ['/work/api'],
+    bootstrap: true,
+    tf: { prompt: 'build a todo app', params: { autopilot: true } },
+  })
+  assert.equal(system, [block, AWAIT_PROTOCOL, SIGNAL_PROTOCOL].join('\n\n'))
+  assert.ok(system.endsWith(SIGNAL_PROTOCOL), 'the signal protocol is the last thing in the channel')
 })
 
 test('composeRunSystem keeps the emit protocols even with the built-in prompt off (#500/#501)', () => {
@@ -181,9 +199,4 @@ test('composeRunSystem keeps the emit protocols even with the built-in prompt of
   const system = composeRunSystem({ antiLazyPill: false })
   assert.ok(!system.includes('# System prompt'), 'built-in #326 prompt is off')
   assert.equal(system, [AWAIT_PROTOCOL, SIGNAL_PROTOCOL].join('\n\n'))
-})
-
-test('composeRunSystem drops empty framing entries (e.g. an absent memory block) (#501)', () => {
-  const system = composeRunSystem({ antiLazyPill: false, framing: ['PERSONA-A', '', 'SKILL-B'] })
-  assert.equal(system, [AWAIT_PROTOCOL, SIGNAL_PROTOCOL, 'PERSONA-A', 'SKILL-B'].join('\n\n'))
 })

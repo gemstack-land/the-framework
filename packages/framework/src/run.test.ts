@@ -3,11 +3,12 @@ import { test } from 'node:test'
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { defineDomainPreset, defineFrameworkExtension, defineLoop, definePersona, defineSkill } from '@gemstack/ai-autopilot'
+import { defineDomainPreset, defineLoop } from '@gemstack/ai-autopilot'
 import type { Prompt } from '@gemstack/ai-autopilot'
 import { DEFAULT_MAX_PASSES, requestChoices, requestMultiSelect, runFramework, type ChoicesOption, type MultiSelectOption } from './run.js'
 import { FAKE_DEPLOY, FAKE_INTENT, FAKE_SIGNALS, fakeDriver } from './fake-script.js'
 import { FakeDriver, type Driver, type DriverSession } from './driver/index.js'
+import { composeRunSystem } from './system-prompt.js'
 import type { ChoiceRequest, FrameworkEvent } from './events.js'
 
 /** A driver that records the `system` framing it is started with, delegating the run to the fake. */
@@ -47,7 +48,7 @@ test('runFramework drives the whole flow through the driver, offline, to product
   // The deploy phase decided SSR -> cloudflare.
   assert.equal(result.deploy?.plan.target, 'cloudflare')
 
-  // We surfaced the wrapped agent's own progress and framed with personas.
+  // We surfaced the wrapped agent's own progress.
   assert.ok(events.some(e => e.kind === 'driver'))
   assert.ok(events.some(e => e.kind === 'session' && e.fake === true))
   assert.equal(events.at(-1)!.kind, 'end')
@@ -170,101 +171,19 @@ test('runFramework shows a literal session link immediately (no template)', asyn
   assert.equal(session.sessionLink, 'https://code.example.com/live')
 })
 
-test('--compose-extensions frames the agent with vike-auth, not hand-rolled auth (#186)', async () => {
-  const { driver, system } = recordingDriver()
-  await runFramework({
-    intent: FAKE_INTENT,
-    driver,
-    cwd: '/tmp/ws',
-    signals: FAKE_SIGNALS,
-    composeExtensions: true,
-    onEvent: () => {},
-  })
-  assert.match(system(), /vike-auth/)
-  assert.match(system(), /npm install vike-auth/)
-})
-
-test('--compose-extensions is ignored on a non-Vike preset and falls back with a log (#202)', async () => {
-  const events: FrameworkEvent[] = []
-  const { driver, system } = recordingDriver()
-  const { detection } = await runFramework({
-    intent: FAKE_INTENT,
-    driver,
-    cwd: '/tmp/ws',
-    signals: { dependencies: ['next'] }, // detect Next, not Vike
-    composeExtensions: true,
-    onEvent: e => events.push(e),
-  })
-
-  // The vike-* extensions are Vike-only, so a Next project does not get them.
-  assert.equal(detection.framework, 'Next.js')
-  assert.doesNotMatch(system(), /vike-auth/)
-  // And we say why, rather than silently framing Next with vike composers.
-  assert.ok(
-    events.some(e => e.kind === 'log' && /--compose-extensions ignored/.test(e.message)),
-    'expected a log explaining the compose fallback',
-  )
-})
-
-test('without --compose-extensions the default framing has no vike-auth (publish-safe)', async () => {
-  const { driver, system } = recordingDriver()
-  await runFramework({
-    intent: FAKE_INTENT,
-    driver,
-    cwd: '/tmp/ws',
-    signals: FAKE_SIGNALS,
-    onEvent: () => {},
-  })
-  assert.doesNotMatch(system(), /vike-auth/)
-})
-
-test('Vike arrives as a skill (llms.txt pointer) in the framing (#190)', async () => {
-  const { driver, system } = recordingDriver()
-  await runFramework({
-    intent: FAKE_INTENT,
-    driver,
-    cwd: '/tmp/ws',
-    signals: FAKE_SIGNALS, // has vike-react -> the Vike skill activates
-    onEvent: () => {},
-  })
-  assert.match(system(), /https:\/\/vike\.dev\/llms\.txt/)
-})
-
-test('the framework page builder is framed via its skill, not a preset persona', async () => {
+test('the run system channel is exactly composeRunSystem, with nothing appended (#547)', async () => {
   const { driver, system } = recordingDriver()
   await runFramework({ intent: FAKE_INTENT, driver, cwd: '/tmp/ws', signals: FAKE_SIGNALS, onEvent: () => {} })
-  // The vike-page-builder persona (page-builder conventions) rides the Vike skill.
-  assert.match(system(), /You build UI on Vike \(Vite \+ SSR\), which is renderer-agnostic/)
+  // runFramework composes no framing of its own: detection narrates, it never reaches the prompt.
+  assert.equal(system(), composeRunSystem({ tf: { prompt: FAKE_INTENT, params: { autopilot: false } } }))
 })
 
-test('an empty from-scratch project is still framed with the flagship page builder (skill fallback)', async () => {
+test('detected deps never reach the system channel (#547)', async () => {
   const { driver, system } = recordingDriver()
-  // No signals match any skill, so only preset selection (fallback = flagship Vike)
-  // brings the framework skill in. Its page builder must still frame the agent.
-  await runFramework({ intent: FAKE_INTENT, driver, cwd: '/tmp/ws', signals: {}, onEvent: () => {} })
-  assert.match(system(), /You build UI on Vike \(Vite \+ SSR\), which is renderer-agnostic/)
-  assert.match(system(), /https:\/\/vike\.dev\/llms\.txt/)
-})
-
-test('repo memory files frame the agent: contents + a maintain instruction (#260)', async () => {
-  const { driver, system } = recordingDriver()
-  await runFramework({
-    intent: FAKE_INTENT,
-    driver,
-    cwd: '/tmp/ws',
-    signals: FAKE_SIGNALS,
-    memory: [{ name: 'CODE-OVERVIEW.md', purpose: 'a map of the codebase', content: 'A blog with comments.' }],
-    onEvent: () => {},
-  })
-  assert.match(system(), /Project memory/)
-  assert.match(system(), /A blog with comments\./) // contents inlined as context
-  assert.match(system(), /Keep these up to date[\s\S]*CODE-OVERVIEW\.md/)
-})
-
-test('no memory option leaves the framing unchanged (#260)', async () => {
-  const { driver, system } = recordingDriver()
-  await runFramework({ intent: FAKE_INTENT, driver, cwd: '/tmp/ws', signals: FAKE_SIGNALS, onEvent: () => {} })
-  assert.doesNotMatch(system(), /Project memory/)
+  // FAKE_SIGNALS carries vike-react + @prisma/client; none of it may frame the agent.
+  const { detection } = await runFramework({ intent: FAKE_INTENT, driver, cwd: '/tmp/ws', signals: FAKE_SIGNALS, onEvent: () => {} })
+  assert.equal(detection.framework, 'Vike') // detection still happens...
+  assert.doesNotMatch(system(), /vike-auth|llms\.txt|Skill:|Persona:|Project memory/) // ...but stays out of the prompt
 })
 
 /** A minimal domain preset whose major-change loop runs one review prompt. */
@@ -283,7 +202,6 @@ function reviewPreset() {
     title: 'Test Domain',
     loops: [defineLoop({ on: 'major-change', run: ['review'] })],
     prompts: [review],
-    skills: [],
   })
 }
 
@@ -352,7 +270,6 @@ function dualLoopPreset(opts: { defaultEvent?: string } = {}) {
       defineLoop({ on: 'bug-fix', run: ['bug-review'] }),
     ],
     prompts: [prompt('major-review', 'MAJOR-SENTINEL'), prompt('bug-review', 'BUGFIX-SENTINEL')],
-    skills: [],
   })
 }
 
@@ -425,38 +342,6 @@ test('a preset defaultEvent selects the loop; an explicit buildEvent overrides i
     onEvent: () => {},
   })
   assert.ok(overridden.prompts().some(p => p.includes('MAJOR-SENTINEL'))) // run choice wins over the preset default
-})
-
-test('a registered extension auto-activates by its signal, no opt-in needed (#190)', async () => {
-  const { driver, system } = recordingDriver()
-  const audit = defineFrameworkExtension({
-    name: 'framework-audit',
-    capability: 'audit',
-    personas: [definePersona({ name: 'auditor', role: 'audits', systemPrompt: 'AUDIT-LOG-EVERYTHING sentinel.' })],
-    signals: { dependencies: ['@prisma/client'] }, // present in FAKE_SIGNALS
-  })
-  await runFramework({
-    intent: FAKE_INTENT,
-    driver,
-    cwd: '/tmp/ws',
-    signals: FAKE_SIGNALS,
-    extensions: [audit],
-    onEvent: () => {},
-  })
-  assert.match(system(), /AUDIT-LOG-EVERYTHING sentinel/)
-})
-
-test('an active extension pulls its own skill into the framing (#190)', async () => {
-  const { driver, system } = recordingDriver()
-  const audit = defineFrameworkExtension({
-    name: 'framework-audit',
-    capability: 'audit',
-    personas: [definePersona({ name: 'auditor', role: 'audits', systemPrompt: 'audit sentinel' })],
-    skills: [defineSkill({ name: 'audit-guide', title: 'Audit Guide', description: 'd', url: 'https://x/audit/llms.txt' })],
-    signals: { dependencies: ['@prisma/client'] }, // present in FAKE_SIGNALS
-  })
-  await runFramework({ intent: FAKE_INTENT, driver, cwd: '/tmp/ws', signals: FAKE_SIGNALS, extensions: [audit], onEvent: () => {} })
-  assert.match(system(), /https:\/\/x\/audit\/llms\.txt/)
 })
 
 test('the default pass budget is raised for from-scratch builds (#182)', () => {

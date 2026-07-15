@@ -1,39 +1,14 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
-import {
-  vikePreset,
-  nextPreset,
-  builtinPresets,
-  presetPersonas,
-  PresetRegistry,
-  builtinPresetRegistry,
-} from './library.js'
+import { vikePreset, nextPreset, builtinPresets, PresetRegistry, builtinPresetRegistry } from './library.js'
 
 describe('built-in presets', () => {
-  it('ship Vike (flagship) and Next, each pointing at its framework skill', () => {
+  it('ship Vike (flagship) and Next, each a pure detector', () => {
     assert.deepEqual(builtinPresets().map(p => p.name), ['vike', 'next'])
-    // The page builder rides the framework skill, not the preset itself.
-    assert.deepEqual(vikePreset.personas, [])
-    assert.deepEqual(nextPreset.personas, [])
-    assert.equal(vikePreset.skill?.name, 'vike')
-    assert.equal(nextPreset.skill?.name, 'next')
-    assert.equal(vikePreset.skill?.personas[0]?.name, 'vike-page-builder')
-    assert.equal(nextPreset.skill?.personas[0]?.name, 'next-page-builder')
-  })
-})
-
-describe('presetPersonas', () => {
-  it('is the preset page builder followed by the shared neutral personas', () => {
-    const names = presetPersonas(vikePreset).map(p => p.name)
-    assert.deepEqual(names, ['vike-page-builder', 'data-modeler', 'ui-intent-designer'])
-  })
-
-  it('swaps only the page builder between frameworks — the rest of the stack is shared', () => {
-    const vike = presetPersonas(vikePreset).map(p => p.name)
-    const next = presetPersonas(nextPreset).map(p => p.name)
-    assert.equal(vike[0], 'vike-page-builder')
-    assert.equal(next[0], 'next-page-builder')
-    assert.deepEqual(vike.slice(1), next.slice(1)) // identical shared core
+    assert.equal(vikePreset.framework, 'Vike')
+    assert.equal(nextPreset.framework, 'Next.js')
+    assert.ok(vikePreset.signals.dependencies?.includes('vike'))
+    assert.ok(nextPreset.signals.dependencies?.includes('next'))
   })
 })
 

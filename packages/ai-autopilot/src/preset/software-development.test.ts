@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { softwareDevelopmentPreset } from './load.js'
 
 describe('softwareDevelopmentPreset (shipped built-in)', () => {
-  it('loads the {loops, prompts, skills} bundle from the shipped directory', async () => {
+  it('loads the {loops, prompts} bundle from the shipped directory', async () => {
     const preset = await softwareDevelopmentPreset()
     assert.equal(preset.name, 'software-development')
     assert.equal(preset.title, 'Software Development')
@@ -11,8 +11,6 @@ describe('softwareDevelopmentPreset (shipped built-in)', () => {
 
     assert.equal(preset.loops.length, 2)
     assert.ok(preset.prompts.length >= 5)
-    assert.equal(preset.skills.length, 1)
-    assert.equal(preset.skills[0]!.url, 'https://google.github.io/eng-practices/')
   })
 
   it('every id a loop dispatches resolves to a shipped prompt body', async () => {

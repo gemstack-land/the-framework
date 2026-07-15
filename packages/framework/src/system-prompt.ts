@@ -218,14 +218,8 @@ export function systemPromptBlock(opts: SystemPromptOptions = {}): string {
   return parts.join('\n\n')
 }
 
-/** Inputs to {@link composeRunSystem}: a {@link systemPromptBlock} plus the run's own framing. */
-export interface RunSystemOptions extends SystemPromptOptions {
-  /**
-   * Extra framing appended after the emit protocols: the build run's persona / skill /
-   * memory blocks. The direct-prompt run has none. Empty entries are dropped.
-   */
-  framing?: readonly string[] | undefined
-}
+/** Inputs to {@link composeRunSystem}. */
+export type RunSystemOptions = SystemPromptOptions
 
 /**
  * Assemble a run's full system channel — the single place it is composed (#501), so the
@@ -235,18 +229,14 @@ export interface RunSystemOptions extends SystemPromptOptions {
  * inside the built-in-prompt branch.
  *
  * Order is fixed: the #326 prompt block (context / bootstrap / built-in prompt / user
- * SYSTEM.md) first, then the always-on emit protocols, then any caller framing. The
- * protocols are unconditional — they are the *emit contract* (how the agent signals an
- * awaited choice and the setSessionName()/setReadyForMerge() lifecycle), not prompt
- * content — so the agent needs them even with the built-in prompt off.
+ * SYSTEM.md) first, then the always-on emit protocols. Nothing else is appended — a
+ * build run's system channel is exactly this (#547), which is what lets the dashboard
+ * show the whole prompt before a run starts (#520). The protocols are unconditional —
+ * they are the *emit contract* (how the agent signals an awaited choice and the
+ * setSessionName()/setReadyForMerge() lifecycle), not prompt content — so the agent
+ * needs them even with the built-in prompt off.
  */
 export function composeRunSystem(opts: RunSystemOptions = {}): string {
-  const { framing, ...blockOpts } = opts
-  const promptBlock = systemPromptBlock(blockOpts)
-  return [
-    ...(promptBlock ? [promptBlock] : []),
-    AWAIT_PROTOCOL,
-    SIGNAL_PROTOCOL,
-    ...(framing ?? []).filter(Boolean),
-  ].join('\n\n')
+  const promptBlock = systemPromptBlock(opts)
+  return [...(promptBlock ? [promptBlock] : []), AWAIT_PROTOCOL, SIGNAL_PROTOCOL].join('\n\n')
 }

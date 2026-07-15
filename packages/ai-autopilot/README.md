@@ -40,49 +40,29 @@ Each stage is a plain function, so you mix LLM and deterministic logic freely:
 - **`workers`** — a single `Agent` (all subtasks), a `Record<string, Agent>` (routed by `subtask.worker`), or a `WorkerRouter` function.
 - **`synthesize`** — a `Synthesizer`: `(task, results) => string`. Defaults to `defaultSynthesize` (concatenate successes, no LLM call); pass `agentSynthesizer(agent)` for an LLM pass.
 
-## Personas — the stack-aware layer
+## Bring your own agents
 
-The Supervisor is stack-agnostic. **Personas** add the opinionated knowledge that
-makes autopilot know the GemStack stack (Vike + Prisma) instead of
-guessing. A persona is *data*: a name, a one-line role, a system-prompt fragment,
-and the skills/tools it brings (composed over [`@gemstack/ai-skills`](https://github.com/gemstack-land/gemstack/tree/main/packages/ai-skills)).
-
-Three are built in: `vikePageBuilder` (Vike `+` file conventions, renderer-agnostic),
-`dataModeler` (schema-first data on Prisma, derived migrations), and
-`uiIntentDesigner` — the "declare intent, decouple implementation" guardrail that
-expresses UI as intent so an AI can't hardcode the wrong markup.
+The Supervisor is stack-agnostic, and stays that way: you hand it the agents, and
+it orchestrates them as-is. Autopilot never appends framing, a role, or knowledge
+of its own to an agent's instructions — what you write is the whole system prompt.
 
 ```ts
 import { Supervisor, agentPlanner } from '@gemstack/ai-autopilot'
-import { stackPersonas, personaWorkers, personaRoster } from '@gemstack/ai-autopilot'
+import { agent } from '@gemstack/ai-sdk'
+
+const roster = [
+  { name: 'data-modeler', role: 'Design database schemas and migrations.' },
+  { name: 'page-builder', role: 'Build pages and their routing.' },
+]
 
 const supervisor = new Supervisor({
-  // Tell the planner which personas exist so it tags each subtask's `worker`.
-  plan: agentPlanner(agent(`Decompose the task.\n\n${personaRoster(stackPersonas)}`)),
-  // Materialize the personas into a worker pool keyed by name.
-  workers: personaWorkers(stackPersonas, { model: 'anthropic/claude-sonnet-4-5' }),
+  // Tell the planner which workers exist so it tags each subtask's `worker`.
+  plan: agentPlanner(agent(`Decompose the task.\n\n${roster.map(w => `- ${w.name}: ${w.role}`).join('\n')}`)),
+  workers: Object.fromEntries(roster.map(w => [w.name, agent({ instructions: w.role })])),
 })
 
 await supervisor.run('Add a paginated orders page backed by an orders table')
 ```
-
-Define your own with `definePersona({ name, role, systemPrompt, skills?, tools? })`,
-or materialize a single persona into an agent with `personaAgent(persona)`. Because
-a persona is data, it can be inspected and listed without building an agent first.
-
-### Composing vike-* extensions (opt-in)
-
-For a Vike app, an opt-in set swaps the hand-rolled default for personas that
-**compose** the vike-* extensions instead of reinventing them: `vikeAuthComposer`
-(vike-auth for identity/sessions), `vikeDataModeler` (the universal-orm data layer),
-`vikeRbacComposer` (vike-rbac roles/permissions), `vikeCrudComposer`
-(vike-crud/vike-admin for schema-derived CRUD + admin UI), and `vikeShellComposer`
-(vike-themes/vike-layouts for styling and the app shell), plus the shared
-`uiIntentDesigner` guardrail. They ship as the `vikeExtensionPersonas` array.
-
-This path is opt-in because the vike-* packages currently resolve only inside the
-vike-data workspace (they are not published to npm), so the default `stackPersonas`
-path stays publish-safe. `@gemstack/framework` exposes it as `--compose-extensions`.
 
 ## Runner — the pluggable execution seam
 
@@ -117,14 +97,13 @@ await session.dispose()           // removes the temp workspace
 
 ```ts
 import { FakeRunner, runnerTools } from '@gemstack/ai-autopilot'
-import { personaAgent, vikePageBuilder } from '@gemstack/ai-autopilot'
+import { agent } from '@gemstack/ai-sdk'
 
 const runner = new FakeRunner()
 const session = await runner.boot({ files: { 'pages/+config.js': '…' } })
 
-// Give a persona hands inside the sandbox: read/write files, exec, preview.
-const agent = personaAgent(vikePageBuilder, { model: 'anthropic/claude-sonnet-4-5' })
-const withTools = agent // compose runnerTools(session) into its tools()
+// Give an agent hands inside the sandbox: read/write files, exec, preview.
+const builder = agent({ instructions: 'Build pages.', tools: runnerTools(session) })
 
 await session.exec('pnpm build')
 const { url } = (await session.preview?.({ port: 5173 })) ?? {}
@@ -298,20 +277,20 @@ own bodies from a directory with `loadPromptsFrom(dir)`, or add one to a library
 with `library.add(...)`. The bodies are the main open-source contribution surface;
 PRs that sharpen them are welcome.
 
-## Domain presets — a loop + prompts + skills bundled per domain
+## Domain presets — loops + prompts bundled per domain
 
-A **domain preset** packages a domain's review loops, prompt bodies, and skill
-pointers as one `{ loops, prompts, skills }` unit, so a run is framed for a *kind*
-of work (software, web, data, product, science) instead of the generic default.
+A **domain preset** packages a domain's review loops and prompt bodies as one
+`{ loops, prompts }` unit, so a run's review policy suits a *kind* of work
+(software, web, data, product, science) instead of the generic default.
 Each preset is a directory of markdown under `presets/` — a `preset.md` manifest
-plus `loops/`, `prompts/`, and `skills/` — so a contributor adds one by writing
-files, not code.
+plus `loops/` and `prompts/` — so a contributor adds one by writing files, not
+code.
 
 ```ts
 import { builtinDomainPresets, selectPreset } from '@gemstack/ai-autopilot'
 
 const presets = await builtinDomainPresets()             // discovers every shipped preset
-const sw = selectPreset(presets, 'software-development')  // sw.loops / sw.prompts / sw.skills
+const sw = selectPreset(presets, 'software-development')  // sw.loops / sw.prompts
 ```
 
 Five ship built in (`software-development`, `web-development`, `data-science`,

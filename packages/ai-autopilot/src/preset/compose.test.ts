@@ -3,7 +3,6 @@ import assert from 'node:assert/strict'
 import { composeDomainPresets, selectPreset } from './compose.js'
 import { defineDomainPreset } from './define.js'
 import { defineLoop } from '../loop/define.js'
-import { defineSkill } from '../extensions/define.js'
 
 const prompt = (id: string, instructions = id) => ({ id, name: id, title: id, description: '', instructions, passes: 1, appliesTo: [] })
 
@@ -11,18 +10,16 @@ const base = defineDomainPreset({
   name: 'base',
   loops: [defineLoop({ on: 'major-change', run: ['review'] })],
   prompts: [prompt('review', 'base-review'), prompt('security')],
-  skills: [defineSkill({ name: 'vike', title: 'Vike', description: 'v', url: 'https://vike.dev/llms.txt' })],
 })
 
 const overlay = defineDomainPreset({
   name: 'overlay',
   loops: [defineLoop({ on: 'ui-flow', run: ['qa'] })],
   prompts: [prompt('review', 'overlay-review'), prompt('qa')],
-  skills: [defineSkill({ name: 'vike', title: 'Vike v2', description: 'v2', url: 'https://vike.dev/llms.txt' })],
 })
 
 describe('composeDomainPresets', () => {
-  it('concatenates loops and merges prompts/skills with later-wins', () => {
+  it('concatenates loops and merges prompts with later-wins', () => {
     const merged = composeDomainPresets({ name: 'combined', title: 'Combined' }, base, overlay)
 
     assert.equal(merged.name, 'combined')
@@ -35,10 +32,6 @@ describe('composeDomainPresets', () => {
     // prompts merge by id, later preset wins, sorted by id
     assert.deepEqual(merged.prompts.map(p => p.id), ['qa', 'review', 'security'])
     assert.equal(merged.prompts.find(p => p.id === 'review')!.instructions, 'overlay-review')
-
-    // skills merge by name, later preset wins
-    assert.equal(merged.skills.length, 1)
-    assert.equal(merged.skills[0]!.title, 'Vike v2')
   })
 
   it('composing is presets-of-presets: the result is itself a preset', () => {

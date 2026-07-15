@@ -11,7 +11,7 @@ describe('bootstrap capstone: the whole epic composes end-to-end (offline)', () 
     assert.equal(detection.preset?.name, 'vike')
     assert.equal(detection.framework, 'Vike')
 
-    // Build: each preset persona wrote its file into the sandbox.
+    // Build: each worker wrote its file into the sandbox.
     assert.ok('database/schema.ts' in files)
     assert.ok('pages/orders/+Page.jsx' in files)
     assert.ok('pages/orders/+config.js' in files)

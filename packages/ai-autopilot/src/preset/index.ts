@@ -1,8 +1,8 @@
 /**
- * The Open Loop bundle unit (#204, #242): a **domain preset** = {loops, prompts,
- * skills}. Author one in code with {@link defineDomainPreset}, load one from a
- * directory of `.md` files with {@link loadDomainPreset}, and merge several into
- * one with {@link composeDomainPresets} (so presets-of-presets falls out).
+ * The Open Loop bundle unit (#204, #242): a **domain preset** = {loops, prompts}.
+ * Author one in code with {@link defineDomainPreset}, load one from a directory
+ * of `.md` files with {@link loadDomainPreset}, and merge several into one with
+ * {@link composeDomainPresets} (so presets-of-presets falls out).
  *
  * Distinct from the framework `Preset` in `presets/` (a project detector); this
  * is the user-picked domain bundle.
@@ -14,7 +14,6 @@ export {
   loadDomainPresetsFrom,
   builtinDomainPresets,
   loadLoopsFrom,
-  loadSkillsFrom,
   builtinPresetsDir,
   softwareDevelopmentPreset,
   type LoadPresetOptions,

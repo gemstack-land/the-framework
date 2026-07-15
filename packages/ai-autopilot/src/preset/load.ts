@@ -4,11 +4,9 @@ import { join } from 'node:path'
 import { parseSkillManifest } from '@gemstack/ai-skills'
 import type { SkillManifest } from '@gemstack/ai-skills'
 import { defineLoop } from '../loop/define.js'
-import { defineSkill } from '../extensions/define.js'
 import { parsePrompt } from '../prompts/parse.js'
 import type { Loop } from '../loop/types.js'
 import type { Prompt } from '../prompts/types.js'
-import type { Skill } from '../extensions/types.js'
 import { readConditions, selectWinners, stemOf } from './conditions.js'
 import { defineDomainPreset, DomainPresetError } from './define.js'
 import type { DomainPreset } from './types.js'
@@ -28,10 +26,9 @@ export interface LoadPresetOptions {
  *   preset.md          # required: name + description (frontmatter), metadata.title
  *   loops/*.md         # metadata.on (kind or kinds) + metadata.run (prompt ids)
  *   prompts/*.md       # prompt bodies (the existing prompt bundle format)
- *   skills/*.md        # metadata.url (llms.txt) + metadata.title; body ignored
  * ```
  *
- * The three content subdirectories are all optional — a missing one yields an
+ * Both content subdirectories are optional — a missing one yields an
  * empty list. The preset's identity comes from `preset.md`. Pass `modes` to
  * activate `conditions` variants (see `conditions.ts`); with none, only base
  * files load.
@@ -49,10 +46,9 @@ export async function loadDomainPreset(dir: string, opts: LoadPresetOptions = {}
   const title = str(manifest.metadata, 'title')
   const event = str(manifest.metadata, 'event')
 
-  const [loops, prompts, skills] = await Promise.all([
+  const [loops, prompts] = await Promise.all([
     loadLoopsFrom(join(dir, 'loops'), { modes }),
     loadPromptsIn(join(dir, 'prompts'), { modes }),
-    loadSkillsFrom(join(dir, 'skills'), { modes }),
   ])
 
   return defineDomainPreset({
@@ -62,7 +58,6 @@ export async function loadDomainPreset(dir: string, opts: LoadPresetOptions = {}
     description: manifest.description,
     loops,
     prompts,
-    skills,
   })
 }
 
@@ -129,22 +124,6 @@ export async function loadLoopsFrom(dir: string, opts: LoadPresetOptions = {}): 
 async function loadPromptsIn(dir: string, opts: LoadPresetOptions = {}): Promise<Prompt[]> {
   const winners = selectWinners(await manifestEntries(dir), opts.modes ?? [])
   return winners.map(({ raw, path }) => parsePrompt(raw, path))
-}
-
-/** Load the skill pointers in a directory, applying mode overrides (a missing directory yields `[]`). */
-export async function loadSkillsFrom(dir: string, opts: LoadPresetOptions = {}): Promise<Skill[]> {
-  const winners = selectWinners(await manifestEntries(dir), opts.modes ?? [])
-  return winners.map(({ path, manifest }) => {
-    const meta = manifest.metadata ?? {}
-    const url = str(meta, 'url')
-    if (!url) throw new DomainPresetError(`skill ${JSON.stringify(path)} is missing metadata.url (its llms.txt pointer)`)
-    return defineSkill({
-      name: manifest.name,
-      title: str(meta, 'title') ?? manifest.name,
-      description: manifest.description,
-      url,
-    })
-  })
 }
 
 // ─── Internals ───────────────────────────────────────────────────

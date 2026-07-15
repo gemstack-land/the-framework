@@ -12,8 +12,8 @@ const KEBAB = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
 
 /**
  * Validate a {@link DomainPresetSpec} and return a frozen {@link DomainPreset}.
- * `title` defaults to `name`, `description` to empty, and the three content lists
- * to empty so callers never null-check them.
+ * `title` defaults to `name`, `description` to empty, and the content lists to
+ * empty so callers never null-check them.
  */
 export function defineDomainPreset(spec: DomainPresetSpec): DomainPreset {
   const name = spec.name?.trim()
@@ -29,6 +29,5 @@ export function defineDomainPreset(spec: DomainPresetSpec): DomainPreset {
     ...(defaultEvent ? { defaultEvent } : {}),
     loops: Object.freeze([...(spec.loops ?? [])]),
     prompts: Object.freeze([...(spec.prompts ?? [])]),
-    skills: Object.freeze([...(spec.skills ?? [])]),
   })
 }

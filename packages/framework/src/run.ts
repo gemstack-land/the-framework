@@ -1,21 +1,12 @@
 import {
   Bootstrap,
   DockerRunner,
-  ExtensionRegistry,
   LocalRunner,
   LoopEngine,
   dockerAvailable,
-  SkillRegistry,
-  builtinExtensionNames,
   builtinPresetRegistry,
-  composePersonas,
-  composeSkills,
   mergeChecklists,
-  neutralPersonas,
-  personaInstructions,
   serveCheck,
-  skillInstructions,
-  skillPersonas,
   type BootstrapEvent,
   type BootstrapResult,
   type BootstrapScope,
@@ -24,7 +15,6 @@ import {
   type DeployTarget,
   type DomainPreset,
   type FrameworkDetection,
-  type FrameworkExtension,
   type FrameworkSignals,
   type LoopPassContext,
   type RunnerSession,
@@ -34,7 +24,6 @@ import {
 import { snapshotWorkspace } from './sandbox.js'
 import { CONSUMPTION_LIMIT_LABEL, type ConsumptionWindow } from './consumption.js'
 import type { Driver, DriverEvent, DriverSession } from './driver/index.js'
-import { memoryFraming, type LoadedMemory } from './memory.js'
 import { composeRunSystem, type EcoOptions, type TfContext } from './system-prompt.js'
 import { AWAIT_PROTOCOL, CONFIRM_APPROVED, CONFIRM_DECLINED, PLAN_DECLINED_MESSAGE, isDeclinedConfirmation, parseAwaitGate, parseMarkdownViews, parseSessionName, parseReadyForMerge, type ParsedAwaitGate } from './turn-gate.js'
 // Value import from todo-loop.js is a benign cycle: todo-loop.js only calls
@@ -101,13 +90,6 @@ export interface RunFrameworkOptions {
   /** Signals for preset detection (deps/files). Default: none, so the flagship preset wins. */
   signals?: FrameworkSignals
   /**
-   * The repo's memory files ({@link LoadedMemory}) to frame the agent with (#260):
-   * their current contents become context and the agent is told to keep the ones
-   * it owns current (persistence lives in the repo as markdown). Load with
-   * `loadRepoMemory(cwd)`. Omit or pass `[]` to frame no memory.
-   */
-  memory?: readonly LoadedMemory[]
-  /**
    * A user-authored system prompt (from `SYSTEM.md`) injected into every prompt
    * (#301). Load with `loadUserSystemPrompt(cwd)`. Composed after the built-in
    * #326 system prompt, so a repo can add its own instructions on top of the default.
@@ -129,9 +111,8 @@ export interface RunFrameworkOptions {
    */
   bootstrap?: boolean
   /**
-   * A user-picked Open Loop domain preset ({loops, prompts, skills}) to run the
-   * build under (#251). Its skills (and their personas) frame every phase, and
-   * its loops + prompts are materialized into a driver-backed {@link LoopEngine}
+   * A user-picked Open Loop domain preset ({loops, prompts}) to run the build
+   * under (#251). Its loops + prompts are materialized into a driver-backed {@link LoopEngine}
    * exposed as {@link RunFrameworkResult.loop}. Load it with `loadDomainPreset` /
    * `softwareDevelopmentPreset` (pass `modes` there to activate variants). Omit
    * for the framework-only run.
@@ -151,21 +132,6 @@ export interface RunFrameworkOptions {
    * checklist, so a run is never left unreviewed. No-op without a preset.
    */
   buildEvent?: string
-  /**
-   * Opt the built-in capability extensions in (auth, data, rbac, crud, shell) so
-   * a from-scratch build is framed to compose them instead of hand-rolling
-   * auth/data/UI. Vike-only: the built-in composers resolve inside the vike-data
-   * workspace, so the opt-in is ignored on a non-Vike preset. Off by default: the
-   * publish-safe path (hand-rolled + Prisma) still stands, and installed
-   * extensions auto-activate by signal either way (see #190).
-   */
-  composeExtensions?: boolean
-  /**
-   * Extra {@link FrameworkExtension}s to register on top of the built-ins —
-   * discovered `framework-*` packages from the project, or explicit ones. Each
-   * still activates by signal or opt-in; registering does not force it on.
-   */
-  extensions?: readonly FrameworkExtension[]
   /** Max full-fledged passes. Default {@link DEFAULT_MAX_PASSES} (5). */
   maxPasses?: number
   /** A deploy decision to narrate at the end. Omit to skip the deploy phase. */
@@ -305,68 +271,28 @@ export async function runFramework(opts: RunFrameworkOptions): Promise<RunFramew
     }
   }
 
-  // 1. Detect the framework, then compose the active capability extensions and
-  // framework skills on top — no framework is hardcoded (#190). Extensions
-  // activate by signal (a dep is present) or, with --compose-extensions, by opting
-  // the built-ins in for a from-scratch build. The built-in composers are Vike-only
-  // (they resolve inside the vike-data workspace), so the blanket opt-in is guarded
-  // to the Vike preset; on any other preset it is ignored with a log and only
-  // signal-matched extensions compose (#202). The framework rides the skill seam:
-  // the detected preset points at its skill (page builder + vike.dev/llms.txt),
-  // which is always framed — even on an empty project where nothing signal-matched,
-  // since preset selection is the fallback. No preset-supplied page-builder persona.
+  // 1. Detect the framework the project already uses. Detection only narrates
+  // ("Detected Vike") and rides the result — nothing about it reaches the agent's
+  // prompt (#547).
   const signals = opts.signals ?? {}
   const { preset, detection } = builtinPresetRegistry().select(signals)
-  const optInBuiltins = opts.composeExtensions === true && preset.name === 'vike'
-  if (opts.composeExtensions && !optInBuiltins) {
-    emit({
-      kind: 'log',
-      message: `--compose-extensions ignored: the built-in extensions are Vike-only, but the detected preset is "${preset.name}". Using the hand-rolled + Prisma path.`,
-    })
-  }
-  const extensionRegistry = new ExtensionRegistry().addAll(opts.extensions ?? [])
-  const activeExtensions = extensionRegistry.match(signals, {
-    include: optInBuiltins ? builtinExtensionNames : [],
-  })
-  // A user-picked domain preset (#251) frames the whole run: its skills (and the
-  // personas they carry) compose in alongside the detected framework's skill.
   const domainPreset = opts.preset
-  const matchedSkills = new SkillRegistry().match(signals)
-  const skills = composeSkills({
-    matched: [
-      ...(preset.skill ? [preset.skill] : []),
-      ...matchedSkills,
-      ...(domainPreset ? domainPreset.skills : []),
-    ],
-    extensions: activeExtensions,
-  })
-  const personas = composePersonas({
-    base: [...preset.personas, ...skillPersonas(skills)],
-    extensions: activeExtensions,
-    neutral: neutralPersonas,
-  })
-  // The repo's own memory files (#260) frame the agent alongside personas + skills:
-  // their contents give context, and the agent is told to keep the ones it owns current.
-  const memoryBlock = opts.memory && opts.memory.length ? memoryFraming(opts.memory) : ''
-  // The built-in #326 system prompt + any user SYSTEM.md lead the system prompt so
-  // its working agreement frames every prompt before the role/skill/memory context
-  // (#301). Only the template's system half is used here: each Bootstrap step
-  // composes its own prompt around the intent, so the user-prompt slot stays with
-  // the steps. `tf.params.autopilot` reflects the run's autopilot mode (#325).
+  // The built-in #326 system prompt + any user SYSTEM.md are the whole prompt. Only
+  // the template's system half is used here: each Bootstrap step composes its own
+  // prompt around the intent, so the user-prompt slot stays with the steps.
+  // `tf.params.autopilot` reflects the run's autopilot mode (#325).
   const tf: TfContext = {
     prompt: opts.intent,
     params: { autopilot: opts.modes?.includes('autopilot') ?? false, ...(opts.eco ? { eco: opts.eco } : {}) },
   }
-  // One assembly path for the whole system channel (#501): the #326 prompt block, the
-  // always-on emit protocols, then this run's persona / skill / memory framing. Shared
-  // with the direct-prompt path so the two can never drift (the drift behind #500).
+  // One assembly path for the whole system channel (#501), shared with the
+  // direct-prompt path so the two can never drift (the drift behind #500).
   const system = composeRunSystem({
     antiLazyPill: opts.antiLazyPill,
     user: opts.systemPrompt,
     tf,
     context: opts.context,
     bootstrap: opts.bootstrap,
-    framing: [...personas.map(personaInstructions), ...skills.map(skillInstructions), memoryBlock],
   })
 
   // The session id is not known until the first driver turn returns, so a
@@ -382,15 +308,14 @@ export async function runFramework(opts: RunFrameworkOptions): Promise<RunFramew
     fake: opts.driver.name === 'fake',
     ...(literalLink ? { sessionLink: literalLink } : {}),
   })
-  // Surface the exact system prompt the agent runs under (#343): the #326 block
-  // plus persona / skill / memory framing. The per-turn user prompts ride along
-  // as `driver` `start` events, so the dashboard can show every prompt sent.
+  // Surface the exact system prompt the agent runs under (#343). Nothing is read
+  // off disk and appended after this, so the text is the whole of it (#547). The
+  // per-turn user prompts ride along as `driver` `start` events, so the dashboard
+  // can show every prompt sent.
   if (system) emit({ kind: 'system-prompt', text: system })
-  const extensionNote = activeExtensions.length ? `, ${activeExtensions.map(e => e.name).join(' + ')}` : ''
-  const skillNote = skills.length ? `, ${skills.length} skill(s)` : ''
   emit({
     kind: 'log',
-    message: `Detected ${detection.framework ?? preset.framework} (confidence ${detection.confidence}); framing with ${personas.length} persona(s)${extensionNote}${skillNote}`,
+    message: `Detected ${detection.framework ?? preset.framework} (confidence ${detection.confidence})`,
   })
   if (domainPreset) {
     const modeNote = opts.modes?.length ? ` (modes: ${opts.modes.join(', ')})` : ''
