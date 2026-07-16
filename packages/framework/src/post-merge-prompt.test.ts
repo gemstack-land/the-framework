@@ -8,7 +8,7 @@ test('POST_MERGE_PROMPT_TEMPLATE carries the #326 post-merge block', () => {
   assert.ok(POST_MERGE_PROMPT_TEMPLATE.includes('TODO_FILE: `TODO_<SESSION_NAME>.agent.md`'))
   assert.ok(POST_MERGE_PROMPT_TEMPLATE.includes('## Maintenance'))
   for (const preset of ['maintainability', 'readability', 'security_audit']) {
-    assert.ok(POST_MERGE_PROMPT_TEMPLATE.includes(`Apply preset \`${preset}\``), `missing ${preset}`)
+    assert.ok(POST_MERGE_PROMPT_TEMPLATE.includes(`tf.presets.${preset}.filePath`), `missing ${preset}`)
   }
 })
 
@@ -25,7 +25,7 @@ test('the business-knowledge section names every knowledge doc (#537)', () => {
 test('eco.autoMaintenance drops the maintenance section and keeps the rest (#314/#537)', () => {
   const prompt = renderPostMergePrompt({ session_name: 'add-oauth' }, { autoMaintenance: true })
   assert.ok(!prompt.includes('## Maintenance'))
-  assert.ok(!prompt.includes('Apply preset'), 'the preset entries go with the section')
+  assert.ok(!prompt.includes('.the-framework/presets/'), 'the preset entries go with the section')
   // The flag names maintenance only, so business knowledge must survive it.
   assert.ok(prompt.includes('## Business knowledge'))
   assert.ok(prompt.includes('add-oauth'))
@@ -48,19 +48,19 @@ test('the template never nests a fragment inside another (#556)', () => {
 test('renderPostMergePrompt names the session on every entry', () => {
   const prompt = renderPostMergePrompt({ session_name: 'add-oauth' })
   assert.ok(!prompt.includes('${{'), 'fully rendered')
-  assert.match(prompt, /Apply preset `maintainability` on the changes introduced by add-oauth/)
-  assert.match(prompt, /Apply preset `security_audit` on the changes introduced by add-oauth/)
+  assert.match(prompt, /Apply \.the-framework\/presets\/maintainability\.md with tf\.params\.what set to "changes introduced by add-oauth"/)
+  assert.match(prompt, /Apply \.the-framework\/presets\/security_audit\.md with tf\.params\.what set to "changes introduced by add-oauth"/)
 })
 
 test('renderPostMergePrompt adds the readability entry only under technical control (#326)', () => {
   const on = renderPostMergePrompt({ session_name: 'add-oauth', settings: { technical_control: true } })
   const off = renderPostMergePrompt({ session_name: 'add-oauth', settings: { technical_control: false } })
-  assert.match(on, /Apply preset `readability` on the changes introduced by add-oauth/)
+  assert.match(on, /Apply \.the-framework\/presets\/readability\.md with tf\.params\.what set to "changes introduced by add-oauth"/)
   assert.doesNotMatch(off, /readability/)
   // The other two entries are unconditional either way.
   for (const prompt of [on, off]) {
-    assert.match(prompt, /`maintainability`/)
-    assert.match(prompt, /`security_audit`/)
+    assert.match(prompt, /maintainability\.md/)
+    assert.match(prompt, /security_audit\.md/)
   }
 })
 

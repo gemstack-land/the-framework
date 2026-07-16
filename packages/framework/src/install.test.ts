@@ -2,6 +2,7 @@ import { strict as assert } from 'node:assert'
 import { test } from 'node:test'
 import { join } from 'node:path'
 import { enumerateGitRepos, installProject, type DirLister } from './install.js'
+import { PRESETS, PRESET_DIR } from './presets.js'
 import { logsPath, readLogs, LOGS_HEADER, gitignorePath, LOGS_GITIGNORE } from './logs.js'
 import type { GitRunner } from './project.js'
 import type { StoreFs } from './store/index.js'
@@ -62,6 +63,15 @@ test('installProject on a clean repo seeds the log and makes exactly one install
 
   const commits = calls.filter(args => args[0] === 'commit')
   assert.deepEqual(commits, [['commit', '-m', '[The Framework] install The Framework']])
+})
+
+test('installProject materializes the quality presets so a post-merge filePath resolves (#326)', async () => {
+  const fs = memFs()
+  const { git } = fakeGit(args => (args[0] === 'rev-parse' ? 'true' : ''))
+  await installProject(CWD, { git, fs })
+  for (const [name, text] of Object.entries(PRESETS)) {
+    assert.equal(fs.files.get(join(CWD, PRESET_DIR, `${name}.md`)), text, `missing ${name}`)
+  }
 })
 
 test('installProject seeds .the-framework/.gitignore so only LOGS.md is committed (#313)', async () => {
