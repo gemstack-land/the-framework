@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import { join, dirname } from 'node:path'
 import { appendControl } from './control.js'
 import { daemonStatePath } from './daemon.js'
-import { EVENTS_FILE, FRAMEWORK_DIR } from './store/index.js'
+import { EVENTS_FILE, FRAMEWORK_DIR, type StoreFs } from './store/index.js'
 import {
   activeModes,
   antiLazyPillOff,
@@ -37,6 +37,20 @@ function capture(): { io: CliIO; out: string[]; err: string[] } {
   const out: string[] = []
   const err: string[] = []
   return { io: { out: l => out.push(l), err: l => err.push(l) }, out, err }
+}
+
+/** An in-memory {@link StoreFs} so runPostMerge's preset materialization never touches disk. */
+function memFs(): StoreFs & { files: Map<string, string> } {
+  const files = new Map<string, string>()
+  return {
+    files,
+    async read(p) { const v = files.get(p); if (v === undefined) throw new Error(`ENOENT: ${p}`); return v },
+    async write(p, c) { files.set(p, c) },
+    async append(p, c) { files.set(p, (files.get(p) ?? '') + c) },
+    async exists(p) { return files.has(p) },
+    async mkdir() {},
+    async readdir() { return [] },
+  }
 }
 
 test('parseArgs reads flags and the intent words', () => {
@@ -95,7 +109,7 @@ test('runPostMerge queues the follow-ups in ONE run instead of running the prese
     seen.push(prompt)
     return Promise.resolve(true)
   }
-  await runPostMerge('/work/app', '/bin/framework', io, { session_name: 'add-oauth' }, undefined, undefined, run)
+  await runPostMerge('/work/app', '/bin/framework', io, { session_name: 'add-oauth' }, undefined, undefined, run, memFs())
   // One child run, not three: it asks for TODO entries rather than doing the passes.
   assert.equal(seen.length, 1)
   const prompt = seen[0]!
@@ -122,6 +136,7 @@ test('runPostMerge gates the readability entry on technical_control (#326)', asy
         seen.push(p)
         return Promise.resolve(true)
       },
+      memFs(),
     )
     return seen[0]!
   }
@@ -132,9 +147,18 @@ test('runPostMerge gates the readability entry on technical_control (#326)', asy
 test('runPostMerge is best-effort: a failed queueing run is reported, never thrown (#326)', async () => {
   const { io, out } = capture()
   await runPostMerge('/work/app', '/bin/framework', io, { session_name: 'add-oauth' }, undefined, undefined, () =>
-    Promise.resolve(false),
+    Promise.resolve(false), memFs(),
   )
   assert.ok(out.some(l => /post-merge queueing did not complete/.test(l)))
+})
+
+test('runPostMerge materializes the presets so the queued filePaths resolve (#598)', async () => {
+  const { io } = capture()
+  const fs = memFs()
+  await runPostMerge('/work/app', '/bin/framework', io, { session_name: 'add-oauth' }, undefined, undefined, () => Promise.resolve(true), fs)
+  // The entry points at .the-framework/presets/maintainability.md; that file must now exist.
+  assert.ok(fs.files.has(join('/work/app', '.the-framework/presets/maintainability.md')))
+  assert.ok(fs.files.has(join('/work/app', '.the-framework/presets/security_audit.md')))
 })
 
 test('parseArgs reads the maintain subcommand + its bounds (#298)', () => {

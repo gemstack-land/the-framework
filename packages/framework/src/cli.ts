@@ -34,7 +34,8 @@ import { loadUserSystemPrompt, SYSTEM_PROMPT_FILE } from './system-prompt-file.j
 import { checkForUpdate, formatUpdateStatus, nodeVersionFetcher } from './update-check.js'
 import { appendLog, type LogEntry } from './logs.js'
 import { preflight } from './preflight.js'
-import { RunStore } from './store/index.js'
+import { RunStore, nodeStoreFs, type StoreFs } from './store/index.js'
+import { materializePresets } from './presets.js'
 import { daemonStatus, ensureDaemon, runDaemon, stopDaemon, DEFAULT_DAEMON_PORT } from './daemon.js'
 import { resetControl, watchControl, type ControlWatcher } from './control.js'
 import { isActivated, nodeGitRunner } from './project.js'
@@ -1426,7 +1427,16 @@ export async function runPostMerge(
   maxCost?: number,
   eco?: EcoOptions,
   run: PromptRunner = spawnPromptRun,
+  fs: StoreFs = nodeStoreFs(),
 ): Promise<void> {
+  // Ensure the presets exist so the queued entries' filePaths resolve, even in a repo
+  // activated before they shipped or a fresh clone (they are gitignored) (#598). Best-effort,
+  // like the rest of this run: a materialize failure must not block the queueing.
+  try {
+    await materializePresets(cwd, fs)
+  } catch (err) {
+    io.out(`  ! post-merge: could not materialize presets (${err instanceof Error ? err.message : String(err)})`)
+  }
   io.out(`\n◆ post-merge: queueing quality follow-ups for ${tf.session_name}`)
   const ok = await run(renderPostMergePrompt(tf, eco), cwd, binPath, maxCost)
   if (!ok) io.out(`  ! post-merge queueing did not complete cleanly.`)
