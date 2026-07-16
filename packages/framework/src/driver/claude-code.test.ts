@@ -49,6 +49,24 @@ test('StreamJsonParser leaves usage off when the result line reports none (#322)
   assert.deepEqual(p.result(), { text: 'done', sessionId: 's' })
 })
 
+test('StreamJsonParser omits costUsd (never 0) when tokens report but no price (#540)', () => {
+  const p = new StreamJsonParser()
+  p.push(
+    JSON.stringify({
+      type: 'result',
+      subtype: 'success',
+      result: 'done',
+      session_id: 's',
+      usage: { input_tokens: 100, output_tokens: 40, cache_read_input_tokens: 900, cache_creation_input_tokens: 50 },
+    }),
+  )
+  const { usage } = p.result()
+  // Tokens surface; costUsd is absent (unknown), not 0 (which the budget gate reads as free).
+  assert.equal(usage?.costUsd, undefined)
+  assert.equal(Object.prototype.hasOwnProperty.call(usage, 'costUsd'), false)
+  assert.deepEqual(usage, { inputTokens: 100, outputTokens: 40, cacheReadTokens: 900, cacheCreationTokens: 50 })
+})
+
 test('StreamJsonParser ignores non-JSON noise and falls back to assistant text', () => {
   const p = new StreamJsonParser()
   assert.deepEqual(p.push('some banner line'), [])

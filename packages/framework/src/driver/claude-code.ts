@@ -265,8 +265,10 @@ function parseUsage(obj: Record<string, unknown>): DriverUsage | undefined {
   if (typeof cost !== 'number' && !hasUsage) return undefined
   const usage = (hasUsage ? raw : {}) as Record<string, unknown>
   const num = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) ? v : 0)
+  // Omit costUsd when there is no price, never 0: the budget gate reads 0 as "free"
+  // and undefined as "unknown" (#540), and Codex reports tokens without a price.
   return {
-    costUsd: typeof cost === 'number' && Number.isFinite(cost) ? cost : 0,
+    ...(typeof cost === 'number' && Number.isFinite(cost) ? { costUsd: cost } : {}),
     inputTokens: num(usage['input_tokens']),
     outputTokens: num(usage['output_tokens']),
     cacheReadTokens: num(usage['cache_read_input_tokens']),
