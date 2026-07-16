@@ -300,8 +300,6 @@ async function promptItem(
   await runAwaitRounds({
     session,
     prompt,
-    continuation: (gate, answer) =>
-      `You paused to ask: "${gate.title}". The user chose: ${answer}. Continue the backlog entry with that decision, and do not ask again unless a genuinely new choice comes up.`,
     emitTurnSignals: deps.emitTurnSignals,
     requestChoice: deps.requestChoice,
     emit: deps.emit,

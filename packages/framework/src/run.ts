@@ -26,7 +26,7 @@ import { CONSUMPTION_LIMIT_LABEL, type ConsumptionWindow } from './consumption.j
 import type { Driver, DriverSession } from './driver/index.js'
 import { composeRunSystem, type EcoOptions, type TfContext } from './system-prompt.js'
 import { createDriverEventHandler, emitSessionStart } from './run-telemetry.js'
-import { AWAIT_PROTOCOL, CONFIRM_APPROVED, CONFIRM_DECLINED, MAX_AWAIT_ROUNDS, PLAN_DECLINED_MESSAGE, createTurnSignalEmitter, isDeclinedConfirmation, parseAwaitGate, type ParsedAwaitGate } from './turn-gate.js'
+import { AWAIT_PROTOCOL, CONFIRM_APPROVED, CONFIRM_DECLINED, MAX_AWAIT_ROUNDS, PLAN_DECLINED_MESSAGE, continuationPrompt, createTurnSignalEmitter, isDeclinedConfirmation, parseAwaitGate, type ParsedAwaitGate } from './turn-gate.js'
 // Value import from todo-loop.js is a benign cycle: todo-loop.js only calls
 // run.js's hoisted function declarations (requestChoices / resolveAwaitGate).
 import { leaveResumeNote, runTodoLoop, type TodoLoopResult } from './todo-loop.js'
@@ -618,12 +618,6 @@ export interface AwaitRoundsOptions {
   session: DriverSession
   /** The prompt that opens the exchange. */
   prompt: string
-  /**
-   * The prompt that resumes the agent once the user has answered a gate. The caller owns
-   * the wording (it is agent-facing text, and each path says something different), so this
-   * takes it rather than templating it here.
-   */
-  continuation: (gate: ParsedAwaitGate, answer: string) => string
   /** Emit the signals each turn carries (#563). */
   emitTurnSignals: (text: string) => void
   requestChoice?: ((req: ChoiceRequest) => Promise<ChoicePick>) | undefined
@@ -658,7 +652,7 @@ export async function runAwaitRounds(opts: AwaitRoundsOptions): Promise<AwaitRou
       return { text: turn.text, declined: true, exhausted: false }
     }
     emit({ kind: 'log', message: `Continuing with your choice: ${answer}` })
-    turn = await session.prompt(opts.continuation(gate, answer), signalOpt)
+    turn = await session.prompt(continuationPrompt(gate.title, answer), signalOpt)
     emitTurnSignals(turn.text)
     gate = parseAwaitGate(turn.text)
   }

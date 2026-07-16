@@ -135,8 +135,6 @@ export async function runPrompt(opts: RunPromptOptions): Promise<RunPromptResult
     const rounds = await runAwaitRounds({
       session,
       prompt: firstPrompt,
-      continuation: (gate, answer) =>
-        `You paused to ask: "${gate.title}". The user chose: ${answer}. Continue with that decision, and do not ask again unless a genuinely new choice comes up.`,
       emitTurnSignals,
       requestChoice: opts.requestChoice,
       emit,
