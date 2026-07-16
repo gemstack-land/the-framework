@@ -1,4 +1,5 @@
 import type { Driver, DriverEvent, DriverPromptOptions, DriverSession, DriverStartOptions, DriverTurn, DriverUsage } from './types.js'
+import { makeEmit } from './session-support.js'
 
 /** One scripted turn the {@link FakeDriver} replays. */
 export interface FakeTurn {
@@ -96,12 +97,6 @@ export class FakeDriverSession implements DriverSession {
   }
 
   private emit(event: DriverEvent): void {
-    const on = this.startOpts.onEvent
-    if (!on) return
-    try {
-      on(event)
-    } catch (err) {
-      console.error('[framework] fake driver onEvent threw; ignoring:', err)
-    }
+    makeEmit(this.startOpts.onEvent, 'fake driver')(event)
   }
 }

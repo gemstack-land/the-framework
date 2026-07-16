@@ -1,11 +1,11 @@
 import { spawn as nodeSpawn } from 'node:child_process'
 import { createInterface } from 'node:readline'
-import { readFile } from 'node:fs/promises'
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { dirname, join, resolve } from 'node:path'
+import { dirname, join } from 'node:path'
 import { killTree, registerChild, unregisterChild } from './child-registry.js'
 import { readClaudeQuota } from './claude-code-quota.js'
+import { combineFraming, combineSignals, makeEmit, readWorkspaceFile } from './session-support.js'
 import type { Driver, DriverEvent, DriverPromptOptions, DriverQuota, DriverRateLimit, DriverSession, DriverStartOptions, DriverTurn, DriverUsage } from './types.js'
 
 /** Grace between SIGTERM and the SIGKILL that forces a hung agent tree down. */
@@ -115,32 +115,21 @@ export class ClaudeCodeSession implements DriverSession {
   }
 
   prompt(text: string, opts: DriverPromptOptions = {}): Promise<DriverTurn> {
-    const system = [this.startOpts.system, opts.system].filter(Boolean).join('\n\n')
-    const args = this.buildArgs(system)
-    const emit = (event: DriverEvent) => {
-      const on = this.startOpts.onEvent
-      if (!on) return
-      try {
-        on(event)
-      } catch (err) {
-        console.error('[framework] claude-code onEvent threw; ignoring:', err)
-      }
-    }
-    const signals = [this.startOpts.signal, opts.signal].filter((s): s is AbortSignal => s != null)
+    const system = combineFraming(this.startOpts.system, opts.system)
     return runClaude({
       bin: this.config.bin ?? 'claude',
-      args,
+      args: this.buildArgs(system),
       cwd: this.cwd,
       env: this.config.env ?? process.env,
       prompt: text,
       spawn: this.config.spawn ?? (nodeSpawn as unknown as SpawnLike),
-      emit,
-      signals,
+      emit: makeEmit(this.startOpts.onEvent, 'claude-code'),
+      signals: combineSignals(this.startOpts.signal, opts.signal),
     })
   }
 
-  async readCode(path: string): Promise<string> {
-    return readFile(resolve(this.cwd, path), 'utf8')
+  readCode(path: string): Promise<string> {
+    return readWorkspaceFile(this.cwd, path)
   }
 
   dispose(): Promise<void> {

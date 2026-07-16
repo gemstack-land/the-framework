@@ -1,7 +1,6 @@
 import { spawn as nodeSpawn } from 'node:child_process'
-import { readFile } from 'node:fs/promises'
-import { resolve } from 'node:path'
 import { runAgentCli, type AgentCliParser, type SpawnLike } from './claude-code.js'
+import { combineFraming, combineSignals, makeEmit, readWorkspaceFile } from './session-support.js'
 import type { Driver, DriverEvent, DriverPromptOptions, DriverSession, DriverStartOptions, DriverTurn, DriverUsage } from './types.js'
 
 /**
@@ -74,18 +73,8 @@ export class CodexSession implements DriverSession {
   prompt(text: string, opts: DriverPromptOptions = {}): Promise<DriverTurn> {
     // Codex takes no system-prompt flag, so the framing rides in front of the
     // prompt. Blank-line separated, so it reads as its own block.
-    const framing = [this.startOpts.system, opts.system].filter(Boolean).join('\n\n')
+    const framing = combineFraming(this.startOpts.system, opts.system)
     const prompt = framing ? `${framing}\n\n${text}` : text
-    const emit = (event: DriverEvent) => {
-      const on = this.startOpts.onEvent
-      if (!on) return
-      try {
-        on(event)
-      } catch (err) {
-        console.error('[framework] codex onEvent threw; ignoring:', err)
-      }
-    }
-    const signals = [this.startOpts.signal, opts.signal].filter((s): s is AbortSignal => s != null)
     return runAgentCli({
       bin: this.config.bin ?? 'codex',
       args: this.buildArgs(),
@@ -93,15 +82,15 @@ export class CodexSession implements DriverSession {
       env: this.config.env ?? process.env,
       prompt,
       spawn: this.config.spawn ?? (nodeSpawn as unknown as SpawnLike),
-      emit,
-      signals,
+      emit: makeEmit(this.startOpts.onEvent, 'codex'),
+      signals: combineSignals(this.startOpts.signal, opts.signal),
       parser: new CodexJsonParser(),
       agent: 'codex',
     })
   }
 
-  async readCode(path: string): Promise<string> {
-    return readFile(resolve(this.cwd, path), 'utf8')
+  readCode(path: string): Promise<string> {
+    return readWorkspaceFile(this.cwd, path)
   }
 
   dispose(): Promise<void> {
