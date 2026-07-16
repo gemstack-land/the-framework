@@ -159,11 +159,6 @@ export function renderSystemPrompt(tf: TfContext = DEFAULT_TF): RenderedSystemPr
   }
 }
 
-/**
- * The canonical user system-prompt file at the workspace root. Its contents are
- * injected into every prompt, so a project's own instructions travel with the
- * code (Rom's repo-as-database model, like the memory files in {@link ./memory}).
- */
 /** Inputs to {@link systemPromptBlock}. */
 export interface SystemPromptOptions {
   /**
