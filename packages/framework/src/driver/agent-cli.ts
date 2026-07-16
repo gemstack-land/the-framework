@@ -144,6 +144,9 @@ export function runAgentCli(opts: RunAgentCliOptions): Promise<DriverTurn> {
 
     child.on('close', code => {
       cleanup()
+      // An abort (or a spawn error) already settled and reported the turn; the process
+      // still closes afterward, but its late exit must not emit a second telemetry event.
+      if (settled) return
       const turn = parser.result()
       // A non-zero exit is a failed turn even when the agent streamed some text
       // first: the loop gates on the outcome, so a crash mid-build must not pass
