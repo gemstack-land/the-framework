@@ -195,13 +195,16 @@ export function systemPromptBlock(opts: SystemPromptOptions = {}): string {
   // The knowledge docs ride with the built-in prompt, not with the user's dirs: they are
   // ours, and `--vanilla` means no framework-authored prompt at all (#547 rule 3). They
   // render as commented bullets under the dirs (#559), so the agent sees what each is for.
-  const docs = opts.antiLazyPill === false ? [] : KNOWLEDGE_DOCS
+  // `--vanilla` (antiLazyPill === false) drops both the framework's knowledge docs and its
+  // built-in prompt; one boolean drives both so they can't fall out of step.
+  const includeBuiltin = opts.antiLazyPill !== false
+  const docs = includeBuiltin ? KNOWLEDGE_DOCS : []
   if (dirs.length || docs.length) {
     const head = `Context:${dirs.length ? ` ${dirs.join(', ')}` : ''}`
     const bullets = docs.map(d => `- \`${d.path}\` (${d.comment})`)
     parts.push([head, ...bullets].join('\n'))
   }
-  if (opts.antiLazyPill !== false) parts.push(renderSystemPrompt(opts.tf).system)
+  if (includeBuiltin) parts.push(renderSystemPrompt(opts.tf).system)
   const user = opts.user?.trim()
   if (user) parts.push(user)
   return parts.join('\n\n')
