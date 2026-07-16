@@ -12,8 +12,10 @@ import {
 } from './system-prompt.js'
 import { loadUserSystemPrompt, SYSTEM_PROMPT_FILE } from './system-prompt-file.js'
 
-/** The `Context:` line the #537 knowledge docs stand up on their own, with no dirs picked. */
-const KNOWLEDGE_CONTEXT = `Context: ${KNOWLEDGE_DOCS.join(', ')}`
+/** The knowledge docs as the commented bullets they render to (#559). */
+const KNOWLEDGE_LINES = KNOWLEDGE_DOCS.map(d => `- \`${d.path}\` (${d.comment})`).join('\n')
+/** The `Context:` block the #537 knowledge docs stand up on their own, with no dirs picked. */
+const KNOWLEDGE_CONTEXT = `Context:\n${KNOWLEDGE_LINES}`
 import { AWAIT_PROTOCOL, SIGNAL_PROTOCOL } from './turn-gate.js'
 
 test('loadUserSystemPrompt reads and trims SYSTEM.md', async () => {
@@ -109,9 +111,9 @@ test('systemPromptBlock prepends a Context line for the selected directories (#4
 
 test('systemPromptBlock puts the knowledge docs in context, after the user dirs (#537)', () => {
   const block = systemPromptBlock({ user: 'Only mine.', context: ['/work/api'] })
-  assert.ok(block.startsWith(`Context: /work/api, ${KNOWLEDGE_DOCS.join(', ')}\n\n`))
-  // No dirs picked: the docs still stand up a Context line of their own.
-  assert.ok(systemPromptBlock({}).startsWith(`Context: ${KNOWLEDGE_DOCS.join(', ')}\n\n`))
+  assert.ok(block.startsWith(`Context: /work/api\n${KNOWLEDGE_LINES}\n\n`))
+  // No dirs picked: the docs still stand up a Context block of their own.
+  assert.ok(systemPromptBlock({}).startsWith(`${KNOWLEDGE_CONTEXT}\n\n`))
 })
 
 test('systemPromptBlock adds no knowledge docs when antiLazyPill is false (#537/#547)', () => {
@@ -127,7 +129,7 @@ test('systemPromptBlock is the #326 prompt and the user prompt, in that order, a
   // for a plan, so the override earned nothing and outranked the doc.
   // The knowledge docs (#537) join the Context line, which is paths, not prompt text.
   const block = systemPromptBlock({ user: 'Ship small PRs.', context: ['/work/api'] })
-  const context = `Context: ${['/work/api', ...KNOWLEDGE_DOCS].join(', ')}`
+  const context = `Context: /work/api\n${KNOWLEDGE_LINES}`
   assert.equal(block, [context, renderSystemPrompt().system, 'Ship small PRs.'].join('\n\n'))
 })
 

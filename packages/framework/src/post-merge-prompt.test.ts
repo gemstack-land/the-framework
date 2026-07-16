@@ -18,7 +18,7 @@ test('the business-knowledge section names every knowledge doc (#537)', () => {
   // agent gets told to read one set of files and update another.
   assert.ok(POST_MERGE_PROMPT_TEMPLATE.includes('## Business knowledge'))
   for (const doc of KNOWLEDGE_DOCS) {
-    assert.ok(POST_MERGE_PROMPT_TEMPLATE.includes(doc), `missing ${doc}`)
+    assert.ok(POST_MERGE_PROMPT_TEMPLATE.includes(`\`${doc.path}\``), `missing ${doc.path}`)
   }
 })
 

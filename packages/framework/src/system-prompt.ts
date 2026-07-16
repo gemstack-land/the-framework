@@ -92,12 +92,13 @@ const DEFAULT_TF: TfContext = { prompt: '', params: {} }
  * The project-knowledge documents (#537): what the repo knows about itself, as markdown
  * that travels with the code. {@link systemPromptBlock} puts them in front of every run
  * as in-context paths; the post-merge prompt asks the agent to update them, which is what
- * keeps them current. Workspace-relative, because that is the agent's cwd.
+ * keeps them current. Repo-root, because that is the agent's cwd and where the docs live.
+ * Each carries the one-line gloss Rom wants shown alongside the path (#559). README is
+ * left out: a repo's own `README.md` already covers the overview.
  */
-export const KNOWLEDGE_DOCS: readonly string[] = [
-  '.the-framework/README.md',
-  '.the-framework/DECISIONS.md',
-  '.the-framework/KNOWLEDGE-BASE.md',
+export const KNOWLEDGE_DOCS: readonly { path: string; comment: string }[] = [
+  { path: 'DECISIONS.md', comment: 'decisions taken, and why' },
+  { path: 'KNOWLEDGE-BASE.md', comment: 'knowledge and insights related to the project' },
 ]
 
 /** The two halves of the rendered {@link SYSTEM_PROMPT_TEMPLATE}. */
@@ -195,11 +196,16 @@ export function systemPromptBlock(opts: SystemPromptOptions = {}): string {
   const parts: string[] = []
   // The #439 context line goes first, so it frames whatever prompt follows (or stands
   // alone under `--vanilla`, where there is no built-in prompt to frame).
-  const context = opts.context?.map(d => d.trim()).filter(Boolean) ?? []
+  const dirs = opts.context?.map(d => d.trim()).filter(Boolean) ?? []
   // The knowledge docs ride with the built-in prompt, not with the user's dirs: they are
-  // ours, and `--vanilla` means no framework-authored prompt at all (#547 rule 3).
-  const inContext = opts.antiLazyPill === false ? context : [...context, ...KNOWLEDGE_DOCS]
-  if (inContext.length) parts.push(`Context: ${inContext.join(', ')}`)
+  // ours, and `--vanilla` means no framework-authored prompt at all (#547 rule 3). They
+  // render as commented bullets under the dirs (#559), so the agent sees what each is for.
+  const docs = opts.antiLazyPill === false ? [] : KNOWLEDGE_DOCS
+  if (dirs.length || docs.length) {
+    const head = `Context:${dirs.length ? ` ${dirs.join(', ')}` : ''}`
+    const bullets = docs.map(d => `- \`${d.path}\` (${d.comment})`)
+    parts.push([head, ...bullets].join('\n'))
+  }
   if (opts.antiLazyPill !== false) parts.push(renderSystemPrompt(opts.tf).system)
   const user = opts.user?.trim()
   if (user) parts.push(user)

@@ -11,9 +11,8 @@ If the changes introduced by ${{ tf.session_name }} can potentially lead to secu
 
 ## Business knowledge
 
-Consider whether the changes introduced by ${{ tf.session_name }} taught you something that belongs in these documents, and update them if so (create one if it doesn't exist yet):
-- `.the-framework/README.md` (whole repo overview)
-- `.the-framework/DECISIONS.md` (decisions taken, and why)
-- `.the-framework/KNOWLEDGE-BASE.md` (business knowledge about the project)
+If you didn't already, consider updating the following based on the changes and discussions of ${{ tf.session_name }} (you can create the files if they're missing):
+- `DECISIONS.md` (decisions taken, and why)
+- `KNOWLEDGE-BASE.md` (knowledge and insights related to the project)
 
 Only write what a future agent would need and cannot get from the code itself.
