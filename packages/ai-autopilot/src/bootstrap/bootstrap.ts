@@ -6,6 +6,7 @@ import type {
   BootstrapSteps,
   DeployOutcome,
 } from './types.js'
+import { makeEmitter } from '../util/emitter.js'
 
 /** Thrown when a run is aborted via the `AbortSignal`. */
 export class BootstrapAborted extends Error {
@@ -51,7 +52,7 @@ export class Bootstrap {
     this.steps = opts.steps
     this.maxPasses = maxPasses
     if (opts.signal) this.signal = opts.signal
-    this.emit = makeEmitter(opts.onEvent)
+    this.emit = makeEmitter(opts.onEvent, 'bootstrap')
   }
 
   /** Run the whole flow and resolve with the {@link BootstrapResult}. */
@@ -150,13 +151,3 @@ export function createBootstrap(opts: BootstrapOptions): Bootstrap {
   return new Bootstrap(opts)
 }
 
-function makeEmitter(onEvent: BootstrapOptions['onEvent']): (event: BootstrapEvent) => void {
-  if (!onEvent) return () => {}
-  return event => {
-    try {
-      onEvent(event)
-    } catch (err) {
-      console.error('[ai-autopilot] bootstrap onEvent callback threw; ignoring:', err)
-    }
-  }
-}

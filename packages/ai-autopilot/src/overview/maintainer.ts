@@ -9,6 +9,7 @@ import type {
   OverviewRefresh,
   Regenerate,
 } from './types.js'
+import { makeEmitter } from '../util/emitter.js'
 
 /** Options for {@link CodeOverviewMaintainer}. */
 export interface MaintainerOptions {
@@ -56,7 +57,7 @@ export class CodeOverviewMaintainer {
     this.detect = opts.detect ?? (event => detectMaterialChange(event))
     if (opts.fs) this.fs = opts.fs
     this.path = opts.path ?? OVERVIEW_FILE
-    this.emit = makeEmitter(opts.onEvent)
+    this.emit = makeEmitter(opts.onEvent, 'overview')
   }
 
   /** The current overview, or `undefined` if none has been generated/loaded. */
@@ -117,13 +118,3 @@ export function createOverviewMaintainer(opts: MaintainerOptions): CodeOverviewM
   return new CodeOverviewMaintainer(opts)
 }
 
-function makeEmitter(onEvent: MaintainerOptions['onEvent']): (event: OverviewEvent) => void {
-  if (!onEvent) return () => {}
-  return event => {
-    try {
-      onEvent(event)
-    } catch (err) {
-      console.error('[ai-autopilot] overview onEvent callback threw; ignoring:', err)
-    }
-  }
-}
