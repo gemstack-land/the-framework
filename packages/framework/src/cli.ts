@@ -1059,22 +1059,14 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
       )
       await store?.close()
       await maybeFireOnBeforeMergeable()
-      if (dashboard) {
-        io.out(`\nDashboard still live at ${dashboard.url}. Press Ctrl+C to exit.`)
-        await waitForInterrupt()
-        await dashboard.close()
-      }
+      if (dashboard) await keepDashboardUp(dashboard, io)
       return 0
     } catch (err) {
       clearInterrupt()
       await store?.close()
       if (controller.signal.aborted || stoppedCleanly) {
         io.out('\n■ Stopped.')
-        if (dashboard) {
-          io.out(`\nDashboard still live at ${dashboard.url}. Press Ctrl+C to exit.`)
-          await waitForInterrupt()
-          await dashboard.close()
-        }
+        if (dashboard) await keepDashboardUp(dashboard, io)
         return 0
       }
       io.err(`\n✗ ${kindLabel} failed: ${err instanceof Error ? err.message : String(err)}`)
@@ -1205,11 +1197,7 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
     // visible, and exit 0.
     if (controller.signal.aborted || stoppedCleanly) {
       io.out('\n■ Stopped.')
-      if (dashboard) {
-        io.out(`\nDashboard still live at ${dashboard.url}. Press Ctrl+C to exit.`)
-        await waitForInterrupt()
-        await dashboard.close()
-      }
+      if (dashboard) await keepDashboardUp(dashboard, io)
       return 0
     }
     io.err(`\n✗ run failed: ${err instanceof Error ? err.message : String(err)}`)
@@ -1541,6 +1529,13 @@ export function buildDeployTarget(
     return { target: dokployTarget({ serverUrl: opts.dokployUrl, applicationId: opts.dokployApp }) }
   }
   return {} // Unknown target: narrate the decision only.
+}
+
+/** The post-run wait: keep the dashboard up until Ctrl+C, then close it. */
+async function keepDashboardUp(dashboard: Dashboard, io: CliIO): Promise<void> {
+  io.out(`\nDashboard still live at ${dashboard.url}. Press Ctrl+C to exit.`)
+  await waitForInterrupt()
+  await dashboard.close()
 }
 
 /** Resolve when the process is interrupted (Ctrl+C), so the dashboard stays up. */
