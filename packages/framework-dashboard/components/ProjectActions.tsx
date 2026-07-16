@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 import { Github, FolderOpen, Code } from 'lucide-react'
 import { onGithubUrl } from '../server/reads.telefunc.js'
 import { useLoaded } from '../lib/use-async.js'
+import { useAction } from '../lib/use-action.js'
 import { sendOpenInApp } from '../server/control.telefunc.js'
 import { PreviewBar } from './PreviewBar.js'
 import { GitStatusBar } from './GitStatusBar.js'
@@ -14,25 +15,13 @@ import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from './ui/t
 // dashboard (the relay shows RelayView instead), so the localhost actions never appear there.
 export function ProjectActions({ projectId }: { projectId: string }) {
   const githubUrl = useLoaded<string | null>(() => onGithubUrl(projectId), null, [projectId])
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const { busy, error, reset, run } = useAction()
 
   // `error` belongs to open(), not to the read, so clearing it on a switch is its own effect:
   // otherwise the last project's failure stays on screen next to the new project's actions.
-  useEffect(() => setError(null), [projectId])
+  useEffect(() => reset(), [projectId, reset])
 
-  const open = async (target: 'files' | 'editor') => {
-    setBusy(true)
-    setError(null)
-    try {
-      const result = await sendOpenInApp(projectId, target)
-      if (!result.ok) setError(result.error)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to open.')
-    } finally {
-      setBusy(false)
-    }
-  }
+  const open = (target: 'files' | 'editor') => run(() => sendOpenInApp(projectId, target), 'Failed to open.')
 
   return (
     <div className="flex flex-wrap items-center gap-2 border-b border-border px-4 py-2">

@@ -88,6 +88,15 @@ export const PromptEditor = forwardRef<PromptEditorHandle, PromptEditorProps>(fu
     onSubmitRef.current = onSubmit
   })
 
+  // Load a template into the live editor and sync the derived state (the empty flag + the
+  // markdown out). Takes the editor as an argument so the `/` menu — whose closures are built
+  // once, before useEditor resolves — can call it too, not only the imperative handle.
+  const loadTemplateInto = (ed: Editor, text: string): void => {
+    applyTemplate(ed, text)
+    setIsEmpty(ed.isEmpty)
+    onChangeRef.current(ed.storage.markdown.getMarkdown())
+  }
+
   const editor = useEditor({
     immediatelyRender: false,
     extensions: [
@@ -117,9 +126,7 @@ export const PromptEditor = forwardRef<PromptEditorHandle, PromptEditorProps>(fu
           if (item.id.startsWith('preset:')) {
             const preset = presetsRef.current.find(p => `preset:${p.id}` === item.id)
             if (preset) {
-              applyTemplate(ed, preset.render())
-              setIsEmpty(ed.isEmpty)
-              onChangeRef.current(ed.storage.markdown.getMarkdown())
+              loadTemplateInto(ed, preset.render())
               onPresetRef.current?.(preset.label)
             }
             return
@@ -197,16 +204,10 @@ export const PromptEditor = forwardRef<PromptEditorHandle, PromptEditorProps>(fu
     },
   })
 
-  // Replace the content with a template and turn its token strings into chips.
-  function loadTemplate(text: string): void {
-    if (!editor) return
-    applyTemplate(editor, text)
-    setIsEmpty(editor.isEmpty)
-    onChangeRef.current(editor.storage.markdown.getMarkdown())
-  }
-
   useImperativeHandle(ref, () => ({
-    loadTemplate,
+    loadTemplate: (text: string) => {
+      if (editor) loadTemplateInto(editor, text)
+    },
     clear: () => {
       editor?.commands.clearContent()
       setIsEmpty(true)

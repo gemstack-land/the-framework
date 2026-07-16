@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Play, ExternalLink, Square } from 'lucide-react'
 import { sendPreview, sendStopPreview, onPreviewStatus } from '../server/control.telefunc.js'
+import { useAction } from '../lib/use-action.js'
 import { Button } from './ui/button.js'
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from './ui/tooltip.js'
 
@@ -12,15 +13,14 @@ import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from './ui/t
 export function PreviewBar({ projectId, inline = false }: { projectId: string; inline?: boolean }) {
   const [url, setUrl] = useState<string | null>(null)
   const [command, setCommand] = useState<string | null>(null)
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const { busy, error, reset, run } = useAction()
 
   // Rehydrate on load / project switch: reflect a preview the daemon is already serving.
   useEffect(() => {
     let live = true
     setUrl(null)
     setCommand(null)
-    setError(null)
+    reset()
     void onPreviewStatus(projectId).then(status => {
       if (!live || !status.running) return
       setUrl(status.url ?? null)
@@ -29,34 +29,24 @@ export function PreviewBar({ projectId, inline = false }: { projectId: string; i
     return () => {
       live = false
     }
-  }, [projectId])
+  }, [projectId, reset])
 
   const open = async () => {
-    setBusy(true)
-    setError(null)
-    try {
-      const result = await sendPreview(projectId)
-      if (result.ok) {
-        setUrl(result.url)
-        setCommand(result.command)
-      } else {
-        setError(result.error)
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to start the preview.')
-    } finally {
-      setBusy(false)
+    const result = await run(() => sendPreview(projectId), 'Failed to start the preview.')
+    if (result?.ok) {
+      setUrl(result.url)
+      setCommand(result.command)
     }
   }
 
   const stop = async () => {
-    setBusy(true)
-    try {
+    const stopped = await run(async () => {
       await sendStopPreview(projectId)
+      return true as const
+    }, 'Failed to stop the preview.')
+    if (stopped) {
       setUrl(null)
       setCommand(null)
-    } finally {
-      setBusy(false)
     }
   }
 

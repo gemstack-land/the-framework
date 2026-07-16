@@ -1,4 +1,4 @@
-import { EventStream } from './EventStream.js'
+import { RunFeed } from './RunFeed.js'
 import { Badge } from './ui/badge.js'
 import { useLiveEvents } from '../lib/use-live-events.js'
 
@@ -16,7 +16,7 @@ export function RelayView({ runId }: { runId: string }) {
         <span className="ml-auto text-xs text-muted-foreground">read-only shared run</span>
       </header>
       <main className="flex min-w-0 flex-1 flex-col">
-        <EventStream projectId={runId} events={events} readOnly />
+        <RunFeed events={events} />
       </main>
     </div>
   )

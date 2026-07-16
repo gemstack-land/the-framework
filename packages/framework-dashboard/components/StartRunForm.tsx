@@ -13,8 +13,8 @@ import { usePreferences, updatePreferences, autopilotEnabled } from '../lib/pref
 import { useLoaded } from '../lib/use-async.js'
 import { PromptEditor, type PromptEditorHandle } from './PromptEditor.js'
 import { SystemPromptDisclosure } from './SystemPromptDisclosure.js'
+import { OptionToggle, type OptionRow } from './OptionToggle.js'
 import { Button } from './ui/button.js'
-import { cn } from '../lib/utils.js'
 
 // The presets (#353/#433): each PREFILLS the textarea with a rendered prompt and runs it
 // verbatim (`kind: 'prompt'`), the same as the old page.ts. Emptying the box falls back to
@@ -88,12 +88,11 @@ export function StartRunForm({
   }
 
   const collectOptions = () => {
-    const ecoOpts = ecoDrops
     return {
       ...(autopilot ? { autopilot: true } : {}),
       ...(technical ? { technical: true } : {}),
       ...(vanilla ? { vanilla: true } : {}),
-      ...(eco && !vanilla && Object.keys(ecoOpts).length ? { eco: ecoOpts } : {}),
+      ...(eco && !vanilla && Object.keys(ecoDrops).length ? { eco: ecoDrops } : {}),
       ...(onBeforeMergeableQuality ? { onBeforeMergeable: true } : {}),
       ...(browser ? { browser: true } : {}),
       ...(context.size ? { context: [...context] } : {}),
@@ -147,6 +146,23 @@ export function StartRunForm({
     }
   }
 
+  // The Global options as one table (#314). Autopilot's default-on lives in `autopilotEnabled`;
+  // Eco is disabled + dimmed under Vanilla (nothing left to trim); the Eco sub-drops show only
+  // while Eco is on.
+  const mainOptions: OptionRow[] = [
+    { key: 'autopilot', label: 'Autopilot', title: 'Auto-accept the recommended choice after a countdown; also relaxes the maintenance stance', checked: autopilot },
+    { key: 'technical', label: 'Technical control', title: 'Expose technical detail (e.g. tech-stack choices)', checked: technical },
+    { key: 'vanilla', label: 'Disable system prompt', title: "Remove all system prompts: the same as raw Claude Code. Expand 'See actual prompt sent' to read what it removes.", checked: vanilla },
+    { key: 'eco', label: 'Eco', title: 'Trim the built-in system prompt to save tokens', checked: eco && !ecoDisabled, disabled: ecoDisabled, dim: ecoDisabled },
+    { key: 'onBeforeMergeableQuality', label: 'Post-merge cleanup', title: "When the run signals it's ready for merge, run maintainability, readability, and security-audit passes", checked: onBeforeMergeableQuality },
+    { key: 'browser', label: 'Browser', title: 'Give the agent a real browser via chrome-devtools-mcp: navigate pages, read console + network, inspect the DOM, and screenshot', checked: browser },
+  ]
+  const ecoOptions: OptionRow[] = [
+    { key: 'ecoPlanning', label: 'Auto planning', title: 'Drop the planning section, letting the agent plan on its own', checked: ecoPlanning },
+    { key: 'ecoResearch', label: 'Auto research', title: 'Drop the alternatives/variability section', checked: ecoResearch },
+    { key: 'ecoMaintenance', label: 'Auto maintenance', title: 'Drop the maintenance section', checked: ecoMaintenance },
+  ]
+
   return (
     <form onSubmit={submit} className="border-b border-border p-4">
       <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Start a run</div>
@@ -192,37 +208,16 @@ export function StartRunForm({
       </div>
 
       <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1.5 text-xs text-muted-foreground">
-        <label className="flex cursor-pointer items-center gap-1.5" title="Auto-accept the recommended choice after a countdown; also relaxes the maintenance stance">
-          <input type="checkbox" checked={autopilot} onChange={e => updatePreferences({ autopilot: e.target.checked })} disabled={busy} /> Autopilot
-        </label>
-        <label className="flex cursor-pointer items-center gap-1.5" title="Expose technical detail (e.g. tech-stack choices)">
-          <input type="checkbox" checked={technical} onChange={e => updatePreferences({ technical: e.target.checked })} disabled={busy} /> Technical control
-        </label>
-        <label className="flex cursor-pointer items-center gap-1.5" title="Remove all system prompts: the same as raw Claude Code. Expand 'See actual prompt sent' to read what it removes.">
-          <input type="checkbox" checked={vanilla} onChange={e => updatePreferences({ vanilla: e.target.checked })} disabled={busy} /> Disable system prompt
-        </label>
-        <label className={cn('flex items-center gap-1.5', ecoDisabled ? 'opacity-40' : 'cursor-pointer')} title="Trim the built-in system prompt to save tokens">
-          <input type="checkbox" checked={eco && !ecoDisabled} onChange={e => updatePreferences({ eco: e.target.checked })} disabled={busy || ecoDisabled} /> Eco
-        </label>
-        <label className="flex cursor-pointer items-center gap-1.5" title="When the run signals it's ready for merge, run maintainability, readability, and security-audit passes">
-          <input type="checkbox" checked={onBeforeMergeableQuality} onChange={e => updatePreferences({ onBeforeMergeableQuality: e.target.checked })} disabled={busy} /> Post-merge cleanup
-        </label>
-        <label className="flex cursor-pointer items-center gap-1.5" title="Give the agent a real browser via chrome-devtools-mcp: navigate pages, read console + network, inspect the DOM, and screenshot">
-          <input type="checkbox" checked={browser} onChange={e => updatePreferences({ browser: e.target.checked })} disabled={busy} /> Browser
-        </label>
+        {mainOptions.map(o => (
+          <OptionToggle key={o.key} option={o} busy={busy} />
+        ))}
       </div>
 
       {eco && !ecoDisabled && (
         <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1.5 pl-4 text-xs text-muted-foreground">
-          <label className="flex cursor-pointer items-center gap-1.5" title="Drop the planning section, letting the agent plan on its own">
-            <input type="checkbox" checked={ecoPlanning} onChange={e => updatePreferences({ ecoPlanning: e.target.checked })} disabled={busy} /> Auto planning
-          </label>
-          <label className="flex cursor-pointer items-center gap-1.5" title="Drop the alternatives/variability section">
-            <input type="checkbox" checked={ecoResearch} onChange={e => updatePreferences({ ecoResearch: e.target.checked })} disabled={busy} /> Auto research
-          </label>
-          <label className="flex cursor-pointer items-center gap-1.5" title="Drop the maintenance section">
-            <input type="checkbox" checked={ecoMaintenance} onChange={e => updatePreferences({ ecoMaintenance: e.target.checked })} disabled={busy} /> Auto maintenance
-          </label>
+          {ecoOptions.map(o => (
+            <OptionToggle key={o.key} option={o} busy={busy} />
+          ))}
         </div>
       )}
 

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import type { ProjectSummary } from '@gemstack/framework'
 import { LayoutDashboard } from 'lucide-react'
 import { onProjects, sendAddProject } from '../server/projects.telefunc.js'
+import { useAction } from '../lib/use-action.js'
 import { Button } from './ui/button.js'
 import { cn } from '../lib/utils.js'
 
@@ -95,8 +96,7 @@ function AddProject({ onAdded }: { onAdded: () => void }) {
   const [open, setOpen] = useState(false)
   const [path, setPath] = useState('')
   const [directory, setDirectory] = useState(false)
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const { busy, error, reset, run } = useAction()
   // Trust gate (#439/#314): adding a repo lets the agent read its files, so an untrusted
   // repo is a prompt-injection risk. Confirm trust before actually installing.
   const [confirming, setConfirming] = useState(false)
@@ -105,32 +105,22 @@ function AddProject({ onAdded }: { onAdded: () => void }) {
   const review = (e: FormEvent) => {
     e.preventDefault()
     if (!path.trim() || busy) return
-    setError(null)
+    reset()
     setConfirming(true)
   }
 
   // Step 2: trust confirmed -> install + register.
   const confirmAdd = async () => {
     if (busy) return
-    setBusy(true)
-    setError(null)
-    try {
-      const result = await sendAddProject(path.trim(), directory)
-      if (result.ok) {
-        setPath('')
-        setDirectory(false)
-        setConfirming(false)
-        setOpen(false)
-        onAdded()
-      } else {
-        setError(result.error)
-        setConfirming(false)
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to add the project.')
+    const result = await run(() => sendAddProject(path.trim(), directory), 'Failed to add the project.')
+    if (result?.ok) {
+      setPath('')
+      setDirectory(false)
       setConfirming(false)
-    } finally {
-      setBusy(false)
+      setOpen(false)
+      onAdded()
+    } else {
+      setConfirming(false)
     }
   }
 

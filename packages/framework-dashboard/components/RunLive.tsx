@@ -1,8 +1,7 @@
 import type { FrameworkEvent } from '@gemstack/framework'
 import { sendStop } from '../server/control.telefunc.js'
-import { EventList } from './EventList.js'
 import { PreviewBar } from './PreviewBar.js'
-import { RunOverview } from './RunOverview.js'
+import { RunFeed } from './RunFeed.js'
 import { Button } from './ui/button.js'
 
 // One running run's own view (its output): the run overview + the live event feed from the
@@ -18,14 +17,7 @@ export function RunLive({ projectId, events }: { projectId: string; events: Fram
           Stop run
         </Button>
       </div>
-      {events.length > 0 ? (
-        <>
-          <RunOverview events={events} />
-          <EventList events={events} />
-        </>
-      ) : (
-        <div className="grid flex-1 place-items-center text-sm text-muted-foreground">Waiting for the run to start…</div>
-      )}
+      <RunFeed events={events} />
     </>
   )
 }

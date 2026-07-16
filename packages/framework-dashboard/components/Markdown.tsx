@@ -8,6 +8,16 @@ export function Markdown({ text }: { text: string }) {
   return <div className="space-y-2 text-sm leading-relaxed">{renderBlocks(text)}</div>
 }
 
+// A fenced-code block, rendered both when its closing fence arrives and when the doc ends
+// mid-fence; one place so the markup and classes can't drift between the two.
+function codeBlock(lines: string[], key: number): ReactNode {
+  return (
+    <pre key={key} className="overflow-x-auto rounded bg-muted p-2 text-xs">
+      <code>{lines.join('\n')}</code>
+    </pre>
+  )
+}
+
 function renderBlocks(text: string): ReactNode[] {
   const lines = text.replace(/\r\n/g, '\n').split('\n')
   const blocks: ReactNode[] = []
@@ -32,11 +42,7 @@ function renderBlocks(text: string): ReactNode[] {
         flushList()
         code = []
       } else {
-        blocks.push(
-          <pre key={key++} className="overflow-x-auto rounded bg-muted p-2 text-xs">
-            <code>{code.join('\n')}</code>
-          </pre>,
-        )
+        blocks.push(codeBlock(code, key++))
         code = null
       }
       continue
@@ -80,7 +86,7 @@ function renderBlocks(text: string): ReactNode[] {
     if (line.trim()) blocks.push(<p key={key++}>{inline(line)}</p>)
   }
   flushList()
-  if (code !== null) blocks.push(<pre key={key++} className="overflow-x-auto rounded bg-muted p-2 text-xs"><code>{code.join('\n')}</code></pre>)
+  if (code !== null) blocks.push(codeBlock(code, key++))
   return blocks
 }
 
