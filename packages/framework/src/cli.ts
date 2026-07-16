@@ -913,6 +913,18 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
     io.out(`◆ shared run: ${publisher.url}`)
   }
 
+  // Pause the choice gates when someone can answer: this run's own dashboard, or the
+  // workspace daemon's via the control channel (#344). With neither, the gates auto-accept
+  // the recommended option (#304). The run's requestChoice parks a resolver in pendingChoices
+  // keyed by the choice id; a dashboard/daemon pick (or an abort) resolves it.
+  const requestChoice =
+    dashboard || control
+      ? (req: ChoiceRequest): Promise<ChoicePick> => new Promise(resolve => pendingChoices.set(req.id, resolve))
+      : undefined
+  // The session link shown on the dashboard: --session-link, else Claude Code's own entry for
+  // a live Claude run, else nothing (#212/#542). Same for both run paths.
+  const sessionLink = chooseSessionLink(opts, fake)
+
   // The framework's own verdict that the run stopped cleanly rather than failed —
   // set by a user interrupt or a budget cap (#322). Trusted over which signal
   // aborted, since a budget stop trips an internal signal the CLI never sees.
@@ -1032,12 +1044,7 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
         cwd,
         onEvent,
         signal: controller.signal,
-        ...(dashboard || control
-          ? {
-              requestChoice: (req: ChoiceRequest) =>
-                new Promise<ChoicePick>(resolve => pendingChoices.set(req.id, resolve)),
-            }
-          : {}),
+        ...(requestChoice ? { requestChoice } : {}),
         ...(opts.model ? { model: opts.model } : {}),
         ...(opts.maxCost ? { budgetUsd: opts.maxCost } : {}),
         ...(guard ? { consumptionGate: guard.gate } : {}),
@@ -1046,10 +1053,7 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
         ...(eco ? { eco } : {}),
         ...(opts.context.length ? { context: opts.context } : {}),
         ...(modeList.includes('autopilot') ? { autopilot: true } : {}),
-        ...((): { sessionLink?: string } => {
-          const link = chooseSessionLink(opts, fake)
-          return link ? { sessionLink: link } : {}
-        })(),
+        ...(sessionLink ? { sessionLink } : {}),
       })
       clearInterrupt()
       io.out(
@@ -1133,15 +1137,7 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
     onEvent,
     signals,
     signal: controller.signal,
-    // Pause the choice gates when someone can answer: this run's own dashboard, or
-    // the workspace daemon's via the control channel (#344). With neither, the gates
-    // auto-accept the recommended option as before (#304).
-    ...(dashboard || control
-      ? {
-          requestChoice: (req: ChoiceRequest) =>
-            new Promise<ChoicePick>(resolve => pendingChoices.set(req.id, resolve)),
-        }
-      : {}),
+    ...(requestChoice ? { requestChoice } : {}),
     ...(opts.model ? { model: opts.model } : {}),
     ...(opts.maxPasses ? { maxPasses: opts.maxPasses } : {}),
     ...(opts.maxCost ? { budgetUsd: opts.maxCost } : {}),
@@ -1161,10 +1157,7 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
     ...(noBuiltinPrompt ? { antiLazyPill: false } : {}),
     ...(eco ? { eco } : {}),
     ...(opts.context.length ? { context: opts.context } : {}),
-    ...((): { sessionLink?: string } => {
-      const link = chooseSessionLink(opts, fake)
-      return link ? { sessionLink: link } : {}
-    })(),
+    ...(sessionLink ? { sessionLink } : {}),
   }
 
   try {
