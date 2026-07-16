@@ -2,7 +2,7 @@ import { strict as assert } from 'node:assert'
 import { test } from 'node:test'
 import { Readable, Writable } from 'node:stream'
 import { CodexDriver, CodexJsonParser, parseCodexUsage } from './codex.js'
-import type { SpawnLike, SpawnedProcess } from './claude-code.js'
+import type { SpawnLike, SpawnedProcess } from './agent-cli.js'
 import type { Driver, DriverEvent } from './types.js'
 
 /** A real codex-cli 0.144.4 run, verbatim: "Create a file hello.txt containing exactly: hi". */

@@ -2,7 +2,8 @@ import { strict as assert } from 'node:assert'
 import { test } from 'node:test'
 import { Readable, Writable } from 'node:stream'
 import { existsSync, readFileSync } from 'node:fs'
-import { ClaudeCodeDriver, StreamJsonParser, runClaude, type SpawnLike, type SpawnedProcess } from './claude-code.js'
+import { ClaudeCodeDriver, StreamJsonParser, runClaude } from './claude-code.js'
+import type { SpawnLike, SpawnedProcess } from './agent-cli.js'
 import type { DriverEvent } from './types.js'
 
 test('StreamJsonParser surfaces assistant text + tool names, keeps the result', () => {

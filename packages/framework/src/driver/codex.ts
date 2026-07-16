@@ -1,5 +1,5 @@
 import { spawn as nodeSpawn } from 'node:child_process'
-import { runAgentCli, type AgentCliParser, type SpawnLike } from './claude-code.js'
+import { runAgentCli, type AgentCliParser, type SpawnLike } from './agent-cli.js'
 import { combineFraming, combineSignals, makeEmit, readWorkspaceFile } from './session-support.js'
 import type { Driver, DriverEvent, DriverPromptOptions, DriverSession, DriverStartOptions, DriverTurn, DriverUsage } from './types.js'
 

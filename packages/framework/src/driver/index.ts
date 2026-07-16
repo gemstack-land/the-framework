@@ -23,9 +23,11 @@ export {
   type ClaudeCodeDriverOptions,
   type McpServerSpec,
   type PermissionMode,
-  type SpawnLike,
-  type SpawnedProcess,
+} from './claude-code.js'
+export {
   runAgentCli,
   type AgentCliParser,
   type RunAgentCliOptions,
-} from './claude-code.js'
+  type SpawnLike,
+  type SpawnedProcess,
+} from './agent-cli.js'

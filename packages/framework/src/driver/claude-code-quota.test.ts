@@ -2,7 +2,7 @@ import { strict as assert } from 'node:assert'
 import { test } from 'node:test'
 import { Readable, Writable } from 'node:stream'
 import { parseQuotaReadout, readClaudeQuota } from './claude-code-quota.js'
-import type { SpawnLike, SpawnedProcess } from './claude-code.js'
+import type { SpawnLike, SpawnedProcess } from './agent-cli.js'
 import { isTransientQuotaReason } from './types.js'
 
 /**
