@@ -156,9 +156,9 @@ export function applyEventToMeta(meta: RunMeta, event: FrameworkEvent, at: strin
   return next
 }
 
-/** Rebuild {@link RunMeta} from a full event log (used when resuming). */
-export function metaFromEvents(events: readonly FrameworkEvent[], startedAt: string): RunMeta {
-  let meta: RunMeta = {
+/** The seed meta a run starts from, before any event is folded in. */
+function freshMeta(startedAt: string): RunMeta {
+  return {
     version: RUN_META_VERSION,
     status: 'running',
     id: runIdFromStartedAt(startedAt),
@@ -166,6 +166,40 @@ export function metaFromEvents(events: readonly FrameworkEvent[], startedAt: str
     updatedAt: startedAt,
     passes: 0,
   }
+}
+
+/**
+ * Parse a JSONL event log. A blank or malformed trailing line (e.g. a crash
+ * mid-write) stops the read rather than throwing, so a partial run still replays
+ * everything up to the cut.
+ */
+function parseEventLog(raw: string): FrameworkEvent[] {
+  const events: FrameworkEvent[] = []
+  for (const line of raw.split('\n')) {
+    const trimmed = line.trim()
+    if (!trimmed) continue
+    try {
+      events.push(JSON.parse(trimmed) as FrameworkEvent)
+    } catch {
+      break // a torn last line from an interrupted write; keep what we have
+    }
+  }
+  return events
+}
+
+/** Read + parse a persisted {@link RunMeta} file, or `undefined` if missing/unreadable. */
+async function readMetaFile(fs: StoreFs, path: string): Promise<RunMeta | undefined> {
+  if (!(await fs.exists(path))) return undefined
+  try {
+    return JSON.parse(await fs.read(path)) as RunMeta
+  } catch {
+    return undefined
+  }
+}
+
+/** Rebuild {@link RunMeta} from a full event log (used when resuming). */
+export function metaFromEvents(events: readonly FrameworkEvent[], startedAt: string): RunMeta {
+  let meta = freshMeta(startedAt)
   for (const event of events) meta = applyEventToMeta(meta, event, startedAt)
   return meta
 }
@@ -209,14 +243,7 @@ export class RunStore {
     const dir = join(cwd, FRAMEWORK_DIR)
     const now = opts.now ?? new Date().toISOString()
     await fs.mkdir(dir)
-    const store = new RunStore(fs, dir, now, {
-      version: RUN_META_VERSION,
-      status: 'running',
-      id: runIdFromStartedAt(now),
-      startedAt: now,
-      updatedAt: now,
-      passes: 0,
-    })
+    const store = new RunStore(fs, dir, now, freshMeta(now))
     if (opts.fresh) {
       // A new run truncates the live log. First rescue the prior run if it never
       // got archived (e.g. a crash exited before close), so no history is lost.
@@ -269,29 +296,12 @@ export class RunStore {
    */
   async loadEvents(): Promise<FrameworkEvent[]> {
     if (!(await this.fs.exists(this.eventsPath))) return []
-    const raw = await this.fs.read(this.eventsPath)
-    const events: FrameworkEvent[] = []
-    for (const line of raw.split('\n')) {
-      const trimmed = line.trim()
-      if (!trimmed) continue
-      try {
-        events.push(JSON.parse(trimmed) as FrameworkEvent)
-      } catch {
-        // A torn last line from an interrupted write; stop, keep what we have.
-        break
-      }
-    }
-    return events
+    return parseEventLog(await this.fs.read(this.eventsPath))
   }
 
   /** Read the persisted meta snapshot, or `undefined` if none/unreadable. */
-  async readMeta(): Promise<RunMeta | undefined> {
-    if (!(await this.fs.exists(this.metaPath))) return undefined
-    try {
-      return JSON.parse(await this.fs.read(this.metaPath)) as RunMeta
-    } catch {
-      return undefined
-    }
+  readMeta(): Promise<RunMeta | undefined> {
+    return readMetaFile(this.fs, this.metaPath)
   }
 
   private writeMeta(): Promise<void> {
@@ -325,14 +335,7 @@ async function archiveRun(fs: StoreFs, dir: string, meta: RunMeta, eventsPath: s
  * {@link RunStore.close} still leaves its history behind.
  */
 async function archivePriorRun(fs: StoreFs, dir: string): Promise<void> {
-  const metaPath = join(dir, META_FILE)
-  if (!(await fs.exists(metaPath))) return
-  let meta: RunMeta
-  try {
-    meta = JSON.parse(await fs.read(metaPath)) as RunMeta
-  } catch {
-    return
-  }
+  const meta = await readMetaFile(fs, join(dir, META_FILE))
   if (!meta?.id || !isSafeRunId(meta.id)) return
   if (await fs.exists(archivePaths(dir, meta.id).meta)) return
   await archiveRun(fs, dir, meta, join(dir, EVENTS_FILE))
@@ -365,14 +368,8 @@ export async function listRuns(cwd: string, fs: StoreFs = nodeStoreFs()): Promis
  * tailing right now — so the dashboard can list it with a `running` status
  * before it finishes. Missing or torn file yields `undefined`, never throws.
  */
-export async function readLiveMeta(cwd: string, fs: StoreFs = nodeStoreFs()): Promise<RunMeta | undefined> {
-  const path = join(cwd, FRAMEWORK_DIR, META_FILE)
-  if (!(await fs.exists(path))) return undefined
-  try {
-    return JSON.parse(await fs.read(path)) as RunMeta
-  } catch {
-    return undefined
-  }
+export function readLiveMeta(cwd: string, fs: StoreFs = nodeStoreFs()): Promise<RunMeta | undefined> {
+  return readMetaFile(fs, join(cwd, FRAMEWORK_DIR, META_FILE))
 }
 
 /**
@@ -388,17 +385,7 @@ export async function loadRunEvents(
   if (!isSafeRunId(id)) return undefined
   const path = archivePaths(join(cwd, FRAMEWORK_DIR), id).events
   if (!(await fs.exists(path))) return undefined
-  const events: FrameworkEvent[] = []
-  for (const line of (await fs.read(path)).split('\n')) {
-    const trimmed = line.trim()
-    if (!trimmed) continue
-    try {
-      events.push(JSON.parse(trimmed) as FrameworkEvent)
-    } catch {
-      break
-    }
-  }
-  return events
+  return parseEventLog(await fs.read(path))
 }
 
 /** A {@link StoreFs} backed by `node:fs/promises`. See {@link nodeFs}. */
