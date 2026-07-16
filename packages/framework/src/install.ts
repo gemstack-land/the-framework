@@ -51,8 +51,8 @@ export async function installProject(cwd: string, deps: InstallDeps = {}): Promi
     }
 
     await fs.mkdir(join(cwd, THE_FRAMEWORK_DIR))
-    const path = logsPath(cwd)
-    if (!(await fs.exists(path))) await fs.write(path, LOGS_HEADER)
+    // The early return above already established LOGS.md is absent, so write it unconditionally.
+    await fs.write(logsPath(cwd), LOGS_HEADER)
     // Keep the transient run state (events.jsonl / run.json / runs/) out of git;
     // only LOGS.md is the committed DB (#313).
     const ignore = gitignorePath(cwd)
