@@ -1,10 +1,10 @@
 import { join } from 'node:path'
-import { Channel, type ClientChannel } from 'telefunc'
+import type { ClientChannel } from 'telefunc'
 import { FRAMEWORK_DIR, EVENTS_FILE } from '../store/index.js'
 import { contextEventsSource, resolveProjectPath } from './context.js'
 import type { FrameworkEvent } from '../events.js'
 import { tailEvents } from './events-tail.js'
-import { forwardStream } from './stream-channel.js'
+import { forwardStream, streamChannel } from './stream-channel.js'
 
 // The live event stream behind the new dashboard (#405): the selected project's run,
 // read straight from the same `.the-framework/events.jsonl` the daemon writes. Each new
@@ -32,24 +32,12 @@ export async function onEvents(projectId: string): Promise<ClientChannel<never, 
   const source = contextEventsSource()
   if (source) {
     // The relay: replay + follow its in-memory run, mirroring how serveSSE consumes it.
-    const stream = source(projectId)
-    const channel = new Channel<never, FrameworkEvent>()
-    if (!stream) {
-      void channel.close()
-      return channel.client
-    }
-    const stop = forwardStream(stream, event => void channel.send(event))
-    channel.onClose(stop)
-    return channel.client
+    return streamChannel<FrameworkEvent>(send => {
+      const stream = source(projectId)
+      return stream ? forwardStream(stream, send) : undefined
+    })
   }
-
-  const channel = new Channel<never, FrameworkEvent>()
+  // Everywhere else: tail the project's on-disk events.jsonl (undefined path -> closed channel).
   const path = await resolveEventsPath(projectId)
-  if (!path) {
-    void channel.close()
-    return channel.client
-  }
-  const stop = tailEvents<FrameworkEvent>(path, event => void channel.send(event))
-  channel.onClose(stop)
-  return channel.client
+  return streamChannel<FrameworkEvent>(send => (path ? tailEvents(path, send) : undefined))
 }
