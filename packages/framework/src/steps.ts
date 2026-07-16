@@ -144,10 +144,36 @@ function hasSourceFile(dir: string, depth: number): boolean {
   return false
 }
 
+/**
+ * Whether a step should hard-scaffold rather than build/improve normally (#182): the
+ * workspace is still empty and this driver verifies its output (a real driver; the fake
+ * one writes nothing, so it opts out to stay deterministic). Read at the moment the step
+ * decides, since the workspace changes as the agent works.
+ */
+function shouldScaffold(session: DriverSession, verifyWorkspace: boolean | undefined): boolean {
+  return verifyWorkspace === true && isWorkspaceEmpty(session.cwd)
+}
+
 /** Options shared by the driver-backed steps. */
 export interface DriverStepOptions {
   /** Extra per-step framing appended to the session system prompt. */
   system?: string
+}
+
+/** One synthetic subtask result: a driver turn's text, always "ok" (the driver owns pass/fail). */
+function subtaskResult(subtask: PlannedSubtask, text: string): SubtaskResult {
+  return { subtask, text, ok: true, usage: ZERO_USAGE }
+}
+
+/** Wrap driver-turn results in a {@link SupervisorRun} so the bootstrap narration shows a phase. */
+function supervisorRun(results: SubtaskResult[]): SupervisorRun {
+  return {
+    text: results[results.length - 1]!.text,
+    plan: results.map(r => r.subtask),
+    results,
+    usage: ZERO_USAGE,
+    stoppedEarly: false,
+  }
 }
 
 /**
@@ -168,8 +194,7 @@ export function continueAfterChoice(
     .prompt(prompt, { ...(ctx.signal ? { signal: ctx.signal } : {}) })
     .then(turn => {
       const subtask: PlannedSubtask = { id: 'build-resume', description: 'Continue after the user picked' }
-      const result: SubtaskResult = { subtask, text: turn.text, ok: true, usage: ZERO_USAGE }
-      return { text: turn.text, plan: [subtask], results: [result], usage: ZERO_USAGE, stoppedEarly: false }
+      return supervisorRun([subtaskResult(subtask, turn.text)])
     })
 }
 
@@ -216,7 +241,7 @@ export function driverBuild(
     ctx.onEvent({ type: 'dispatch-start', subtask })
 
     let turn = await session.prompt(firstPrompt, { ...promptOpts, ...signalOpt })
-    const results: SubtaskResult[] = [{ subtask, text: turn.text, ok: true, usage: ZERO_USAGE }]
+    const results: SubtaskResult[] = [subtaskResult(subtask, turn.text)]
     ctx.onEvent({ type: 'dispatch-result', result: results[0]! })
 
     // #182: the build must actually produce an app. If nothing landed on disk,
@@ -225,23 +250,17 @@ export function driverBuild(
     // Exception (#337 / #339): an empty workspace plus an await block means the agent
     // stopped *on purpose* to ask; the await gate handles it, so don't clobber the
     // question with a scaffold directive.
-    if (opts.verifyWorkspace && isWorkspaceEmpty(session.cwd) && !parseAwaitGate(turn.text)) {
+    if (shouldScaffold(session, opts.verifyWorkspace) && !parseAwaitGate(turn.text)) {
       const retry: PlannedSubtask = { id: 'build-2', description: 'Scaffold the app from scratch (workspace was empty)' }
       ctx.onEvent({ type: 'dispatch-start', subtask: retry })
       turn = await session.prompt(scaffoldPrompt(ctx.intent), { ...promptOpts, ...signalOpt })
-      const retryResult: SubtaskResult = { subtask: retry, text: turn.text, ok: true, usage: ZERO_USAGE }
+      const retryResult = subtaskResult(retry, turn.text)
       results.push(retryResult)
       ctx.onEvent({ type: 'dispatch-result', result: retryResult })
     }
 
     ctx.onEvent({ type: 'synthesize', results })
-    return {
-      text: turn.text,
-      plan: results.map(r => r.subtask),
-      results,
-      usage: ZERO_USAGE,
-      stoppedEarly: false,
-    }
+    return supervisorRun(results)
   }
 }
 
@@ -329,8 +348,7 @@ export function driverImprove(
 ): (ctx: LoopPassContext) => Promise<void> {
   const compose = opts.prompt ?? improvePrompt
   return async ctx => {
-    const scaffold = opts.verifyWorkspace && isWorkspaceEmpty(session.cwd)
-    const text = scaffold ? scaffoldPrompt(ctx.intent) : compose(ctx.blockers)
+    const text = shouldScaffold(session, opts.verifyWorkspace) ? scaffoldPrompt(ctx.intent) : compose(ctx.blockers)
     await session.prompt(text, {
       ...(opts.system ? { system: opts.system } : {}),
       ...(ctx.signal ? { signal: ctx.signal } : {}),
