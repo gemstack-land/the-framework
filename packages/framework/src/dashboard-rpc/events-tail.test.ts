@@ -23,7 +23,7 @@ test('tailEvents seeds with what is already logged, then follows appends', async
     await sleep(150)
     assert.deepEqual(seen, ['first'])
     await writeFile(path, line('first') + line('second'))
-    await sleep(150)
+    await sleep(1400) // fs.watch is unreliable on CI; wait out the poll backstop behind it
     assert.deepEqual(seen, ['first', 'second'])
   } finally {
     stop()

@@ -159,7 +159,7 @@ export function parseSessionName(text: string): string | undefined {
  * and body-less — it just flips the run from building to ready-for-review.
  */
 export function parseReadyForMerge(text: string): boolean {
-  return /```ready-for-merge\s*```/.test(text) || /```ready-for-merge\s+[\s\S]*?```/.test(text)
+  return /```ready-for-merge(?:\s[\s\S]*?)?```/.test(text)
 }
 
 /** Find the body + start index of the last fenced block with `tag` in `text`. */
@@ -188,6 +188,19 @@ function parseBody(body: string): { record: Record<string, unknown>; options: Re
 const str = (v: unknown): string => (typeof v === 'string' ? v.trim() : '')
 
 /**
+ * Parse one await option's shared fields: a synthesized id (`opt:<i>` when the
+ * agent named none), the label, and an optional detail. Returns `undefined` for a
+ * label-less option, which both gate parsers drop. The multi variant layers its
+ * own `default` on top.
+ */
+function parseOption(o: Record<string, unknown>, i: number): ChoicesOption | undefined {
+  const label = str(o?.label)
+  if (!label) return undefined
+  const detail = str(o?.detail)
+  return { id: str(o?.id) || `opt:${i}`, label, ...(detail ? { detail } : {}) }
+}
+
+/**
  * Parse a trailing `await-choices` block (per {@link AWAIT_PROTOCOL}) from a turn's
  * final text (#337). Returns `undefined` when the agent did not stop to ask (the common
  * case). Tolerant by design: ids are synthesized from position, a blank title falls
@@ -202,10 +215,8 @@ export function parseChoicesGate(text: string): ParsedChoicesGate | undefined {
 
   const options: ChoicesOption[] = []
   parsed.options.forEach((o, i) => {
-    const label = str(o?.label)
-    if (!label) return
-    const detail = str(o?.detail)
-    options.push({ id: str(o?.id) || `opt:${i}`, label, ...(detail ? { detail } : {}) })
+    const opt = parseOption(o, i)
+    if (opt) options.push(opt)
   })
   if (options.length === 0) return undefined
 
@@ -228,10 +239,8 @@ export function parseMultiSelectGate(text: string): ParsedMultiSelectGate | unde
 
   const options: MultiSelectOption[] = []
   parsed.options.forEach((o, i) => {
-    const label = str(o?.label)
-    if (!label) return
-    const detail = str(o?.detail)
-    options.push({ id: str(o?.id) || `opt:${i}`, label, ...(detail ? { detail } : {}), ...(o?.default === true ? { default: true } : {}) })
+    const opt = parseOption(o, i)
+    if (opt) options.push({ ...opt, ...(o?.default === true ? { default: true } : {}) })
   })
   if (options.length === 0) return undefined
 
