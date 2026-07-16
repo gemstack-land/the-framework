@@ -5,11 +5,11 @@ import { defaultSynthesize } from './synthesizer.js'
 import type {
   PlannedSubtask,
   SubtaskResult,
-  SupervisorEvent,
   SupervisorOptions,
   SupervisorRun,
   WorkerRouter,
 } from './types.js'
+import { makeEmitter } from './util/emitter.js'
 
 const ZERO_USAGE: TokenUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 }
 
@@ -114,17 +114,6 @@ export class Supervisor {
  * Wrap the user's `onEvent` so a throwing callback can never abort a run.
  * Observer errors are reported to the console but otherwise swallowed.
  */
-function makeEmitter(onEvent: SupervisorOptions['onEvent']): (event: SupervisorEvent) => void {
-  if (!onEvent) return () => {}
-  return (event) => {
-    try {
-      onEvent(event)
-    } catch (err) {
-      console.error('[ai-autopilot] onEvent callback threw; ignoring:', err)
-    }
-  }
-}
-
 async function runSubtask(route: WorkerRouter, subtask: PlannedSubtask): Promise<SubtaskResult> {
   try {
     const agent = route(subtask)

@@ -10,6 +10,7 @@ import type {
 } from './types.js'
 import type { Verdict } from './verdict.js'
 import { parseVerdict } from './verdict.js'
+import { makeEmitter } from '../util/emitter.js'
 
 /** Options for {@link LoopEngine}. */
 export interface LoopEngineOptions {
@@ -184,13 +185,3 @@ function indexPrompts(prompts: LoopPrompt[] | Record<string, LoopPrompt>): Map<s
   return map
 }
 
-function makeEmitter(onEvent: LoopEngineOptions['onEvent']): (event: LoopProgress) => void {
-  if (!onEvent) return () => {}
-  return (event) => {
-    try {
-      onEvent(event)
-    } catch (err) {
-      console.error('[ai-autopilot] onEvent callback threw; ignoring:', err)
-    }
-  }
-}
