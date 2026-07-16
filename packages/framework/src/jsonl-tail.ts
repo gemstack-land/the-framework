@@ -1,3 +1,4 @@
+import { watch, type FSWatcher } from 'node:fs'
 import { open } from 'node:fs/promises'
 
 /**
@@ -56,5 +57,51 @@ export class JsonlTailer<T> {
     } finally {
       await fd.close()
     }
+  }
+}
+
+/** Options for {@link followFile}. */
+export interface FollowFileOptions {
+  /** How often the backstop poll runs. */
+  pollMs: number
+  /** Let the process exit with the poll still scheduled (steering must never hold it open). */
+  unref?: boolean
+}
+
+/**
+ * Drive a {@link JsonlTailer} as the file grows: an `fs.watch` on `dir` for latency, plus a
+ * poll backstop because `fs.watch` is unreliable across platforms. Pulls are serialized (a
+ * pull already in flight swallows the next trigger) and stop for good once the returned
+ * function is called. Shared by the run's control tail and the dashboard's event tail, which
+ * hand-rolled this separately and drifted apart.
+ */
+export function followFile(dir: string, pull: () => Promise<void>, opts: FollowFileOptions): () => void {
+  let pulling = false
+  let stopped = false
+  const pump = async (): Promise<void> => {
+    if (pulling || stopped) return
+    pulling = true
+    try {
+      await pull()
+    } finally {
+      pulling = false
+    }
+  }
+
+  let watcher: FSWatcher | undefined
+  try {
+    watcher = watch(dir, () => void pump())
+  } catch {
+    // dir may not be watchable everywhere; the poll backstop still covers it
+  }
+  const poll = setInterval(() => void pump(), opts.pollMs)
+  if (opts.unref) poll.unref()
+  void pump() // seed with whatever is already written
+
+  return () => {
+    stopped = true
+    clearInterval(poll)
+    watcher?.close()
+    watcher = undefined
   }
 }

@@ -64,6 +64,7 @@ test('startOptionFlags maps only enabled Global options to CLI flags (#314)', ()
 
 const logEvent = (message: string): FrameworkEvent => ({ kind: 'log', message })
 const line = (message: string): string => JSON.stringify(logEvent(message)) + '\n'
+const sleep = (ms: number): Promise<void> => new Promise(resolve => setTimeout(resolve, ms))
 
 async function tmpWorkspace(): Promise<string> {
   const cwd = await mkdtemp(join(tmpdir(), 'framework-daemon-'))
@@ -133,7 +134,10 @@ test('EventTailer resets when the log is truncated by a fresh run', async () => 
     await tailer.pull()
     assert.deepEqual(seen, ['old-run'])
 
-    await writeFile(path, line('new-run')) // truncate + rewrite (shorter than offset)
+    // Truncate + rewrite to the SAME byte length (both lines are 35 bytes), so this is
+    // caught by the mtime check, not by the shrink check.
+    await sleep(20) // let mtime advance past the read above
+    await writeFile(path, line('new-run'))
     await tailer.pull()
     assert.deepEqual(seen, ['old-run', 'new-run'])
   } finally {

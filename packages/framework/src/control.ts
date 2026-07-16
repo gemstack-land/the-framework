@@ -1,9 +1,8 @@
-import { watch, type FSWatcher } from 'node:fs'
 import { appendFile, mkdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { ChoiceBy } from './events.js'
 import { FRAMEWORK_DIR } from './store/index.js'
-import { JsonlTailer } from './jsonl-tail.js'
+import { JsonlTailer, followFile } from './jsonl-tail.js'
 
 /**
  * The dashboard-to-run control channel (#344): the reverse of the event log.
@@ -63,32 +62,9 @@ export function watchControl(
   const tailer = new JsonlTailer<ControlEntry>(controlPath(cwd), entry => {
     if (isControlEntry(entry)) onEntry(entry)
   })
-  let pulling = false
-  const pump = async (): Promise<void> => {
-    if (pulling) return
-    pulling = true
-    try {
-      await tailer.pull()
-    } finally {
-      pulling = false
-    }
-  }
-  let watcher: FSWatcher | undefined
-  try {
-    watcher = watch(join(cwd, FRAMEWORK_DIR), () => void pump())
-  } catch {
-    // dir may not be watchable everywhere; the poll backstop still covers it
-  }
-  const poll = setInterval(() => void pump(), pollMs)
-  poll.unref() // never keep the process alive just for steering
-  void pump()
-  return {
-    close: () => {
-      clearInterval(poll)
-      watcher?.close()
-      watcher = undefined
-    },
-  }
+  // unref: never keep the process alive just for steering.
+  const stop = followFile(join(cwd, FRAMEWORK_DIR), () => tailer.pull(), { pollMs, unref: true })
+  return { close: stop }
 }
 
 /** Shape-check a parsed line. A multi-select pick may legitimately be `[]`. */
