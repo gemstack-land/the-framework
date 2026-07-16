@@ -113,7 +113,7 @@ export async function startRelay(opts: RelayOptions = {}): Promise<Relay> {
   // the relay's own in-memory run (create-on-access, so a viewer can connect before the
   // publisher), and an empty projects provider neutralizes every file/registry RPC on
   // this public host. No `startRun`, so a start is never enabled here.
-  const telefunc = makeTelefuncMount(undefined, emptyProjectsProvider(), id => run(id).stream)
+  const telefunc = makeTelefuncMount({ projects: emptyProjectsProvider(), eventsSource: id => run(id).stream })
   const server = createServer((req, res) => handle(req, res, { run, maxBody, clientBundleDir, telefunc }))
 
   return new Promise<Relay>((resolvePromise, rejectPromise) => {

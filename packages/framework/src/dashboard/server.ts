@@ -117,15 +117,14 @@ export function startDashboard(opts: DashboardOptions = {}): Promise<Dashboard> 
   // `projects` is passed raw (may be undefined) so the mount falls back to the global
   // registry, byte-identical to the daemon default; the per-run dashboard passes a
   // single-project provider, the relay an empty one.
-  const telefuncMount = makeTelefuncMount(
-    opts.onStart,
-    opts.projects,
-    undefined,
-    opts.onAddProject,
-    opts.preferences ?? registryPreferencesStore(),
-    preview,
+  const telefuncMount = makeTelefuncMount({
+    ...(opts.onStart ? { startRun: opts.onStart } : {}),
+    ...(opts.projects ? { projects: opts.projects } : {}),
+    ...(opts.onAddProject ? { addProject: opts.onAddProject } : {}),
+    ...(preview ? { preview } : {}),
+    preferences: opts.preferences ?? registryPreferencesStore(),
     quota,
-  )
+  })
 
   const server = createServer((req, res) => {
     const { pathname } = new URL(req.url ?? '/', 'http://localhost')

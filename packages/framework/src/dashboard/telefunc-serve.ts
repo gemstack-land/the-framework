@@ -93,17 +93,14 @@ export function isSameOriginRequest(req: IncomingMessage): boolean {
  * Mount the dashboard's Telefunc surface (#405) on the daemon's `node:http` server: one
  * `serve()` handles both the RPCs and the Channel SSE stream at `/_telefunc`. Telefunc
  * runs in the daemon process, so a `sendStart` telefunction can call the daemon's own
- * `startRun` via the request context. Cross-origin POSTs are rejected (CSRF: a page on
- * evil.com must not steer or start a run). Returns whether the request was Telefunc's.
+ * `startRun` via the request context. The `context` is exactly what each telefunction
+ * reaches through {@link getContext} (see {@link DashboardContext}): the daemon wires the
+ * full set, the relay passes only an events source plus an empty projects provider. Cross-
+ * origin POSTs are rejected (CSRF: a page on evil.com must not steer or start a run).
+ * Returns whether the request was Telefunc's.
  */
 export function makeTelefuncMount(
-  startRun?: StartRunHandler,
-  projects?: ProjectsProvider,
-  eventsSource?: EventsSource,
-  addProject?: AddProjectHandler,
-  preferences?: PreferencesStore,
-  preview?: PreviewHandlers,
-  quota?: QuotaSource,
+  context: DashboardContext = {},
 ): (req: IncomingMessage, res: ServerResponse) => Promise<boolean> {
   return async (req, res) => {
     if (!isSameOriginRequest(req)) {
@@ -112,15 +109,6 @@ export function makeTelefuncMount(
       return true
     }
     const tf = setup()
-    const context: DashboardContext = {
-      ...(startRun ? { startRun } : {}),
-      ...(addProject ? { addProject } : {}),
-      ...(preview ? { preview } : {}),
-      ...(projects ? { projects } : {}),
-      ...(eventsSource ? { eventsSource } : {}),
-      ...(preferences ? { preferences } : {}),
-      ...(quota ? { quota } : {}),
-    }
     // Never let a telefunc failure become an unhandled rejection that kills the daemon:
     // telefunc 0.2.22 throws on a bare `GET /_telefunc` (it passes the request as a body,
     // which `new Request()` rejects for GET), and a browser tab hits that on reconnect.
