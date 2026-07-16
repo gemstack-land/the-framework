@@ -1,12 +1,13 @@
 import { renderTemplate } from './prompt-template.js'
 import { POST_MERGE_PROMPT } from './prompts.generated.js'
+import { presetContext } from './presets.js'
 import { dropSection, type EcoOptions, type TfContext } from './system-prompt.js'
 
 /**
  * The post-merge prompt (#326), in `prompts/post_merge_prompt.md` (#551).
  *
  * It does not *run* the quality presets, it *queues* them: one agent turn that appends
- * "Apply preset X on the changes introduced by <session>" entries to the session's TODO
+ * "Apply <preset filePath> with tf.params.what set to ..." entries to the session's TODO
  * file, which the backlog loop (#323/#538) picks up later. That is the whole point of
  * #556 — the previous suite executed maintainability, readability and security-audit as
  * three child runs on the spot, which does not compose with the queue.
@@ -31,6 +32,12 @@ export interface PostMergeContext {
   session_name: string
   /** The user's settings; `technical_control` gates the readability entry. Absent means off. */
   settings?: TfContext['settings']
+  /**
+   * The materialized presets, stem -> `{ filePath }` (#326). The `## Maintenance` entries carry
+   * `tf.presets.<name>.filePath` so the picked-up agent opens the real preset file. Defaulted
+   * from {@link presetContext}, so callers get the standard `.the-framework/presets/*.md` paths.
+   */
+  presets?: Record<string, { filePath: string }>
 }
 
 /**
@@ -47,5 +54,7 @@ export function renderPostMergePrompt(tf: PostMergeContext, eco?: EcoOptions | u
   const template = eco?.autoMaintenance
     ? dropSection(POST_MERGE_PROMPT_TEMPLATE, MAINTENANCE_HEADING)
     : POST_MERGE_PROMPT_TEMPLATE
-  return renderTemplate(template, { tf: { ...tf, settings: tf.settings ?? {} } })
+  return renderTemplate(template, {
+    tf: { ...tf, settings: tf.settings ?? {}, presets: tf.presets ?? presetContext() },
+  })
 }

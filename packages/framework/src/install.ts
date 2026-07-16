@@ -2,6 +2,7 @@ import { join } from 'node:path'
 import { nodeGitRunner, type GitRunner } from './project.js'
 import { logsPath, LOGS_HEADER, THE_FRAMEWORK_DIR, gitignorePath, LOGS_GITIGNORE } from './logs.js'
 import { nodeStoreFs, type StoreFs } from './store/index.js'
+import { materializePresets } from './presets.js'
 
 /**
  * Install/activate a repo for The Framework (#391): create the
@@ -56,6 +57,12 @@ export async function installProject(cwd: string, deps: InstallDeps = {}): Promi
     // only LOGS.md is the committed DB (#313).
     const ignore = gitignorePath(cwd)
     if (!(await fs.exists(ignore))) await fs.write(ignore, LOGS_GITIGNORE)
+
+    // Materialize the quality presets so a post-merge TODO entry's filePath resolves to a
+    // real file the agent can open (#326). The .the-framework/.gitignore above keeps them out
+    // of git (only LOGS.md is committed), so they are regenerated on install and track the
+    // installed framework version rather than going stale in the repo's history.
+    await materializePresets(cwd, fs)
 
     await git(['add', '-A'], cwd)
     await git(['commit', '-m', '[The Framework] install The Framework'], cwd)

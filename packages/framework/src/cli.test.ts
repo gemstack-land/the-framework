@@ -100,8 +100,8 @@ test('runPostMerge queues the follow-ups in ONE run instead of running the prese
   assert.equal(seen.length, 1)
   const prompt = seen[0]!
   assert.match(prompt, /add the following to <TODO_FILE>/)
-  assert.match(prompt, /Apply preset `maintainability` on the changes introduced by add-oauth/)
-  assert.match(prompt, /Apply preset `security_audit` on the changes introduced by add-oauth/)
+  assert.match(prompt, /Apply \.the-framework\/presets\/maintainability\.md with tf\.params\.what set to "changes introduced by add-oauth"/)
+  assert.match(prompt, /Apply \.the-framework\/presets\/security_audit\.md with tf\.params\.what set to "changes introduced by add-oauth"/)
   // The preset prompts themselves are not what gets sent any more.
   assert.doesNotMatch(prompt, /easy as possible for humans to read/)
   assert.ok(!prompt.includes('${{'), 'fully rendered')
@@ -125,7 +125,7 @@ test('runPostMerge gates the readability entry on technical_control (#326)', asy
     )
     return seen[0]!
   }
-  assert.match(await render(true), /Apply preset `readability` on the changes introduced by add-oauth/)
+  assert.match(await render(true), /Apply \.the-framework\/presets\/readability\.md with tf\.params\.what set to "changes introduced by add-oauth"/)
   assert.doesNotMatch(await render(false), /readability/)
 })
 
