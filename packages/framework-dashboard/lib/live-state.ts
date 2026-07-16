@@ -35,12 +35,13 @@ export function pendingChoice(events: readonly FrameworkEvent[]): ChoiceRequest 
   return pendingChoices(events).at(-1) ?? null
 }
 
-/** One ad-hoc markdown view the agent pushed to the right rail (#441). */
-export interface AgentView {
-  id: string
-  title: string
-  markdown: string
-}
+/**
+ * One ad-hoc markdown view the agent pushed to the right rail (#441): the `view` event
+ * minus its discriminant, derived so a field added to the event carries through here on
+ * its own — the same way {@link ChoiceEvent} tracks the `choice` event.
+ */
+type ViewEvent = Extract<FrameworkEvent, { kind: 'view' }>
+export type AgentView = Omit<ViewEvent, 'kind'>
 
 /**
  * Every markdown view the agent has shown this run (#441), in first-seen order. A `view`
@@ -50,7 +51,12 @@ export interface AgentView {
 export function agentViews(events: readonly FrameworkEvent[]): AgentView[] {
   const byId = new Map<string, AgentView>()
   for (const event of events) {
-    if (event.kind === 'view') byId.set(event.id, { id: event.id, title: event.title, markdown: event.markdown })
+    // Strip the discriminant and keep the rest, like pendingChoices — a new field on the
+    // view event is then carried without touching this.
+    if (event.kind === 'view') {
+      const { kind: _kind, ...view } = event
+      byId.set(event.id, view)
+    }
   }
   return [...byId.values()]
 }
