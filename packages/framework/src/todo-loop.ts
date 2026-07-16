@@ -213,13 +213,17 @@ export async function runTodoLoop(opts: TodoLoopOptions): Promise<TodoLoopResult
   let stalls = 0
   let file: string | undefined
 
+  // The backlog emptied: announce it if we did any work, and report a clean finish.
+  // Both the mid-loop find and the post-loop re-check funnel through here.
+  const finishEmpty = (): TodoLoopResult => {
+    if (completed > 0) emit({ kind: 'log', message: `Backlog done: ${file ?? 'TODO'} is empty after ${completed} item(s).` })
+    return { completed, reason: 'empty', ...(file ? { file } : {}) }
+  }
+
   for (let item = 0; item < maxItems; item++) {
     if (opts.signal?.aborted) break
     const backlog = await findTodoBacklog(cwd)
-    if (!backlog) {
-      if (completed > 0) emit({ kind: 'log', message: `Backlog done: ${file ?? 'TODO'} is empty after ${completed} item(s).` })
-      return { completed, reason: 'empty', ...(file ? { file } : {}) }
-    }
+    if (!backlog) return finishEmpty()
     file = backlog.name
     const next = backlog.entries[0]!
     const preview = next.length > 100 ? `${next.slice(0, 100)}…` : next
@@ -276,10 +280,7 @@ export async function runTodoLoop(opts: TodoLoopOptions): Promise<TodoLoopResult
   if (opts.signal?.aborted) return { completed, reason: 'stopped', ...(file ? { file } : {}) }
 
   const remaining = await findTodoBacklog(cwd)
-  if (!remaining) {
-    if (completed > 0) emit({ kind: 'log', message: `Backlog done: ${file ?? 'TODO'} is empty after ${completed} item(s).` })
-    return { completed, reason: 'empty', ...(file ? { file } : {}) }
-  }
+  if (!remaining) return finishEmpty()
   emit({
     kind: 'log',
     message: `Backlog loop stopped at the ${maxItems}-item cap; ${remaining.entries.length} item(s) left in ${remaining.name}.`,
