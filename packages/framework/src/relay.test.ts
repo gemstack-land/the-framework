@@ -194,6 +194,29 @@ test('relayPublisher keeps publishing after a rejected event, and stays quiet wh
   }
 })
 
+test('the body cap counts bytes, not UTF-16 length: a multibyte body over the byte cap is rejected', async () => {
+  const relay = await startRelay({ ...local, maxBodyBytes: 100, clientBundleDir: '/no/such/bundle' })
+  try {
+    const body = JSON.stringify({ kind: 'log', message: '料'.repeat(40) }) // 40 three-byte chars
+    // Char length is under the cap, byte length is over it: the old char-count would wrongly accept.
+    assert.ok(body.length <= 100 && Buffer.byteLength(body) > 100)
+    assert.equal((await send(`${relay.url}/r/multibyte/publish`, 'POST', body)).status, 413)
+  } finally {
+    await relay.close()
+  }
+})
+
+test('a multibyte body under the cap is accepted and parses cleanly (decoded once, not per chunk)', async () => {
+  const relay = await startRelay({ ...local, clientBundleDir: '/no/such/bundle' })
+  try {
+    const body = JSON.stringify({ kind: 'log', message: 'café ☕ 日本語 🚀' })
+    assert.equal((await send(`${relay.url}/r/utf8/publish`, 'POST', body)).status, 202)
+    assert.deepEqual(relay.runIds(), ['utf8']) // it parsed as JSON and landed in the run
+  } finally {
+    await relay.close()
+  }
+})
+
 test('healthz is 200; a bad publish is rejected without crashing the run', async () => {
   const relay = await startRelay({ ...local, clientBundleDir: '/no/such/bundle' })
   try {

@@ -182,23 +182,29 @@ function handle(req: IncomingMessage, res: ServerResponse, ctx: HandleCtx): void
 
 /** Read a JSON body (one event or an array) and push each event into the run's stream. */
 function ingestBody(req: IncomingMessage, res: ServerResponse, r: Run, maxBody: number): void {
-  let body = ''
+  // Collect raw bytes and decode once at the end: a per-chunk `String(chunk)` corrupts a
+  // multibyte UTF-8 codepoint split across two chunks, and the cap is in bytes, not the
+  // UTF-16 code units a string length would count.
+  const chunks: Buffer[] = []
+  let bytes = 0
   let tooBig = false
   req.on('data', (chunk: Buffer) => {
     if (tooBig) return
-    body += chunk
-    if (body.length > maxBody) {
+    bytes += chunk.length
+    if (bytes > maxBody) {
       tooBig = true
       res.writeHead(413, { 'content-type': 'text/plain' })
       res.end('payload too large')
       req.destroy()
+      return
     }
+    chunks.push(chunk)
   })
   req.on('end', () => {
     if (tooBig) return
     let parsed: unknown
     try {
-      parsed = JSON.parse(body)
+      parsed = JSON.parse(Buffer.concat(chunks).toString('utf8'))
     } catch {
       res.writeHead(400, { 'content-type': 'text/plain' })
       res.end('invalid json')
