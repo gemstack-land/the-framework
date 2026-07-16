@@ -14,11 +14,16 @@ describe('contentToString', () => {
     assert.equal(contentToString('already text'), 'already text')
   })
 
-  it('joins text parts with no separator by default, which is what the providers send', () => {
+  // The two separators are an intentional, settled difference (#573), not an oversight:
+  // the provider default reconstructs the wire message with nothing injected, while
+  // memory extraction separates parts so text does not jam across a dropped part.
+  it('joins text parts with no separator by default, reconstructing the wire message', () => {
     assert.equal(contentToString(mixed), 'Helloworld')
   })
 
-  it('takes a separator, which is what memory extraction needs (#572)', () => {
+  it('separates parts with a given separator, which is what memory extraction needs (#573)', () => {
+    // The image between the two text parts is dropped; the separator keeps the
+    // remaining text from jamming into `Helloworld` for the extractor.
     assert.equal(contentToString(mixed, '\n'), 'Hello\nworld')
   })
 
