@@ -15,6 +15,7 @@ import type {
   PreviewOptions,
 } from './types.js'
 import { RunnerError } from './types.js'
+import { norm } from './path.js'
 
 const delay = (ms: number): Promise<void> => new Promise(res => setTimeout(res, ms))
 
@@ -46,12 +47,13 @@ export interface LocalRunnerOptions {
   previewHost?: string
 }
 
-/** Normalize a workspace path to a canonical relative form (matches FakeFs). */
-function norm(path: string): string {
-  return path.replace(/^\.?\/+/, '').replace(/\/+$/, '')
-}
-
-/** Resolve `path` inside `root`, rejecting anything that escapes the workspace. */
+/**
+ * Resolve `path` inside `root`, rejecting anything that escapes the workspace.
+ *
+ * Not {@link safeSegments}: there is a real filesystem here, so resolving against
+ * the root and asking `node:path` whether we stayed inside also catches what the
+ * host resolves differently. The container and browser runners have no such root.
+ */
 function within(root: string, path: string): string {
   const abs = resolve(root, norm(path))
   const rel = relative(root, abs)

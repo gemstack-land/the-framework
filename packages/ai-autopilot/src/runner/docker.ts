@@ -11,6 +11,7 @@ import type {
   PreviewOptions,
 } from './types.js'
 import { RunnerError } from './types.js'
+import { norm, safeSegments } from './path.js'
 
 const delay = (ms: number): Promise<void> => new Promise(res => setTimeout(res, ms))
 
@@ -64,21 +65,9 @@ async function waitForContainerPort(container: string, port: number, timeoutMs: 
   }
 }
 
-/** Normalize a workspace path to a canonical relative form (matches LocalFs/FakeFs). */
-function norm(path: string): string {
-  return path.replace(/^\.?\/+/, '').replace(/\/+$/, '')
-}
-
 /** Resolve `path` to an absolute container path under {@link WORKSPACE}, rejecting escapes. */
 function within(path: string): string {
-  const parts: string[] = []
-  for (const seg of norm(path).split('/')) {
-    if (seg === '' || seg === '.') continue
-    if (seg === '..') {
-      if (parts.length === 0) throw new RunnerError(`path escapes the workspace: ${path}`)
-      parts.pop()
-    } else parts.push(seg)
-  }
+  const parts = safeSegments(path)
   return parts.length ? `${WORKSPACE}/${parts.join('/')}` : WORKSPACE
 }
 

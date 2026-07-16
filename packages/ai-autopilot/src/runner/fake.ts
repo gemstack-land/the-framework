@@ -10,6 +10,7 @@ import type {
   PreviewOptions,
 } from './types.js'
 import { RunnerError } from './types.js'
+import { norm } from './path.js'
 
 /** How the fake responds to a command: a static result or a per-command function. */
 export type FakeExec = (command: string, opts: ExecOptions) => ExecResult | Promise<ExecResult>
@@ -25,10 +26,6 @@ export interface FakeRunnerOptions {
   background?: boolean
 }
 
-/** Normalize a workspace path to a canonical relative form. */
-function norm(path: string): string {
-  return path.replace(/^\.?\/+/, '').replace(/\/+$/, '')
-}
 
 class FakeFs implements RunnerFs {
   constructor(private readonly files: Map<string, string>) {}
