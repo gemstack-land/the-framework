@@ -1,4 +1,4 @@
-Measure "problem variability" of <PARAM:what>
+Measure "problem variability" of ${{ tf.params.what }}
 - List all high-level flows the code implements, i.e. the list of all "problems" the code solves
 - Give a rating for each problem (from 0 to 10) following this criteria: does the code solves the problem in an obviously optimal way (10), or is it highly unclear whether the problem can be solved in a better way (0)?
 - Write down the ratings in a new file <REVIEW_FILE>

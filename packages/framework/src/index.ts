@@ -235,15 +235,6 @@ export {
 export { loadUserSystemPrompt, SYSTEM_PROMPT_FILE } from './system-prompt-file.js'
 export { renderTemplate, TemplateFragmentError } from './prompt-template.js'
 export {
-  extractParamNames,
-  renderPresetPrompt,
-  unfilledParams,
-  PresetParamError,
-  PARAM_PATTERN,
-  type PresetParam,
-  type PresetParamOptions,
-} from './preset-params.js'
-export {
   preflight,
   type PreflightResult,
   type PreflightCheck,

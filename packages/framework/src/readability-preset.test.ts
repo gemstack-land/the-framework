@@ -1,6 +1,5 @@
 import { strict as assert } from 'node:assert'
 import { test } from 'node:test'
-import { PARAM_PATTERN } from './preset-params.js'
 import { renderReadabilityPrompt, READABILITY_PARAMS, READABILITY_PROMPT_TEMPLATE } from './readability-preset.js'
 
 test('the Readability template carries the #360 flow: seams, altitude pass, rating lists', () => {
@@ -12,7 +11,7 @@ test('the Readability template carries the #360 flow: seams, altitude pass, rati
   assert.match(READABILITY_PROMPT_TEMPLATE, /<FUNCTION>/)
   assert.match(READABILITY_PROMPT_TEMPLATE, /^FUNCTION: /m)
   // The one user blank, declared with its default.
-  assert.match(READABILITY_PROMPT_TEMPLATE, /<PARAM:what>/)
+  assert.match(READABILITY_PROMPT_TEMPLATE, /\$\{\{ tf\.params\.what \}\}/)
   assert.deepEqual(READABILITY_PARAMS.map(p => p.name), ['what'])
 })
 
@@ -24,6 +23,6 @@ test('renderReadabilityPrompt defaults the blank to "this PR" and takes an overr
   const custom = renderReadabilityPrompt('the dashboard package')
   assert.match(custom, /^Refactor the dashboard package to make it/)
   // No raw placeholder survives a render; <FUNCTION> is not a param and stays.
-  assert.equal(PARAM_PATTERN.test(custom), false)
+  assert.equal(custom.includes('${{'), false)
   assert.match(custom, /<FUNCTION>/)
 })
