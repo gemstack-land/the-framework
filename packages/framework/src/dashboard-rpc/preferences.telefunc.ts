@@ -22,6 +22,12 @@ export async function onPreferences(): Promise<Preferences> {
 export async function savePreferences(preferences: Preferences): Promise<SavePreferencesResult> {
   const store = contextPreferences()
   if (!store) return { ok: false, error: 'preferences are not enabled on this server' }
-  await store.save(preferences)
-  return { ok: true }
+  // A failed write returns the advertised typed error rather than rejecting the RPC,
+  // so the client handles it the same as the not-enabled case (both `{ ok: false }`).
+  try {
+    await store.save(preferences)
+    return { ok: true }
+  } catch {
+    return { ok: false, error: 'failed to save preferences' }
+  }
 }
