@@ -65,7 +65,7 @@ test('installProject on a clean repo seeds the log and makes exactly one install
   assert.deepEqual(commits, [['commit', '-m', '[The Framework] install The Framework']])
 })
 
-test('installProject materializes the quality presets so a post-merge filePath resolves (#326)', async () => {
+test('installProject materializes the quality presets so an on-before-mergeable filePath resolves (#326)', async () => {
   const fs = memFs()
   const { git } = fakeGit(args => (args[0] === 'rev-parse' ? 'true' : ''))
   await installProject(CWD, { git, fs })

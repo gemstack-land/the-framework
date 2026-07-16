@@ -56,8 +56,8 @@ test('startOptionFlags maps only enabled Global options to CLI flags (#314)', ()
     '--context',
     '/work/ui',
   ])
-  // Post-merge prompt (#326): maps to --post-merge.
-  assert.deepEqual(startOptionFlags({ postMerge: true }), ['--post-merge'])
+  // On-before-mergeable prompt (#326): maps to --on-before-mergeable.
+  assert.deepEqual(startOptionFlags({ onBeforeMergeable: true }), ['--on-before-mergeable'])
   // Browser via chrome-devtools-mcp (#452): maps to --browser.
   assert.deepEqual(startOptionFlags({ browser: true }), ['--browser'])
 })

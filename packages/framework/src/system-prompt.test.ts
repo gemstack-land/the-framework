@@ -181,10 +181,10 @@ test('eco.autoResearch drops only the Alternatives section (#314)', () => {
   assert.ok(system.includes('### Scope'))
 })
 
-test('eco.autoMaintenance drops nothing here: #326 moved the section to the post-merge prompt (#555/#556)', () => {
+test('eco.autoMaintenance drops nothing here: #326 moved the section to the on-before-mergeable prompt (#555/#556)', () => {
   // Not a silent breakage but a deliberate no-op on *this* prompt: the maintenance text left
   // the system prompt, so the tokens are already saved for everyone. The flag acts on the
-  // post-merge prompt instead, where the CLI skips it (#556).
+  // on-before-mergeable prompt instead, where the CLI skips it (#556).
   const { system, user } = renderSystemPrompt({ prompt: 'ship it', params: { eco: { autoMaintenance: true } } })
   assert.equal(system, renderSystemPrompt({ prompt: 'ship it', params: {} }).system)
   assert.equal(user, 'ship it') // the user half is untouched by eco

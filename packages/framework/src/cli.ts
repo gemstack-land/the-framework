@@ -49,7 +49,7 @@ import {
   type RepoReview,
 } from './maintenance.js'
 import { renderMaintainabilityPrompt } from './maintainability-preset.js'
-import { renderPostMergePrompt, type PostMergeContext } from './post-merge-prompt.js'
+import { renderOnBeforeMergeablePrompt, type OnBeforeMergeableContext } from './on-before-mergeable-prompt.js'
 import { runPrompt } from './prompt-run.js'
 import { renderResearchPrompt } from './research-preset.js'
 
@@ -152,7 +152,7 @@ Options:
   --context <dir>        Focus the agent on this directory (repeatable). Adds one
                          "Context: <dirs>" line to the system prompt; the agent can
                          still reach every repo, this just narrows where it looks.
-  --post-merge           When the run signals setReadyForMerge(), fire the post-merge
+  --on-before-mergeable           When the run signals setReadyForMerge(), fire the on-before-mergeable
                          prompt: queue the maintainability and security-audit follow-ups
                          (plus readability under --technical) as TODO entries for the
                          backlog loop to pick up (#326).
@@ -228,8 +228,8 @@ export interface CliOptions {
   eco: Required<EcoOptions>
   /** `--context <dir>` (repeatable): in-context directories added as one `Context:` line (#439). */
   context: string[]
-  /** `--post-merge`: fire the #326 post-merge prompt when the run signals setReadyForMerge(), queueing the quality follow-ups as TODO entries. */
-  postMerge: boolean
+  /** `--on-before-mergeable`: fire the #326 on-before-mergeable prompt when the run signals setReadyForMerge(), queueing the quality follow-ups as TODO entries. */
+  onBeforeMergeable: boolean
   /** `--browser`: give the agent a real browser via chrome-devtools-mcp (navigate, console, network, DOM, screenshot) during the run (#452). */
   browser: boolean
   buildEvent?: string | undefined
@@ -291,7 +291,7 @@ export function parseArgs(argv: string[]): CliOptions {
     vanilla: false,
     eco: { autoPlanning: false, autoResearch: false, autoMaintenance: false },
     context: [],
-    postMerge: false,
+    onBeforeMergeable: false,
     browser: false,
     dashboard: true,
     relayServe: false,
@@ -338,8 +338,8 @@ export function parseArgs(argv: string[]): CliOptions {
       case '--vanilla':
         opts.vanilla = true
         break
-      case '--post-merge':
-        opts.postMerge = true
+      case '--on-before-mergeable':
+        opts.onBeforeMergeable = true
         break
       case '--browser':
         opts.browser = true
@@ -914,11 +914,11 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
   // set by a user interrupt or a budget cap (#322). Trusted over which signal
   // aborted, since a budget stop trips an internal signal the CLI never sees.
   let stoppedCleanly = false
-  // The agent signalled setReadyForMerge() this run (#326): with --post-merge on, fire the
-  // post-merge prompt once the run settles (not mid-run — it would race the agent's own git work).
+  // The agent signalled setReadyForMerge() this run (#326): with --on-before-mergeable on, fire the
+  // on-before-mergeable prompt once the run settles (not mid-run — it would race the agent's own git work).
   let sawReadyForMerge = false
   // The session the agent named via setSessionName() (#326). Carried on run state because the
-  // post-merge prompt names it on every line: it is set before the first change and read here,
+  // on-before-mergeable prompt names it on every line: it is set before the first change and read here,
   // after the run.
   let sessionName: string | undefined
   // Record the finished run in the project log `.the-framework/LOGS.md` (#379). The
@@ -954,22 +954,22 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
     publisher?.publish(event)
   }
 
-  // Fire the #326 post-merge prompt once a --post-merge run has settled and the agent
+  // Fire the #326 on-before-mergeable prompt once a --on-before-mergeable run has settled and the agent
   // signalled setReadyForMerge(). Skipped for a fake/offline run and when the run was stopped.
-  const maybeFirePostMerge = async (): Promise<void> => {
-    if (!opts.postMerge || !sawReadyForMerge || stoppedCleanly || fake) return
+  const maybeFireOnBeforeMergeable = async (): Promise<void> => {
+    if (!opts.onBeforeMergeable || !sawReadyForMerge || stoppedCleanly || fake) return
     // --eco-auto-maintenance (#314) no longer skips the whole run: since #537 this prompt
     // also carries `## Business knowledge`, which the flag does not name. It drops just
-    // `## Maintenance` inside renderPostMergePrompt() instead.
+    // `## Maintenance` inside renderOnBeforeMergeablePrompt() instead.
     // Every line of the prompt names the session, so there is nothing to queue without one.
     // An agent that made changes has one; this is the agent that ignored the instruction.
     if (!sessionName) {
-      io.out('  ! post-merge skipped: the run never called setSessionName().')
+      io.out('  ! on-before-mergeable skipped: the run never called setSessionName().')
       return
     }
     const binPath = process.argv[1]
     if (!binPath) return
-    await runPostMerge(
+    await runOnBeforeMergeable(
       cwd,
       binPath,
       io,
@@ -1055,7 +1055,7 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
           : '\n✓ research done: see the REVIEW-PROBLEMS / TODO files it wrote.',
       )
       await store?.close()
-      await maybeFirePostMerge()
+      await maybeFireOnBeforeMergeable()
       if (dashboard) {
         io.out(`\nDashboard still live at ${dashboard.url}. Press Ctrl+C to exit.`)
         await waitForInterrupt()
@@ -1184,7 +1184,7 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
     if (preview) io.out(`\n▶ Your app is running at ${preview.url} — open it in a browser.`)
     // Flush the event log. Best-effort.
     await store?.close()
-    await maybeFirePostMerge()
+    await maybeFireOnBeforeMergeable()
     // Stay up while the dashboard and/or the app are live, then tear both down.
     if (dashboard || preview) {
       if (dashboard) io.out(`\nDashboard still live at ${dashboard.url}. Press Ctrl+C to exit.`)
@@ -1379,13 +1379,13 @@ function spawnMaintenanceRun(review: RepoReview, binPath: string, maxCost?: numb
 /**
  * Run one direct prompt by spawning `framework prompt "<prompt>" --cwd <dir> --no-dashboard`,
  * reusing the whole run path (preflight, driver, budget cap, LOGS.md). The child inherits
- * stdio so its run streams to the terminal. Note it carries no `--post-merge`, so a quality
- * pass never triggers its own post-merge prompt (the recursion guard). Resolves true on a
+ * stdio so its run streams to the terminal. Note it carries no `--on-before-mergeable`, so a quality
+ * pass never triggers its own on-before-mergeable prompt (the recursion guard). Resolves true on a
  * clean exit (0). Never re-execs a test entry (fork-bomb guard).
  */
 /**
  * The argv a spawned `framework prompt` child runs with. Pure so a test can assert it:
- * note it carries **no** `--post-merge`, which is the post-merge recursion guard (a quality
+ * note it carries **no** `--on-before-mergeable`, which is the on-before-mergeable recursion guard (a quality
  * pass must not trigger its own suite).
  */
 export function promptRunArgs(prompt: string, cwd: string, binPath: string, maxCost?: number): string[] {
@@ -1406,11 +1406,11 @@ function spawnPromptRun(prompt: string, cwd: string, binPath: string, maxCost?: 
   })
 }
 
-/** How the post-merge prompt is spawned; injectable so tests observe it without spawning. */
+/** How the on-before-mergeable prompt is spawned; injectable so tests observe it without spawning. */
 export type PromptRunner = (prompt: string, cwd: string, binPath: string, maxCost?: number) => Promise<boolean>
 
 /**
- * Fire the #326 post-merge prompt after a run signalled setReadyForMerge(): one
+ * Fire the #326 on-before-mergeable prompt after a run signalled setReadyForMerge(): one
  * `framework prompt` child on the same workspace that appends the quality follow-ups to the
  * session's TODO file, for the backlog loop (#323/#538) to pick up.
  *
@@ -1419,11 +1419,11 @@ export type PromptRunner = (prompt: string, cwd: string, binPath: string, maxCos
  * one short turn that writes a few TODO lines, rather than three full preset passes serialized
  * on the same git index. Best-effort, like the suite was: a failure is logged, never thrown.
  */
-export async function runPostMerge(
+export async function runOnBeforeMergeable(
   cwd: string,
   binPath: string,
   io: CliIO,
-  tf: PostMergeContext,
+  tf: OnBeforeMergeableContext,
   maxCost?: number,
   eco?: EcoOptions,
   run: PromptRunner = spawnPromptRun,
@@ -1435,11 +1435,11 @@ export async function runPostMerge(
   try {
     await materializePresets(cwd, fs)
   } catch (err) {
-    io.out(`  ! post-merge: could not materialize presets (${err instanceof Error ? err.message : String(err)})`)
+    io.out(`  ! on-before-mergeable: could not materialize presets (${err instanceof Error ? err.message : String(err)})`)
   }
-  io.out(`\n◆ post-merge: queueing quality follow-ups for ${tf.session_name}`)
-  const ok = await run(renderPostMergePrompt(tf, eco), cwd, binPath, maxCost)
-  if (!ok) io.out(`  ! post-merge queueing did not complete cleanly.`)
+  io.out(`\n◆ on-before-mergeable: queueing quality follow-ups for ${tf.session_name}`)
+  const ok = await run(renderOnBeforeMergeablePrompt(tf, eco), cwd, binPath, maxCost)
+  if (!ok) io.out(`  ! on-before-mergeable queueing did not complete cleanly.`)
 }
 
 async function runRelayServer(opts: CliOptions, io: CliIO): Promise<number> {

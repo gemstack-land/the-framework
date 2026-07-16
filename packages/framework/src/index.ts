@@ -212,8 +212,8 @@ export {
   type VersionFetcher,
   type UpdateStatus,
 } from './update-check.js'
-export { runCli, parseArgs, buildDeployTarget, runPostMerge, promptRunArgs, type PromptRunner, type CliIO, type CliOptions } from './cli.js'
-export { renderPostMergePrompt, POST_MERGE_PROMPT_TEMPLATE, type PostMergeContext } from './post-merge-prompt.js'
+export { runCli, parseArgs, buildDeployTarget, runOnBeforeMergeable, promptRunArgs, type PromptRunner, type CliIO, type CliOptions } from './cli.js'
+export { renderOnBeforeMergeablePrompt, ON_BEFORE_MERGEABLE_PROMPT_TEMPLATE, type OnBeforeMergeableContext } from './on-before-mergeable-prompt.js'
 export {
   loadFrameworkConfig,
   parseFrameworkConfig,

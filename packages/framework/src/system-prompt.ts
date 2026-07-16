@@ -43,8 +43,8 @@ export interface EcoOptions {
   autoResearch?: boolean | undefined
   /**
    * Drop `## Maintenance`. Nothing to drop *here*: #326 moved that section out of the
-   * system prompt and into the post-merge prompt, so this flag acts on that prompt
-   * instead (#556) — see {@link ./post-merge-prompt.renderPostMergePrompt}. Listed here
+   * system prompt and into the on-before-mergeable prompt, so this flag acts on that prompt
+   * instead (#556) — see {@link ./on-before-mergeable-prompt.renderOnBeforeMergeablePrompt}. Listed here
    * because it is still an {@link EcoOptions} flag.
    */
   autoMaintenance?: boolean | undefined
@@ -68,7 +68,7 @@ const ECO_SECTION_HEADINGS: Partial<Record<keyof EcoOptions, string>> = {
 /**
  * The `tf` context the templates' `${{...}}` fragments read (#326/#350). One shape across
  * the prompts; each reads the subset it needs. `session_name` and `settings` are the
- * post-merge prompt's (#556), and are snake_case because the doc writes them that way.
+ * on-before-mergeable prompt's (#556), and are snake_case because the doc writes them that way.
  */
 export interface TfContext {
   /** The user's prompt (the run intent, or the typed prompt): fills `${{tf.prompt}}`. */
@@ -77,7 +77,7 @@ export interface TfContext {
   params: { autopilot?: boolean; eco?: EcoOptions | undefined } & Record<string, unknown>
   /**
    * The session name the agent set via setSessionName(), carried on run state. Only the
-   * post-merge prompt reads it, never the system prompt: it is set before the agent makes
+   * on-before-mergeable prompt reads it, never the system prompt: it is set before the agent makes
    * changes and read afterwards, so it is not chicken-and-egg.
    */
   session_name?: string | undefined
@@ -91,7 +91,7 @@ const DEFAULT_TF: TfContext = { prompt: '', params: {} }
 /**
  * The project-knowledge documents (#537): what the repo knows about itself, as markdown
  * that travels with the code. {@link systemPromptBlock} puts them in front of every run
- * as in-context paths; the post-merge prompt asks the agent to update them, which is what
+ * as in-context paths; the on-before-mergeable prompt asks the agent to update them, which is what
  * keeps them current. Repo-root, because that is the agent's cwd and where the docs live.
  * Each carries the one-line gloss Rom wants shown alongside the path (#559). README is
  * left out: a repo's own `README.md` already covers the overview.
