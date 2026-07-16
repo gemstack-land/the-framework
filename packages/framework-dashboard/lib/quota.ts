@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react'
 import type { QuotaView } from '@gemstack/framework'
 import { onQuota } from '../server/quota.telefunc.js'
+import { usePolled } from './use-async.js'
 
 // The usage panel's data (#535). The daemon polls the agent for us and caches the answer,
 // so this only has to ask the daemon for what it already knows — cheap, unlike the read
@@ -16,26 +16,5 @@ const REFRESH_MS = 30_000
  * than blanking it: an empty bar reads as "nothing used".
  */
 export function useQuota(): QuotaView | undefined {
-  const [view, setView] = useState<QuotaView | undefined>(undefined)
-
-  useEffect(() => {
-    let live = true
-    const load = (): void => {
-      void onQuota()
-        .then(next => {
-          if (live) setView(next)
-        })
-        .catch(() => {
-          // Keep whatever we last showed; the next tick may well succeed.
-        })
-    }
-    load()
-    const timer = setInterval(load, REFRESH_MS)
-    return () => {
-      live = false
-      clearInterval(timer)
-    }
-  }, [])
-
-  return view
+  return usePolled<QuotaView | undefined>(onQuota, undefined, REFRESH_MS, []).value
 }

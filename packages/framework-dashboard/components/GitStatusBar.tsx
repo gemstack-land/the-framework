@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react'
 import type { GitStatus } from '@gemstack/framework'
 import { GitBranch } from 'lucide-react'
 import { onGitStatus } from '../server/reads.telefunc.js'
+import { usePolled } from '../lib/use-async.js'
 import { cn } from '../lib/utils.js'
 
 // The project panel's git status (#491, part of #488): active branch, a clean/dirty dot, and
@@ -9,19 +9,7 @@ import { cn } from '../lib/utils.js'
 // when the project is not a git repo (or on the relay, which has no local checkout).
 // `inline` renders just the status (for the project action bar); otherwise a full-width row.
 export function GitStatusBar({ projectId, inline = false }: { projectId: string; inline?: boolean }) {
-  const [status, setStatus] = useState<GitStatus | null>(null)
-
-  useEffect(() => {
-    let live = true
-    setStatus(null)
-    const load = () => void onGitStatus(projectId).then(s => live && setStatus(s))
-    load()
-    const poll = setInterval(load, 10_000)
-    return () => {
-      live = false
-      clearInterval(poll)
-    }
-  }, [projectId])
+  const { value: status } = usePolled<GitStatus | null>(() => onGitStatus(projectId), null, 10_000, [projectId])
 
   if (!status) return null
 

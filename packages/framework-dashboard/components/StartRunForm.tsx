@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { useRef, useState, type FormEvent } from 'react'
 import type { ProjectSummary } from '@gemstack/framework'
 import {
   renderResearchPrompt,
@@ -10,6 +10,7 @@ import {
 import { sendStart } from '../server/control.telefunc.js'
 import { onProjects } from '../server/projects.telefunc.js'
 import { usePreferences, updatePreferences, autopilotEnabled } from '../lib/preferences.js'
+import { useLoaded } from '../lib/use-async.js'
 import { PromptEditor, type PromptEditorHandle } from './PromptEditor.js'
 import { SystemPromptDisclosure } from './SystemPromptDisclosure.js'
 import { Button } from './ui/button.js'
@@ -71,16 +72,8 @@ export function StartRunForm({
   // Context selector (#439/#314): the agent can reach every registered repo, so ticking a
   // subset narrows its focus — the picked paths become one `Context:` line in the system
   // prompt. Loaded from the same registry the Projects sidebar shows.
-  const [projects, setProjects] = useState<ProjectSummary[]>([])
+  const projects = useLoaded<ProjectSummary[]>(onProjects, [], [])
   const [showContext, setShowContext] = useState(false)
-
-  useEffect(() => {
-    let live = true
-    void onProjects().then(list => live && setProjects(list))
-    return () => {
-      live = false
-    }
-  }, [])
 
   // Vanilla removes the system prompt entirely, so Eco (which only trims it) has nothing
   // left to act on.

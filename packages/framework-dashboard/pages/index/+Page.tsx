@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { onProjectFiles } from '../../server/reads.telefunc.js'
 import { ProjectsSidebar } from '../../components/ProjectsSidebar.js'
 import { RunHistory } from '../../components/RunHistory.js'
@@ -11,7 +11,11 @@ import { RelayView } from '../../components/RelayView.js'
 import { Badge } from '../../components/ui/badge.js'
 import { useLiveEvents } from '../../lib/use-live-events.js'
 import { useRuns } from '../../lib/use-runs.js'
+import { useLoaded } from '../../lib/use-async.js'
 import { pendingChoices, agentViews } from '../../lib/live-state.js'
+
+/** Stable, so `files` keeps one identity while no project is selected. */
+const EMPTY_FILES: string[] = []
 
 // The dashboard shell (#405 phase 2): Projects | Runs | main | Docs/Log rail. The main pane
 // is one of three views chosen by the Runs-rail selection: the project home/launcher (Live,
@@ -52,19 +56,7 @@ export default function Page() {
 
   // The selected project's files (git ls-files), fetched once here and handed to both the
   // `#` picker and the tree. Empty when no project / on the relay (no checkout).
-  const [files, setFiles] = useState<string[]>([])
-  useEffect(() => {
-    if (!projectId) {
-      setFiles([])
-      return
-    }
-    let live = true
-    setFiles([])
-    void onProjectFiles(projectId).then(list => live && setFiles(list))
-    return () => {
-      live = false
-    }
-  }, [projectId])
+  const files = useLoaded<string[]>(projectId ? () => onProjectFiles(projectId) : null, EMPTY_FILES, [projectId])
 
   const onRunStarted = (intent: string) => {
     // Stay on the home launcher (it must stay visible so you can launch again); the new run

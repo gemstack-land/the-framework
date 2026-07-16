@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Check, FileIcon } from 'lucide-react'
 import { onProjectFileStatus } from '../server/reads.telefunc.js'
+import { usePolled } from '../lib/use-async.js'
 import {
   Files,
   FolderItem,
@@ -11,6 +12,9 @@ import {
 } from './animate-ui/components/base/files/index.js'
 
 type FileGitStatus = 'untracked' | 'modified' | 'deleted'
+
+/** Stable, so the `useMemo` on `status` doesn't re-run for a fresh empty object. */
+const EMPTY_STATUS: Record<string, FileGitStatus> = {}
 
 // The project panel's file tree (#492): a lazy, collapsible tree built from the flat
 // `git ls-files` list (onProjectFiles, shared with the `#` picker #504). It is a file-level
@@ -78,18 +82,12 @@ export function FileTree({
   const [query, setQuery] = useState('')
 
   // Per-file git status for the dots (#492): polled so it tracks a run editing files.
-  const [status, setStatus] = useState<Record<string, FileGitStatus>>({})
-  useEffect(() => {
-    let live = true
-    setStatus({})
-    const load = () => void onProjectFileStatus(projectId).then(s => live && setStatus(s))
-    load()
-    const poll = setInterval(load, 8_000)
-    return () => {
-      live = false
-      clearInterval(poll)
-    }
-  }, [projectId])
+  const { value: status } = usePolled<Record<string, FileGitStatus>>(
+    () => onProjectFileStatus(projectId),
+    EMPTY_STATUS,
+    8_000,
+    [projectId],
+  )
 
   const folderStatus = useMemo(() => foldersFromStatus(status), [status])
 
