@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { isDeclinedConfirmation, parseAwaitGate, parseChoicesGate, parseConfirmationGate, parseMarkdownViews, parseMultiSelectGate, parseSessionName, parseReadyForMerge } from './turn-gate.js'
+import { continuationPrompt, isDeclinedConfirmation, parseAwaitGate, parseChoicesGate, parseConfirmationGate, parseMarkdownViews, parseMultiSelectGate, parseSessionName, parseReadyForMerge } from './turn-gate.js'
 
 const block = (json: string): string => 'Here are the options.\n```await-choices\n' + json + '\n```'
 const multiBlock = (json: string): string => 'Pick some.\n```await-multiselect\n' + json + '\n```'
@@ -8,6 +8,15 @@ const confirmBlock = (json: string): string => 'Wrote the plan.\n```await-confir
 
 test('parseChoicesGate returns undefined when the agent did not stop to ask (#337)', () => {
   assert.equal(parseChoicesGate('Built the whole app. Done.'), undefined)
+})
+
+test('continuationPrompt is one wording for every path, carrying the title and the pick (#570)', () => {
+  const prompt = continuationPrompt('Which data store?', 'Postgres')
+  assert.match(prompt, /You paused to ask: "Which data store\?"/)
+  assert.match(prompt, /The user chose: Postgres/)
+  // No caller-specific clause ("backlog entry" / "building X"): the same string everywhere.
+  assert.equal(prompt, continuationPrompt('Which data store?', 'Postgres'))
+  assert.doesNotMatch(prompt, /backlog entry|Continue building/)
 })
 
 test('parseChoicesGate parses a well-formed await-choices block (#337)', () => {

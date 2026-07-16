@@ -17,7 +17,7 @@ import type {
   Verdict,
 } from '@gemstack/ai-autopilot'
 import type { DriverSession } from './driver/index.js'
-import { parseAwaitGate, type ParsedAwaitGate } from './turn-gate.js'
+import { continuationPrompt, parseAwaitGate, type ParsedAwaitGate } from './turn-gate.js'
 
 /**
  * Driver-backed {@link https://github.com/gemstack-land/gemstack | Bootstrap} steps.
@@ -163,7 +163,7 @@ export function continueAfterChoice(
   question: string,
   answer: string,
 ): Promise<SupervisorRun> {
-  const prompt = `You paused to ask: "${question}". The user chose: ${answer}. Continue building "${ctx.intent}" with that decision, and do not ask again unless a genuinely new choice comes up.`
+  const prompt = continuationPrompt(question, answer)
   return session
     .prompt(prompt, { ...(ctx.signal ? { signal: ctx.signal } : {}) })
     .then(turn => {

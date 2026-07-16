@@ -10,7 +10,7 @@ import { FAKE_DEPLOY, FAKE_INTENT, FAKE_SIGNALS, fakeDriver } from './fake-scrip
 import { FakeDriver, type Driver, type DriverSession } from './driver/index.js'
 import { composeRunSystem } from './system-prompt.js'
 import type { ChoiceRequest, FrameworkEvent } from './events.js'
-import { MAX_AWAIT_ROUNDS, PLAN_DECLINED_MESSAGE } from './turn-gate.js'
+import { MAX_AWAIT_ROUNDS, PLAN_DECLINED_MESSAGE, continuationPrompt } from './turn-gate.js'
 
 /** A driver that records the `system` framing it is started with, delegating the run to the fake. */
 function recordingDriver(): { driver: Driver; system: () => string } {
@@ -829,14 +829,14 @@ test('runAwaitRounds resolves a gate, re-prompts with the answer, and emits ever
   const result = await runAwaitRounds({
     session,
     prompt: 'open',
-    continuation: (gate, answer) => `resume: ${gate.title} -> ${answer}`,
     emitTurnSignals: text => void signalled.push(text),
     requestChoice: async () => ({ picked: 'b' }),
     emit: e => void events.push(e),
   })
 
   assert.deepEqual(result, { text: 'All done.', declined: false, exhausted: false })
-  assert.deepEqual(prompts, ['open', 'resume: Which way? -> Option B']) // the caller owns the wording
+  // One shared continuation wording for every path (#570), built from the gate title + pick.
+  assert.deepEqual(prompts, ['open', continuationPrompt('Which way?', 'Option B')])
   assert.ok(events.some(e => e.kind === 'log' && e.message === 'Continuing with your choice: Option B'))
   // Every turn goes through the signal emitter, the gate turn included (#563).
   assert.equal(signalled.length, 2)
@@ -852,7 +852,6 @@ test('runAwaitRounds reports a declined plan and stops instead of re-prompting (
   const result = await runAwaitRounds({
     session,
     prompt: 'open',
-    continuation: () => 'should never be sent',
     emitTurnSignals: () => {},
     requestChoice: async () => ({ picked: 'decline' }),
     emit: e => void events.push(e),
@@ -872,7 +871,6 @@ test('runAwaitRounds gives up after MAX_AWAIT_ROUNDS and reports it exhausted', 
   const result = await runAwaitRounds({
     session,
     prompt: 'open',
-    continuation: () => 'again',
     emitTurnSignals: () => {},
     requestChoice: async () => ({ picked: 'a' }),
     emit: () => {},
