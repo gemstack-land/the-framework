@@ -1,5 +1,6 @@
 import { join } from 'node:path'
 import type { FrameworkEvent } from '../events.js'
+import { nodeFs } from '../node-fs.js'
 
 /**
  * Persisted orchestration state (#211). The dashboard is a pure projection of the
@@ -400,44 +401,10 @@ export async function loadRunEvents(
   return events
 }
 
-/**
- * A {@link StoreFs} backed by `node:fs/promises`. The import is dynamic so the
- * store core stays free of a hard `node:fs` dependency — same convention as
- * ai-autopilot's `nodeLedgerFs`.
- */
+/** A {@link StoreFs} backed by `node:fs/promises`. See {@link nodeFs}. */
 export function nodeStoreFs(): StoreFs {
-  return {
-    async read(path) {
-      const { readFile } = await import('node:fs/promises')
-      return readFile(path, 'utf8')
-    },
-    async write(path, contents) {
-      const { writeFile } = await import('node:fs/promises')
-      await writeFile(path, contents, 'utf8')
-    },
-    async append(path, contents) {
-      const { appendFile } = await import('node:fs/promises')
-      await appendFile(path, contents, 'utf8')
-    },
-    async exists(path) {
-      const { stat } = await import('node:fs/promises')
-      try {
-        return (await stat(path)).isFile()
-      } catch {
-        return false
-      }
-    },
-    async mkdir(path) {
-      const { mkdir } = await import('node:fs/promises')
-      await mkdir(path, { recursive: true })
-    },
-    async readdir(path) {
-      const { readdir } = await import('node:fs/promises')
-      try {
-        return await readdir(path)
-      } catch {
-        return []
-      }
-    },
-  }
+  // Destructured rather than returned whole: the narrow interface is the contract,
+  // so the object should not carry methods the store was never handed.
+  const { read, write, append, exists, mkdir, readdir } = nodeFs()
+  return { read, write, append, exists, mkdir, readdir }
 }

@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { FrameworkSignals } from '@gemstack/ai-autopilot'
+import { nodeFs } from './node-fs.js'
 import { THE_FRAMEWORK_DIR } from './logs.js'
 
 /**
@@ -38,22 +39,10 @@ export interface ProjectFs {
   isDirectory(path: string): Promise<boolean>
 }
 
-/**
- * A {@link ProjectFs} backed by `node:fs/promises`. The import is dynamic so
- * the module core stays free of a hard `node:fs` dependency, same convention
- * as {@link nodeStoreFs}; any stat error reads as `false`.
- */
+/** A {@link ProjectFs} backed by `node:fs/promises`. See {@link nodeFs}. */
 export function nodeProjectFs(): ProjectFs {
-  return {
-    async isDirectory(path) {
-      const { stat } = await import('node:fs/promises')
-      try {
-        return (await stat(path)).isDirectory()
-      } catch {
-        return false
-      }
-    },
-  }
+  const { isDirectory } = nodeFs()
+  return { isDirectory }
 }
 
 /**

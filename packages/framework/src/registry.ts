@@ -1,5 +1,6 @@
 import { basename, dirname, join, resolve } from 'node:path'
 import { DEFAULT_CONSUMPTION_LIMITS, type ConsumptionLimit, type ConsumptionLimits } from './consumption.js'
+import { nodeFs } from './node-fs.js'
 
 /**
  * The multi-project registry (#390): the list of projects the user has
@@ -105,26 +106,10 @@ export interface RegistryFs {
   mkdir(path: string): Promise<void>
 }
 
-/**
- * A {@link RegistryFs} backed by `node:fs/promises`. The import is dynamic so
- * the module core stays free of a hard `node:fs` dependency, same convention
- * as {@link nodeProjectFs}.
- */
+/** A {@link RegistryFs} backed by `node:fs/promises`. See {@link nodeFs}. */
 export function nodeRegistryFs(): RegistryFs {
-  return {
-    async read(path) {
-      const { readFile } = await import('node:fs/promises')
-      return readFile(path, 'utf8')
-    },
-    async write(path, contents) {
-      const { writeFile } = await import('node:fs/promises')
-      await writeFile(path, contents, 'utf8')
-    },
-    async mkdir(path) {
-      const { mkdir } = await import('node:fs/promises')
-      await mkdir(path, { recursive: true })
-    },
-  }
+  const { read, write, mkdir } = nodeFs()
+  return { read, write, mkdir }
 }
 
 /** True when `value` is a well-formed {@link ProjectRecord}. */

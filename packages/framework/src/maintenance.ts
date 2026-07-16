@@ -1,5 +1,6 @@
 import { join } from 'node:path'
 import { nodeGitRunner, type GitRunner } from './project.js'
+import { nodeFs } from './node-fs.js'
 import { FRAMEWORK_DIR } from './store/index.js'
 
 /**
@@ -31,22 +32,10 @@ export interface MaintenanceFs {
   mkdir(path: string): Promise<void>
 }
 
-/** A {@link MaintenanceFs} backed by `node:fs/promises` (dynamic import, same convention as the registry). */
+/** A {@link MaintenanceFs} backed by `node:fs/promises`. See {@link nodeFs}. */
 export function nodeMaintenanceFs(): MaintenanceFs {
-  return {
-    async read(path) {
-      const { readFile } = await import('node:fs/promises')
-      return readFile(path, 'utf8')
-    },
-    async write(path, contents) {
-      const { writeFile } = await import('node:fs/promises')
-      await writeFile(path, contents, 'utf8')
-    },
-    async mkdir(path) {
-      const { mkdir } = await import('node:fs/promises')
-      await mkdir(path, { recursive: true })
-    },
-  }
+  const { read, write, mkdir } = nodeFs()
+  return { read, write, mkdir }
 }
 
 /** The review-state file path for a repo. */
