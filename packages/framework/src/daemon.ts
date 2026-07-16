@@ -1,4 +1,4 @@
-import { spawn } from 'node:child_process'
+import { spawn, type ChildProcess } from 'node:child_process'
 import { mkdir, readFile, writeFile, rm, stat } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
 import type { FrameworkEvent } from './events.js'
@@ -52,6 +52,40 @@ export interface DaemonState {
 /** The `.the-framework/` directory for a workspace. */
 export function daemonDir(cwd: string): string {
   return join(cwd, FRAMEWORK_DIR)
+}
+
+/**
+ * Locate the CLI entry to re-invoke for a detached child, refusing to re-exec a test
+ * file. Under `node --test` (or a direct `node foo.test.js`) `process.argv[1]` is the test
+ * file, which re-runs the whole suite instead of the daemon/run body — and that suite calls
+ * back here, so each spawn spawns another: a fork bomb. A real run passes the compiled bin
+ * (or an explicit `binPath`), so the guard only ever trips in tests.
+ */
+function resolveSpawnBin(explicitBinPath: string | undefined): string {
+  const binPath = explicitBinPath ?? process.argv[1]
+  if (!binPath) throw new Error('cannot locate the framework CLI entry')
+  if (!explicitBinPath && (process.env.NODE_TEST_CONTEXT || /\.test\.[cm]?[jt]s$/.test(binPath))) {
+    throw new Error('refusing to spawn a framework process from a test entry; pass an explicit binPath')
+  }
+  return binPath
+}
+
+/** Spawn a detached, unref'd framework child (`node <binPath> <args...>`) that outlives us. */
+function spawnDetached(binPath: string, args: string[]): ChildProcess {
+  const child = spawn(process.execPath, [binPath, ...args], { detached: true, stdio: 'ignore' })
+  child.unref()
+  return child
+}
+
+/**
+ * Make sure an activated home workspace shows up in the Projects list (#392). Best-effort
+ * and idempotent (addProject dedupes by path), so it never blocks the daemon coming up.
+ * Called both by the foreground daemon and by `framework --daemon`'s launcher.
+ */
+export async function registerHomeProject(cwd: string, env: NodeJS.ProcessEnv = process.env): Promise<void> {
+  if (await isActivated(cwd).catch(() => false)) {
+    await addProject(cwd, new Date().toISOString(), undefined, env).catch(() => {})
+  }
 }
 
 /**
@@ -153,23 +187,7 @@ export async function ensureDaemon(cwd: string, opts: EnsureDaemonOptions = {}):
   if (existing) return { state: existing, alreadyRunning: true }
 
   const port = opts.port ?? DEFAULT_DAEMON_PORT
-  const binPath = opts.binPath ?? process.argv[1]
-  if (!binPath) throw new Error('cannot locate the framework CLI entry to spawn the daemon')
-
-  // Never re-exec a test file as the daemon. Under `node --test` (or a direct
-  // `node foo.test.js`), process.argv[1] is the test file, which re-runs the whole
-  // suite instead of the daemon body — and that suite calls back here, so each spawn
-  // spawns another: a fork bomb. A real run passes the compiled bin as argv[1] (or an
-  // explicit binPath), so this only ever trips in tests.
-  if (!opts.binPath && (process.env.NODE_TEST_CONTEXT || /\.test\.[cm]?[jt]s$/.test(binPath))) {
-    throw new Error('refusing to spawn the dashboard daemon from a test entry; pass an explicit binPath')
-  }
-
-  const child = spawn(process.execPath, [binPath, '--daemon-serve', '--cwd', cwd, '--port', String(port)], {
-    detached: true,
-    stdio: 'ignore',
-  })
-  child.unref()
+  spawnDetached(resolveSpawnBin(opts.binPath), ['--daemon-serve', '--cwd', cwd, '--port', String(port)])
 
   const state = await waitForDaemon(opts.env, opts.timeoutMs ?? 5000)
   if (!state) throw new Error('the daemon did not come up in time')
@@ -282,20 +300,84 @@ export async function runDaemon(cwd: string, opts: RunDaemonOptions = {}): Promi
   // command in a fresh workspace (before any run made the dir).
   await mkdir(daemonDir(cwd), { recursive: true })
 
-  // Multi-project (#392): when the daemon starts in an activated repo, make sure
-  // it shows up in the Projects list. Best-effort and idempotent (addProject
-  // dedupes by path), so it never blocks the daemon coming up.
-  if (await isActivated(cwd).catch(() => false)) {
-    await addProject(cwd, new Date().toISOString(), undefined, env).catch(() => {})
+  // Multi-project (#392): make sure an activated home repo shows up in the Projects list.
+  await registerHomeProject(cwd, env)
+
+  // Everything the dashboard drives per project — run spawning, project install, and app
+  // previews — lives in the runtime, so this body stays about the daemon's own lifecycle.
+  const runtime = createProjectRuntime({ cwd, env, ...(opts.binPath !== undefined ? { binPath: opts.binPath } : {}) })
+
+  // The daemon serves the prerendered Vike + Telefunc dashboard (#405/#426): the SPA reads
+  // each project's `.the-framework/events.jsonl` over a Telefunc Channel and steers over
+  // control.jsonl, so there is no in-process event stream to feed here. The runtime's RPCs
+  // reach the browser through the Telefunc request context. A missing bundle (a broken
+  // install) surfaces as a 503 from the server.
+  const clientBundleDir = await resolveDashboardBundle()
+  const dashboard: Dashboard = await startDashboard({
+    port,
+    onStart: runtime.onStart,
+    onAddProject: runtime.onAddProject,
+    onPreview: runtime.onPreview,
+    onStopPreview: runtime.onStopPreview,
+    onPreviewStatus: runtime.onPreviewStatus,
+    ...(clientBundleDir ? { clientBundleDir } : {}),
+  })
+
+  try {
+    const actualPort = Number(new URL(dashboard.url).port) || port
+    const state: DaemonState = { pid: process.pid, port: actualPort, url: dashboard.url, startedAt: new Date().toISOString() }
+    await mkdir(dirname(daemonStatePath(env)), { recursive: true })
+    await writeFile(daemonStatePath(env), JSON.stringify(state, null, 2))
+    opts.onListening?.(state)
+  } catch (err) {
+    // Startup failed after the port was bound. Tear the server down, or it keeps the
+    // event loop alive: a zombie daemon squatting the port with no state file, which
+    // also wedges every later `framework` start.
+    await dashboard.close()
+    throw err
   }
 
-  // Per-project run state (#393). The one global run became a map keyed by project
-  // id, so each project runs at most one run at a time independently. The daemon's
-  // own `cwd` is the home project; a run started without a project id targets it, and
-  // the browser passes the home project's id or omits it (both resolve to `homeId`).
+  await waitForShutdown(opts.signal)
+
+  await runtime.dispose() // stop live previews (#475) so their dev servers do not outlive us
+  await dashboard.close()
+  await rm(daemonStatePath(env), { force: true }).catch(() => {})
+}
+
+/** Inputs to {@link createProjectRuntime}. */
+interface ProjectRuntimeOptions {
+  /** The daemon's home workspace; a run/preview with no project id targets it. */
+  cwd: string
+  /** Env for the registry lookups (#393). */
+  env: NodeJS.ProcessEnv
+  /** The CLI entry to spawn runs with (#345); undefined uses `process.argv[1]`. */
+  binPath?: string | undefined
+}
+
+/** The per-project run + preview surface the dashboard drives, plus its teardown. */
+interface ProjectRuntime {
+  onStart: (prompt: string, kind: StartRunKind, options?: StartRunOptions, targetProjectId?: string) => Promise<StartRunResult>
+  onAddProject: (path: string, directory: boolean) => Promise<AddProjectResult>
+  onPreview: (targetProjectId?: string) => Promise<PreviewResult>
+  onStopPreview: (targetProjectId?: string) => Promise<void>
+  onPreviewStatus: (targetProjectId?: string) => PreviewStatus
+  /** Stop every live preview so their dev servers do not outlive the daemon (#475). */
+  dispose: () => Promise<void>
+}
+
+/**
+ * The daemon's per-project runtime (#393): the run and preview state keyed by project id,
+ * plus the RPCs the dashboard invokes over Telefunc. Each project runs at most one run and
+ * one preview at a time, independently. The home `cwd` is the default target — a request
+ * with no project id (or the home id) resolves to it without a registry lookup. Split out of
+ * {@link runDaemon} so the daemon body reads as lifecycle and this reads as business logic.
+ */
+function createProjectRuntime({ cwd, env, binPath }: ProjectRuntimeOptions): ProjectRuntime {
   const homeId = projectId(resolve(cwd))
   const activeRuns = new Map<string, number>()
   const starting = new Set<string>() // reserved keys mid-spawn, to close the async gap
+  const activePreviews = new Map<string, PreviewHandle>()
+
   // A project id resolves to its repo path via the registry; the home id (or none)
   // resolves to the daemon's own `cwd` without a lookup.
   const resolveProject = async (id: string | undefined): Promise<string | undefined> => {
@@ -304,13 +386,12 @@ export async function runDaemon(cwd: string, opts: RunDaemonOptions = {}): Promi
     return records.find(record => record.id === id)?.path
   }
 
-  // Start-from-dashboard (#345): POST /api/start spawns `framework "<prompt>"
-  // --no-dashboard --cwd <project>` as a detached child — the same spawn pattern
-  // ensureDaemon uses for the daemon itself. The run streams into this page via the
-  // tailed event log, and its gates + Stop steer through the control channel (#344),
-  // which the run wires whenever a daemon is live. One run per project (#393): while
-  // that project's child is alive, Start for it is refused (the #322 runaway concern).
-  const startRun = async (
+  // Start-from-dashboard (#345): spawn `framework "<prompt>" --no-dashboard --cwd <project>`
+  // as a detached child — the same spawn ensureDaemon uses for the daemon itself. The run
+  // streams into the page via its tailed event log, and its gates + Stop steer through the
+  // control channel (#344). One run per project (#393): while that project's child is alive,
+  // Start for it is refused (the #322 runaway concern).
+  const onStart = async (
     prompt: string,
     kind: StartRunKind,
     options: StartRunOptions = {},
@@ -326,11 +407,11 @@ export async function runDaemon(cwd: string, opts: RunDaemonOptions = {}): Promi
     try {
       const projectCwd = await resolveProject(targetProjectId)
       if (!projectCwd) return { ok: false, error: `unknown project: ${targetProjectId}` }
-      const binPath = opts.binPath ?? process.argv[1]
-      if (!binPath) return { ok: false, error: 'cannot locate the framework CLI entry to spawn a run' }
-      // Same fork-bomb guard as ensureDaemon: never re-exec a test file as a run.
-      if (!opts.binPath && (process.env.NODE_TEST_CONTEXT || /\.test\.[cm]?[jt]s$/.test(binPath))) {
-        return { ok: false, error: 'refusing to spawn a run from a test entry; pass an explicit binPath' }
+      let realBin: string
+      try {
+        realBin = resolveSpawnBin(binPath)
+      } catch (err) {
+        return { ok: false, error: err instanceof Error ? err.message : String(err) }
       }
       // [Research] (#331) runs the research subcommand; its empty prompt is fine
       // (the "what" defaults to `this PR` in the CLI). A `prompt` kind (#353) is a
@@ -341,11 +422,7 @@ export async function runDaemon(cwd: string, opts: RunDaemonOptions = {}): Promi
           : kind === 'prompt'
             ? ['prompt', prompt]
             : [prompt]
-      const child = spawn(process.execPath, [binPath, ...runArgs, ...startOptionFlags(options), '--no-dashboard', '--cwd', projectCwd], {
-        detached: true,
-        stdio: 'ignore',
-      })
-      child.unref()
+      const child = spawnDetached(realBin, [...runArgs, ...startOptionFlags(options), '--no-dashboard', '--cwd', projectCwd])
       // The run narrates itself through its own `.the-framework/events.jsonl`, which the
       // dashboard streams over a Telefunc Channel; the daemon just tracks liveness.
       child.once('error', () => activeRuns.delete(key))
@@ -357,11 +434,11 @@ export async function runDaemon(cwd: string, opts: RunDaemonOptions = {}): Promi
     }
   }
 
-  // Add project(s) (#396): install a single repo, or every git repo directly under
-  // a directory, then register each so it appears in the Projects list. installProject
-  // is idempotent (an already-activated repo is a no-op success); a git failure on any
-  // target aborts and surfaces as an error the dialog shows.
-  const addProjects = async (path: string, directory: boolean): Promise<AddProjectResult> => {
+  // Add project(s) (#396): install a single repo, or every git repo directly under a
+  // directory, then register each so it appears in the Projects list. installProject is
+  // idempotent (an already-activated repo is a no-op success); a git failure on any target
+  // aborts and surfaces as an error the dialog shows.
+  const onAddProject = async (path: string, directory: boolean): Promise<AddProjectResult> => {
     // Resolve relative input against the daemon cwd, and check the directory really
     // exists first: without this a bad path reaches git as a missing cwd, which
     // surfaces as the confusing "spawn git ENOENT" rather than a path error.
@@ -382,22 +459,18 @@ export async function runDaemon(cwd: string, opts: RunDaemonOptions = {}): Promi
     return { ok: true, added, alreadyActivated }
   }
 
-  // On-demand app preview (#475): one long-lived preview process per project, kept in the
-  // daemon so it outlives the request that opened it and the Stop that closes it. Opening is
-  // idempotent (a live preview is returned as-is); the browser polls `previewStatus` on load
-  // to rehydrate the button after a reload.
-  const activePreviews = new Map<string, PreviewHandle>()
-  // Track a preview under its key and evict it the moment it stops serving (stop, or a
-  // self-exit: crash / build error / the user killing it). Without this a dead preview
-  // lingers, so `previewStatus` reports a dead URL and the idempotent open below hands it
-  // back instead of restarting (#475).
+  // On-demand app preview (#475): one long-lived preview process per project, kept here so it
+  // outlives the request that opened it and the Stop that closes it. Track a preview under its
+  // key and evict it the moment it stops serving (stop, or a self-exit: crash / build error /
+  // the user killing it), so previewStatus never reports a dead URL and the idempotent open
+  // below never hands back a corpse instead of restarting.
   const trackPreview = (key: string, handle: PreviewHandle): void => {
     activePreviews.set(key, handle)
     void handle.exited.then(() => {
       if (activePreviews.get(key) === handle) activePreviews.delete(key)
     })
   }
-  const openPreview = async (targetProjectId?: string): Promise<PreviewResult> => {
+  const onPreview = async (targetProjectId?: string): Promise<PreviewResult> => {
     const key = targetProjectId ?? homeId
     const existing = activePreviews.get(key)
     if (existing) return { ok: true, url: existing.url, command: existing.command }
@@ -417,55 +490,24 @@ export async function runDaemon(cwd: string, opts: RunDaemonOptions = {}): Promi
       return { ok: false, error: err instanceof Error ? err.message : String(err) }
     }
   }
-  const closePreview = async (targetProjectId?: string): Promise<void> => {
+  const onStopPreview = async (targetProjectId?: string): Promise<void> => {
     const key = targetProjectId ?? homeId
     const handle = activePreviews.get(key)
     if (!handle) return
     activePreviews.delete(key)
     await handle.stop().catch(() => {})
   }
-  const previewStatus = (targetProjectId?: string): PreviewStatus => {
+  const onPreviewStatus = (targetProjectId?: string): PreviewStatus => {
     const handle = activePreviews.get(targetProjectId ?? homeId)
     return handle ? { running: true, url: handle.url, command: handle.command } : { running: false }
   }
 
-  // The daemon serves the prerendered Vike + Telefunc dashboard (#405/#426): the SPA reads
-  // each project's `.the-framework/events.jsonl` over a Telefunc Channel and steers over
-  // control.jsonl, so there is no in-process event stream to feed here. `sendStart` /
-  // `sendAddProject` / the Preview RPCs reach the closures above through the Telefunc request
-  // context. A missing bundle (a broken install) surfaces as a 503 from the server.
-  const clientBundleDir = await resolveDashboardBundle()
-  const dashboard: Dashboard = await startDashboard({
-    port,
-    onStart: startRun,
-    onAddProject: addProjects,
-    onPreview: openPreview,
-    onStopPreview: closePreview,
-    onPreviewStatus: previewStatus,
-    ...(clientBundleDir ? { clientBundleDir } : {}),
-  })
-
-  try {
-    const actualPort = Number(new URL(dashboard.url).port) || port
-    const state: DaemonState = { pid: process.pid, port: actualPort, url: dashboard.url, startedAt: new Date().toISOString() }
-    await mkdir(dirname(daemonStatePath(env)), { recursive: true })
-    await writeFile(daemonStatePath(env), JSON.stringify(state, null, 2))
-    opts.onListening?.(state)
-  } catch (err) {
-    // Startup failed after the port was bound. Tear the server down, or it keeps the
-    // event loop alive: a zombie daemon squatting the port with no state file, which
-    // also wedges every later `framework` start.
-    await dashboard.close()
-    throw err
+  const dispose = async (): Promise<void> => {
+    await Promise.all([...activePreviews.values()].map(p => p.stop().catch(() => {})))
+    activePreviews.clear()
   }
 
-  await waitForShutdown(opts.signal)
-
-  // Tear down any live previews (#475) so their dev servers do not outlive the daemon.
-  await Promise.all([...activePreviews.values()].map(p => p.stop().catch(() => {})))
-  activePreviews.clear()
-  await dashboard.close()
-  await rm(daemonStatePath(env), { force: true }).catch(() => {})
+  return { onStart, onAddProject, onPreview, onStopPreview, onPreviewStatus, dispose }
 }
 
 /** Resolve on SIGINT/SIGTERM, or when the optional abort signal fires. */

@@ -36,10 +36,10 @@ import { appendLog, type LogEntry } from './logs.js'
 import { preflight } from './preflight.js'
 import { RunStore, nodeStoreFs, type StoreFs } from './store/index.js'
 import { materializePresets } from './presets.js'
-import { daemonStatus, ensureDaemon, runDaemon, stopDaemon, DEFAULT_DAEMON_PORT } from './daemon.js'
+import { daemonStatus, ensureDaemon, registerHomeProject, runDaemon, stopDaemon, DEFAULT_DAEMON_PORT } from './daemon.js'
 import { resetControl, watchControl, type ControlWatcher } from './control.js'
-import { isActivated, nodeGitRunner } from './project.js'
-import { addProject, listProjects, readPreferences, resolveConsumptionLimits } from './registry.js'
+import { nodeGitRunner } from './project.js'
+import { listProjects, readPreferences, resolveConsumptionLimits } from './registry.js'
 import { startConsumptionGuard } from './consumption-guard.js'
 import {
   planMaintenanceSweep,
@@ -1273,13 +1273,10 @@ async function ensureDaemonCmd(opts: CliOptions, io: CliIO): Promise<number> {
     io.err(`could not start the dashboard daemon (${err instanceof Error ? err.message : String(err)}).`)
     return 1
   }
-  // One daemon per machine (#393): when it is already running, `framework` in a new
-  // repo would not otherwise register that repo (only the daemon's own cwd is added
-  // on startup). Register it here too, best-effort, so it shows up in the Projects
-  // list either way. Idempotent (addProject dedupes by path).
-  if (await isActivated(cwd).catch(() => false)) {
-    await addProject(cwd, new Date().toISOString()).catch(() => {})
-  }
+  // One daemon per machine (#393): when it is already running, `framework` in a new repo
+  // would not otherwise register that repo (only the daemon's own cwd is added on startup).
+  // Register it here too, best-effort, so it shows up in the Projects list either way.
+  await registerHomeProject(cwd)
 
   const { state, alreadyRunning } = result
   io.out(`◆ dashboard ${alreadyRunning ? 'already running' : 'started'}: ${state.url}`)
