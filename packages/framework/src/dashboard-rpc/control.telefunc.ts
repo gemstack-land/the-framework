@@ -3,7 +3,7 @@ import { appendControl } from '../control.js'
 import { openInApp, type OpenTarget, type OpenResult } from '../dashboard/open-in-app.js'
 import { resolveProjectPath } from './context.js'
 import type { ChoiceBy } from '../events.js'
-import type { PreviewResult, PreviewStatus, StartRunKind, StartRunOptions, StartRunResult } from '../dashboard/server.js'
+import type { PreviewResult, PreviewStatus, StartRunKind, StartRunOptions, StartRunResult } from '../dashboard/types.js'
 import type { DashboardContext } from '../dashboard/telefunc-serve.js'
 
 // The write side behind the new dashboard (#405): steering a live run. The reverse of

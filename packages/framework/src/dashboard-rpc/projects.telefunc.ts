@@ -1,7 +1,7 @@
 import { getContext } from 'telefunc'
 import { contextProjects } from './context.js'
 import type { ProjectSummary } from '../dashboard/projects.js'
-import type { AddProjectResult } from '../dashboard/server.js'
+import type { AddProjectResult } from '../dashboard/types.js'
 import type { DashboardContext } from '../dashboard/telefunc-serve.js'
 
 // The Projects sidebar behind the new dashboard (#405): the global registry (#390) the

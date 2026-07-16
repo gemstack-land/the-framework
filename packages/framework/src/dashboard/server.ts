@@ -7,8 +7,6 @@ import { serveClientBundle } from './static.js'
 import { makeTelefuncMount } from './telefunc-serve.js'
 import type { AddProjectResult, PreviewResult, PreviewStatus, StartRunKind, StartRunOptions, StartRunResult } from './types.js'
 
-export type { AddProjectResult, PreviewResult, PreviewStatus, StartRunKind, StartRunOptions, StartRunResult } from './types.js'
-
 /** Options for {@link startDashboard}. */
 export interface DashboardOptions {
   /** Port to bind. Default `4200`; pass `0` for an ephemeral port. */

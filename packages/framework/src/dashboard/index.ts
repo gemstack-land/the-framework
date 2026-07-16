@@ -1,4 +1,5 @@
-export { startDashboard, type Dashboard, type DashboardOptions, type StartRunKind, type StartRunOptions, type StartRunResult, type AddProjectResult, type PreviewResult, type PreviewStatus } from './server.js'
+export { startDashboard, type Dashboard, type DashboardOptions } from './server.js'
+export type { StartRunKind, StartRunOptions, StartRunResult, AddProjectResult, PreviewResult, PreviewStatus } from './types.js'
 export {
   summarizeProject,
   defaultProjectsProvider,
