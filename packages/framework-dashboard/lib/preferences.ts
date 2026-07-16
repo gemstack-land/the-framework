@@ -30,11 +30,13 @@ function snapshot(): Preferences {
 function ensureLoaded(): void {
   if (cache || loading) return
   loading = onPreferences()
+    // `??=`, not `=`: a toggle made while this initial load was in flight already populated
+    // the cache and persisted, so the load must not overwrite it with the pre-toggle value.
     .then(preferences => {
-      cache = preferences
+      cache ??= preferences
     })
     .catch(() => {
-      cache = {}
+      cache ??= {}
     })
     .finally(() => {
       loading = null
