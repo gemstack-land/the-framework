@@ -900,7 +900,7 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
   }
 
   // Publish the run to a relay (#230) so teammates can watch it live. Best-effort:
-  // a relay that is down never fails the run (relayPublisher swallows POST errors).
+  // a relay that is down reports each failed POST here but never fails the run.
   let publisher: RelayPublisher | undefined
   if (opts.share) {
     publisher = relayPublisher(opts.share, randomUUID(), err =>

@@ -250,12 +250,15 @@ export function relayPublisher(
         try {
           // Timeout so a relay that accepts but never responds can't wedge flush()
           // (awaited on shutdown) and hang the whole CLI on exit.
-          await fetch(`${root}/publish`, {
+          const res = await fetch(`${root}/publish`, {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
             body: JSON.stringify(event),
             signal: AbortSignal.timeout(timeoutMs),
           })
+          // fetch only throws on a transport failure, so a rejected event (413 over
+          // the body cap, 400, or a URL that isn't a relay) would otherwise be silent.
+          if (!res.ok) throw new Error(`relay answered ${res.status} ${res.statusText}`.trimEnd())
         } catch (err) {
           onError?.(err)
         }

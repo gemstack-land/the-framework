@@ -164,6 +164,36 @@ test('relayPublisher does not hang flush() when the relay accepts but never resp
   }
 })
 
+test('relayPublisher reports a rejected publish, which fetch resolves rather than throws (#575)', async () => {
+  // maxBodyBytes small enough that one event trips the relay's 413.
+  const relay = await startRelay({ ...local, maxBodyBytes: 512, clientBundleDir: '/no/such/bundle' })
+  try {
+    const errors: unknown[] = []
+    const pub = relayPublisher(relay.url, 'over-cap', e => errors.push(e))
+    pub.publish({ kind: 'log', message: 'x'.repeat(2000) })
+    await pub.flush()
+    assert.equal(errors.length, 1) // an error STATUS is a failed POST, same as a thrown fetch
+    assert.match(String(errors[0]), /413/)
+  } finally {
+    await relay.close()
+  }
+})
+
+test('relayPublisher keeps publishing after a rejected event, and stays quiet when accepted (#575)', async () => {
+  const relay = await startRelay({ ...local, maxBodyBytes: 512, clientBundleDir: '/no/such/bundle' })
+  try {
+    const errors: unknown[] = []
+    const pub = relayPublisher(relay.url, 'mixed', e => errors.push(e))
+    pub.publish({ kind: 'log', message: 'x'.repeat(2000) }) // rejected: 413
+    pub.publish({ kind: 'log', message: 'small' }) // accepted: 202
+    await pub.flush()
+    assert.equal(errors.length, 1) // only the rejected one reported; best-effort, the run goes on
+    assert.deepEqual(relay.runIds(), ['mixed'])
+  } finally {
+    await relay.close()
+  }
+})
+
 test('healthz is 200; a bad publish is rejected without crashing the run', async () => {
   const relay = await startRelay({ ...local, clientBundleDir: '/no/such/bundle' })
   try {
