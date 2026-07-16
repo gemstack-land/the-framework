@@ -56,7 +56,8 @@
     "test": "node scripts/gen-prompts.mjs && tsc -p tsconfig.test.json && cd dist-test && node --test",
     "bundle:dashboard": "node scripts/bundle-dashboard.mjs",
     "clean": "rm -rf dist dist-test src/prompts.generated.ts",
-    "gen:prompts": "node scripts/gen-prompts.mjs"
+    "gen:prompts": "node scripts/gen-prompts.mjs",
+    "check:prompt-drift": "node scripts/check-prompt-drift.mjs"
   },
   "dependencies": {
     "@gemstack/ai-autopilot": "workspace:^",
