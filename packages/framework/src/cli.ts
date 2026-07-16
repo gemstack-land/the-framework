@@ -1225,12 +1225,6 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
 }
 
 /**
- * `framework relay`: host the run relay (#230). Teammates open a run's URL
- * (printed when a run uses `--share <this-url>`) and watch it live with full
- * history replay. Runs until interrupted. Unauthenticated by design — anyone with
- * a run URL can watch; accounts/teams/steering come later.
- */
-/**
  * Bare `framework` (no prompt): run the dashboard server in the foreground (#456), so its
  * logs and any server-thrown errors are visible and Ctrl+C stops it. If a background daemon
  * (`framework --daemon`) already owns the port, defer to it rather than fight for the bind.
@@ -1377,13 +1371,6 @@ function spawnMaintenanceRun(review: RepoReview, binPath: string, maxCost?: numb
 }
 
 /**
- * Run one direct prompt by spawning `framework prompt "<prompt>" --cwd <dir> --no-dashboard`,
- * reusing the whole run path (preflight, driver, budget cap, LOGS.md). The child inherits
- * stdio so its run streams to the terminal. Note it carries no `--on-before-mergeable`, so a quality
- * pass never triggers its own on-before-mergeable prompt (the recursion guard). Resolves true on a
- * clean exit (0). Never re-execs a test entry (fork-bomb guard).
- */
-/**
  * The argv a spawned `framework prompt` child runs with. Pure so a test can assert it:
  * note it carries **no** `--on-before-mergeable`, which is the on-before-mergeable recursion guard (a quality
  * pass must not trigger its own suite).
@@ -1401,6 +1388,13 @@ export function promptRunArgs(prompt: string, cwd: string, binPath: string, maxC
   return args
 }
 
+/**
+ * Run one direct prompt by spawning `framework prompt "<prompt>" --cwd <dir> --no-dashboard`,
+ * reusing the whole run path (preflight, driver, budget cap, LOGS.md). The child inherits
+ * stdio so its run streams to the terminal. Note it carries no `--on-before-mergeable`, so a quality
+ * pass never triggers its own on-before-mergeable prompt (the recursion guard). Resolves true on a
+ * clean exit (0). Never re-execs a test entry (fork-bomb guard).
+ */
 function spawnPromptRun(prompt: string, cwd: string, binPath: string, maxCost?: number, vanilla = false): Promise<boolean> {
   if (process.env.NODE_TEST_CONTEXT || /\.test\.[cm]?[jt]s$/.test(binPath)) {
     return Promise.resolve(false) // refuse to spawn from a test entry
@@ -1450,6 +1444,12 @@ export async function runOnBeforeMergeable(
   if (!ok) io.out(`  ! on-before-mergeable queueing did not complete cleanly.`)
 }
 
+/**
+ * `framework relay`: host the run relay (#230). Teammates open a run's URL
+ * (printed when a run uses `--share <this-url>`) and watch it live with full
+ * history replay. Runs until interrupted. Unauthenticated by design — anyone with
+ * a run URL can watch; accounts/teams/steering come later.
+ */
 async function runRelayServer(opts: CliOptions, io: CliIO): Promise<number> {
   const relay = await startRelay(opts.port !== undefined ? { port: opts.port } : {})
   io.out(`◆ relay listening at ${relay.url}`)
