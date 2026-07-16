@@ -1,9 +1,9 @@
-import type { Driver, DriverEvent, DriverSession } from './driver/index.js'
-import { hasSessionIdPlaceholder, resolveSessionLink, type ChoicePick, type ChoiceRequest, type FrameworkEvent } from './events.js'
+import type { Driver, DriverSession } from './driver/index.js'
+import { type ChoicePick, type ChoiceRequest, type FrameworkEvent } from './events.js'
 import { resolveAwaitGate } from './run.js'
 import { composeRunSystem, renderSystemPrompt, type EcoOptions, type TfContext } from './system-prompt.js'
+import { createDriverEventHandler, emitSessionStart } from './run-telemetry.js'
 import { PLAN_DECLINED_MESSAGE, createTurnSignalEmitter, isDeclinedConfirmation, parseAwaitGate } from './turn-gate.js'
-import { UsageMeter } from './usage.js'
 import { CONSUMPTION_LIMIT_LABEL, type ConsumptionWindow } from './consumption.js'
 import { leaveResumeNote } from './todo-loop.js'
 
@@ -96,15 +96,7 @@ export async function runPrompt(opts: RunPromptOptions): Promise<RunPromptResult
   // the built-in prompt off, the raw prompt is sent as-is.
   const firstPrompt = opts.antiLazyPill === false ? opts.prompt : renderSystemPrompt(tf).user
 
-  const linkTemplate = opts.sessionLink
-  const literalLink = linkTemplate && !hasSessionIdPlaceholder(linkTemplate) ? linkTemplate : undefined
-  emit({
-    kind: 'session',
-    driver: opts.driver.name,
-    workspace: opts.cwd,
-    fake: opts.driver.name === 'fake',
-    ...(literalLink ? { sessionLink: literalLink } : {}),
-  })
+  emitSessionStart({ emit, driver: opts.driver, cwd: opts.cwd, sessionLink: opts.sessionLink })
   // Surface the exact system prompt the agent runs under (#343). The user prompts
   // ride along as `driver` `start` events, so the dashboard can show them all.
   emit({ kind: 'system-prompt', text: system })
@@ -115,46 +107,19 @@ export async function runPrompt(opts: RunPromptOptions): Promise<RunPromptResult
   // A consumption limit (#531) is the other self-stop: the account's quota ran
   // out rather than this run's spend.
   const consumptionController = new AbortController()
-  let consumptionTrip: ConsumptionWindow | undefined
   const runSignal = AbortSignal.any([
     ...(opts.signal ? [opts.signal] : []),
     budgetController.signal,
     consumptionController.signal,
   ])
-  let lastSessionId: string | undefined
-  const usage = new UsageMeter()
-  const onDriverEvent = (event: DriverEvent): void => {
-    emit({ kind: 'driver', event })
-    if (event.type !== 'result') return
-    if (event.sessionId && event.sessionId !== lastSessionId) {
-      lastSessionId = event.sessionId
-      const link = linkTemplate ? resolveSessionLink(linkTemplate, event.sessionId) : undefined
-      emit({ kind: 'session-update', sessionId: event.sessionId, ...(link ? { sessionLink: link } : {}) })
-    }
-    if (!event.usage) return
-    usage.add(event.usage)
-    const totals = usage.totals()
-    emit({ kind: 'usage', ...totals, ...(opts.budgetUsd != null ? { budgetUsd: opts.budgetUsd } : {}) })
-    // No price reported means no cap to cross — see the same gate in run.ts (#540).
-    if (opts.budgetUsd != null && totals.costUsd !== undefined && totals.costUsd >= opts.budgetUsd && !budgetController.signal.aborted) {
-      emit({ kind: 'log', message: `Budget reached: $${totals.costUsd.toFixed(4)} of $${opts.budgetUsd} — stopping the run.` })
-      budgetController.abort(new Error('[framework] budget reached'))
-    }
-    if (opts.consumptionGate && !consumptionController.signal.aborted) {
-      let reached: ConsumptionWindow | null = null
-      try {
-        reached = opts.consumptionGate()
-      } catch (err) {
-        // Fail open: an unreadable quota must not stop the work (Rom on #519).
-        console.error('[framework] consumptionGate threw; carrying on:', err)
-      }
-      if (reached) {
-        consumptionTrip = reached
-        emit({ kind: 'log', message: `${CONSUMPTION_LIMIT_LABEL[reached]} consumption limit reached — pausing the run.` })
-        consumptionController.abort(new Error('[framework] consumption limit reached'))
-      }
-    }
-  }
+  const { onDriverEvent, consumptionTrip } = createDriverEventHandler({
+    emit,
+    sessionLink: opts.sessionLink,
+    budgetUsd: opts.budgetUsd,
+    consumptionGate: opts.consumptionGate,
+    budgetController,
+    consumptionController,
+  })
 
   const session: DriverSession = await opts.driver.start({
     cwd: opts.cwd,
@@ -204,7 +169,7 @@ export async function runPrompt(opts: RunPromptOptions): Promise<RunPromptResult
     const detail = budgetStopped
       ? `budget reached ($${opts.budgetUsd})`
       : paused
-        ? `${CONSUMPTION_LIMIT_LABEL[consumptionTrip ?? 'session']} consumption limit reached${resumeNote ? `; will resume from ${resumeNote}` : ''}`
+        ? `${CONSUMPTION_LIMIT_LABEL[consumptionTrip() ?? 'session']} consumption limit reached${resumeNote ? `; will resume from ${resumeNote}` : ''}`
         : err instanceof Error
           ? err.message
           : String(err)
