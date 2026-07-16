@@ -1,11 +1,13 @@
-import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
+import { createServer, type Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
-import type { EcoOptions } from '../system-prompt.js'
 import type { ProjectsProvider } from './projects.js'
 import { registryPreferencesStore, type PreferencesStore } from '../registry.js'
 import { defaultQuotaSource, type QuotaSource } from './quota.js'
 import { serveClientBundle } from './static.js'
 import { makeTelefuncMount } from './telefunc-serve.js'
+import type { AddProjectResult, PreviewResult, PreviewStatus, StartRunKind, StartRunOptions, StartRunResult } from './types.js'
+
+export type { AddProjectResult, PreviewResult, PreviewStatus, StartRunKind, StartRunOptions, StartRunResult } from './types.js'
 
 /** Options for {@link startDashboard}. */
 export interface DashboardOptions {
@@ -69,60 +71,6 @@ export interface DashboardOptions {
    * no built bundle, where the server reports the bundle is missing.
    */
   clientBundleDir?: string
-}
-
-/** The outcome of an {@link DashboardOptions.onAddProject} attempt (#396). */
-export type AddProjectResult =
-  | { ok: true; added: number; alreadyActivated: number }
-  | { ok: false; error: string }
-
-/**
- * The dashboard's Global options (#314), posted alongside a Start. Each maps to a
- * run flag: Autopilot + Technical to modes, Vanilla to removing the built-in
- * system prompt, and Eco to the fine-grained #326 section drops. Absent fields
- * default off, i.e. today's behavior.
- */
-export interface StartRunOptions {
-  /** Auto-accept mode; also steers the #326 maintenance stance. */
-  autopilot?: boolean
-  /** Technical mode: expose technical detail (preset-scoped). */
-  technical?: boolean
-  /** Remove the built-in #326 system prompt entirely (raw Claude Code). */
-  vanilla?: boolean
-  /** Fine-grained #326 section drops to save tokens. */
-  eco?: EcoOptions
-  /** In-context directories (#439): each becomes a `--context <dir>` flag on the spawned run. */
-  context?: string[]
-  /** On-before-mergeable prompt (#326): on setReadyForMerge(), queue the quality follow-ups as TODO entries; maps to `--on-before-mergeable`. */
-  onBeforeMergeable?: boolean
-  /** Give the agent a real browser via chrome-devtools-mcp during the run (#452); maps to `--browser`. */
-  browser?: boolean
-}
-
-/**
- * What a dashboard Start spawns (#345/#331/#353): `build` is the normal framework
- * run; `prompt` runs the posted text verbatim through the direct path — what the
- * page sends after a preset prefilled (and the user possibly edited) the textarea;
- * `research` renders the [Research] preset around the posted "what" server-side
- * (empty allowed, defaults to `this PR`) and remains for API callers.
- */
-export type StartRunKind = 'build' | 'research' | 'prompt'
-
-/** The outcome of an {@link DashboardOptions.onStart} attempt (#345). */
-export type StartRunResult =
-  | { ok: true }
-  | { ok: false; busy?: boolean; error: string }
-
-/** The outcome of an {@link DashboardOptions.onPreview} attempt (#475): the live URL, or why not. */
-export type PreviewResult =
-  | { ok: true; url: string; command: string }
-  | { ok: false; error: string }
-
-/** Whether a project's Preview is running, and where (#475). */
-export interface PreviewStatus {
-  running: boolean
-  url?: string
-  command?: string
 }
 
 /** A running localhost dashboard: the prerendered SPA + its Telefunc mount. */
@@ -205,27 +153,6 @@ function listenDashboard(server: Server, host: string, port: number, close: () =
       resolvePromise({ url: `http://${host}:${address.port}`, close })
     })
   })
-}
-
-/**
- * CSRF guard for the state-changing Telefunc calls. A browser attaches an `Origin`
- * header to every cross-site request, so we reject any POST whose Origin is not this
- * same server (or a loopback host) — otherwise a page on `evil.com` could `fetch()` the
- * localhost dashboard and spawn/steer a run. An absent Origin means a non-browser caller
- * (curl, the test suite) with no ambient session to abuse, so it passes.
- */
-export function isSameOriginRequest(req: IncomingMessage): boolean {
-  const origin = req.headers.origin
-  if (!origin) return true
-  const host = req.headers.host
-  if (host && (origin === `http://${host}` || origin === `https://${host}`)) return true
-  let hostname: string
-  try {
-    hostname = new URL(origin).hostname
-  } catch {
-    return false // malformed Origin: treat as cross-origin
-  }
-  return hostname === 'localhost' || hostname === '::1' || hostname === '[::1]' || hostname.startsWith('127.')
 }
 
 function closeServer(server: Server): Promise<void> {

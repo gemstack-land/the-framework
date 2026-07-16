@@ -6,7 +6,7 @@ import type { ProjectsProvider } from './projects.js'
 import type { FrameworkEvent } from '../events.js'
 import type { PreferencesStore } from '../registry.js'
 import type { QuotaSource } from './quota.js'
-import { isSameOriginRequest, type AddProjectResult, type PreviewResult, type PreviewStatus, type StartRunKind, type StartRunOptions, type StartRunResult } from './server.js'
+import type { AddProjectResult, PreviewResult, PreviewStatus, StartRunKind, StartRunOptions, StartRunResult } from './types.js'
 
 /** Wired by the daemon so `sendStart` can reach the daemon's own `startRun` closure. */
 export type StartRunHandler = (
@@ -65,6 +65,28 @@ function setup(): Telefunc {
   registerDashboardTelefunctions()
   instance = new Telefunc()
   return instance
+}
+
+/**
+ * CSRF guard for the state-changing Telefunc calls. A browser attaches an `Origin`
+ * header to every cross-site request, so we reject any POST whose Origin is not this
+ * same server (or a loopback host) — otherwise a page on `evil.com` could `fetch()` the
+ * localhost dashboard and spawn/steer a run. An absent Origin means a non-browser caller
+ * (curl, the test suite) with no ambient session to abuse, so it passes. Lives here beside
+ * the mount, its only caller.
+ */
+export function isSameOriginRequest(req: IncomingMessage): boolean {
+  const origin = req.headers.origin
+  if (!origin) return true
+  const host = req.headers.host
+  if (host && (origin === `http://${host}` || origin === `https://${host}`)) return true
+  let hostname: string
+  try {
+    hostname = new URL(origin).hostname
+  } catch {
+    return false // malformed Origin: treat as cross-origin
+  }
+  return hostname === 'localhost' || hostname === '::1' || hostname === '[::1]' || hostname.startsWith('127.')
 }
 
 /**

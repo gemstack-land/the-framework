@@ -1,4 +1,4 @@
-export { startDashboard, isSameOriginRequest, type Dashboard, type DashboardOptions, type StartRunKind, type StartRunOptions, type StartRunResult, type AddProjectResult, type PreviewResult, type PreviewStatus } from './server.js'
+export { startDashboard, type Dashboard, type DashboardOptions, type StartRunKind, type StartRunOptions, type StartRunResult, type AddProjectResult, type PreviewResult, type PreviewStatus } from './server.js'
 export {
   summarizeProject,
   defaultProjectsProvider,
@@ -9,7 +9,7 @@ export {
   type SummarizeDeps,
 } from './projects.js'
 export { resolveDashboardBundle } from './bundle.js'
-export { makeTelefuncMount, type EventsSource } from './telefunc-serve.js'
+export { makeTelefuncMount, isSameOriginRequest, type EventsSource } from './telefunc-serve.js'
 export { serveClientBundle } from './static.js'
 export { readDocs, DOC_CATEGORIES, type WorkspaceDoc } from './docs.js'
 export { collectQueue, parseTodoItems, type ProjectQueue, type QueueItem } from './queue.js'

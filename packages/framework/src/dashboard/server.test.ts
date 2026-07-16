@@ -4,7 +4,8 @@ import { get, request } from 'node:http'
 import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { startDashboard, isSameOriginRequest } from './server.js'
+import { startDashboard } from './server.js'
+import { isSameOriginRequest } from './telefunc-serve.js'
 import type { IncomingMessage } from 'node:http'
 
 function fetchText(url: string): Promise<{ status: number; body: string; type: string }> {
