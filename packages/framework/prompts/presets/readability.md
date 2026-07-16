@@ -1,4 +1,4 @@
-Refactor <PARAM:what> to make it as easy as possible for humans to read:
+Refactor ${{ tf.params.what }} to make it as easy as possible for humans to read:
 - Pinnacle architectural split
   - Does each file and each <FUNCTION> represent a sensible and natural abstraction?
   - Rate the *seams*, not just the boxes: for each call site, ask whether the responsibility sits on the right side of the boundary — should a caller's wrapper move down into the callee (or vice versa)? A <FUNCTION> can be clean, DRY and well-tested in isolation yet still be in the wrong place. "Well-factored" is not "well-located".

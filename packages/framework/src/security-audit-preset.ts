@@ -1,10 +1,10 @@
-import { renderPresetPrompt, type PresetParam } from './preset-params.js'
+import { renderTemplate } from './prompt-template.js'
 import { PRESETS_SECURITY_AUDIT } from './prompts.generated.js'
 
 /**
  * The [Security audit] preset (#461): Rom's exhaustive security pass, shipped as
  * a direct prompt like [Readability] (#360) and [Maintainability] (#361) — it
- * scrutinizes existing code, so it skips the scope -> build scaffolding. `<PARAM:what>` is the user-facing blank (defaults to `this PR`).
+ * scrutinizes existing code, so it skips the scope -> build scaffolding. `${{ tf.params.what }}` is the user-facing blank (defaults to `this PR`).
  * It is also one of the post-merge quality prompts #326 fires on
  * `setReadyForMerge()`. Keep it in sync with the issue rather than growing it here.
  */
@@ -13,21 +13,19 @@ import { PRESETS_SECURITY_AUDIT } from './prompts.generated.js'
 export const SECURITY_AUDIT_PRESET_NAME = 'security-audit'
 
 /** The one user param: what to audit. Defaults to `this PR`, like the others. */
-export const SECURITY_AUDIT_PARAMS: readonly PresetParam[] = [
+export const SECURITY_AUDIT_PARAMS = [
   { name: 'what', default: 'this PR', description: 'What to security-audit' },
-]
+] as const
 
-/** The prompt template, verbatim from #461 (with `<PARAM:what>` as the blank). */
+/** The prompt template, verbatim from #461 (with `${{ tf.params.what }}` as the blank). */
 export const SECURITY_AUDIT_PROMPT_TEMPLATE = PRESETS_SECURITY_AUDIT
 
 /**
- * Render the Security audit prompt for a target. A blank / omitted `what` falls
- * back to the declared default (`this PR`), so the dashboard button runs with
- * zero input.
+ * Render the Security audit prompt for a target, filling its `${{ tf.params.what }}`
+ * blank (#326). A blank / omitted `what` falls back to the declared default
+ * (`this PR`), so the dashboard button runs with zero input.
  */
 export function renderSecurityAuditPrompt(what?: string): string {
-  return renderPresetPrompt(SECURITY_AUDIT_PROMPT_TEMPLATE, {
-    params: SECURITY_AUDIT_PARAMS,
-    values: { what },
-  })
+  const value = what?.trim() || SECURITY_AUDIT_PARAMS[0].default
+  return renderTemplate(SECURITY_AUDIT_PROMPT_TEMPLATE, { tf: { params: { what: value } } })
 }

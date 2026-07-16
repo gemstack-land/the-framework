@@ -1,6 +1,5 @@
 import { strict as assert } from 'node:assert'
 import { test } from 'node:test'
-import { PARAM_PATTERN } from './preset-params.js'
 import {
   renderSecurityAuditPrompt,
   SECURITY_AUDIT_PARAMS,
@@ -13,7 +12,7 @@ test('the Security audit template carries the #461 prompt: exhaustive, per-aspec
   assert.match(SECURITY_AUDIT_PROMPT_TEMPLATE, /verdict/)
   assert.match(SECURITY_AUDIT_PROMPT_TEMPLATE, /each security issue in a separate commit/)
   // The one user blank, declared with its default.
-  assert.match(SECURITY_AUDIT_PROMPT_TEMPLATE, /<PARAM:what>/)
+  assert.match(SECURITY_AUDIT_PROMPT_TEMPLATE, /\$\{\{ tf\.params\.what \}\}/)
   assert.deepEqual(SECURITY_AUDIT_PARAMS.map(p => p.name), ['what'])
 })
 
@@ -25,5 +24,5 @@ test('renderSecurityAuditPrompt defaults the blank to "this PR" and takes an ove
   const custom = renderSecurityAuditPrompt('the auth package')
   assert.match(custom, /^Security audit the auth package/)
   // No raw placeholder survives a render.
-  assert.equal(PARAM_PATTERN.test(custom), false)
+  assert.equal(custom.includes('${{'), false)
 })

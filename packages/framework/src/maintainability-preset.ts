@@ -1,4 +1,4 @@
-import { renderPresetPrompt, type PresetParam } from './preset-params.js'
+import { renderTemplate } from './prompt-template.js'
 import { PRESETS_MAINTAINABILITY } from './prompts.generated.js'
 
 /**
@@ -12,20 +12,18 @@ import { PRESETS_MAINTAINABILITY } from './prompts.generated.js'
 export const MAINTAINABILITY_PRESET_NAME = 'maintainability'
 
 /** The one user param: what to refactor. Defaults to `this PR`, like the others. */
-export const MAINTAINABILITY_PARAMS: readonly PresetParam[] = [
+export const MAINTAINABILITY_PARAMS = [
   { name: 'what', default: 'this PR', description: 'What to refactor for maintainability' },
-]
+] as const
 
 /** The prompt template, verbatim from #361, in `prompts/presets/maintainability.md` (#551). */
 export const MAINTAINABILITY_PROMPT_TEMPLATE = PRESETS_MAINTAINABILITY
 
 /**
- * Render the Maintainability prompt for a target. A blank / omitted `what`
- * falls back to the declared default (`this PR`).
+ * Render the Maintainability prompt for a target, filling its `${{ tf.params.what }}`
+ * blank (#326). A blank / omitted `what` falls back to the declared default (`this PR`).
  */
 export function renderMaintainabilityPrompt(what?: string): string {
-  return renderPresetPrompt(MAINTAINABILITY_PROMPT_TEMPLATE, {
-    params: MAINTAINABILITY_PARAMS,
-    values: { what },
-  })
+  const value = what?.trim() || MAINTAINABILITY_PARAMS[0].default
+  return renderTemplate(MAINTAINABILITY_PROMPT_TEMPLATE, { tf: { params: { what: value } } })
 }
