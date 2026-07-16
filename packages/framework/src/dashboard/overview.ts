@@ -1,6 +1,4 @@
-import { readFile } from 'node:fs/promises'
-import { join } from 'node:path'
-import { FRAMEWORK_DIR, META_FILE, type RunMeta, type RunStatus } from '../store/index.js'
+import { readLiveMeta, type RunMeta, type RunStatus } from '../store/index.js'
 import type { ProjectSummary } from './projects.js'
 import { collectQueue, type ProjectQueue } from './queue.js'
 
@@ -45,15 +43,6 @@ export interface Overview {
 
 /** How many recent projects the Overview surfaces. */
 const RECENT_LIMIT = 5
-
-/** Read a project's live run meta (`.the-framework/run.json`), or undefined when absent/unreadable. */
-async function readLiveMeta(cwd: string): Promise<RunMeta | undefined> {
-  try {
-    return JSON.parse(await readFile(join(cwd, FRAMEWORK_DIR, META_FILE), 'utf8')) as RunMeta
-  } catch {
-    return undefined
-  }
-}
 
 /** Injectable readers so {@link buildOverview} is unit-testable off disk. */
 export interface OverviewDeps {
