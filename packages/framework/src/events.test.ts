@@ -1,13 +1,8 @@
 import { strict as assert } from 'node:assert'
 import { test } from 'node:test'
-import {
-  OPEN_LOOP_MODES,
-  SESSION_ID_PLACEHOLDER,
-  formatFrameworkEvent,
-  hasSessionIdPlaceholder,
-  pickedIds,
-  resolveSessionLink,
-} from './events.js'
+import { OPEN_LOOP_MODES, pickedIds } from './events.js'
+import { formatFrameworkEvent } from './terminal.js'
+import { SESSION_ID_PLACEHOLDER, hasSessionIdPlaceholder, resolveSessionLink } from './session-link.js'
 
 test('hasSessionIdPlaceholder distinguishes templates from literal URLs', () => {
   assert.equal(hasSessionIdPlaceholder(`https://x.dev/s/${SESSION_ID_PLACEHOLDER}`), true)

@@ -1,6 +1,7 @@
 import { CONSUMPTION_LIMIT_LABEL, type ConsumptionWindow } from './consumption.js'
 import type { Driver, DriverEvent } from './driver/index.js'
-import { hasSessionIdPlaceholder, resolveSessionLink, type FrameworkEvent } from './events.js'
+import { hasSessionIdPlaceholder, resolveSessionLink } from './session-link.js'
+import { type FrameworkEvent } from './events.js'
 import { UsageMeter } from './usage.js'
 
 // The telemetry both entry paths share. A build (`run.ts`) and a direct prompt

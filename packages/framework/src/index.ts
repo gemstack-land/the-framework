@@ -103,12 +103,10 @@ export {
   type ChoicePick,
   type ChoiceBy,
   pickedIds,
-  formatFrameworkEvent,
-  resolveSessionLink,
-  hasSessionIdPlaceholder,
-  SESSION_ID_PLACEHOLDER,
   OPEN_LOOP_MODES,
 } from './events.js'
+export { formatFrameworkEvent } from './terminal.js'
+export { resolveSessionLink, hasSessionIdPlaceholder, SESSION_ID_PLACEHOLDER } from './session-link.js'
 export {
   loopStatus,
   sessionInfo,

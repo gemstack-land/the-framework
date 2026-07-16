@@ -18,7 +18,9 @@ import { hostExecutor } from './host-exec.js'
 import { startDashboard, singleProjectProvider, resolveDashboardBundle, type Dashboard } from './dashboard/index.js'
 import { startRelay, relayPublisher, type RelayPublisher } from './relay.js'
 import { randomUUID } from 'node:crypto'
-import { formatFrameworkEvent, CLAUDE_CODE_SESSION_LINK, type ChoicePick, type ChoiceRequest, type FrameworkEvent } from './events.js'
+import { formatFrameworkEvent } from './terminal.js'
+import { CLAUDE_CODE_SESSION_LINK } from './session-link.js'
+import { type ChoicePick, type ChoiceRequest, type FrameworkEvent } from './events.js'
 import {
   runFramework,
   type AppPreview,
