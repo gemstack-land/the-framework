@@ -173,6 +173,39 @@ export const DEFAULT_CONSUMPTION_LIMITS: ConsumptionLimits = {
   session: { enabled: true, percent: 40 },
 }
 
+const CONSUMPTION_LIMIT_KEYS = ['daily', 'fiveHour', 'session'] as const
+
+/**
+ * Read one limit out of a hand-edited or browser-supplied object.
+ *
+ * `undefined` for anything we can't trust, so the caller falls back to the
+ * default rather than to an unguarded account. The percentage is clamped rather
+ * than rejected: a plausible-but-out-of-range number is a slip, and honouring
+ * the nearest legal value beats silently reverting to something else entirely.
+ */
+function sanitizeConsumptionLimit(value: unknown): ConsumptionLimit | undefined {
+  if (typeof value !== 'object' || value === null) return undefined
+  const input = value as Record<string, unknown>
+  const percent = input['percent']
+  if (typeof input['enabled'] !== 'boolean') return undefined
+  if (typeof percent !== 'number' || !Number.isFinite(percent)) return undefined
+  return { enabled: input['enabled'], percent: Math.min(100, Math.max(0, percent)) }
+}
+
+/** Read the three limits, falling back per-limit so one bad entry can't unguard the rest. */
+export function sanitizeConsumptionLimits(value: unknown): ConsumptionLimits | undefined {
+  if (typeof value !== 'object' || value === null) return undefined
+  const input = value as Record<string, unknown>
+  const limits = {} as ConsumptionLimits
+  let any = false
+  for (const key of CONSUMPTION_LIMIT_KEYS) {
+    const limit = sanitizeConsumptionLimit(input[key])
+    if (limit) any = true
+    limits[key] = limit ?? DEFAULT_CONSUMPTION_LIMITS[key]
+  }
+  return any ? limits : undefined
+}
+
 /** What each limit works out to, in points of the weekly meter. */
 export interface ConsumptionBudgets {
   daily: number
