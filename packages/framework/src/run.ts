@@ -23,15 +23,15 @@ import {
 } from '@gemstack/ai-autopilot'
 import { snapshotWorkspace } from './sandbox.js'
 import { CONSUMPTION_LIMIT_LABEL, type ConsumptionWindow } from './consumption.js'
-import type { Driver, DriverEvent, DriverSession } from './driver/index.js'
+import type { Driver, DriverSession } from './driver/index.js'
 import { composeRunSystem, type EcoOptions, type TfContext } from './system-prompt.js'
+import { createDriverEventHandler, emitSessionStart } from './run-telemetry.js'
 import { AWAIT_PROTOCOL, CONFIRM_APPROVED, CONFIRM_DECLINED, PLAN_DECLINED_MESSAGE, createTurnSignalEmitter, isDeclinedConfirmation, parseAwaitGate, type ParsedAwaitGate } from './turn-gate.js'
 // Value import from todo-loop.js is a benign cycle: todo-loop.js only calls
 // run.js's hoisted function declarations (requestChoices / resolveAwaitGate).
 import { leaveResumeNote, runTodoLoop, type TodoLoopResult } from './todo-loop.js'
 import { continueAfterChoice, decideDeploy, deployWith, domainLoopChecklist, driverBuild, driverChecklist, driverImprove, driverLoopPrompts } from './steps.js'
-import { hasSessionIdPlaceholder, OPEN_LOOP_MODES, pickedIds, resolveSessionLink, type ChoicePick, type ChoiceRequest, type FrameworkEvent } from './events.js'
-import { UsageMeter } from './usage.js'
+import { OPEN_LOOP_MODES, pickedIds, type ChoicePick, type ChoiceRequest, type FrameworkEvent } from './events.js'
 
 /**
  * The framework's default full-fledged pass budget. Higher than ai-autopilot's
@@ -289,19 +289,7 @@ export async function runFramework(opts: RunFrameworkOptions): Promise<RunFramew
     context: opts.context,
   })
 
-  // The session id is not known until the first driver turn returns, so a
-  // templated link (`.../{sessionId}`) can only resolve later. A literal link is
-  // shown right away; a template waits for `session-update`.
-  const linkTemplate = opts.sessionLink
-  const literalLink = linkTemplate && !hasSessionIdPlaceholder(linkTemplate) ? linkTemplate : undefined
-
-  emit({
-    kind: 'session',
-    driver: opts.driver.name,
-    workspace: opts.cwd,
-    fake: opts.driver.name === 'fake',
-    ...(literalLink ? { sessionLink: literalLink } : {}),
-  })
+  emitSessionStart({ emit, driver: opts.driver, cwd: opts.cwd, sessionLink: opts.sessionLink })
   // Surface the exact system prompt the agent runs under (#343). Nothing is read
   // off disk and appended after this, so the text is the whole of it (#547). The
   // per-turn user prompts ride along as `driver` `start` events, so the dashboard
@@ -332,7 +320,6 @@ export async function runFramework(opts: RunFrameworkOptions): Promise<RunFramew
   // A consumption limit (#529) is the third clean stop: the account's quota, not
   // this run's spend, is what ran out.
   const consumptionController = new AbortController()
-  let consumptionTrip: ConsumptionWindow | undefined
   const runSignal = AbortSignal.any([
     ...(opts.signal ? [opts.signal] : []),
     budgetController.signal,
@@ -340,51 +327,14 @@ export async function runFramework(opts: RunFrameworkOptions): Promise<RunFramew
     consumptionController.signal,
   ])
 
-  // Watch the black box for its real session id (the {type:'result'} event) and
-  // surface it as `session-update` once known — that is the honest handle a UI
-  // links to. Re-emit when it changes, since each Claude Code prompt is a fresh
-  // session; the dashboard just updates the link in place. The same result event
-  // carries this turn's usage, which we fold into the run total and gate on (#322).
-  let lastSessionId: string | undefined
-  const usage = new UsageMeter()
-  const onDriverEvent = (event: DriverEvent) => {
-    emit({ kind: 'driver', event })
-    if (event.type !== 'result') return
-    if (event.sessionId && event.sessionId !== lastSessionId) {
-      lastSessionId = event.sessionId
-      const link = linkTemplate ? resolveSessionLink(linkTemplate, event.sessionId) : undefined
-      emit({ kind: 'session-update', sessionId: event.sessionId, ...(link ? { sessionLink: link } : {}) })
-    }
-    if (!event.usage) return
-    usage.add(event.usage)
-    const totals = usage.totals()
-    emit({ kind: 'usage', ...totals, ...(opts.budgetUsd != null ? { budgetUsd: opts.budgetUsd } : {}) })
-    // The turn that crosses the cap has already run (its cost is spent); stop the
-    // run before the next one. Signalled once — the next phase's check ends it.
-    // An agent that reports no price leaves `costUsd` undefined and so can never
-    // trip the cap; the CLI says so up front rather than let it look capped (#540).
-    if (opts.budgetUsd != null && totals.costUsd !== undefined && totals.costUsd >= opts.budgetUsd && !budgetController.signal.aborted) {
-      emit({ kind: 'log', message: `Budget reached: $${totals.costUsd.toFixed(4)} of $${opts.budgetUsd} — stopping the run.` })
-      budgetController.abort(new Error('[framework] budget reached'))
-    }
-    // The consumption limits (#519). Asked only between turns and answered from a
-    // cached reading: a live quota read spawns the whole agent CLI (~5s), so it
-    // can never sit here. A gate that throws is treated as "carry on" — the
-    // fail-open Rom confirmed, since an unreadable quota must not stop the work.
-    if (opts.consumptionGate && !consumptionController.signal.aborted) {
-      let reached: ConsumptionWindow | null = null
-      try {
-        reached = opts.consumptionGate()
-      } catch (err) {
-        console.error('[framework] consumptionGate threw; carrying on:', err)
-      }
-      if (reached) {
-        consumptionTrip = reached
-        emit({ kind: 'log', message: `${CONSUMPTION_LIMIT_LABEL[reached]} consumption limit reached — pausing the run.` })
-        consumptionController.abort(new Error('[framework] consumption limit reached'))
-      }
-    }
-  }
+  const { onDriverEvent, consumptionTrip } = createDriverEventHandler({
+    emit,
+    sessionLink: opts.sessionLink,
+    budgetUsd: opts.budgetUsd,
+    consumptionGate: opts.consumptionGate,
+    budgetController,
+    consumptionController,
+  })
 
   // 2. One driver session for the whole run; each prompt is a fresh invocation.
   const session: DriverSession = await opts.driver.start({
@@ -527,7 +477,7 @@ export async function runFramework(opts: RunFrameworkOptions): Promise<RunFramew
       : budgetStopped
         ? `budget reached ($${opts.budgetUsd})`
         : paused
-          ? `${CONSUMPTION_LIMIT_LABEL[consumptionTrip ?? 'session']} consumption limit reached${resumeNote ? `; will resume from ${resumeNote}` : ''}`
+          ? `${CONSUMPTION_LIMIT_LABEL[consumptionTrip() ?? 'session']} consumption limit reached${resumeNote ? `; will resume from ${resumeNote}` : ''}`
           : err instanceof Error
             ? err.message
             : String(err)
