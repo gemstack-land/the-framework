@@ -100,6 +100,15 @@ test('promptRunArgs runs a headless prompt and carries NO --on-before-mergeable 
   assert.equal(args.includes('--on-before-mergeable'), false)
   // maxCost is optional.
   assert.equal(promptRunArgs('x', '/w', '/bin/f').includes('--max-cost'), false)
+  // Not vanilla by default: a normal direct/quality run keeps the built-in #326 prompt.
+  assert.equal(args.includes('--vanilla'), false)
+})
+
+test('promptRunArgs adds --vanilla so the on-before-mergeable follow-up skips the session-name branch step (#560)', () => {
+  // The follow-up is not a session; --vanilla drops the #326 prompt (and its `### Session
+  // name` step), so the run stays on the session branch instead of stranding its output.
+  const args = promptRunArgs('queue follow-ups', '/work/app', '/bin/framework', 3, true)
+  assert.ok(args.includes('--vanilla'))
 })
 
 test('runOnBeforeMergeable queues the follow-ups in ONE run instead of running the presets (#326/#556)', async () => {

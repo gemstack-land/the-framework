@@ -1388,17 +1388,24 @@ function spawnMaintenanceRun(review: RepoReview, binPath: string, maxCost?: numb
  * note it carries **no** `--on-before-mergeable`, which is the on-before-mergeable recursion guard (a quality
  * pass must not trigger its own suite).
  */
-export function promptRunArgs(prompt: string, cwd: string, binPath: string, maxCost?: number): string[] {
+export function promptRunArgs(prompt: string, cwd: string, binPath: string, maxCost?: number, vanilla = false): string[] {
   const args = [binPath, 'prompt', prompt, '--no-dashboard', '--cwd', cwd]
   if (maxCost !== undefined) args.push('--max-cost', String(maxCost))
+  // The on-before-mergeable follow-up runs `--vanilla` so it skips the #326 prompt's
+  // `### Session name` step: it is a follow-up to a session, not a session of its own,
+  // so it must not commit + branch + checkout a new `the-framework/<name>` branch. That
+  // stranded its output (the #556 TODO entries and #537 knowledge docs) on a branch
+  // nothing merges (#560). Vanilla keeps it on the session's current branch, where its
+  // output rides to review and merge with the work. The follow-up prompt is self-contained.
+  if (vanilla) args.push('--vanilla')
   return args
 }
 
-function spawnPromptRun(prompt: string, cwd: string, binPath: string, maxCost?: number): Promise<boolean> {
+function spawnPromptRun(prompt: string, cwd: string, binPath: string, maxCost?: number, vanilla = false): Promise<boolean> {
   if (process.env.NODE_TEST_CONTEXT || /\.test\.[cm]?[jt]s$/.test(binPath)) {
     return Promise.resolve(false) // refuse to spawn from a test entry
   }
-  const args = promptRunArgs(prompt, cwd, binPath, maxCost)
+  const args = promptRunArgs(prompt, cwd, binPath, maxCost, vanilla)
   return new Promise<boolean>(resolvePromise => {
     const child = spawn(process.execPath, args, { stdio: 'inherit' })
     child.once('error', () => resolvePromise(false))
@@ -1426,7 +1433,8 @@ export async function runOnBeforeMergeable(
   tf: OnBeforeMergeableContext,
   maxCost?: number,
   eco?: EcoOptions,
-  run: PromptRunner = spawnPromptRun,
+  // Vanilla by default: the follow-up must not run the session-name step and branch (#560).
+  run: PromptRunner = (prompt, cwd, binPath, maxCost) => spawnPromptRun(prompt, cwd, binPath, maxCost, true),
   fs: StoreFs = nodeStoreFs(),
 ): Promise<void> {
   // Ensure the presets exist so the queued entries' filePaths resolve, even in a repo
