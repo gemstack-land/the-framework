@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { type ReactNode } from 'react'
 import type { DashboardData, ActiveRun, ProjectStat, ProjectQueue } from '@gemstack/framework'
 import { FolderGit2, Zap, ListChecks, History } from 'lucide-react'
 import { onDashboard } from '../server/reads.telefunc.js'
@@ -6,6 +6,7 @@ import { ActivityChart } from './ActivityChart.js'
 import { RunOutcomes } from './RunOutcomes.js'
 import { UsagePanel } from './UsagePanel.js'
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card.js'
+import { usePolled } from '../lib/use-async.js'
 import { cn } from '../lib/utils.js'
 
 // The Overview dashboard page (#471). What used to be a cramped, collapsible section in the
@@ -14,18 +15,7 @@ import { cn } from '../lib/utils.js'
 // projection of the same files over the `onDashboard` Telefunc read, polled so it stays live.
 // Selecting anything here jumps into that project. Shown by the shell when no project is picked.
 export function DashboardPage({ onSelectProject }: { onSelectProject: (id: string) => void }) {
-  const [data, setData] = useState<DashboardData | null>(null)
-
-  useEffect(() => {
-    let live = true
-    const load = () => void onDashboard().then(d => live && setData(d))
-    load()
-    const poll = setInterval(load, 5000)
-    return () => {
-      live = false
-      clearInterval(poll)
-    }
-  }, [])
+  const { value: data } = usePolled<DashboardData | null>(onDashboard, null, 5000, [])
 
   return (
     <div className="min-h-0 flex-1 overflow-y-auto">

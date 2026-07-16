@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Github, FolderOpen, Code } from 'lucide-react'
 import { onGithubUrl } from '../server/reads.telefunc.js'
+import { useLoaded } from '../lib/use-async.js'
 import { sendOpenInApp } from '../server/control.telefunc.js'
 import { PreviewBar } from './PreviewBar.js'
 import { GitStatusBar } from './GitStatusBar.js'
@@ -12,19 +13,13 @@ import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from './ui/t
 // spawn the OS file manager / editor on the project's path. This bar only renders in the local
 // dashboard (the relay shows RelayView instead), so the localhost actions never appear there.
 export function ProjectActions({ projectId }: { projectId: string }) {
-  const [githubUrl, setGithubUrl] = useState<string | null>(null)
+  const githubUrl = useLoaded<string | null>(() => onGithubUrl(projectId), null, [projectId])
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  useEffect(() => {
-    let live = true
-    setGithubUrl(null)
-    setError(null)
-    void onGithubUrl(projectId).then(url => live && setGithubUrl(url))
-    return () => {
-      live = false
-    }
-  }, [projectId])
+  // `error` belongs to open(), not to the read, so clearing it on a switch is its own effect:
+  // otherwise the last project's failure stays on screen next to the new project's actions.
+  useEffect(() => setError(null), [projectId])
 
   const open = async (target: 'files' | 'editor') => {
     setBusy(true)

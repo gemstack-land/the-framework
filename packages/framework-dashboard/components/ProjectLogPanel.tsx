@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react'
 import type { LogEntry } from '@gemstack/framework'
 import { onProjectLog } from '../server/reads.telefunc.js'
 import { Badge } from './ui/badge.js'
+import { useLoaded } from '../lib/use-async.js'
 import { cn } from '../lib/utils.js'
 
 const STATUS_TONE: Record<string, string> = {
@@ -14,19 +14,7 @@ const STATUS_TONE: Record<string, string> = {
 // The committed project log (#378/#379): `.the-framework/LOGS.md`, every finished
 // loop/prompt/build run newest-first, over a Telefunc RPC (server/reads.telefunc.ts).
 export function ProjectLogPanel({ projectId }: { projectId: string | null }) {
-  const [logs, setLogs] = useState<LogEntry[]>([])
-
-  useEffect(() => {
-    if (!projectId) {
-      setLogs([])
-      return
-    }
-    let live = true
-    void onProjectLog(projectId).then(list => live && setLogs(list))
-    return () => {
-      live = false
-    }
-  }, [projectId])
+  const logs = useLoaded<LogEntry[]>(projectId ? () => onProjectLog(projectId) : null, [], [projectId])
 
   if (!projectId) return null
   if (logs.length === 0) return <p className="p-4 text-sm text-muted-foreground">No committed log entries yet.</p>
