@@ -15,6 +15,7 @@ import type {
   ToolChoice,
 } from '../types.js'
 import { base64ToUtf8 } from '../base64.js'
+import { contentToString } from '../util/content.js'
 
 export interface AnthropicConfig {
   apiKey: string
@@ -168,10 +169,6 @@ export function splitSystemMessages(messages: AiMessage[]): { system: string | u
   return { system, messages: rest }
 }
 
-function contentToString(content: string | import('../types.js').ContentPart[]): string {
-  if (typeof content === 'string') return content
-  return content.filter(p => p.type === 'text').map(p => (p as { text: string }).text).join('')
-}
 
 function contentToAnthropicParts(content: string | import('../types.js').ContentPart[]): unknown[] | string {
   if (typeof content === 'string') return content

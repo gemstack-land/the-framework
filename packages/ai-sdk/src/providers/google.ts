@@ -35,6 +35,7 @@ import {
   durationToGoogleTtl,
   _internals as _registryInternals,
 } from './google-cache-registry.js'
+import { contentToString } from '../util/content.js'
 
 export interface GoogleConfig {
   apiKey: string
@@ -229,10 +230,6 @@ export class GoogleAdapter implements ProviderAdapter {
 
 // ─── Conversion Helpers ──────────────────────────────────
 
-function contentToString(content: string | import('../types.js').ContentPart[]): string {
-  if (typeof content === 'string') return content
-  return content.filter(p => p.type === 'text').map(p => (p as { text: string }).text).join('')
-}
 
 function contentToGeminiParts(content: string | import('../types.js').ContentPart[]): unknown[] {
   if (typeof content === 'string') return [{ text: content }]

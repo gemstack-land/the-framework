@@ -5,11 +5,11 @@ import { Output } from './output.js'
 import type {
   AiMessage,
   AiMiddleware,
-  ContentPart,
   MemoryEntry,
   RemembersSpec,
 } from './types.js'
 import type { UserMemoryLookup } from './memory.js'
+import { contentToString } from './util/content.js'
 
 export interface MemoryExtractOptions {
   /**
@@ -174,7 +174,7 @@ function extractLatestTurn(messages: AiMessage[]): { user: string; assistant: st
     const m = messages[i]
     if (!m || m.role !== 'assistant') continue
     if (m.toolCalls && m.toolCalls.length > 0) continue   // tool-call step, not a final reply
-    const text = contentToString(m.content)
+    const text = contentToString(m.content, '\n')
     if (text.length === 0) continue
     assistantText  = text
     lastAssistantIdx = i
@@ -186,21 +186,13 @@ function extractLatestTurn(messages: AiMessage[]): { user: string; assistant: st
   for (let i = lastAssistantIdx - 1; i >= 0; i--) {
     const m = messages[i]
     if (!m || m.role !== 'user') continue
-    const text = contentToString(m.content)
+    const text = contentToString(m.content, '\n')
     if (text.length === 0) continue
     return { user: text, assistant: assistantText }
   }
   return null
 }
 
-function contentToString(content: string | ContentPart[]): string {
-  if (typeof content === 'string') return content
-  const out: string[] = []
-  for (const p of content) {
-    if (p.type === 'text' && typeof p.text === 'string') out.push(p.text)
-  }
-  return out.join('\n')
-}
 
 function mergeTags(modelTags: string[] | undefined, specTags: string[]): string[] {
   if (!modelTags || modelTags.length === 0) return [...specTags]

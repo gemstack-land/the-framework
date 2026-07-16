@@ -36,6 +36,7 @@ import type {
 } from '../types.js'
 import { cyrb53Hex } from '../util/hash.js'
 import { base64ToUtf8 } from '../base64.js'
+import { contentToString } from '../util/content.js'
 
 export interface OpenAIConfig {
   apiKey: string
@@ -206,10 +207,6 @@ export class OpenAIAdapter implements ProviderAdapter {
 
 // ─── Conversion Helpers ──────────────────────────────────
 
-function contentToString(content: string | import('../types.js').ContentPart[]): string {
-  if (typeof content === 'string') return content
-  return content.filter(p => p.type === 'text').map(p => (p as { text: string }).text).join('')
-}
 
 function contentToOpenAIParts(content: string | import('../types.js').ContentPart[]): unknown[] | string {
   if (typeof content === 'string') return content
