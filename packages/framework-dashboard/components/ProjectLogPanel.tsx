@@ -1,7 +1,7 @@
 import type { LogEntry } from '@gemstack/framework'
 import { onProjectLog } from '../server/reads.telefunc.js'
 import { Badge } from './ui/badge.js'
-import { useLoaded } from '../lib/use-async.js'
+import { usePolled } from '../lib/use-async.js'
 import { cn } from '../lib/utils.js'
 
 const STATUS_TONE: Record<string, string> = {
@@ -13,8 +13,10 @@ const STATUS_TONE: Record<string, string> = {
 
 // The committed project log (#378/#379): `.the-framework/LOGS.md`, every finished
 // loop/prompt/build run newest-first, over a Telefunc RPC (server/reads.telefunc.ts).
+// Polled like the sibling rail panels, so an entry a run appends on finishing shows up
+// without a project switch.
 export function ProjectLogPanel({ projectId }: { projectId: string | null }) {
-  const logs = useLoaded<LogEntry[]>(projectId ? () => onProjectLog(projectId) : null, [], [projectId])
+  const logs = usePolled<LogEntry[]>(projectId ? () => onProjectLog(projectId) : null, [], 10_000, [projectId]).value
 
   if (!projectId) return null
   if (logs.length === 0) return <p className="p-4 text-sm text-muted-foreground">No committed log entries yet.</p>
