@@ -1,9 +1,9 @@
 import type { Driver, DriverSession } from './driver/index.js'
 import { type ChoicePick, type ChoiceRequest, type FrameworkEvent } from './events.js'
-import { resolveAwaitGate } from './run.js'
+import { runAwaitRounds } from './run.js'
 import { composeRunSystem, renderSystemPrompt, type EcoOptions, type TfContext } from './system-prompt.js'
 import { createDriverEventHandler, emitSessionStart } from './run-telemetry.js'
-import { PLAN_DECLINED_MESSAGE, createTurnSignalEmitter, isDeclinedConfirmation, parseAwaitGate } from './turn-gate.js'
+import { createTurnSignalEmitter } from './turn-gate.js'
 import { CONSUMPTION_LIMIT_LABEL, type ConsumptionWindow } from './consumption.js'
 import { leaveResumeNote } from './todo-loop.js'
 
@@ -65,9 +65,6 @@ export interface RunPromptResult {
   /** Every event emitted, in order. */
   events: FrameworkEvent[]
 }
-
-/** How many times the prompt may stop to ask (and be resumed) before it just finishes. */
-const MAX_AWAIT_ROUNDS = 5
 
 /**
  * Run one prompt to completion through the driver, pausing on each await gate
@@ -134,29 +131,21 @@ export async function runPrompt(opts: RunPromptOptions): Promise<RunPromptResult
   const emitTurnSignals = createTurnSignalEmitter(emit)
 
   try {
-    let turn = await session.prompt(firstPrompt, { signal: runSignal })
-    emitTurnSignals(turn.text)
-    let gate = parseAwaitGate(turn.text)
-    for (let round = 0; round < MAX_AWAIT_ROUNDS && gate; round++) {
-      const answer = await resolveAwaitGate(gate, round, { requestChoice: opts.requestChoice, emit, signal: runSignal })
-      if (isDeclinedConfirmation(gate, answer)) {
-        // A declined plan (#358) ends the run cleanly: the user takes over with fresh instructions.
-        emit({ kind: 'log', message: PLAN_DECLINED_MESSAGE })
-        gate = undefined
-        break
-      }
-      emit({ kind: 'log', message: `Continuing with your choice: ${answer}` })
-      turn = await session.prompt(
+    // A declined plan (#358) ends the run cleanly: the user takes over with fresh instructions.
+    const rounds = await runAwaitRounds({
+      session,
+      prompt: firstPrompt,
+      continuation: (gate, answer) =>
         `You paused to ask: "${gate.title}". The user chose: ${answer}. Continue with that decision, and do not ask again unless a genuinely new choice comes up.`,
-        { signal: runSignal },
-      )
-      emitTurnSignals(turn.text)
-      gate = parseAwaitGate(turn.text)
-    }
+      emitTurnSignals,
+      requestChoice: opts.requestChoice,
+      emit,
+      signal: runSignal,
+    })
     // The agent kept asking past the limit: finish with the latest turn rather than loop.
-    if (gate) emit({ kind: 'log', message: 'Finishing the run (await limit reached).' })
+    if (rounds.exhausted) emit({ kind: 'log', message: 'Finishing the run (await limit reached).' })
     emit({ kind: 'end', ok: true })
-    return { text: turn.text, events }
+    return { text: rounds.text, events }
   } catch (err) {
     // A user interrupt or the budget cap is a clean stop, not a failure (#322).
     const budgetStopped = budgetController.signal.aborted && opts.signal?.aborted !== true

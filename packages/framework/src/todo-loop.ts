@@ -2,8 +2,8 @@ import { readdir, readFile, stat, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { DriverSession } from './driver/index.js'
 import type { ChoicePick, ChoiceRequest, FrameworkEvent } from './events.js'
-import { requestChoices, resolveAwaitGate } from './run.js'
-import { PLAN_DECLINED_MESSAGE, createTurnSignalEmitter, isDeclinedConfirmation, parseAwaitGate } from './turn-gate.js'
+import { requestChoices, runAwaitRounds } from './run.js'
+import { createTurnSignalEmitter } from './turn-gate.js'
 
 /**
  * The backlog loop (#323): once the main work settles, consume the agent's own
@@ -284,9 +284,6 @@ export async function runTodoLoop(opts: TodoLoopOptions): Promise<TodoLoopResult
   return { completed, reason: 'max-items', ...(file ? { file } : {}) }
 }
 
-/** How many times one backlog item may stop to ask before the turn just finishes. */
-const MAX_AWAIT_ROUNDS = 5
-
 /** One backlog item's turn: complete the first open entry, honoring await gates. */
 async function promptItem(
   session: DriverSession,
@@ -298,24 +295,16 @@ async function promptItem(
     emitTurnSignals: (text: string) => void
   },
 ): Promise<void> {
-  const signalOpt = deps.signal ? { signal: deps.signal } : {}
   const prompt = `Open \`${fileName}\` at the workspace root and work on the FIRST open entry only. Complete it fully and verify your work. Then update \`${fileName}\`: check the entry off (or remove it). Do not start any other entry.`
-  let turn = await session.prompt(prompt, signalOpt)
-  deps.emitTurnSignals(turn.text)
-  let gate = parseAwaitGate(turn.text)
-  for (let round = 0; round < MAX_AWAIT_ROUNDS && gate; round++) {
-    const answer = await resolveAwaitGate(gate, round, deps)
-    if (isDeclinedConfirmation(gate, answer)) {
-      // A declined plan (#358) ends the item turn; the loop's stall check takes it from there.
-      deps.emit({ kind: 'log', message: PLAN_DECLINED_MESSAGE })
-      return
-    }
-    deps.emit({ kind: 'log', message: `Continuing with your choice: ${answer}` })
-    turn = await session.prompt(
+  // A declined plan (#358) ends the item turn; the loop's stall check takes it from there.
+  await runAwaitRounds({
+    session,
+    prompt,
+    continuation: (gate, answer) =>
       `You paused to ask: "${gate.title}". The user chose: ${answer}. Continue the backlog entry with that decision, and do not ask again unless a genuinely new choice comes up.`,
-      signalOpt,
-    )
-    deps.emitTurnSignals(turn.text)
-    gate = parseAwaitGate(turn.text)
-  }
+    emitTurnSignals: deps.emitTurnSignals,
+    requestChoice: deps.requestChoice,
+    emit: deps.emit,
+    signal: deps.signal,
+  })
 }

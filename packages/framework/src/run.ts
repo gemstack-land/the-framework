@@ -26,7 +26,7 @@ import { CONSUMPTION_LIMIT_LABEL, type ConsumptionWindow } from './consumption.j
 import type { Driver, DriverSession } from './driver/index.js'
 import { composeRunSystem, type EcoOptions, type TfContext } from './system-prompt.js'
 import { createDriverEventHandler, emitSessionStart } from './run-telemetry.js'
-import { AWAIT_PROTOCOL, CONFIRM_APPROVED, CONFIRM_DECLINED, PLAN_DECLINED_MESSAGE, createTurnSignalEmitter, isDeclinedConfirmation, parseAwaitGate, type ParsedAwaitGate } from './turn-gate.js'
+import { AWAIT_PROTOCOL, CONFIRM_APPROVED, CONFIRM_DECLINED, MAX_AWAIT_ROUNDS, PLAN_DECLINED_MESSAGE, createTurnSignalEmitter, isDeclinedConfirmation, parseAwaitGate, type ParsedAwaitGate } from './turn-gate.js'
 // Value import from todo-loop.js is a benign cycle: todo-loop.js only calls
 // run.js's hoisted function declarations (requestChoices / resolveAwaitGate).
 import { leaveResumeNote, runTodoLoop, type TodoLoopResult } from './todo-loop.js'
@@ -490,8 +490,6 @@ export async function runFramework(opts: RunFrameworkOptions): Promise<RunFramew
   }
 }
 
-/** How many times a build may stop to ask (and be resumed) before it just proceeds (#337). */
-const MAX_AWAIT_ROUNDS = 5
 
 /**
  * The agent-authored await gate (#337 / #339): the turn-boundary counterpart to the
@@ -604,6 +602,69 @@ export async function resolveAwaitGate(
   })
   return gate.options.find(o => o.id === pickedId)?.label ?? pickedId
 }
+
+/** What {@link runAwaitRounds} hands back. */
+export interface AwaitRoundsResult {
+  /** The last turn's text. */
+  text: string
+  /** A confirmation gate was declined (#358): the caller stops rather than build on it. */
+  declined: boolean
+  /** The agent was still asking when the round cap ran out. */
+  exhausted: boolean
+}
+
+/** Inputs to {@link runAwaitRounds}. */
+export interface AwaitRoundsOptions {
+  session: DriverSession
+  /** The prompt that opens the exchange. */
+  prompt: string
+  /**
+   * The prompt that resumes the agent once the user has answered a gate. The caller owns
+   * the wording (it is agent-facing text, and each path says something different), so this
+   * takes it rather than templating it here.
+   */
+  continuation: (gate: ParsedAwaitGate, answer: string) => string
+  /** Emit the signals each turn carries (#563). */
+  emitTurnSignals: (text: string) => void
+  requestChoice?: ((req: ChoiceRequest) => Promise<ChoicePick>) | undefined
+  emit: (event: FrameworkEvent) => void
+  signal?: AbortSignal | undefined
+}
+
+/**
+ * Prompt the agent and honor its await gates (#337/#339) until it stops asking: resolve each
+ * gate to the user's answer, re-prompt with it, and repeat up to {@link MAX_AWAIT_ROUNDS}.
+ * A declined plan (#358) ends the exchange rather than re-prompting.
+ *
+ * Every turn here is a turn like any other, so each one's signals are emitted. That is the
+ * point of sharing this: the direct prompt path and the backlog loop each had their own copy
+ * of these rounds, and the emission had to be added to each by hand (#563).
+ *
+ * The build's {@link agentAwaitGate} is deliberately not this: it wraps a supervisor pass
+ * rather than a raw prompt, and skips gates entirely when headless.
+ */
+export async function runAwaitRounds(opts: AwaitRoundsOptions): Promise<AwaitRoundsResult> {
+  const { session, emit, emitTurnSignals } = opts
+  const deps = { requestChoice: opts.requestChoice, emit, signal: opts.signal }
+  const signalOpt = opts.signal ? { signal: opts.signal } : {}
+
+  let turn = await session.prompt(opts.prompt, signalOpt)
+  emitTurnSignals(turn.text)
+  let gate = parseAwaitGate(turn.text)
+  for (let round = 0; round < MAX_AWAIT_ROUNDS && gate; round++) {
+    const answer = await resolveAwaitGate(gate, round, deps)
+    if (isDeclinedConfirmation(gate, answer)) {
+      emit({ kind: 'log', message: PLAN_DECLINED_MESSAGE })
+      return { text: turn.text, declined: true, exhausted: false }
+    }
+    emit({ kind: 'log', message: `Continuing with your choice: ${answer}` })
+    turn = await session.prompt(opts.continuation(gate, answer), signalOpt)
+    emitTurnSignals(turn.text)
+    gate = parseAwaitGate(turn.text)
+  }
+  return { text: turn.text, declined: false, exhausted: gate !== undefined }
+}
+
 
 /** The recommended fallback pick when a single-select gate cannot get a real answer. */
 const PROCEED: ChoicePick = { picked: 'proceed', by: 'auto' }

@@ -62,6 +62,13 @@ export type ParsedAwaitGate =
 export const CONFIRM_APPROVED = 'Approve'
 export const CONFIRM_DECLINED = 'Decline'
 
+/**
+ * How many times the agent may stop to ask, and be resumed, before a run stops honoring
+ * gates and just finishes. A property of the await protocol, so every path that runs gates
+ * shares it: a build, a direct prompt, and the backlog loop each used to declare their own.
+ */
+export const MAX_AWAIT_ROUNDS = 5
+
 /** The log line printed when a confirmation gate is declined (#358). */
 export const PLAN_DECLINED_MESSAGE = 'Plan declined, awaiting user instructions.'
 

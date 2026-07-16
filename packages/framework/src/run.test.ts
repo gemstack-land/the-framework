@@ -5,11 +5,12 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { defineDomainPreset, defineLoop } from '@gemstack/ai-autopilot'
 import type { Prompt } from '@gemstack/ai-autopilot'
-import { DEFAULT_MAX_PASSES, requestChoices, requestMultiSelect, runFramework, type ChoicesOption, type MultiSelectOption } from './run.js'
+import { DEFAULT_MAX_PASSES, requestChoices, requestMultiSelect, runAwaitRounds, runFramework, type ChoicesOption, type MultiSelectOption } from './run.js'
 import { FAKE_DEPLOY, FAKE_INTENT, FAKE_SIGNALS, fakeDriver } from './fake-script.js'
 import { FakeDriver, type Driver, type DriverSession } from './driver/index.js'
 import { composeRunSystem } from './system-prompt.js'
 import type { ChoiceRequest, FrameworkEvent } from './events.js'
+import { MAX_AWAIT_ROUNDS, PLAN_DECLINED_MESSAGE } from './turn-gate.js'
 
 /** A driver that records the `system` framing it is started with, delegating the run to the fake. */
 function recordingDriver(): { driver: Driver; system: () => string } {
@@ -802,4 +803,82 @@ test('runFramework carries on when the gate itself fails (#529)', async () => {
 test('runFramework leaves the run ungated with no consumption gate (#529)', async () => {
   const { result } = await runFramework({ intent: FAKE_INTENT, driver: fakeDriver(), cwd: '/tmp/ws', signals: FAKE_SIGNALS })
   assert.ok(result)
+})
+
+// The await rounds shared by the direct prompt path and the backlog loop (#569). Both used
+// to carry their own copy, which is how the turn-signal emission missed one of them (#563).
+
+/** A gate the fake agent can emit, in the wire shape `parseAwaitGate` reads. */
+const choicesGate = (title: string): string =>
+  `${title}\n\`\`\`await-choices\n${JSON.stringify({ title, options: [{ id: 'a', label: 'Option A' }, { id: 'b', label: 'Option B' }] })}\n\`\`\``
+
+const confirmGate = (title: string): string =>
+  `${title}\n\`\`\`await-confirmation\n${JSON.stringify({ title })}\n\`\`\``
+
+test('runAwaitRounds resolves a gate, re-prompts with the answer, and emits every turn signal', async () => {
+  const events: FrameworkEvent[] = []
+  const prompts: string[] = []
+  const signalled: string[] = []
+  const driver = new FakeDriver({
+    respond: (prompt, i) => {
+      prompts.push(prompt)
+      return i === 0 ? choicesGate('Which way?') : 'All done.'
+    },
+  })
+  const session = await driver.start({ cwd: '/tmp/ws' })
+  const result = await runAwaitRounds({
+    session,
+    prompt: 'open',
+    continuation: (gate, answer) => `resume: ${gate.title} -> ${answer}`,
+    emitTurnSignals: text => void signalled.push(text),
+    requestChoice: async () => ({ picked: 'b' }),
+    emit: e => void events.push(e),
+  })
+
+  assert.deepEqual(result, { text: 'All done.', declined: false, exhausted: false })
+  assert.deepEqual(prompts, ['open', 'resume: Which way? -> Option B']) // the caller owns the wording
+  assert.ok(events.some(e => e.kind === 'log' && e.message === 'Continuing with your choice: Option B'))
+  // Every turn goes through the signal emitter, the gate turn included (#563).
+  assert.equal(signalled.length, 2)
+  assert.match(signalled[0]!, /await-choices/)
+  assert.equal(signalled[1], 'All done.')
+})
+
+test('runAwaitRounds reports a declined plan and stops instead of re-prompting (#358)', async () => {
+  const events: FrameworkEvent[] = []
+  const prompts: string[] = []
+  const driver = new FakeDriver({ respond: prompt => (prompts.push(prompt), confirmGate('Plan ok?')) })
+  const session = await driver.start({ cwd: '/tmp/ws' })
+  const result = await runAwaitRounds({
+    session,
+    prompt: 'open',
+    continuation: () => 'should never be sent',
+    emitTurnSignals: () => {},
+    requestChoice: async () => ({ picked: 'decline' }),
+    emit: e => void events.push(e),
+  })
+
+  assert.equal(result.declined, true)
+  assert.equal(result.exhausted, false)
+  assert.deepEqual(prompts, ['open']) // it stopped rather than continuing
+  assert.ok(events.some(e => e.kind === 'log' && e.message === PLAN_DECLINED_MESSAGE))
+})
+
+test('runAwaitRounds gives up after MAX_AWAIT_ROUNDS and reports it exhausted', async () => {
+  const prompts: string[] = []
+  // An agent that asks forever: the cap is what stops it.
+  const driver = new FakeDriver({ respond: prompt => (prompts.push(prompt), choicesGate('Again?')) })
+  const session = await driver.start({ cwd: '/tmp/ws' })
+  const result = await runAwaitRounds({
+    session,
+    prompt: 'open',
+    continuation: () => 'again',
+    emitTurnSignals: () => {},
+    requestChoice: async () => ({ picked: 'a' }),
+    emit: () => {},
+  })
+
+  assert.equal(result.exhausted, true)
+  assert.equal(result.declined, false)
+  assert.equal(prompts.length, MAX_AWAIT_ROUNDS + 1) // the opener, then one per round
 })
