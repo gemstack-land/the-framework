@@ -309,6 +309,14 @@ export function parseArgs(argv: string[]): CliOptions {
   }
   const PERMISSION_MODES: PermissionMode[] = ['default', 'acceptEdits', 'bypassPermissions', 'plan']
   const words: string[] = []
+  // Parse an integer flag's value, recording opts.error (naming the flag) on a bad one. The
+  // integer flags all share this shape; only the lower bound (0 for --port, else 1) varies.
+  const intFlag = (value: string | undefined, label: string, min: number): number | undefined => {
+    const n = Number(value)
+    if (Number.isInteger(n) && n >= min) return n
+    opts.error = `invalid ${label}: must be a ${min > 0 ? 'positive' : 'non-negative'} integer`
+    return undefined
+  }
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i]!
     switch (arg) {
@@ -426,9 +434,8 @@ export function parseArgs(argv: string[]): CliOptions {
         opts.servePath = argv[++i]
         break
       case '--serve-port': {
-        const n = Number(argv[++i])
-        if (!Number.isInteger(n) || n < 1) opts.error = `invalid --serve-port: must be a positive integer`
-        else opts.servePort = n
+        const n = intFlag(argv[++i], '--serve-port', 1)
+        if (n !== undefined) opts.servePort = n
         break
       }
       case '--sandbox': {
@@ -450,9 +457,8 @@ export function parseArgs(argv: string[]): CliOptions {
         break
       }
       case '--max-passes': {
-        const n = Number(argv[++i])
-        if (!Number.isInteger(n) || n < 1) opts.error = `invalid --max-passes: must be a positive integer`
-        else opts.maxPasses = n
+        const n = intFlag(argv[++i], '--max-passes', 1)
+        if (n !== undefined) opts.maxPasses = n
         break
       }
       case '--max-cost': {
@@ -468,21 +474,18 @@ export function parseArgs(argv: string[]): CliOptions {
         opts.dryRun = true
         break
       case '--max-repos': {
-        const n = Number(argv[++i])
-        if (!Number.isInteger(n) || n < 1) opts.error = `invalid --max-repos: must be a positive integer`
-        else opts.maxRepos = n
+        const n = intFlag(argv[++i], '--max-repos', 1)
+        if (n !== undefined) opts.maxRepos = n
         break
       }
       case '--max-todo-items': {
-        const n = Number(argv[++i])
-        if (!Number.isInteger(n) || n < 1) opts.error = `invalid --max-todo-items: must be a positive integer`
-        else opts.todoMaxItems = n
+        const n = intFlag(argv[++i], '--max-todo-items', 1)
+        if (n !== undefined) opts.todoMaxItems = n
         break
       }
       case '--port': {
-        const n = Number(argv[++i])
-        if (!Number.isInteger(n) || n < 0) opts.error = `invalid --port: must be a non-negative integer`
-        else opts.port = n
+        const n = intFlag(argv[++i], '--port', 0)
+        if (n !== undefined) opts.port = n
         break
       }
       default:
