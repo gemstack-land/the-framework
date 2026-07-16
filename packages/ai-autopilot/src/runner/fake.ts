@@ -10,7 +10,15 @@ import type {
   PreviewOptions,
 } from './types.js'
 import { RunnerError } from './types.js'
-import { norm } from './path.js'
+import { safeSegments } from './path.js'
+
+// The fake's canonical map key: the same rules the real runners enforce — reject a
+// path that escapes the workspace, resolve `.`/`..`. Routing every path through it
+// keeps code exercised only against the fake honest about the one path most worth
+// exercising. Empty string is the workspace root, which no file names.
+function fsKey(path: string): string {
+  return safeSegments(path).join('/')
+}
 
 /** How the fake responds to a command: a static result or a per-command function. */
 export type FakeExec = (command: string, opts: ExecOptions) => ExecResult | Promise<ExecResult>
@@ -31,26 +39,26 @@ class FakeFs implements RunnerFs {
   constructor(private readonly files: Map<string, string>) {}
 
   async read(path: string): Promise<string> {
-    const p = norm(path)
+    const p = fsKey(path)
     if (!this.files.has(p)) throw new RunnerError(`no such file: ${path}`)
     return this.files.get(p)!
   }
 
   async write(path: string, contents: string): Promise<void> {
-    this.files.set(norm(path), contents)
+    this.files.set(fsKey(path), contents)
   }
 
   async remove(path: string): Promise<void> {
-    this.files.delete(norm(path))
+    this.files.delete(fsKey(path))
   }
 
   async list(dir?: string): Promise<string[]> {
-    const prefix = dir ? norm(dir) + '/' : ''
+    const prefix = dir ? fsKey(dir) + '/' : ''
     return [...this.files.keys()].filter(p => p.startsWith(prefix)).sort()
   }
 
   async exists(path: string): Promise<boolean> {
-    return this.files.has(norm(path))
+    return this.files.has(fsKey(path))
   }
 }
 
@@ -98,7 +106,7 @@ export class FakeRunnerSession implements RunnerSession {
   ) {
     this.id = id
     for (const [path, contents] of Object.entries(boot.files ?? {})) {
-      this.files.set(norm(path), contents)
+      this.files.set(fsKey(path), contents)
     }
     this.fs = new FakeFs(this.files)
     if (opts.preview) {

@@ -39,6 +39,23 @@ describe('FakeRunnerSession.fs', () => {
     const s = await new FakeRunner().boot()
     await assert.rejects(() => s.fs.read('nope.txt'), RunnerError)
   })
+
+  it('refuses paths that escape the workspace, like the real runners', async () => {
+    const s = await new FakeRunner().boot()
+    for (const path of ['../evil.txt', '../../etc/passwd', 'a/../../b', '..']) {
+      await assert.rejects(() => s.fs.write(path, 'x'), RunnerError)
+      await assert.rejects(() => s.fs.read(path), RunnerError)
+    }
+  })
+
+  it('resolves `.` and in-workspace `..` to the same file the real runners do', async () => {
+    const s = await new FakeRunner().boot()
+    await s.fs.write('src/./a.txt', 'A') // `.` is a no-op segment
+    await s.fs.write('src/tmp/../b.txt', 'B') // `..` pops `tmp`, staying inside
+    assert.equal(await s.fs.read('src/a.txt'), 'A')
+    assert.equal(await s.fs.read('src/b.txt'), 'B')
+    assert.deepEqual(await s.fs.list('src'), ['src/a.txt', 'src/b.txt'])
+  })
 })
 
 describe('FakeRunnerSession.exec', () => {
