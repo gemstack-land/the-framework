@@ -1,10 +1,10 @@
 import { renderTemplate } from './prompt-template.js'
-import { POST_MERGE_PROMPT } from './prompts.generated.js'
+import { ON_BEFORE_MERGEABLE_PROMPT } from './prompts.generated.js'
 import { presetContext } from './presets.js'
 import { dropSection, type EcoOptions, type TfContext } from './system-prompt.js'
 
 /**
- * The post-merge prompt (#326), in `prompts/post_merge_prompt.md` (#551).
+ * The on-before-mergeable prompt (#326), in `prompts/on_before_mergeable_prompt.md` (#551).
  *
  * It does not *run* the quality presets, it *queues* them: one agent turn that appends
  * "Apply <preset filePath> with tf.params.what set to ..." entries to the session's TODO
@@ -21,13 +21,13 @@ import { dropSection, type EcoOptions, type TfContext } from './system-prompt.js
  * Two sections: `## Maintenance` queues the quality presets, and `## Business knowledge`
  * (#537) asks the agent to fold what it learned back into {@link KNOWLEDGE_DOCS}.
  */
-export const POST_MERGE_PROMPT_TEMPLATE = POST_MERGE_PROMPT
+export const ON_BEFORE_MERGEABLE_PROMPT_TEMPLATE = ON_BEFORE_MERGEABLE_PROMPT
 
 /** The section `EcoOptions.autoMaintenance` drops (#314). */
 const MAINTENANCE_HEADING = '## Maintenance'
 
-/** What the post-merge prompt's fragments read. A subset of {@link TfContext}. */
-export interface PostMergeContext {
+/** What the on-before-mergeable prompt's fragments read. A subset of {@link TfContext}. */
+export interface OnBeforeMergeableContext {
   /** The session the finished run named via setSessionName(). Every line of the prompt names it. */
   session_name: string
   /** The user's settings; `technical_control` gates the readability entry. Absent means off. */
@@ -41,7 +41,7 @@ export interface PostMergeContext {
 }
 
 /**
- * Render the post-merge prompt for a finished session. `settings` is defaulted rather than
+ * Render the on-before-mergeable prompt for a finished session. `settings` is defaulted rather than
  * left absent: the template reads `tf.settings.technical_control`, so a missing `settings`
  * throws a {@link TemplateFragmentError} instead of reading as off.
  *
@@ -50,10 +50,10 @@ export interface PostMergeContext {
  * name and must not silently take with it. Dropped before rendering, so the dropped
  * section's fragments never evaluate.
  */
-export function renderPostMergePrompt(tf: PostMergeContext, eco?: EcoOptions | undefined): string {
+export function renderOnBeforeMergeablePrompt(tf: OnBeforeMergeableContext, eco?: EcoOptions | undefined): string {
   const template = eco?.autoMaintenance
-    ? dropSection(POST_MERGE_PROMPT_TEMPLATE, MAINTENANCE_HEADING)
-    : POST_MERGE_PROMPT_TEMPLATE
+    ? dropSection(ON_BEFORE_MERGEABLE_PROMPT_TEMPLATE, MAINTENANCE_HEADING)
+    : ON_BEFORE_MERGEABLE_PROMPT_TEMPLATE
   return renderTemplate(template, {
     tf: { ...tf, settings: tf.settings ?? {}, presets: tf.presets ?? presetContext() },
   })

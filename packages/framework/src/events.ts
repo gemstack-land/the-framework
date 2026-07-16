@@ -119,7 +119,7 @@ export type FrameworkEvent =
   /**
    * The agent signalled `setReadyForMerge()` (#326): it believes the work is complete
    * and ready for human review. Non-blocking — it flips the run's dashboard status from
-   * building (orange) to ready (green); the post-merge quality prompts hang off it.
+   * building (orange) to ready (green); the on-before-mergeable quality prompts hang off it.
    */
   | { kind: 'ready-for-merge' }
   /**

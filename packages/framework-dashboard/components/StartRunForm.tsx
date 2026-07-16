@@ -66,7 +66,7 @@ export function StartRunForm({
   const ecoPlanning = preferences.ecoPlanning ?? false
   const ecoResearch = preferences.ecoResearch ?? false
   const ecoMaintenance = preferences.ecoMaintenance ?? false
-  const postMergeQuality = preferences.postMergeQuality ?? false
+  const onBeforeMergeableQuality = preferences.onBeforeMergeableQuality ?? false
   const browser = preferences.browser ?? false
 
   // Context selector (#439/#314): the agent can reach every registered repo, so ticking a
@@ -94,7 +94,7 @@ export function StartRunForm({
       ...(technical ? { technical: true } : {}),
       ...(vanilla ? { vanilla: true } : {}),
       ...(eco && !vanilla && Object.keys(ecoOpts).length ? { eco: ecoOpts } : {}),
-      ...(postMergeQuality ? { postMerge: true } : {}),
+      ...(onBeforeMergeableQuality ? { onBeforeMergeable: true } : {}),
       ...(browser ? { browser: true } : {}),
       ...(context.size ? { context: [...context] } : {}),
     }
@@ -205,7 +205,7 @@ export function StartRunForm({
           <input type="checkbox" checked={eco && !ecoDisabled} onChange={e => updatePreferences({ eco: e.target.checked })} disabled={busy || ecoDisabled} /> Eco
         </label>
         <label className="flex cursor-pointer items-center gap-1.5" title="When the run signals it's ready for merge, run maintainability, readability, and security-audit passes">
-          <input type="checkbox" checked={postMergeQuality} onChange={e => updatePreferences({ postMergeQuality: e.target.checked })} disabled={busy} /> Post-merge cleanup
+          <input type="checkbox" checked={onBeforeMergeableQuality} onChange={e => updatePreferences({ onBeforeMergeableQuality: e.target.checked })} disabled={busy} /> Post-merge cleanup
         </label>
         <label className="flex cursor-pointer items-center gap-1.5" title="Give the agent a real browser via chrome-devtools-mcp: navigate pages, read console + network, inspect the DOM, and screenshot">
           <input type="checkbox" checked={browser} onChange={e => updatePreferences({ browser: e.target.checked })} disabled={busy} /> Browser

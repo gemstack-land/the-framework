@@ -58,7 +58,7 @@ export async function installProject(cwd: string, deps: InstallDeps = {}): Promi
     const ignore = gitignorePath(cwd)
     if (!(await fs.exists(ignore))) await fs.write(ignore, LOGS_GITIGNORE)
 
-    // Materialize the quality presets so a post-merge TODO entry's filePath resolves to a
+    // Materialize the quality presets so an on-before-mergeable TODO entry's filePath resolves to a
     // real file the agent can open (#326). The .the-framework/.gitignore above keeps them out
     // of git (only LOGS.md is committed), so they are regenerated on install and track the
     // installed framework version rather than going stale in the repo's history.

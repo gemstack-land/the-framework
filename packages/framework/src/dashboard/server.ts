@@ -93,8 +93,8 @@ export interface StartRunOptions {
   eco?: EcoOptions
   /** In-context directories (#439): each becomes a `--context <dir>` flag on the spawned run. */
   context?: string[]
-  /** Post-merge prompt (#326): on setReadyForMerge(), queue the quality follow-ups as TODO entries; maps to `--post-merge`. */
-  postMerge?: boolean
+  /** On-before-mergeable prompt (#326): on setReadyForMerge(), queue the quality follow-ups as TODO entries; maps to `--on-before-mergeable`. */
+  onBeforeMergeable?: boolean
   /** Give the agent a real browser via chrome-devtools-mcp during the run (#452); maps to `--browser`. */
   browser?: boolean
 }

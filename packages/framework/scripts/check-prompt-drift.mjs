@@ -19,12 +19,12 @@ import { fileURLToPath } from 'node:url'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const systemPromptFile = join(here, '..', 'prompts', 'system_prompt.md')
-const snapshotFile = join(here, 'op-326-post-merge.snapshot.md')
+const snapshotFile = join(here, 'op-326-on-before-mergeable.snapshot.md')
 
 const REPO = 'gemstack-land/gemstack'
 const ISSUE = 326
 
-/** The ```md blocks of the issue body, in order. Block 1 = system prompt, block 2 = post-merge. */
+/** The ```md blocks of the issue body, in order. Block 1 = system prompt, block 2 = on-before-mergeable. */
 function extractPromptBlocks(body) {
   return [...body.matchAll(/```md\n([\s\S]*?)\n```/g)].map(m => m[1])
 }
@@ -76,11 +76,11 @@ async function main() {
         `The issue's structure changed; this check needs updating along with it.`,
     )
   }
-  const [systemBlock, postMergeBlock] = blocks.map(normalize)
+  const [systemBlock, onBeforeMergeableBlock] = blocks.map(normalize)
 
   if (update) {
-    await writeFile(snapshotFile, `${postMergeBlock}\n`)
-    console.log(`Updated ${snapshotFile} to the current #${ISSUE} post-merge block.`)
+    await writeFile(snapshotFile, `${onBeforeMergeableBlock}\n`)
+    console.log(`Updated ${snapshotFile} to the current #${ISSUE} on-before-mergeable block.`)
     return
   }
 
@@ -97,13 +97,13 @@ async function main() {
   }
 
   const snapshot = normalize(await readFile(snapshotFile, 'utf8'))
-  if (postMergeBlock !== snapshot) {
+  if (onBeforeMergeableBlock !== snapshot) {
     failures.push(
-      `The post-merge block (block 2) of ${REPO}#${ISSUE} changed since it was last reviewed.\n` +
-        `  snapshot: ${snapshot.length} chars, issue: ${postMergeBlock.length} chars\n` +
-        `  first difference at ${firstDifference(postMergeBlock, snapshot, 'issue:', 'snapshot:')}\n` +
+      `The on-before-mergeable block (block 2) of ${REPO}#${ISSUE} changed since it was last reviewed.\n` +
+        `  snapshot: ${snapshot.length} chars, issue: ${onBeforeMergeableBlock.length} chars\n` +
+        `  first difference at ${firstDifference(onBeforeMergeableBlock, snapshot, 'issue:', 'snapshot:')}\n` +
         `  It cannot be copied verbatim (it nests \`\${{ }}\` fragments). Re-flatten it into\n` +
-        `  prompts/post_merge_prompt.md, then run: pnpm --filter @gemstack/framework check:prompt-drift --update`,
+        `  prompts/on_before_mergeable_prompt.md, then run: pnpm --filter @gemstack/framework check:prompt-drift --update`,
     )
   }
 

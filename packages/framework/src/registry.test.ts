@@ -155,11 +155,11 @@ test('readRegistry reads a legacy bare-array file as { projects, preferences: {}
 test('readRegistry reads the object form with preferences and drops unknown/non-boolean fields', async () => {
   const raw = JSON.stringify({
     projects: [APP_A],
-    preferences: { autopilot: false, eco: true, ecoPlanning: 'yes', bogus: 1, postMergeQuality: true, browser: true },
+    preferences: { autopilot: false, eco: true, ecoPlanning: 'yes', bogus: 1, onBeforeMergeableQuality: true, browser: true },
   })
   assert.deepEqual(await readRegistry(memFs({ [FILE]: raw }), ENV), {
     projects: [APP_A],
-    preferences: { autopilot: false, eco: true, postMergeQuality: true, browser: true }, // ecoPlanning (non-boolean) + bogus dropped
+    preferences: { autopilot: false, eco: true, onBeforeMergeableQuality: true, browser: true }, // ecoPlanning (non-boolean) + bogus dropped
   })
 })
 

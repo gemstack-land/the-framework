@@ -22,7 +22,7 @@ import {
   runCli,
   runLogEntry,
   runLogKind,
-  runPostMerge,
+  runOnBeforeMergeable,
   unguardedNotices,
   withBrowser,
   BROWSER_MCP_SERVERS,
@@ -39,7 +39,7 @@ function capture(): { io: CliIO; out: string[]; err: string[] } {
   return { io: { out: l => out.push(l), err: l => err.push(l) }, out, err }
 }
 
-/** An in-memory {@link StoreFs} so runPostMerge's preset materialization never touches disk. */
+/** An in-memory {@link StoreFs} so runOnBeforeMergeable's preset materialization never touches disk. */
 function memFs(): StoreFs & { files: Map<string, string> } {
   const files = new Map<string, string>()
   return {
@@ -74,9 +74,9 @@ test('parseArgs collects repeatable --context directories (#439)', () => {
   assert.deepEqual(parseArgs(['--context', '/work/api', '--context', '/work/ui', 'x']).context, ['/work/api', '/work/ui'])
 })
 
-test('parseArgs reads --post-merge (#326)', () => {
-  assert.equal(parseArgs(['x']).postMerge, false)
-  assert.equal(parseArgs(['--post-merge', 'x']).postMerge, true)
+test('parseArgs reads --on-before-mergeable (#326)', () => {
+  assert.equal(parseArgs(['x']).onBeforeMergeable, false)
+  assert.equal(parseArgs(['--on-before-mergeable', 'x']).onBeforeMergeable, true)
 })
 
 test('parseArgs reads --browser (#452)', () => {
@@ -93,23 +93,23 @@ test('withBrowser folds chrome-devtools-mcp into driver options only when enable
   assert.equal(base.mcpServers, undefined)
 })
 
-test('promptRunArgs runs a headless prompt and carries NO --post-merge (recursion guard, #326)', () => {
+test('promptRunArgs runs a headless prompt and carries NO --on-before-mergeable (recursion guard, #326)', () => {
   const args = promptRunArgs('audit this', '/work/app', '/bin/framework', 3)
   assert.deepEqual(args, ['/bin/framework', 'prompt', 'audit this', '--no-dashboard', '--cwd', '/work/app', '--max-cost', '3'])
-  // The guard: a queued pass must not trigger its own post-merge prompt.
-  assert.equal(args.includes('--post-merge'), false)
+  // The guard: a queued pass must not trigger its own on-before-mergeable prompt.
+  assert.equal(args.includes('--on-before-mergeable'), false)
   // maxCost is optional.
   assert.equal(promptRunArgs('x', '/w', '/bin/f').includes('--max-cost'), false)
 })
 
-test('runPostMerge queues the follow-ups in ONE run instead of running the presets (#326/#556)', async () => {
+test('runOnBeforeMergeable queues the follow-ups in ONE run instead of running the presets (#326/#556)', async () => {
   const { io } = capture()
   const seen: string[] = []
   const run = (prompt: string) => {
     seen.push(prompt)
     return Promise.resolve(true)
   }
-  await runPostMerge('/work/app', '/bin/framework', io, { session_name: 'add-oauth' }, undefined, undefined, run, memFs())
+  await runOnBeforeMergeable('/work/app', '/bin/framework', io, { session_name: 'add-oauth' }, undefined, undefined, run, memFs())
   // One child run, not three: it asks for TODO entries rather than doing the passes.
   assert.equal(seen.length, 1)
   const prompt = seen[0]!
@@ -121,11 +121,11 @@ test('runPostMerge queues the follow-ups in ONE run instead of running the prese
   assert.ok(!prompt.includes('${{'), 'fully rendered')
 })
 
-test('runPostMerge gates the readability entry on technical_control (#326)', async () => {
+test('runOnBeforeMergeable gates the readability entry on technical_control (#326)', async () => {
   const { io } = capture()
   const render = async (technical_control: boolean) => {
     const seen: string[] = []
-    await runPostMerge(
+    await runOnBeforeMergeable(
       '/work/app',
       '/bin/framework',
       io,
@@ -144,18 +144,18 @@ test('runPostMerge gates the readability entry on technical_control (#326)', asy
   assert.doesNotMatch(await render(false), /readability/)
 })
 
-test('runPostMerge is best-effort: a failed queueing run is reported, never thrown (#326)', async () => {
+test('runOnBeforeMergeable is best-effort: a failed queueing run is reported, never thrown (#326)', async () => {
   const { io, out } = capture()
-  await runPostMerge('/work/app', '/bin/framework', io, { session_name: 'add-oauth' }, undefined, undefined, () =>
+  await runOnBeforeMergeable('/work/app', '/bin/framework', io, { session_name: 'add-oauth' }, undefined, undefined, () =>
     Promise.resolve(false), memFs(),
   )
-  assert.ok(out.some(l => /post-merge queueing did not complete/.test(l)))
+  assert.ok(out.some(l => /on-before-mergeable queueing did not complete/.test(l)))
 })
 
-test('runPostMerge materializes the presets so the queued filePaths resolve (#598)', async () => {
+test('runOnBeforeMergeable materializes the presets so the queued filePaths resolve (#598)', async () => {
   const { io } = capture()
   const fs = memFs()
-  await runPostMerge('/work/app', '/bin/framework', io, { session_name: 'add-oauth' }, undefined, undefined, () => Promise.resolve(true), fs)
+  await runOnBeforeMergeable('/work/app', '/bin/framework', io, { session_name: 'add-oauth' }, undefined, undefined, () => Promise.resolve(true), fs)
   // The entry points at .the-framework/presets/maintainability.md; that file must now exist.
   assert.ok(fs.files.has(join('/work/app', '.the-framework/presets/maintainability.md')))
   assert.ok(fs.files.has(join('/work/app', '.the-framework/presets/security_audit.md')))
