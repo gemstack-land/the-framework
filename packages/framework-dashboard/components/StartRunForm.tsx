@@ -199,7 +199,7 @@ export function StartRunForm({
   const mainOptions: OptionRow[] = [
     { key: 'autopilot', label: 'Autopilot', description: 'Auto-accepts the recommended choice after a countdown.', title: 'Auto-accept the recommended choice after a countdown; also relaxes the maintenance stance', checked: autopilot },
     { key: 'technical', label: 'Technical control', description: 'Surfaces technical detail like tech-stack choices.', title: 'Expose technical detail (e.g. tech-stack choices)', checked: technical },
-    { key: 'vanilla', label: 'Disable system prompt', description: 'Raw Claude Code, with no added system prompt.', title: "Remove all system prompts: the same as raw Claude Code. Expand 'See actual prompt sent' to read what it removes.", checked: vanilla },
+    { key: 'vanilla', label: 'Disable system prompt', description: 'Raw Claude Code, with no added system prompt.', title: "Remove all system prompts: the same as raw Claude Code. Expand 'Actual prompt' to read what it removes.", checked: vanilla },
     { key: 'eco', label: 'Eco', description: 'Trims the system prompt to save tokens.', title: 'Trim the built-in system prompt to save tokens', checked: eco && !ecoDisabled, disabled: ecoDisabled },
     { key: 'onBeforeMergeableQuality', label: 'Post-merge cleanup', description: 'Runs quality passes once it is ready to merge.', title: "When the run signals it's ready for merge, run maintainability, readability, and security-audit passes", checked: onBeforeMergeableQuality },
     { key: 'browser', label: 'Browser', description: 'Gives the agent a real browser to inspect pages.', title: 'Give the agent a real browser via chrome-devtools-mcp: navigate pages, read console + network, inspect the DOM, and screenshot', checked: browser },
@@ -286,7 +286,7 @@ export function StartRunForm({
             Context{context.size > 0 && <span className="text-primary"> · {context.size} selected</span>}
           </DisclosureToggle>
           {showContext && (
-            <div className="mt-1.5 space-y-2 pl-4">
+            <div className="mt-2 space-y-2 rounded border border-border p-3">
               {/* Files picked via a `#` mention or the file tree (#661): removable with an X. */}
               {contextFiles.length > 0 && (
                 <div>

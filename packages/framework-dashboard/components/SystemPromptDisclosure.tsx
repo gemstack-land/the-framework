@@ -45,7 +45,7 @@ export function SystemPromptDisclosure({
   return (
     <div className="mt-3 text-xs">
       <DisclosureToggle open={open} onToggle={() => setOpen(o => !o)}>
-        See actual prompt sent (see system prompt)
+        Actual prompt
       </DisclosureToggle>
 
       {open && (
