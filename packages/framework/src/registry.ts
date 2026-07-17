@@ -41,6 +41,13 @@ export interface Preferences {
   /** Fire a browser notification when a new item lands on the "needs you" queue (#627). Absent = on. */
   notifyBrowser?: boolean
   /**
+   * Post a Discord message when a new item lands on the "needs you" queue (#627). Absent = off:
+   * unlike the in-browser toggle, Discord reaches you when no dashboard is open, so it is opt-in.
+   * Gates the daemon watcher *on top of* a `DISCORD_WEBHOOK` being set (the webhook is where to
+   * post; this is whether to).
+   */
+  notifyDiscord?: boolean
+  /**
    * How much of the subscription The Framework may burn before it pauses itself
    * (#527, the settings behind #519).
    *
@@ -146,6 +153,7 @@ const PREFERENCE_KEYS = [
   'onBeforeMergeableQuality',
   'browser',
   'notifyBrowser',
+  'notifyDiscord',
 ] as const
 
 /** Keep only the known preference fields, so a hand-edited or browser-supplied

@@ -179,6 +179,12 @@ test('writePreferences persists sanitized prefs and preserves the project list',
   assert.deepEqual(await listProjects(fs, ENV), [APP_A, APP_B])
 })
 
+test('writePreferences round-trips the notifyDiscord toggle (#627)', async () => {
+  const fs = memFs({ [FILE]: JSON.stringify([APP_A]) })
+  await writePreferences({ notifyDiscord: true }, fs, ENV)
+  assert.deepEqual(await readPreferences(fs, ENV), { notifyDiscord: true })
+})
+
 test('addProject preserves existing preferences', async () => {
   const fs = memFs({ [FILE]: JSON.stringify({ projects: [APP_A], preferences: { autopilot: false } }) })
   await addProject('/repos/app-b', APP_B.addedAt, fs, ENV)

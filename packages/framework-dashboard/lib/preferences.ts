@@ -72,3 +72,9 @@ export function autopilotEnabled(preferences: Preferences): boolean {
 export function notificationsEnabled(preferences: Preferences): boolean {
   return preferences.notifyBrowser ?? true
 }
+
+/** Discord notifications default off (#627): they reach you with no dashboard open, so opt-in.
+ * The daemon's `DISCORD_WEBHOOK` is the other gate (where to post; this is whether to). */
+export function discordEnabled(preferences: Preferences): boolean {
+  return preferences.notifyDiscord ?? false
+}
