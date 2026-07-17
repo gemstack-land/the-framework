@@ -14,7 +14,7 @@ import { useLoaded } from '../lib/use-async.js'
 import { PromptEditor, type PromptEditorHandle } from './PromptEditor.js'
 import { PresetMenu } from './PresetMenu.js'
 import { PresetCreatePanel } from './PresetCreatePanel.js'
-import { AgentModelMenu } from './AgentModelMenu.js'
+import { AgentModelMenu, type AgentOption } from './AgentModelMenu.js'
 import { ClaudeLogo, CodexLogo } from './agent-logos.js'
 import { SystemPromptDisclosure } from './SystemPromptDisclosure.js'
 import { OptionsMenu, type OptionRow } from './OptionsMenu.js'
@@ -31,24 +31,34 @@ const PRESETS: { id: string; label: string; render: () => string }[] = [
   { id: 'ux', label: 'UX', render: renderUxPrompt },
 ]
 
-// The model picker below the textarea (#628): what the run passes as `--model`. Empty = the
-// driver's own default (no flag). The aliases are Claude Code's, since it is the default driver;
-// the value passes straight through to the wrapped agent, so a full model id typed into the
-// registry works too.
-const MODELS: { value: string; label: string }[] = [
-  { value: '', label: 'Default model' },
-  { value: 'opus', label: 'Opus' },
-  { value: 'sonnet', label: 'Sonnet' },
-  { value: 'haiku', label: 'Haiku' },
-]
-
-// The coding agent that drives the run (#650): maps to `--agent`. Mirrors AGENTS in the
-// framework's agent.ts — kept as a client const so the dashboard bundle never imports the
-// node-only driver layer. `claude` is the default (empty flag). The logo (#656) stands in for
-// the name in the picker trigger.
-const AGENTS: { value: string; label: string; icon: ReactNode }[] = [
-  { value: 'claude', label: 'Claude Code', icon: <ClaudeLogo className="h-4 w-4" /> },
-  { value: 'codex', label: 'Codex', icon: <CodexLogo className="h-4 w-4" /> },
+// The agent + model tree (#650/#656/#658): each agent lists ONLY its own models, since `--model`
+// passes straight through to that agent's CLI (Claude aliases vs OpenAI ids). Picking a model in
+// an agent's submenu sets both, so an incompatible pair can't be chosen. Empty value = the
+// agent's own default (no `--model` flag). Kept as a client const so the dashboard bundle never
+// imports the node-only driver layer (mirrors AGENTS in the framework's agent.ts).
+const AGENTS: AgentOption[] = [
+  {
+    value: 'claude',
+    label: 'Claude Code',
+    icon: <ClaudeLogo className="h-4 w-4" />,
+    models: [
+      { value: '', label: 'Default model' },
+      { value: 'opus', label: 'Opus' },
+      { value: 'sonnet', label: 'Sonnet' },
+      { value: 'haiku', label: 'Haiku' },
+    ],
+  },
+  {
+    value: 'codex',
+    label: 'Codex',
+    icon: <CodexLogo className="h-4 w-4" />,
+    models: [
+      { value: '', label: 'Default model' },
+      { value: 'gpt-5-codex', label: 'GPT-5 Codex' },
+      { value: 'gpt-5', label: 'GPT-5' },
+      { value: 'o3', label: 'o3' },
+    ],
+  },
 ]
 
 // Start a run in the selected project (#405): the one write that goes through the daemon's
@@ -229,15 +239,13 @@ export function StartRunForm({
         />
         {/* Global options (#314) as a checkbox dropdown (#654). */}
         <OptionsMenu options={mainOptions} ecoOptions={ecoOptions} showEco={eco && !ecoDisabled} busy={busy} />
-        {/* Agent (#650) + Model (#628) in one dropdown, each a submenu — pushed to the end. */}
+        {/* Agent + model as one tree (#650/#658), each agent showing only its own models — at the end. */}
         <div className="ml-auto">
           <AgentModelMenu
+            agents={AGENTS}
             agent={agent}
-            agentOptions={AGENTS}
-            onAgentChange={a => updatePreferences({ agent: a })}
             model={model}
-            modelOptions={MODELS}
-            onModelChange={m => updatePreferences({ model: m })}
+            onChange={(a, m) => updatePreferences({ agent: a, model: m })}
             busy={busy}
           />
         </div>

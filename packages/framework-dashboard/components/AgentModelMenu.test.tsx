@@ -1,69 +1,57 @@
 import { afterEach, describe, expect, test, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
-import { AgentModelMenu } from './AgentModelMenu.js'
+import { AgentModelMenu, type AgentOption } from './AgentModelMenu.js'
 
 afterEach(cleanup)
 
-const agentOptions = [
-  { value: 'claude', label: 'Claude Code' },
-  { value: 'codex', label: 'Codex' },
-]
-const modelOptions = [
-  { value: '', label: 'Default model' },
-  { value: 'opus', label: 'Opus' },
+const agents: AgentOption[] = [
+  {
+    value: 'claude',
+    label: 'Claude Code',
+    icon: <svg data-testid="claude-logo" />,
+    models: [
+      { value: '', label: 'Default model' },
+      { value: 'opus', label: 'Opus' },
+    ],
+  },
+  {
+    value: 'codex',
+    label: 'Codex',
+    models: [
+      { value: '', label: 'Default model' },
+      { value: 'gpt-5-codex', label: 'GPT-5 Codex' },
+    ],
+  },
 ]
 
 function renderMenu(over: Partial<Parameters<typeof AgentModelMenu>[0]> = {}) {
-  const onAgentChange = vi.fn()
-  const onModelChange = vi.fn()
-  render(
-    <AgentModelMenu
-      agent="claude"
-      agentOptions={agentOptions}
-      onAgentChange={onAgentChange}
-      model=""
-      modelOptions={modelOptions}
-      onModelChange={onModelChange}
-      busy={false}
-      {...over}
-    />,
-  )
-  return { onAgentChange, onModelChange }
+  const onChange = vi.fn()
+  render(<AgentModelMenu agents={agents} agent="claude" model="opus" onChange={onChange} busy={false} {...over} />)
+  return { onChange }
 }
 
-describe('AgentModelMenu (#650)', () => {
-  test('the trigger shows the current agent and model', () => {
-    renderMenu({ agent: 'codex', model: 'opus' })
+describe('AgentModelMenu tree (#658)', () => {
+  test('the trigger shows the current agent logo and model', () => {
+    renderMenu()
     const trigger = screen.getByRole('button')
-    expect(trigger.textContent).toContain('Codex')
+    expect(trigger.querySelector('[data-testid="claude-logo"]')).toBeTruthy()
     expect(trigger.textContent).toContain('Opus')
+    expect(trigger.getAttribute('title')).toContain('Claude Code')
   })
 
-  test('choosing a model from its submenu reports the value', () => {
-    const { onModelChange } = renderMenu()
+  test('picking a model within an agent sets both the agent and the model', () => {
+    const { onChange } = renderMenu()
     fireEvent.click(screen.getByRole('button')) // open root
-    fireEvent.click(screen.getByText('Model')) // open the Model submenu
-    fireEvent.click(screen.getByText('Opus'))
-    expect(onModelChange).toHaveBeenCalledWith('opus')
+    fireEvent.click(screen.getByText('Codex')) // open the Codex submenu
+    fireEvent.click(screen.getByText('GPT-5 Codex'))
+    expect(onChange).toHaveBeenCalledWith('codex', 'gpt-5-codex')
   })
 
-  test('renders the agent logo on the trigger, with the name in the tooltip (#656)', () => {
-    const withLogo = [
-      { value: 'claude', label: 'Claude Code', icon: <svg data-testid="claude-logo" /> },
-      { value: 'codex', label: 'Codex' },
-    ]
-    renderMenu({ agentOptions: withLogo, agent: 'claude' })
-    const trigger = screen.getByRole('button')
-    expect(trigger.querySelector('[data-testid="claude-logo"]')).toBeTruthy() // logo, not the name
-    expect(trigger.textContent).not.toContain('Claude Code')
-    expect(trigger.getAttribute('title')).toContain('Claude Code') // still accessible
-  })
-
-  test('choosing an agent from its submenu reports the value', () => {
-    const { onAgentChange } = renderMenu()
-    fireEvent.click(screen.getByRole('button')) // open root
-    fireEvent.click(screen.getByText('Agent')) // open the Agent submenu
-    fireEvent.click(screen.getByText('Codex'))
-    expect(onAgentChange).toHaveBeenCalledWith('codex')
+  test("each agent's submenu shows only its own models", () => {
+    renderMenu({ model: '' }) // keep 'Opus' out of the trigger so we count only submenu items
+    fireEvent.click(screen.getByRole('button'))
+    fireEvent.click(screen.getByText('Claude Code')) // Claude submenu
+    expect(screen.getByText('Opus')).toBeTruthy() // Claude's own model
+    expect(screen.queryByText('GPT-5 Codex')).toBeNull() // a Claude submenu never lists Codex models
   })
 })
