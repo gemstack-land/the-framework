@@ -14,10 +14,12 @@ import {
   runDaemon,
   daemonStatePath,
   startOptionFlags,
+  registerHomeProject,
+  isNestedWithin,
 } from './daemon.js'
 import { EVENTS_FILE, FRAMEWORK_DIR } from './store/index.js'
 import { controlPath } from './control.js'
-import { projectId } from './registry.js'
+import { projectId, listProjects, addProject } from './registry.js'
 
 // The new dashboard steers + starts over Telefunc (#405/#426), not the retired /api/* HTTP
 // routes. Post an RPC to the daemon's in-process `/_telefunc` mount (same-origin), keyed by
@@ -475,5 +477,48 @@ test('runDaemon steers through the control log: sendStop / sendChoice append ent
     if (prevXdg === undefined) delete process.env['XDG_CONFIG_HOME']
     else process.env['XDG_CONFIG_HOME'] = prevXdg
     await rm(cwd, { recursive: true, force: true })
+  }
+})
+
+test('isNestedWithin flags a child path, not equal/sibling/parent (#647)', () => {
+  assert.equal(isNestedWithin('/repo/packages/framework', '/repo'), true)
+  assert.equal(isNestedWithin('/repo', '/repo'), false) // equal is not nested
+  assert.equal(isNestedWithin('/repo', '/repo/packages'), false) // parent is not nested
+  assert.equal(isNestedWithin('/other/framework', '/repo'), false) // sibling tree
+  assert.equal(isNestedWithin('/repo-x', '/repo'), false) // prefix but not a path child
+})
+
+test('registerHomeProject skips a cwd nested inside an already-tracked project (#647)', async () => {
+  const parent = await mkdtemp(join(tmpdir(), 'framework-parent-'))
+  const env = await configEnv(parent)
+  try {
+    await addProject(parent, new Date().toISOString(), undefined, env)
+    // A nested, activated subfolder (like packages/framework inside the repo).
+    const nested = join(parent, 'packages', 'framework')
+    await mkdir(join(nested, FRAMEWORK_DIR), { recursive: true })
+
+    await registerHomeProject(nested, env)
+
+    const projects = await listProjects(undefined, env)
+    assert.deepEqual(
+      projects.map(p => p.path),
+      [parent],
+      'the nested subfolder must not be added as a second project',
+    )
+  } finally {
+    await rm(parent, { recursive: true, force: true })
+  }
+})
+
+test('registerHomeProject still adds an activated cwd that is not nested (#647)', async () => {
+  const home = await mkdtemp(join(tmpdir(), 'framework-home-'))
+  const env = await configEnv(home)
+  try {
+    await mkdir(join(home, FRAMEWORK_DIR), { recursive: true })
+    await registerHomeProject(home, env)
+    const projects = await listProjects(undefined, env)
+    assert.deepEqual(projects.map(p => p.path), [home])
+  } finally {
+    await rm(home, { recursive: true, force: true })
   }
 })
