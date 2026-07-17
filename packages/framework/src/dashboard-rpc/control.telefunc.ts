@@ -4,6 +4,7 @@ import { openInApp, type OpenTarget, type OpenResult } from '../dashboard/open-i
 import { resolveProjectPath } from './context.js'
 import type { ChoiceBy } from '../events.js'
 import type { PreviewResult, PreviewStatus, StartRunKind, StartRunOptions, StartRunResult } from '../dashboard/types.js'
+import type { ServeTarget } from '../preview.js'
 import type { DashboardContext } from '../dashboard/telefunc-serve.js'
 
 // The write side behind the new dashboard (#405): steering a live run. The reverse of
@@ -62,10 +63,21 @@ export async function sendStart(
  * (like `sendStart`). Idempotent — opening while a preview is up returns the running one.
  * Returns an error result when Preview is not enabled on this host (the relay/per-run view).
  */
-export async function sendPreview(projectId: string): Promise<PreviewResult> {
+export async function sendPreview(projectId: string, targetId?: string): Promise<PreviewResult> {
   const { preview } = getContext<DashboardContext>()
   if (!preview) return { ok: false, error: 'preview is not enabled on this server' }
-  return preview.start(projectId)
+  return preview.start(projectId, targetId)
+}
+
+/**
+ * List a project's servable apps (#651) for the Serve picker: the root plus each workspace package
+ * that has a dev/serve script. A single-package repo returns at most one, so the button stays a
+ * plain Serve; a monorepo returns several to choose from. Empty when Preview is not enabled.
+ */
+export async function onServeTargets(projectId: string): Promise<ServeTarget[]> {
+  const { preview } = getContext<DashboardContext>()
+  if (!preview) return []
+  return preview.targets(projectId)
 }
 
 /** Stop a project's Preview (#475). A no-op when none is running, or Preview is not enabled. */

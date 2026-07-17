@@ -1,8 +1,9 @@
 import { spawn, type ChildProcess } from 'node:child_process'
 import { createServer } from 'node:http'
 import { createReadStream } from 'node:fs'
-import { readFile, stat } from 'node:fs/promises'
-import { join, normalize, sep } from 'node:path'
+import { readFile, readdir, stat } from 'node:fs/promises'
+import { basename, join, normalize, sep } from 'node:path'
+import { parse as parseYaml } from 'yaml'
 import type { ServerResponse } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { contentTypeFor } from './dashboard/content-type.js'
@@ -37,6 +38,11 @@ export interface PreviewHandle {
 export interface StartPreviewOptions {
   /** The project directory to serve. */
   cwd: string
+  /**
+   * Which app to serve in a multi-package repo (#651), from {@link detectServeTargets}. Absent
+   * serves the root package (the single-package default), preserving the original behavior.
+   */
+  target?: ServeTarget
   /** How long to wait for a dev script to print its localhost URL before giving up. Default 20s. */
   waitMs?: number
 }
@@ -44,16 +50,160 @@ export interface StartPreviewOptions {
 /** The npm scripts we try, best-first, when serving a project's dev preview. */
 export const PREVIEW_SCRIPTS = ['dev', 'start', 'preview', 'serve'] as const
 
+/** The first {@link PREVIEW_SCRIPTS} entry a `package.json`'s `scripts` defines, else undefined. */
+function pickScript(scripts: Record<string, unknown> | undefined): string | undefined {
+  const s = scripts ?? {}
+  return PREVIEW_SCRIPTS.find(name => typeof s[name] === 'string' && (s[name] as string).trim() !== '')
+}
+
 /** The first {@link PREVIEW_SCRIPTS} entry the project's `package.json` defines, else undefined. */
 export async function detectDevScript(cwd: string): Promise<string | undefined> {
-  let pkg: { scripts?: Record<string, unknown> }
-  try {
-    pkg = JSON.parse(await readFile(join(cwd, 'package.json'), 'utf8')) as { scripts?: Record<string, unknown> }
-  } catch {
-    return undefined // no package.json, or it is unreadable/malformed
+  return pickScript((await readPkg(cwd))?.scripts)
+}
+
+/**
+ * One servable app in a repo (#651): a package that defines a dev/serve script. Plain repos
+ * have exactly one (the root); a monorepo has one per workspace package that can serve, and
+ * the dashboard offers a picker over them.
+ */
+export interface ServeTarget {
+  /** Stable id = the dir relative to the repo root, or `.` for the root package itself. */
+  id: string
+  /** Human label: the package.json `name`, else the directory basename (`.` → `root`). */
+  label: string
+  /** The dir to run the script in, relative to the repo root (`''` = the root). */
+  dir: string
+  /** The npm script that serves it (a {@link PREVIEW_SCRIPTS} entry). */
+  script: string
+}
+
+/** How many workspace packages we scan / offer, so a pathological monorepo can't hang or flood the picker. */
+const MAX_SERVE_TARGETS = 50
+
+/**
+ * Enumerate the repo's servable apps (#651), best-first: the root package (when it has a serve
+ * script) followed by each workspace package that has one, in path order. A plain single-package
+ * repo yields at most one target (the root); a monorepo yields one per servable workspace so the
+ * Serve button can offer a pick. Workspaces come from `pnpm-workspace.yaml` or the package.json
+ * `workspaces` field; unreadable/absent config just yields the root (or nothing).
+ */
+export async function detectServeTargets(cwd: string): Promise<ServeTarget[]> {
+  const targets: ServeTarget[] = []
+  const seen = new Set<string>()
+  const add = async (dir: string): Promise<void> => {
+    const abs = dir === '' ? cwd : join(cwd, dir)
+    if (seen.has(abs)) return
+    seen.add(abs)
+    const pkg = await readPkg(abs)
+    const script = pickScript(pkg?.scripts)
+    if (!script) return
+    targets.push({ id: dir === '' ? '.' : dir, label: serveLabel(pkg?.name, dir), dir, script })
   }
-  const scripts = pkg.scripts ?? {}
-  return PREVIEW_SCRIPTS.find(name => typeof scripts[name] === 'string' && (scripts[name] as string).trim() !== '')
+  await add('')
+  const rootPkg = await readPkg(cwd)
+  for (const dir of await workspaceDirs(cwd, rootPkg)) {
+    if (targets.length >= MAX_SERVE_TARGETS) break
+    await add(dir)
+  }
+  return targets
+}
+
+/** A target's display label: its package name, else the dir basename (`.`/root → `root`). */
+function serveLabel(name: unknown, dir: string): string {
+  if (typeof name === 'string' && name.trim() !== '') return name.trim()
+  const base = basename(dir)
+  return base === '' || base === '.' ? 'root' : base
+}
+
+interface PkgJson {
+  name?: unknown
+  scripts?: Record<string, unknown>
+  workspaces?: unknown
+}
+
+/** Read and parse a directory's `package.json`, or undefined when absent/unreadable/malformed. */
+async function readPkg(dir: string): Promise<PkgJson | undefined> {
+  try {
+    return JSON.parse(await readFile(join(dir, 'package.json'), 'utf8')) as PkgJson
+  } catch {
+    return undefined
+  }
+}
+
+/**
+ * The workspace package directories (relative to `cwd`), from `pnpm-workspace.yaml` `packages:`
+ * or the package.json `workspaces` field, expanded from their globs. Order is stable (sorted).
+ */
+async function workspaceDirs(cwd: string, rootPkg: PkgJson | undefined): Promise<string[]> {
+  const globs = await workspaceGlobs(cwd, rootPkg)
+  const dirs = new Set<string>()
+  for (const glob of globs) {
+    for (const dir of await expandWorkspaceGlob(cwd, glob)) dirs.add(dir)
+  }
+  return [...dirs].sort()
+}
+
+/** The raw workspace globs: pnpm's `pnpm-workspace.yaml` wins, else npm/yarn's `workspaces`. */
+async function workspaceGlobs(cwd: string, rootPkg: PkgJson | undefined): Promise<string[]> {
+  try {
+    const doc = parseYaml(await readFile(join(cwd, 'pnpm-workspace.yaml'), 'utf8')) as { packages?: unknown }
+    const pkgs = doc?.packages
+    if (Array.isArray(pkgs)) return pkgs.filter((g): g is string => typeof g === 'string')
+  } catch {
+    // no pnpm-workspace.yaml — fall through to the package.json workspaces field
+  }
+  const ws = rootPkg?.workspaces
+  const list = Array.isArray(ws) ? ws : Array.isArray((ws as { packages?: unknown })?.packages) ? (ws as { packages: unknown[] }).packages : []
+  return list.filter((g): g is string => typeof g === 'string')
+}
+
+/**
+ * Expand one workspace glob to the package dirs it matches (relative to `cwd`). Handles the shapes
+ * real workspaces use — a literal dir, a single `*` segment (`packages/*`), and a trailing `**`
+ * (`packages/**`) — by walking the directory tree rather than pulling in a glob dependency. Negations
+ * (`!`) and dirs without a `package.json` are skipped; the walk is depth-bounded for `**`.
+ */
+async function expandWorkspaceGlob(cwd: string, glob: string): Promise<string[]> {
+  if (glob.startsWith('!')) return [] // exclusion patterns: skip, we only add positives
+  const parts = glob.replace(/\/+$/, '').split('/')
+  const out: string[] = []
+  let visited = 0
+  const walk = async (relDir: string, i: number): Promise<void> => {
+    if (++visited > 2000) return // bound the tree walk so a pathological repo can't hang the picker
+    if (i === parts.length) {
+      if (await hasPkg(join(cwd, relDir))) out.push(relDir)
+      return
+    }
+    const seg = parts[i]!
+    if (seg === '**') {
+      // Match this dir and any descendant (bounded), then continue past the `**`.
+      await walk(relDir, i + 1)
+      for (const child of await subdirs(join(cwd, relDir))) await walk(join(relDir, child), i)
+      return
+    }
+    if (seg === '*') {
+      for (const child of await subdirs(join(cwd, relDir))) await walk(join(relDir, child), i + 1)
+      return
+    }
+    await walk(relDir === '' ? seg : join(relDir, seg), i + 1)
+  }
+  await walk('', 0)
+  return out
+}
+
+/** The immediate child directory names of `dir` (excluding dotfiles and `node_modules`), or []. */
+async function subdirs(dir: string): Promise<string[]> {
+  try {
+    const entries = await readdir(dir, { withFileTypes: true })
+    return entries.filter(e => e.isDirectory() && e.name !== 'node_modules' && !e.name.startsWith('.')).map(e => e.name)
+  } catch {
+    return []
+  }
+}
+
+/** Whether `dir` holds a `package.json` (marking a workspace package). */
+async function hasPkg(dir: string): Promise<boolean> {
+  return stat(join(dir, 'package.json')).then(s => s.isFile()).catch(() => false)
 }
 
 // Strip ANSI color codes (dev servers print their URL in color) before matching.
@@ -79,6 +229,11 @@ export function parsePreviewUrl(output: string): string | undefined {
  * is nothing to serve, or the dev script never announces a URL.
  */
 export async function startPreview(opts: StartPreviewOptions): Promise<PreviewHandle> {
+  // A picked target (#651) serves that workspace package; otherwise fall back to the root package.
+  if (opts.target) {
+    const dir = opts.target.dir === '' ? opts.cwd : join(opts.cwd, opts.target.dir)
+    return startDevServer(dir, opts.target.script, opts.waitMs ?? 20_000)
+  }
   const script = await detectDevScript(opts.cwd)
   if (script) return startDevServer(opts.cwd, script, opts.waitMs ?? 20_000)
   const hasIndex = await stat(join(opts.cwd, 'index.html')).then(s => s.isFile()).catch(() => false)

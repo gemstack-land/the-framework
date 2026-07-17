@@ -6,6 +6,7 @@ import { defaultQuotaSource, type QuotaSource } from './quota.js'
 import { serveClientBundle } from './static.js'
 import { makeTelefuncMount } from './telefunc-serve.js'
 import type { AddProjectResult, PreviewResult, PreviewStatus, StartRunKind, StartRunOptions, StartRunResult } from './types.js'
+import type { ServeTarget } from '../preview.js'
 
 /** Options for {@link startDashboard}. */
 export interface DashboardOptions {
@@ -45,7 +46,10 @@ export interface DashboardOptions {
    * per-run dashboard and the relay never serve one). {@link onStopPreview} tears it down and
    * {@link onPreviewStatus} rehydrates the button after a reload.
    */
-  onPreview?: (projectId?: string) => PreviewResult | Promise<PreviewResult>
+  onPreview?: (projectId?: string, targetId?: string) => PreviewResult | Promise<PreviewResult>
+  /** Called to list a project's servable apps (#651) so the Serve button can offer a picker in a
+   * multi-package repo. Omit alongside {@link onPreview} to disable Preview entirely. */
+  onServeTargets?: (projectId?: string) => ServeTarget[] | Promise<ServeTarget[]>
   /** Called when the browser stops a project's Preview (#475). No-op when none is running. */
   onStopPreview?: (projectId?: string) => void | Promise<void>
   /** Called on load to reflect whether a project's Preview is already running (#475). */
@@ -107,7 +111,12 @@ export function startDashboard(opts: DashboardOptions = {}): Promise<Dashboard> 
   // Bundle the three Preview callbacks (#475) into one context handler set, present only
   // when the host wired a Preview (the daemon does; the relay/per-run dashboard do not).
   const preview = opts.onPreview
-    ? { start: opts.onPreview, stop: opts.onStopPreview ?? (() => {}), status: opts.onPreviewStatus ?? (() => ({ running: false })) }
+    ? {
+        start: opts.onPreview,
+        targets: opts.onServeTargets ?? (() => []),
+        stop: opts.onStopPreview ?? (() => {}),
+        status: opts.onPreviewStatus ?? (() => ({ running: false })),
+      }
     : undefined
   // The usage panel polls for the dashboard's whole life, not just during a run:
   // it has to show where the account stands while nothing is running (#533).

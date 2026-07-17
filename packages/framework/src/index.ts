@@ -131,7 +131,7 @@ export {
   type MaintenanceFs,
 } from './maintenance.js'
 export { startDashboard, summarizeProject, defaultProjectsProvider, readDocs, type Dashboard, type DashboardOptions, type StartRunKind, type StartRunResult, type AddProjectResult, type PreviewResult, type PreviewStatus, type ProjectSummary, type ProjectsProvider, type SummarizeDeps, type WorkspaceDoc, type ProjectQueue, type QueueItem, type Overview, type ActiveRun, type RecentProject, type DashboardData, type ProjectStat, type ActivityDay, type GitStatus, type LinkedPr, buildInterventions, nodeGhPrLister, type Intervention, type OpenPr, type PrLister, type InterventionsDeps, buildActivity, activityKey, pickNewActivity, type Activity, type ActivityDeps } from './dashboard/index.js'
-export { startPreview, detectDevScript, parsePreviewUrl, PREVIEW_SCRIPTS, type PreviewHandle, type StartPreviewOptions } from './preview.js'
+export { startPreview, detectDevScript, detectServeTargets, parsePreviewUrl, PREVIEW_SCRIPTS, type PreviewHandle, type StartPreviewOptions, type ServeTarget } from './preview.js'
 export {
   RunStore,
   nodeStoreFs,

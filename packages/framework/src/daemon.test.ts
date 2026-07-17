@@ -286,6 +286,43 @@ test('runDaemon comes up on a fresh workspace with no .the-framework yet', async
   }
 })
 
+test('onServeTargets lists a monorepo\'s servable apps over telefunc (#651)', async () => {
+  const cwd = await tmpWorkspace()
+  // A monorepo whose root has no serve script; two workspace apps do, one package does not.
+  await writeFile(join(cwd, 'package.json'), JSON.stringify({ name: 'mono', scripts: { build: 'turbo build' } }))
+  await writeFile(join(cwd, 'pnpm-workspace.yaml'), 'packages:\n  - "apps/*"\n  - "packages/*"\n')
+  await mkdir(join(cwd, 'apps', 'web'), { recursive: true })
+  await writeFile(join(cwd, 'apps', 'web', 'package.json'), JSON.stringify({ name: 'web', scripts: { dev: 'vite' } }))
+  await mkdir(join(cwd, 'apps', 'api'), { recursive: true })
+  await writeFile(join(cwd, 'apps', 'api', 'package.json'), JSON.stringify({ name: 'api', scripts: { start: 'node .' } }))
+  await mkdir(join(cwd, 'packages', 'lib'), { recursive: true })
+  await writeFile(join(cwd, 'packages', 'lib', 'package.json'), JSON.stringify({ name: 'lib', scripts: { build: 'tsc' } }))
+  const env = await configEnv(cwd)
+  const ac = new AbortController()
+  try {
+    const done = runDaemon(cwd, { port: 0, signal: ac.signal, env })
+    let state = await readDaemonState(env)
+    for (let i = 0; i < 100 && !state; i++) {
+      await new Promise(r => setTimeout(r, 20))
+      state = await readDaemonState(env)
+    }
+    assert.ok(state, 'daemon wrote its state file')
+    const targets = (await callTelefunc(state!.url, '/server/control.telefunc.ts', 'onServeTargets', [
+      homeId(cwd),
+    ])) as Array<{ id: string; label: string; script: string }>
+    assert.deepEqual(
+      targets.map(t => `${t.id}:${t.script}`),
+      ['apps/api:start', 'apps/web:dev'],
+      'lists only servable workspace apps, sorted; the non-servable package is excluded',
+    )
+    ac.abort()
+    await done
+  } finally {
+    ac.abort()
+    await rm(cwd, { recursive: true, force: true })
+  }
+})
+
 test('sendStart spawns the run child (prompt, --no-dashboard, --cwd) one at a time (#345)', async () => {
   const cwd = await tmpWorkspace()
   // A stub CLI standing in for the framework bin: it records its argv, then

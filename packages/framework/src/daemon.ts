@@ -7,7 +7,7 @@ import { startDashboard, type Dashboard, type StartRunKind, type StartRunOptions
 import { startInterventionWatcher, postDiscord, type InterventionWatcher } from './dashboard/intervention-watcher.js'
 import { buildInterventions } from './dashboard/interventions.js'
 import { startActivityWatcher, postActivityDiscord, type ActivityWatcher } from './dashboard/activity-watcher.js'
-import { startPreview, type PreviewHandle } from './preview.js'
+import { startPreview, detectServeTargets, type PreviewHandle, type ServeTarget } from './preview.js'
 import { resolveDashboardBundle } from './dashboard/bundle.js'
 import { isActivated } from './project.js'
 import { addProject, listProjects, projectId, readPreferences } from './registry.js'
@@ -346,6 +346,7 @@ export async function runDaemon(cwd: string, opts: RunDaemonOptions = {}): Promi
     onStart: runtime.onStart,
     onAddProject: runtime.onAddProject,
     onPreview: runtime.onPreview,
+    onServeTargets: runtime.onServeTargets,
     onStopPreview: runtime.onStopPreview,
     onPreviewStatus: runtime.onPreviewStatus,
     ...(clientBundleDir ? { clientBundleDir } : {}),
@@ -430,7 +431,8 @@ interface ProjectRuntimeOptions {
 interface ProjectRuntime {
   onStart: (prompt: string, kind: StartRunKind, options?: StartRunOptions, targetProjectId?: string) => Promise<StartRunResult>
   onAddProject: (path: string, directory: boolean) => Promise<AddProjectResult>
-  onPreview: (targetProjectId?: string) => Promise<PreviewResult>
+  onPreview: (targetProjectId?: string, targetId?: string) => Promise<PreviewResult>
+  onServeTargets: (targetProjectId?: string) => Promise<ServeTarget[]>
   onStopPreview: (targetProjectId?: string) => Promise<void>
   onPreviewStatus: (targetProjectId?: string) => PreviewStatus
   /** Stop every live preview so their dev servers do not outlive the daemon (#475). */
@@ -542,20 +544,33 @@ function createProjectRuntime({ cwd, env, binPath }: ProjectRuntimeOptions): Pro
       if (activePreviews.get(key) === handle) activePreviews.delete(key)
     })
   }
-  const onPreview = async (targetProjectId?: string): Promise<PreviewResult> => {
+  // The app the user last served per project (#651), so re-serving a monorepo picks it again
+  // without re-choosing. In-memory: a live preview already rehydrates via onPreviewStatus, and
+  // the pick resets on daemon restart (the picker still lists everything).
+  const lastServeTarget = new Map<string, string>()
+  const onServeTargets = async (targetProjectId?: string): Promise<ServeTarget[]> => {
+    const projectCwd = await resolveProject(targetProjectId)
+    return projectCwd ? detectServeTargets(projectCwd).catch(() => []) : []
+  }
+  const onPreview = async (targetProjectId?: string, targetId?: string): Promise<PreviewResult> => {
     const key = targetProjectId ?? homeId
     const existing = activePreviews.get(key)
     if (existing) return { ok: true, url: existing.url, command: existing.command }
     const projectCwd = await resolveProject(targetProjectId)
     if (!projectCwd) return { ok: false, error: `unknown project: ${targetProjectId}` }
     try {
-      const handle = await startPreview({ cwd: projectCwd })
+      // Resolve the pick: an explicit choice, else the one remembered from last time. Both are
+      // matched against the live target list so a stale/unknown id falls back to the root default.
+      const wantId = targetId ?? lastServeTarget.get(key)
+      const target = wantId ? (await detectServeTargets(projectCwd).catch(() => [])).find(t => t.id === wantId) : undefined
+      const handle = await startPreview(target ? { cwd: projectCwd, target } : { cwd: projectCwd })
       // A racing second open won the slot while we were booting: keep theirs, drop ours.
       const raced = activePreviews.get(key)
       if (raced) {
         await handle.stop().catch(() => {})
         return { ok: true, url: raced.url, command: raced.command }
       }
+      if (target) lastServeTarget.set(key, target.id)
       trackPreview(key, handle)
       return { ok: true, url: handle.url, command: handle.command }
     } catch (err) {
@@ -579,7 +594,7 @@ function createProjectRuntime({ cwd, env, binPath }: ProjectRuntimeOptions): Pro
     activePreviews.clear()
   }
 
-  return { onStart, onAddProject, onPreview, onStopPreview, onPreviewStatus, dispose }
+  return { onStart, onAddProject, onPreview, onServeTargets, onStopPreview, onPreviewStatus, dispose }
 }
 
 /** Resolve on SIGINT/SIGTERM, or when the optional abort signal fires. */

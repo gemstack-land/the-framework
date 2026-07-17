@@ -7,6 +7,7 @@ import type { FrameworkEvent } from '../events.js'
 import type { PreferencesStore } from '../registry.js'
 import type { QuotaSource } from './quota.js'
 import type { AddProjectResult, PreviewResult, PreviewStatus, StartRunKind, StartRunOptions, StartRunResult } from './types.js'
+import type { ServeTarget } from '../preview.js'
 
 /** Wired by the daemon so `sendStart` can reach the daemon's own `startRun` closure. */
 export type StartRunHandler = (
@@ -21,7 +22,9 @@ export type AddProjectHandler = (path: string, directory: boolean) => AddProject
 
 /** Wired by the daemon so the Preview RPCs can serve/stop/report a project's app (#475). */
 export interface PreviewHandlers {
-  start: (projectId?: string) => PreviewResult | Promise<PreviewResult>
+  start: (projectId?: string, targetId?: string) => PreviewResult | Promise<PreviewResult>
+  /** List the project's servable apps (#651) for the Serve picker in a multi-package repo. */
+  targets: (projectId?: string) => ServeTarget[] | Promise<ServeTarget[]>
   stop: (projectId?: string) => void | Promise<void>
   status: (projectId?: string) => PreviewStatus | Promise<PreviewStatus>
 }
