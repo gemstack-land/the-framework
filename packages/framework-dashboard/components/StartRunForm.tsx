@@ -27,6 +27,17 @@ const PRESETS: { id: string; label: string; render: () => string }[] = [
   { id: 'ux', label: 'UX', render: renderUxPrompt },
 ]
 
+// The model picker below the textarea (#628): what the run passes as `--model`. Empty = the
+// driver's own default (no flag). The aliases are Claude Code's, since it is the default driver;
+// the value passes straight through to the wrapped agent, so a full model id typed into the
+// registry works too.
+const MODELS: { value: string; label: string }[] = [
+  { value: '', label: 'Default model' },
+  { value: 'opus', label: 'Opus' },
+  { value: 'sonnet', label: 'Sonnet' },
+  { value: 'haiku', label: 'Haiku' },
+]
+
 // Start a run in the selected project (#405): the one write that goes through the daemon's
 // own `startRun` (with its one-run-per-project busy guard), posted over Telefunc. The
 // Global options (#314/#433) ride along: Autopilot, Technical control, Vanilla, and Eco
@@ -68,6 +79,7 @@ export function StartRunForm({
   const ecoMaintenance = preferences.ecoMaintenance ?? false
   const onBeforeMergeableQuality = preferences.onBeforeMergeableQuality ?? false
   const browser = preferences.browser ?? false
+  const model = preferences.model ?? '' // #628: empty = the driver's default model
 
   // Context selector (#439/#314): the agent can reach every registered repo, so ticking a
   // subset narrows its focus — the picked paths become one `Context:` line in the system
@@ -95,6 +107,7 @@ export function StartRunForm({
       ...(eco && !vanilla && Object.keys(ecoDrops).length ? { eco: ecoDrops } : {}),
       ...(onBeforeMergeableQuality ? { onBeforeMergeable: true } : {}),
       ...(browser ? { browser: true } : {}),
+      ...(model ? { model } : {}),
       ...(context.size ? { context: [...context] } : {}),
     }
   }
@@ -189,7 +202,7 @@ export function StartRunForm({
         busy={busy}
       />
 
-      <div className="mt-2 flex flex-wrap gap-1.5">
+      <div className="mt-2 flex flex-wrap items-center gap-1.5">
         {PRESETS.map(p => (
           <Button
             key={p.id}
@@ -205,6 +218,22 @@ export function StartRunForm({
             {p.label}
           </Button>
         ))}
+        {/* Model picker (#628): sits with the presets under the textarea; persists as a preference. */}
+        <label className="ml-auto flex items-center gap-1.5 text-xs text-muted-foreground" title="Model to run on (passed as --model)">
+          Model
+          <select
+            value={model}
+            disabled={busy}
+            onChange={e => updatePreferences({ model: e.target.value })}
+            className="rounded-md border border-border bg-background px-2 py-1 text-xs text-foreground disabled:opacity-50"
+          >
+            {MODELS.map(m => (
+              <option key={m.value} value={m.value}>
+                {m.label}
+              </option>
+            ))}
+          </select>
+        </label>
       </div>
 
       <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1.5 text-xs text-muted-foreground">

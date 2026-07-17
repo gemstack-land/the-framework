@@ -40,6 +40,8 @@ export interface Preferences {
   browser?: boolean
   /** Fire a browser notification when a new item lands on the "needs you" queue (#627). Absent = on. */
   notifyBrowser?: boolean
+  /** The model to run on (#628), e.g. `opus` / `sonnet`; maps to a run's `--model`. Absent = the driver's default. */
+  model?: string
   /**
    * Post a Discord message when a new item lands on the "needs you" queue (#627). Absent = off:
    * unlike the in-browser toggle, Discord reaches you when no dashboard is open, so it is opt-in.
@@ -165,6 +167,9 @@ function sanitizePreferences(value: unknown): Preferences {
   for (const key of PREFERENCE_KEYS) {
     if (typeof input[key] === 'boolean') preferences[key] = input[key] as boolean
   }
+  // `model` (#628) is the one string preference; the rest are booleans. A blank string is "no
+  // choice", same as absent, so it is dropped rather than persisted.
+  if (typeof input['model'] === 'string' && input['model'].trim()) preferences.model = input['model'].trim()
   const consumptionLimits = sanitizeConsumptionLimits(input['consumptionLimits'])
   if (consumptionLimits) preferences.consumptionLimits = consumptionLimits
   return preferences

@@ -60,6 +60,10 @@ test('startOptionFlags maps only enabled Global options to CLI flags (#314)', ()
   assert.deepEqual(startOptionFlags({ onBeforeMergeable: true }), ['--on-before-mergeable'])
   // Browser via chrome-devtools-mcp (#452): maps to --browser.
   assert.deepEqual(startOptionFlags({ browser: true }), ['--browser'])
+  // Model (#628): maps to --model, trimmed; blank/whitespace is no choice -> no flag.
+  assert.deepEqual(startOptionFlags({ model: 'opus' }), ['--model', 'opus'])
+  assert.deepEqual(startOptionFlags({ model: '  sonnet  ' }), ['--model', 'sonnet'])
+  assert.deepEqual(startOptionFlags({ model: '   ' }), [])
 })
 
 const logEvent = (message: string): FrameworkEvent => ({ kind: 'log', message })
