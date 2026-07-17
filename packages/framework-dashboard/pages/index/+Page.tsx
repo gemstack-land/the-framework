@@ -3,6 +3,7 @@ import type { Intervention } from '@gemstack/framework'
 import { onProjectFiles, onInterventions } from '../../server/reads.telefunc.js'
 import { ProjectsSidebar } from '../../components/ProjectsSidebar.js'
 import { NotificationBell } from '../../components/NotificationBell.js'
+import { DiscordToggle } from '../../components/DiscordToggle.js'
 import { RunHistory } from '../../components/RunHistory.js'
 import { ProjectHome } from '../../components/ProjectHome.js'
 import { DashboardPage } from '../../components/DashboardPage.js'
@@ -127,7 +128,10 @@ export default function Page() {
         <span className="font-semibold">The Framework</span>
         <Badge className="text-muted-foreground">dashboard</Badge>
         <div className="ml-auto flex items-center gap-3">
-          <NotificationBell />
+          <div className="flex items-center gap-1">
+            <NotificationBell />
+            <DiscordToggle />
+          </div>
           <span className="text-xs text-muted-foreground">Vike · React · shadcn · Telefunc</span>
         </div>
       </header>

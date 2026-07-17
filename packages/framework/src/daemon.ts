@@ -9,7 +9,7 @@ import { buildInterventions } from './dashboard/interventions.js'
 import { startPreview, type PreviewHandle } from './preview.js'
 import { resolveDashboardBundle } from './dashboard/bundle.js'
 import { isActivated } from './project.js'
-import { addProject, listProjects, projectId } from './registry.js'
+import { addProject, listProjects, projectId, readPreferences } from './registry.js'
 import { installProject, enumerateGitRepos } from './install.js'
 import { JsonlTailer } from './jsonl-tail.js'
 
@@ -340,7 +340,10 @@ export async function runDaemon(cwd: string, opts: RunDaemonOptions = {}): Promi
   }
 
   // Discord notifications (#627): fire on new "needs you" items even when no dashboard is open.
-  // Opt-in by setting DISCORD_WEBHOOK; the browser-notification path needs no daemon watcher.
+  // Two gates: a `DISCORD_WEBHOOK` (where to post) and the per-user `notifyDiscord` preference
+  // (whether to). The pref is checked at post time, not watcher start, so the header toggle takes
+  // effect without a daemon restart — and the watcher keeps observing while off, so flipping it on
+  // starts from now rather than blasting the whole open backlog.
   const webhook = env.DISCORD_WEBHOOK
   let watcher: InterventionWatcher | undefined
   if (webhook) {
@@ -354,7 +357,11 @@ export async function runDaemon(cwd: string, opts: RunDaemonOptions = {}): Promi
         })),
       // Pass the daemon's own URL so a paused-run item (#636) can link back to the dashboard.
       build: projects => buildInterventions(projects, { dashboardUrl: dashboard.url }),
-      onNew: items => postDiscord(webhook, items).catch(() => {}),
+      onNew: async items => {
+        const prefs = await readPreferences(undefined, env).catch(() => ({}) as Awaited<ReturnType<typeof readPreferences>>)
+        if (!prefs.notifyDiscord) return // opted out (default): keep quiet, baseline already advanced
+        await postDiscord(webhook, items).catch(() => {})
+      },
     })
   }
 
