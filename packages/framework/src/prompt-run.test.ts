@@ -117,6 +117,26 @@ test('runPrompt with antiLazyPill false emits no built-in prompt even with eco s
   assert.ok(!sys.text.includes('## Analyze the user prompt'))
 })
 
+test('runPrompt under transparent emits an empty system channel and sends the prompt verbatim (#625)', async () => {
+  const events: FrameworkEvent[] = []
+  const driver = new FakeDriver({ turns: [{ text: 'done' }] })
+  await runPrompt({
+    prompt: 'just do this',
+    driver,
+    cwd: '/ws',
+    onEvent: e => events.push(e),
+    transparent: true,
+  })
+  const sys = events.find(e => e.kind === 'system-prompt') as { text: string } | undefined
+  assert.ok(sys)
+  assert.equal(sys.text, '') // no framework system channel at all — not even the emit protocols
+  const start = events.find(
+    (e): e is Extract<FrameworkEvent, { kind: 'driver' }> => e.kind === 'driver' && e.event.type === 'start',
+  )
+  assert.ok(start, 'the driver start event carries the user prompt')
+  if (start.event.type === 'start') assert.equal(start.event.prompt, 'just do this') // verbatim, not the template half
+})
+
 test('runPrompt pauses on a multi-select gate and continues with the pick (#331)', async () => {
   const events: FrameworkEvent[] = []
   const picks: ChoiceRequest[] = []

@@ -249,3 +249,13 @@ test('composeRunSystem keeps the emit protocols even with the built-in prompt of
   assert.ok(!system.includes('# System prompt'), 'built-in #326 prompt is off')
   assert.equal(system, [AWAIT_PROTOCOL, SIGNAL_PROTOCOL].join('\n\n'))
 })
+
+test('composeRunSystem is empty under transparent mode — no prompt, no emit protocols (#625)', () => {
+  // Transparent (#625) is stronger than --vanilla: the whole system channel is dropped, protocols
+  // included, so the agent runs as raw `claude -p`. It overrides every other option.
+  assert.equal(composeRunSystem({ transparent: true }), '')
+  assert.equal(
+    composeRunSystem({ transparent: true, antiLazyPill: true, user: 'ignored', context: ['/work/api'] }),
+    '',
+  )
+})

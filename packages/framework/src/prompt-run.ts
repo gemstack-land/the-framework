@@ -40,6 +40,8 @@ export interface RunPromptOptions {
   systemPrompt?: string
   /** Include the built-in #326 system prompt. Default true (#301; the name is the historical config key). */
   antiLazyPill?: boolean
+  /** Transparent mode (#625): empty the system channel and pass the prompt verbatim (raw `claude -p`). */
+  transparent?: boolean
   /** Whether autopilot mode is on: steers the #326 prompt's maintenance stance (#325). Default false. */
   autopilot?: boolean
   /** Eco fine-grained control (#314): drop the enabled #326 sections to save tokens. */
@@ -87,11 +89,11 @@ export async function runPrompt(opts: RunPromptOptions): Promise<RunPromptResult
     prompt: opts.prompt,
     params: { autopilot: opts.autopilot === true, ...(opts.eco ? { eco: opts.eco } : {}) },
   }
-  const system = composeRunSystem({ antiLazyPill: opts.antiLazyPill, user: opts.systemPrompt, tf, context: opts.context })
+  const system = composeRunSystem({ antiLazyPill: opts.antiLazyPill, transparent: opts.transparent, user: opts.systemPrompt, tf, context: opts.context })
   // The template's `# User prompt` half carries the prompt (today it renders to
   // exactly `opts.prompt`; any framing Rom adds around the slot rides along). With
-  // the built-in prompt off, the raw prompt is sent as-is.
-  const firstPrompt = opts.antiLazyPill === false ? opts.prompt : renderSystemPrompt(tf).user
+  // the built-in prompt off (or transparent, #625), the raw prompt is sent as-is.
+  const firstPrompt = opts.transparent || opts.antiLazyPill === false ? opts.prompt : renderSystemPrompt(tf).user
 
   emitSessionStart({ emit, driver: opts.driver, cwd: opts.cwd, sessionLink: opts.sessionLink })
   // Surface the exact system prompt the agent runs under (#343). The user prompts

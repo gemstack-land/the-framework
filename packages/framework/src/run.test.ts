@@ -179,6 +179,12 @@ test('the run system channel is exactly composeRunSystem, with nothing appended 
   assert.equal(system(), composeRunSystem({ tf: { prompt: FAKE_INTENT, params: { autopilot: false } } }))
 })
 
+test('transparent empties the build-path system channel (#625)', async () => {
+  const { driver, system } = recordingDriver()
+  await runFramework({ intent: FAKE_INTENT, driver, cwd: '/tmp/ws', signals: FAKE_SIGNALS, transparent: true, onEvent: () => {} })
+  assert.equal(system(), '') // raw claude: no #326 block, no emit protocols
+})
+
 test('detected deps never reach the system channel (#547)', async () => {
   const { driver, system } = recordingDriver()
   // FAKE_SIGNALS carries vike-react + @prisma/client; none of it may frame the agent.

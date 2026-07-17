@@ -112,6 +112,7 @@ export function startOptionFlags(options: StartRunOptions): string[] {
   if (options.autopilot) flags.push('--autopilot')
   if (options.technical) flags.push('--technical')
   if (options.vanilla) flags.push('--vanilla')
+  if (options.transparent) flags.push('--transparent')
   if (options.eco?.autoPlanning) flags.push('--eco-auto-planning')
   if (options.eco?.autoResearch) flags.push('--eco-auto-research')
   if (options.eco?.autoMaintenance) flags.push('--eco-auto-maintenance')
