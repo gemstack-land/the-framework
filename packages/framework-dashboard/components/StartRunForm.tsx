@@ -237,9 +237,17 @@ export function StartRunForm({
         disabled={busy}
       />
 
-      {/* Run controls, directly under the textarea (#649/#650/#654): presets and options on the
-          left, agent+model at the end — all compact matching dropdowns. */}
+      {/* Run controls, directly under the textarea (#649/#650/#654/#668): agent+model at the start,
+          then presets and the options gear, then Start run at the end. */}
       <div className="mt-2 flex flex-wrap items-center gap-1.5">
+        {/* Agent + model tree (#650/#658), each agent showing only its own models. */}
+        <AgentModelMenu
+          agents={AGENTS}
+          agent={agent}
+          model={model}
+          onChange={(a, m) => updatePreferences({ agent: a, model: m })}
+          busy={busy}
+        />
         <PresetMenu
           builtIns={PRESETS}
           customPresets={customPresets}
@@ -255,18 +263,12 @@ export function StartRunForm({
           onDeleteCustom={id => updatePreferences({ customPresets: customPresets.filter(p => p.id !== id) })}
           onNewPreset={() => setAddingPreset(true)}
         />
-        {/* Global options (#314) as a checkbox dropdown (#654). */}
+        {/* Global options (#314) as a gear-icon checkbox dropdown (#654/#668). */}
         <OptionsMenu options={mainOptions} ecoOptions={ecoOptions} showEco={eco && !ecoDisabled} busy={busy} />
-        {/* Agent + model as one tree (#650/#658), each agent showing only its own models — at the end. */}
-        <div className="ml-auto">
-          <AgentModelMenu
-            agents={AGENTS}
-            agent={agent}
-            model={model}
-            onChange={(a, m) => updatePreferences({ agent: a, model: m })}
-            busy={busy}
-          />
-        </div>
+        {/* Start run at the end of the row (#668). */}
+        <Button type="submit" className="ml-auto" disabled={busy || !prompt.trim()}>
+          {busy ? 'Starting…' : 'Start run'}
+        </Button>
       </div>
 
       {addingPreset && (
@@ -331,13 +333,9 @@ export function StartRunForm({
         </div>
       )}
 
+      {/* Start run moved up into the controls row (#668); the note + error stay below it. */}
       {error && <p className="mt-2 text-xs text-red-500">{error}</p>}
-      <div className="mt-2 flex items-center justify-end gap-2">
-        {note && <span className="text-xs text-muted-foreground">{note}</span>}
-        <Button type="submit" disabled={busy || !prompt.trim()}>
-          {busy ? 'Starting…' : 'Start run'}
-        </Button>
-      </div>
+      {note && !error && <p className="mt-2 text-xs text-muted-foreground">{note}</p>}
     </form>
   )
 }

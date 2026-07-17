@@ -1,5 +1,5 @@
 import type { Preferences } from '@gemstack/framework'
-import { ChevronDown } from 'lucide-react'
+import { Settings } from 'lucide-react'
 import { updatePreferences } from '../lib/preferences.js'
 import { cn } from '../lib/utils.js'
 import { buttonVariants } from './ui/button.js'
@@ -59,16 +59,16 @@ export function OptionsMenu({
       <DropdownMenuTrigger
         type="button"
         disabled={busy}
-        title="Run options"
-        className={cn(buttonVariants({ variant: 'outline', size: 'xs' }), 'font-normal')}
+        title={activeCount > 0 ? `Run options — ${activeCount} on` : 'Run options'}
+        aria-label="Run options"
+        className={cn(buttonVariants({ variant: 'outline', size: 'icon-sm' }), 'relative')}
       >
-        Options
+        <Settings className="h-4 w-4" />
         {activeCount > 0 && (
-          <span className="rounded-full bg-[var(--color-primary)] px-1.5 text-[10px] leading-4 text-[var(--color-primary-foreground)]">
+          <span className="absolute -right-1.5 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-[var(--color-primary)] px-1 text-[10px] font-medium leading-none text-[var(--color-primary-foreground)]">
             {activeCount}
           </span>
         )}
-        <ChevronDown className="h-3.5 w-3.5 opacity-70" />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="min-w-[19rem] max-w-[22rem]">
         {options.map(o => (
