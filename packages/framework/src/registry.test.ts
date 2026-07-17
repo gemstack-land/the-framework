@@ -185,6 +185,14 @@ test('writePreferences round-trips the notifyDiscord toggle (#627)', async () =>
   assert.deepEqual(await readPreferences(fs, ENV), { notifyDiscord: true })
 })
 
+test('writePreferences keeps the model string but drops a blank one (#628)', async () => {
+  const fs = memFs({ [FILE]: JSON.stringify([APP_A]) })
+  await writePreferences({ model: '  opus  ' }, fs, ENV)
+  assert.deepEqual(await readPreferences(fs, ENV), { model: 'opus' }) // trimmed
+  await writePreferences({ model: '   ' }, fs, ENV)
+  assert.deepEqual(await readPreferences(fs, ENV), {}) // blank -> no choice, dropped
+})
+
 test('addProject preserves existing preferences', async () => {
   const fs = memFs({ [FILE]: JSON.stringify({ projects: [APP_A], preferences: { autopilot: false } }) })
   await addProject('/repos/app-b', APP_B.addedAt, fs, ENV)

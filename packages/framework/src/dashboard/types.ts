@@ -30,6 +30,8 @@ export interface StartRunOptions {
   onBeforeMergeable?: boolean
   /** Give the agent a real browser via chrome-devtools-mcp during the run (#452); maps to `--browser`. */
   browser?: boolean
+  /** The model to run the wrapped agent on (#628); maps to `--model`. Absent = the driver's own default. */
+  model?: string
 }
 
 /**

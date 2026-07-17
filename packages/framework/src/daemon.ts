@@ -106,6 +106,7 @@ export function startOptionFlags(options: StartRunOptions): string[] {
   for (const dir of options.context ?? []) if (typeof dir === 'string' && dir.trim()) flags.push('--context', dir)
   if (options.onBeforeMergeable) flags.push('--on-before-mergeable')
   if (options.browser) flags.push('--browser')
+  if (typeof options.model === 'string' && options.model.trim()) flags.push('--model', options.model.trim())
   return flags
 }
 
