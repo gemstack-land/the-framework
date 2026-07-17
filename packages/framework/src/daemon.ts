@@ -118,6 +118,10 @@ export function startOptionFlags(options: StartRunOptions): string[] {
   if (options.onBeforeMergeable) flags.push('--on-before-mergeable')
   if (options.browser) flags.push('--browser')
   if (typeof options.model === 'string' && options.model.trim()) flags.push('--model', options.model.trim())
+  // Agent (#650): only non-default (codex) needs a flag; claude is the CLI default.
+  if (typeof options.agent === 'string' && options.agent.trim() && options.agent !== 'claude') {
+    flags.push('--agent', options.agent.trim())
+  }
   return flags
 }
 

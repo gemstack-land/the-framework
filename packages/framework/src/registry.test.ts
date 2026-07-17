@@ -193,6 +193,14 @@ test('writePreferences keeps the model string but drops a blank one (#628)', asy
   assert.deepEqual(await readPreferences(fs, ENV), {}) // blank -> no choice, dropped
 })
 
+test('writePreferences keeps a known agent and drops an unknown one (#650)', async () => {
+  const fs = memFs({ [FILE]: JSON.stringify([APP_A]) })
+  await writePreferences({ agent: 'codex' }, fs, ENV)
+  assert.deepEqual(await readPreferences(fs, ENV), { agent: 'codex' })
+  await writePreferences({ agent: 'gpt-9000' } as never, fs, ENV) // not in the known set
+  assert.deepEqual(await readPreferences(fs, ENV), {}) // dropped
+})
+
 test('writePreferences keeps well-formed custom presets and drops malformed ones (#626)', async () => {
   const fs = memFs({ [FILE]: JSON.stringify([APP_A]) })
   await writePreferences(

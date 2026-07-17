@@ -13,8 +13,10 @@ import { usePreferences, updatePreferences, autopilotEnabled } from '../lib/pref
 import { useLoaded } from '../lib/use-async.js'
 import { PromptEditor, type PromptEditorHandle } from './PromptEditor.js'
 import { PresetMenu } from './PresetMenu.js'
+import { PresetCreatePanel } from './PresetCreatePanel.js'
+import { AgentModelMenu } from './AgentModelMenu.js'
 import { SystemPromptDisclosure } from './SystemPromptDisclosure.js'
-import { OptionToggle, type OptionRow } from './OptionToggle.js'
+import { OptionsMenu, type OptionRow } from './OptionsMenu.js'
 import { Button } from './ui/button.js'
 
 // The presets (#353/#433): each PREFILLS the textarea with a rendered prompt and runs it
@@ -37,6 +39,14 @@ const MODELS: { value: string; label: string }[] = [
   { value: 'opus', label: 'Opus' },
   { value: 'sonnet', label: 'Sonnet' },
   { value: 'haiku', label: 'Haiku' },
+]
+
+// The coding agent that drives the run (#650): maps to `--agent`. Mirrors AGENTS in the
+// framework's agent.ts — kept as a client const so the dashboard bundle never imports the
+// node-only driver layer. `claude` is the default (empty flag).
+const AGENTS: { value: string; label: string }[] = [
+  { value: 'claude', label: 'Claude Code' },
+  { value: 'codex', label: 'Codex' },
 ]
 
 // Start a run in the selected project (#405): the one write that goes through the daemon's
@@ -81,7 +91,9 @@ export function StartRunForm({
   const onBeforeMergeableQuality = preferences.onBeforeMergeableQuality ?? false
   const browser = preferences.browser ?? false
   const model = preferences.model ?? '' // #628: empty = the driver's default model
+  const agent = preferences.agent ?? 'claude' // #650: which coding agent drives the run
   const customPresets = preferences.customPresets ?? [] // #626: the user's own saved prompts
+  const [addingPreset, setAddingPreset] = useState(false) // #649: the full-width "New preset" panel
 
   // Context selector (#439/#314): the agent can reach every registered repo, so ticking a
   // subset narrows its focus — the picked paths become one `Context:` line in the system
@@ -110,6 +122,7 @@ export function StartRunForm({
       ...(onBeforeMergeableQuality ? { onBeforeMergeable: true } : {}),
       ...(browser ? { browser: true } : {}),
       ...(model ? { model } : {}),
+      ...(agent && agent !== 'claude' ? { agent } : {}),
       ...(context.size ? { context: [...context] } : {}),
     }
   }
@@ -165,17 +178,17 @@ export function StartRunForm({
   // Eco is disabled + dimmed under Vanilla (nothing left to trim); the Eco sub-drops show only
   // while Eco is on.
   const mainOptions: OptionRow[] = [
-    { key: 'autopilot', label: 'Autopilot', title: 'Auto-accept the recommended choice after a countdown; also relaxes the maintenance stance', checked: autopilot },
-    { key: 'technical', label: 'Technical control', title: 'Expose technical detail (e.g. tech-stack choices)', checked: technical },
-    { key: 'vanilla', label: 'Disable system prompt', title: "Remove all system prompts: the same as raw Claude Code. Expand 'See actual prompt sent' to read what it removes.", checked: vanilla },
-    { key: 'eco', label: 'Eco', title: 'Trim the built-in system prompt to save tokens', checked: eco && !ecoDisabled, disabled: ecoDisabled, dim: ecoDisabled },
-    { key: 'onBeforeMergeableQuality', label: 'Post-merge cleanup', title: "When the run signals it's ready for merge, run maintainability, readability, and security-audit passes", checked: onBeforeMergeableQuality },
-    { key: 'browser', label: 'Browser', title: 'Give the agent a real browser via chrome-devtools-mcp: navigate pages, read console + network, inspect the DOM, and screenshot', checked: browser },
+    { key: 'autopilot', label: 'Autopilot', description: 'Auto-accepts the recommended choice after a countdown.', title: 'Auto-accept the recommended choice after a countdown; also relaxes the maintenance stance', checked: autopilot },
+    { key: 'technical', label: 'Technical control', description: 'Surfaces technical detail like tech-stack choices.', title: 'Expose technical detail (e.g. tech-stack choices)', checked: technical },
+    { key: 'vanilla', label: 'Disable system prompt', description: 'Raw Claude Code, with no added system prompt.', title: "Remove all system prompts: the same as raw Claude Code. Expand 'See actual prompt sent' to read what it removes.", checked: vanilla },
+    { key: 'eco', label: 'Eco', description: 'Trims the system prompt to save tokens.', title: 'Trim the built-in system prompt to save tokens', checked: eco && !ecoDisabled, disabled: ecoDisabled },
+    { key: 'onBeforeMergeableQuality', label: 'Post-merge cleanup', description: 'Runs quality passes once it is ready to merge.', title: "When the run signals it's ready for merge, run maintainability, readability, and security-audit passes", checked: onBeforeMergeableQuality },
+    { key: 'browser', label: 'Browser', description: 'Gives the agent a real browser to inspect pages.', title: 'Give the agent a real browser via chrome-devtools-mcp: navigate pages, read console + network, inspect the DOM, and screenshot', checked: browser },
   ]
   const ecoOptions: OptionRow[] = [
-    { key: 'ecoPlanning', label: 'Auto planning', title: 'Drop the planning section, letting the agent plan on its own', checked: ecoPlanning },
-    { key: 'ecoResearch', label: 'Auto research', title: 'Drop the alternatives/variability section', checked: ecoResearch },
-    { key: 'ecoMaintenance', label: 'Auto maintenance', title: 'Drop the maintenance section', checked: ecoMaintenance },
+    { key: 'ecoPlanning', label: 'Auto planning', description: 'Drops the planning section; the agent plans itself.', title: 'Drop the planning section, letting the agent plan on its own', checked: ecoPlanning },
+    { key: 'ecoResearch', label: 'Auto research', description: 'Drops the alternatives/variability section.', title: 'Drop the alternatives/variability section', checked: ecoResearch },
+    { key: 'ecoMaintenance', label: 'Auto maintenance', description: 'Drops the maintenance section.', title: 'Drop the maintenance section', checked: ecoMaintenance },
   ]
 
   return (
@@ -194,22 +207,12 @@ export function StartRunForm({
         disabled={busy}
       />
 
-      <SystemPromptDisclosure
-        prompt={prompt}
-        disabled={vanilla}
-        onDisabledChange={value => updatePreferences({ vanilla: value })}
-        autopilot={autopilot}
-        eco={eco && !vanilla ? ecoDrops : undefined}
-        context={[...context]}
-        busy={busy}
-      />
-
+      {/* Run controls, directly under the textarea (#649/#650/#654): presets and options on the
+          left, agent+model at the end — all compact matching dropdowns. */}
       <div className="mt-2 flex flex-wrap items-center gap-1.5">
-        {/* Presets in one dropdown (#649): built-in + saved (#626) + "New preset". */}
         <PresetMenu
           builtIns={PRESETS}
           customPresets={customPresets}
-          currentPrompt={prompt}
           busy={busy}
           onLoadBuiltIn={p => {
             editorRef.current?.loadTemplate(p.render())
@@ -219,39 +222,46 @@ export function StartRunForm({
             editorRef.current?.loadTemplate(preset.prompt)
             loadPreset(preset.label)
           }}
-          onChangeCustom={next => updatePreferences({ customPresets: next })}
+          onDeleteCustom={id => updatePreferences({ customPresets: customPresets.filter(p => p.id !== id) })}
+          onNewPreset={() => setAddingPreset(true)}
         />
-        {/* Model picker (#628): sits with the presets under the textarea; persists as a preference. */}
-        <label className="ml-auto flex items-center gap-1.5 text-xs text-muted-foreground" title="Model to run on (passed as --model)">
-          Model
-          <select
-            value={model}
-            disabled={busy}
-            onChange={e => updatePreferences({ model: e.target.value })}
-            className="rounded-md border border-border bg-background px-2 py-1 text-xs text-foreground disabled:opacity-50"
-          >
-            {MODELS.map(m => (
-              <option key={m.value} value={m.value}>
-                {m.label}
-              </option>
-            ))}
-          </select>
-        </label>
-      </div>
-
-      <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1.5 text-xs text-muted-foreground">
-        {mainOptions.map(o => (
-          <OptionToggle key={o.key} option={o} busy={busy} />
-        ))}
-      </div>
-
-      {eco && !ecoDisabled && (
-        <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1.5 pl-4 text-xs text-muted-foreground">
-          {ecoOptions.map(o => (
-            <OptionToggle key={o.key} option={o} busy={busy} />
-          ))}
+        {/* Global options (#314) as a checkbox dropdown (#654). */}
+        <OptionsMenu options={mainOptions} ecoOptions={ecoOptions} showEco={eco && !ecoDisabled} busy={busy} />
+        {/* Agent (#650) + Model (#628) in one dropdown, each a submenu — pushed to the end. */}
+        <div className="ml-auto">
+          <AgentModelMenu
+            agent={agent}
+            agentOptions={AGENTS}
+            onAgentChange={a => updatePreferences({ agent: a })}
+            model={model}
+            modelOptions={MODELS}
+            onModelChange={m => updatePreferences({ model: m })}
+            busy={busy}
+          />
         </div>
+      </div>
+
+      {addingPreset && (
+        <PresetCreatePanel
+          currentPrompt={prompt}
+          busy={busy}
+          onCancel={() => setAddingPreset(false)}
+          onSave={preset => {
+            updatePreferences({ customPresets: [...customPresets, preset] })
+            setAddingPreset(false)
+          }}
+        />
       )}
+
+      <SystemPromptDisclosure
+        prompt={prompt}
+        disabled={vanilla}
+        onDisabledChange={value => updatePreferences({ vanilla: value })}
+        autopilot={autopilot}
+        eco={eco && !vanilla ? ecoDrops : undefined}
+        context={[...context]}
+        busy={busy}
+      />
 
       {projects.length > 0 && (
         <div className="mt-3 text-xs text-muted-foreground">

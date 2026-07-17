@@ -32,6 +32,8 @@ export interface StartRunOptions {
   browser?: boolean
   /** The model to run the wrapped agent on (#628); maps to `--model`. Absent = the driver's own default. */
   model?: string
+  /** Which coding agent drives the run (#650): `claude` or `codex`; maps to `--agent`. Absent = the default (`claude`). */
+  agent?: string
 }
 
 /**
