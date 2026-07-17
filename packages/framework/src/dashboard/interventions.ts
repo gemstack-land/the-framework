@@ -82,5 +82,8 @@ export async function buildInterventions(
     }
   }
   items.sort((a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? ''))
-  return items
+  // The same repo can be registered under two projects (e.g. a monorepo root + a subdir), so a
+  // PR would otherwise appear once per entry. Collapse by URL, keeping the first (newest-sorted).
+  const seen = new Set<string>()
+  return items.filter(item => (seen.has(item.url) ? false : (seen.add(item.url), true)))
 }

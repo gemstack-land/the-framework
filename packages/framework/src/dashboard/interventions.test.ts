@@ -41,3 +41,10 @@ test('buildInterventions returns [] when nothing is open anywhere', async () => 
   const prs = async (): Promise<OpenPr[]> => []
   assert.deepEqual(await buildInterventions([project('a', '/a')], { prs }), [])
 })
+
+test('buildInterventions dedupes a PR shared by two registered projects (same repo), keeping one', async () => {
+  const shared: OpenPr = { number: 285, title: 'release', url: 'https://gh/pr/285', isDraft: false, createdAt: '2026-07-05T00:00:00Z' }
+  const prs = async (): Promise<OpenPr[]> => [shared] // both projects resolve to the same repo
+  const items = await buildInterventions([project('root', '/repo'), project('sub', '/repo/packages/x')], { prs })
+  assert.deepEqual(items.map(i => i.number), [285])
+})
