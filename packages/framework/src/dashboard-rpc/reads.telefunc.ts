@@ -3,6 +3,7 @@ import { readLogs, type LogEntry } from '../logs.js'
 import { readDocs, type WorkspaceDoc } from '../dashboard/docs.js'
 import { collectQueue, type ProjectQueue } from '../dashboard/queue.js'
 import { buildOverview, type Overview } from '../dashboard/overview.js'
+import { buildInterventions, type Intervention } from '../dashboard/interventions.js'
 import { buildDashboard, type DashboardData } from '../dashboard/dashboard.js'
 import { githubUrlFor } from '../dashboard/github.js'
 import { readGitStatus, type GitStatus } from '../dashboard/git-status.js'
@@ -75,6 +76,12 @@ export async function onQueue(): Promise<ProjectQueue[]> {
 export async function onOverview(): Promise<Overview> {
   const projects = await contextProjects().list().catch(() => [])
   return buildOverview(projects)
+}
+
+/** The cross-project interventions queue (#632, Queue #624): open PRs that need review, newest first. */
+export async function onInterventions(): Promise<Intervention[]> {
+  const projects = await contextProjects().list().catch(() => [])
+  return buildInterventions(projects)
 }
 
 /** The Overview dashboard page (#471): the {@link onOverview} rollup plus run counts, run-status totals, and activity. */
