@@ -15,6 +15,7 @@ import { PromptEditor, type PromptEditorHandle } from './PromptEditor.js'
 import { PresetMenu } from './PresetMenu.js'
 import { PresetCreatePanel } from './PresetCreatePanel.js'
 import { AgentModelMenu, type AgentOption } from './AgentModelMenu.js'
+import { ContextFiles } from './ContextFiles.js'
 import { ClaudeLogo, CodexLogo } from './agent-logos.js'
 import { DisclosureToggle } from './DisclosureToggle.js'
 import { SystemPromptDisclosure } from './SystemPromptDisclosure.js'
@@ -113,6 +114,11 @@ export function StartRunForm({
   // prompt. Loaded from the same registry the Projects sidebar shows.
   const projects = useLoaded<ProjectSummary[]>(onProjects, [], [])
   const [showContext, setShowContext] = useState(false)
+
+  // The Context set mixes whole repos (registered project paths) and individual files (relative
+  // paths from a `#` mention or the file tree). Split out the files so they can be shown + removed.
+  const projectPaths = new Set(projects.map(p => p.path))
+  const contextFiles = [...context].filter(path => !projectPaths.has(path))
 
   // Vanilla removes the system prompt entirely, so Eco (which only trims it) has nothing
   // left to act on.
@@ -251,6 +257,10 @@ export function StartRunForm({
           />
         </div>
       </div>
+
+      {/* Files picked into the Context (#661), from a `#` mention or the file tree — shown so they
+          are visible and removable even after the prompt is cleared. */}
+      <ContextFiles files={contextFiles} onRemove={toggleContext} busy={busy} />
 
       {addingPreset && (
         <PresetCreatePanel
