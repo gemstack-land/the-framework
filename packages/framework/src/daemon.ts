@@ -6,6 +6,7 @@ import { FRAMEWORK_DIR, reconcileOrphanedRuns } from './store/index.js'
 import { startDashboard, type Dashboard, type StartRunKind, type StartRunOptions, type StartRunResult, type AddProjectResult, type PreviewResult, type PreviewStatus } from './dashboard/index.js'
 import { startInterventionWatcher, postDiscord, type InterventionWatcher } from './dashboard/intervention-watcher.js'
 import { buildInterventions } from './dashboard/interventions.js'
+import { startActivityWatcher, postActivityDiscord, type ActivityWatcher } from './dashboard/activity-watcher.js'
 import { startPreview, type PreviewHandle } from './preview.js'
 import { resolveDashboardBundle } from './dashboard/bundle.js'
 import { isActivated } from './project.js'
@@ -369,22 +370,38 @@ export async function runDaemon(cwd: string, opts: RunDaemonOptions = {}): Promi
   // effect without a daemon restart — and the watcher keeps observing while off, so flipping it on
   // starts from now rather than blasting the whole open backlog.
   const webhook = env.DISCORD_WEBHOOK
+  const listSummaries = async () =>
+    (await listProjects(undefined, env).catch(() => [])).map(p => ({
+      id: p.id,
+      path: p.path,
+      name: basename(p.path),
+      activated: true,
+    }))
+  const readPrefs = () =>
+    readPreferences(undefined, env).catch(() => ({}) as Awaited<ReturnType<typeof readPreferences>>)
   let watcher: InterventionWatcher | undefined
+  let activityWatcher: ActivityWatcher | undefined
   if (webhook) {
     watcher = startInterventionWatcher({
-      projects: async () =>
-        (await listProjects(undefined, env).catch(() => [])).map(p => ({
-          id: p.id,
-          path: p.path,
-          name: basename(p.path),
-          activated: true,
-        })),
+      projects: listSummaries,
       // Pass the daemon's own URL so a paused-run item (#636) can link back to the dashboard.
       build: projects => buildInterventions(projects, { dashboardUrl: dashboard.url }),
       onNew: async items => {
-        const prefs = await readPreferences(undefined, env).catch(() => ({}) as Awaited<ReturnType<typeof readPreferences>>)
+        const prefs = await readPrefs()
         if (!prefs.notifyDiscord) return // opted out (default): keep quiet, baseline already advanced
         await postDiscord(webhook, items).catch(() => {})
+      },
+    })
+    // The default-off "New activity" category (#627): the same Discord path for run started/finished
+    // events. Double-gated at post time so the header toggles take effect without a daemon restart —
+    // the category (`notifyNewActivity`) AND the method (`notifyDiscord`) must both be on. The watcher
+    // keeps observing while off, so flipping it on starts from now rather than blasting the backlog.
+    activityWatcher = startActivityWatcher({
+      projects: listSummaries,
+      onNew: async items => {
+        const prefs = await readPrefs()
+        if (!prefs.notifyDiscord || !prefs.notifyNewActivity) return
+        await postActivityDiscord(webhook, items).catch(() => {})
       },
     })
   }
@@ -392,6 +409,7 @@ export async function runDaemon(cwd: string, opts: RunDaemonOptions = {}): Promi
   await waitForShutdown(opts.signal)
 
   watcher?.stop()
+  activityWatcher?.stop()
   await runtime.dispose() // stop live previews (#475) so their dev servers do not outlive us
   await dashboard.close()
   await rm(daemonStatePath(env), { force: true }).catch(() => {})
