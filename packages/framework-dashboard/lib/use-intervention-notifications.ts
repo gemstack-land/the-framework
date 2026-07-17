@@ -12,16 +12,24 @@ import { interventionKey, pickNewInterventions } from './interventions.js'
 /** Observations to treat as baseline before notifying: the initial `[]` plus the first fetch. */
 const WARMUP = 2
 
+/** How a single intervention reads in a notification body: a PR by number, a paused run by its question (#636). */
+function label(item: Intervention): string {
+  return item.kind === 'awaiting' ? item.title : `#${item.number} ${item.title}`
+}
+
 function fire(items: Intervention[]): void {
   if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return
   const first = items[0]
   if (!first) return
   const single = items.length === 1
   const title = single ? `Needs you · ${first.projectName}` : `${items.length} items need you`
-  const body = single ? `#${first.number} ${first.title}` : items.map(i => `#${i.number} ${i.title}`).join('\n')
+  const body = single ? label(first) : items.map(label).join('\n')
   const notification = new Notification(title, { body })
   notification.onclick = () => {
-    window.open(first.url, '_blank', 'noopener')
+    // A PR opens on GitHub; a paused run lives in this dashboard, so just bring the tab forward
+    // (project selection is client state, not a URL) — the "needs you" card takes it from there.
+    if (first.kind === 'awaiting') window.focus()
+    else window.open(first.url, '_blank', 'noopener')
     notification.close()
   }
 }

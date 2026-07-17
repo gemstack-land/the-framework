@@ -32,7 +32,12 @@ export async function postDiscord(
   fetchImpl: typeof fetch = fetch,
 ): Promise<void> {
   if (items.length === 0) return
-  const line = (i: Intervention): string => `#${i.number} ${i.title} — ${i.url}`
+  // A PR reads `#123 Title — url`; a paused run (#636) has no number and only the dashboard url,
+  // so it reads `Title — awaiting your answer` with the link appended when the daemon knows it.
+  const line = (i: Intervention): string =>
+    i.kind === 'awaiting'
+      ? `${i.title} — awaiting your answer${i.url ? ` — ${i.url}` : ''}`
+      : `#${i.number} ${i.title} — ${i.url}`
   const content =
     items.length === 1
       ? `🔔 Needs you (${items[0]!.projectName}): ${line(items[0]!)}`

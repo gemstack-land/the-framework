@@ -5,9 +5,13 @@ import type { Intervention } from '@gemstack/framework'
 // framework barrel would drag its Node-only + telefunc modules into the browser bundle. Only
 // the `Intervention` type is borrowed (types are erased), and that logic is a couple of lines.
 
-/** The stable identity of an intervention — its PR url, which survives title edits and re-sorts. */
+/**
+ * The stable identity of an intervention. A PR is its url (survives title edits and re-sorts);
+ * an awaiting run (#636) is its project + gate id, since its url is the shared dashboard URL and
+ * would otherwise collide across projects. Mirrors the server's `interventionKey`.
+ */
 export function interventionKey(item: Intervention): string {
-  return item.url
+  return item.kind === 'awaiting' ? `awaiting:${item.projectId}:${item.awaitId ?? ''}` : item.url
 }
 
 /**

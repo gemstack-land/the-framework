@@ -4,6 +4,7 @@ import type { Intervention } from '@gemstack/framework'
 import { useInterventionNotifications } from './use-intervention-notifications.js'
 
 const item = (n: number, url: string): Intervention => ({ projectId: 'p', projectName: 'p', kind: 'pr', number: n, title: `pr ${n}`, url })
+const awaiting = (awaitId: string, title: string): Intervention => ({ projectId: 'p', projectName: 'p', kind: 'awaiting', title, url: '', awaitId })
 
 const ctor = vi.fn()
 
@@ -32,6 +33,14 @@ describe('useInterventionNotifications (#627)', () => {
     rerender({ items: [item(1, 'u1'), item(2, 'u2')] }) // a genuinely new PR -> notify once
     expect(ctor).toHaveBeenCalledTimes(1)
     expect(ctor.mock.calls[0]![0]).toContain('Needs you')
+  })
+
+  test('fires for a paused run that appears later, showing its question (#636)', () => {
+    const { rerender } = render(true)
+    rerender({ items: [] }) // baseline
+    rerender({ items: [awaiting('g1', 'Cache the auth store?')] })
+    expect(ctor).toHaveBeenCalledTimes(1)
+    expect(ctor.mock.calls[0]![1]?.body).toContain('Cache the auth store?')
   })
 
   test('never fires when notifications are disabled', () => {

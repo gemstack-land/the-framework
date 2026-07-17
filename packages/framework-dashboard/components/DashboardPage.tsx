@@ -1,7 +1,8 @@
 import { type ReactNode } from 'react'
 import type { DashboardData, ActiveRun, ProjectStat, ProjectQueue, Intervention } from '@gemstack/framework'
-import { FolderGit2, Zap, ListChecks, History, GitPullRequest, Inbox } from 'lucide-react'
+import { FolderGit2, Zap, ListChecks, History, GitPullRequest, Inbox, MessageCircleQuestion } from 'lucide-react'
 import { onDashboard } from '../server/reads.telefunc.js'
+import { interventionKey } from '../lib/interventions.js'
 import { ActivityChart } from './ActivityChart.js'
 import { RunOutcomes } from './RunOutcomes.js'
 import { UsagePanel } from './UsagePanel.js'
@@ -31,7 +32,7 @@ export function DashboardPage({
           <p className="text-sm text-muted-foreground">Everything the agent is doing, across every project.</p>
         </div>
 
-        <NeedsYou items={interventions} />
+        <NeedsYou items={interventions} onSelectProject={onSelectProject} />
 
         {data === null ? (
           <p className="text-sm text-muted-foreground">Loading…</p>
@@ -104,11 +105,12 @@ export function DashboardPage({
   )
 }
 
-// The Queue's "needs you" list (#632, part of #624): the cross-project interventions — today
-// the open PRs to review (proposals + finished work both surface as PRs). Merge to confirm,
-// close to reject; both happen on GitHub, so each item links straight out to its PR. Placed at
-// the top of the Overview as the day's actionable inbox; #627 notifications fire off the same set.
-function NeedsYou({ items }: { items: Intervention[] }) {
+// The Queue's "needs you" list (#632, part of #624): the cross-project interventions. Two kinds:
+// open PRs to review (proposals + finished work both surface as PRs) — merge to confirm, close to
+// reject, so each links straight out to its PR; and runs paused mid-flight on a question (#636),
+// which jump into that project's live view to answer. Placed at the top of the Overview as the
+// day's actionable inbox; #627 notifications fire off the same set.
+function NeedsYou({ items, onSelectProject }: { items: Intervention[]; onSelectProject: (id: string) => void }) {
   return (
     <Card>
       <CardHeader>
@@ -128,19 +130,33 @@ function NeedsYou({ items }: { items: Intervention[] }) {
         ) : (
           <ul className="divide-y divide-border">
             {items.map(item => (
-              <li key={`${item.projectId}#${item.number}`}>
-                <a
-                  href={item.url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="flex items-center gap-2 py-2 hover:opacity-80"
-                  title={`Open PR #${item.number} on GitHub`}
-                >
-                  <GitPullRequest className="h-4 w-4 shrink-0 text-emerald-500" />
-                  <span className="shrink-0 text-xs font-medium tabular-nums text-muted-foreground">#{item.number}</span>
-                  <span className="truncate font-medium">{item.title}</span>
-                  <span className="ml-auto shrink-0 text-xs text-muted-foreground">{item.projectName}</span>
-                </a>
+              <li key={interventionKey(item)}>
+                {item.kind === 'awaiting' ? (
+                  <button
+                    type="button"
+                    onClick={() => onSelectProject(item.projectId)}
+                    className="flex w-full items-center gap-2 py-2 text-left hover:opacity-80"
+                    title="Open the run to answer"
+                  >
+                    <MessageCircleQuestion className="h-4 w-4 shrink-0 text-amber-500" />
+                    <span className="shrink-0 text-xs font-medium text-amber-500">Awaiting</span>
+                    <span className="truncate font-medium">{item.title}</span>
+                    <span className="ml-auto shrink-0 text-xs text-muted-foreground">{item.projectName}</span>
+                  </button>
+                ) : (
+                  <a
+                    href={item.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="flex items-center gap-2 py-2 hover:opacity-80"
+                    title={`Open PR #${item.number} on GitHub`}
+                  >
+                    <GitPullRequest className="h-4 w-4 shrink-0 text-emerald-500" />
+                    <span className="shrink-0 text-xs font-medium tabular-nums text-muted-foreground">#{item.number}</span>
+                    <span className="truncate font-medium">{item.title}</span>
+                    <span className="ml-auto shrink-0 text-xs text-muted-foreground">{item.projectName}</span>
+                  </a>
+                )}
               </li>
             ))}
           </ul>

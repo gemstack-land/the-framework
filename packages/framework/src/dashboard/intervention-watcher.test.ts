@@ -36,6 +36,28 @@ test('postDiscord posts one item with its number, title, project and url', async
   assert.match(content, /https:\/\/gh\/pr\/285/)
 })
 
+test('postDiscord phrases a paused-run item as awaiting, with no PR number (#636)', async () => {
+  const awaiting: Intervention = {
+    projectId: 'p',
+    projectName: 'gemstack',
+    kind: 'awaiting',
+    title: 'Cache the auth store?',
+    url: 'http://localhost:4200',
+    awaitId: 'g1',
+  }
+  let body: unknown
+  const fetchImpl = (async (_url, init) => {
+    body = JSON.parse(String(init!.body))
+    return new Response(null, { status: 204 })
+  }) as typeof fetch
+  await postDiscord('https://discord/hook', [awaiting], fetchImpl)
+  const content = (body as { content: string }).content
+  assert.match(content, /Cache the auth store\?/)
+  assert.match(content, /awaiting your answer/)
+  assert.match(content, /http:\/\/localhost:4200/)
+  assert.doesNotMatch(content, /#undefined/) // no phantom PR number
+})
+
 test('postDiscord summarizes multiple items and skips the call when there are none', async () => {
   const calls: string[] = []
   const fetchImpl = (async (_url, init) => {
@@ -55,7 +77,7 @@ test('startInterventionWatcher announces only items that appear after the first 
   const watcher = startInterventionWatcher({
     projects,
     build: async () => current,
-    onNew: items => void announced.push(items.map(i => i.number)),
+    onNew: items => void announced.push(items.map(i => i.number!)),
     intervalMs: 1_000_000, // effectively disable the timer; drive via poll()
   })
   try {

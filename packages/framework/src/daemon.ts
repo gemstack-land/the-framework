@@ -5,6 +5,7 @@ import type { FrameworkEvent } from './events.js'
 import { FRAMEWORK_DIR } from './store/index.js'
 import { startDashboard, type Dashboard, type StartRunKind, type StartRunOptions, type StartRunResult, type AddProjectResult, type PreviewResult, type PreviewStatus } from './dashboard/index.js'
 import { startInterventionWatcher, postDiscord, type InterventionWatcher } from './dashboard/intervention-watcher.js'
+import { buildInterventions } from './dashboard/interventions.js'
 import { startPreview, type PreviewHandle } from './preview.js'
 import { resolveDashboardBundle } from './dashboard/bundle.js'
 import { isActivated } from './project.js'
@@ -351,6 +352,8 @@ export async function runDaemon(cwd: string, opts: RunDaemonOptions = {}): Promi
           name: basename(p.path),
           activated: true,
         })),
+      // Pass the daemon's own URL so a paused-run item (#636) can link back to the dashboard.
+      build: projects => buildInterventions(projects, { dashboardUrl: dashboard.url }),
       onNew: items => postDiscord(webhook, items).catch(() => {}),
     })
   }

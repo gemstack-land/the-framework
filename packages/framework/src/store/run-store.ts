@@ -82,6 +82,12 @@ export interface RunMeta {
   sessionName?: string
   /** Whether the agent signalled `setReadyForMerge()` (#326): building (false/absent) vs ready (true). */
   readyForMerge?: boolean
+  /**
+   * The choice gate the run is currently parked on (#636): set when a `choice` event fires and
+   * cleared when its `choice-resolved` (or the run's `end`) arrives. Present means the run is
+   * paused waiting for the user's answer — the second "needs you" source after open PRs (#624).
+   */
+  pendingChoice?: { id: string; title: string }
 }
 
 /**
@@ -135,6 +141,12 @@ export function applyEventToMeta(meta: RunMeta, event: FrameworkEvent, at: strin
     case 'ready-for-merge':
       next.readyForMerge = true
       break
+    case 'choice':
+      next.pendingChoice = { id: event.id, title: event.title }
+      break
+    case 'choice-resolved':
+      if (next.pendingChoice?.id === event.id) delete next.pendingChoice
+      break
     case 'bootstrap': {
       const b = event.event
       if (b.type === 'scope') {
@@ -149,6 +161,7 @@ export function applyEventToMeta(meta: RunMeta, event: FrameworkEvent, at: strin
     }
     case 'end':
       next.status = event.ok ? 'done' : event.stopped ? 'stopped' : 'failed'
+      delete next.pendingChoice // a finished run is not awaiting anything
       break
     default:
       break

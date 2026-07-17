@@ -155,6 +155,25 @@ test('applyEventToMeta records the session name + ready-for-merge lifecycle sign
   assert.equal(ready.sessionName, 'add-comments') // ready doesn't clobber the name
 })
 
+test('applyEventToMeta tracks the pending choice gate a run is parked on (#636)', () => {
+  const base = metaFromEvents(RUN.slice(0, 4), AT)
+  assert.equal(base.pendingChoice, undefined)
+  const asked = applyEventToMeta(base, { kind: 'choice', id: 'g1', title: 'Cache the auth store?', options: [{ id: 'y', label: 'Yes' }] }, AT)
+  assert.deepEqual(asked.pendingChoice, { id: 'g1', title: 'Cache the auth store?' })
+  // A resolve for a different gate id leaves it parked; the matching resolve clears it.
+  const other = applyEventToMeta(asked, { kind: 'choice-resolved', id: 'other', picked: 'y', by: 'user' }, AT)
+  assert.deepEqual(other.pendingChoice, { id: 'g1', title: 'Cache the auth store?' })
+  const resolved = applyEventToMeta(asked, { kind: 'choice-resolved', id: 'g1', picked: 'y', by: 'user' }, AT)
+  assert.equal(resolved.pendingChoice, undefined)
+})
+
+test('applyEventToMeta clears a pending choice when the run ends (#636)', () => {
+  const base = metaFromEvents(RUN.slice(0, 4), AT)
+  const asked = applyEventToMeta(base, { kind: 'choice', id: 'g1', title: 'q?', options: [{ id: 'y', label: 'Yes' }] }, AT)
+  const ended = applyEventToMeta(asked, { kind: 'end', ok: true }, AT)
+  assert.equal(ended.pendingChoice, undefined)
+})
+
 test('close archives the run into runs/<id>.json + .jsonl for history (#303)', async () => {
   const fs = memFs()
   const store = await RunStore.open(CWD, { fs, fresh: true, now: AT })
