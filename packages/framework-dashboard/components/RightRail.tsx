@@ -58,7 +58,10 @@ export function RightRail({
   ]
   const label = (t: Tab) =>
     t === 'files' ? 'Files' : t === 'choices' ? 'Choices' : t === 'views' ? 'Views' : t === 'docs' ? 'Docs' : 'Log'
-  const count = (t: Tab) => (t === 'choices' ? choices.length : t === 'views' ? views.length : t === 'files' ? context.size : 0)
+  // The Files badge counts only selected files, not whole-repo entries (#661): the shared context
+  // set also holds project paths (from the Start form's repo checkboxes), which aren't in `files`.
+  const selectedFiles = files.filter(f => context.has(f)).length
+  const count = (t: Tab) => (t === 'choices' ? choices.length : t === 'views' ? views.length : t === 'files' ? selectedFiles : 0)
 
   return (
     <aside className="flex w-80 shrink-0 flex-col border-l border-border">

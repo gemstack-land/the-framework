@@ -116,9 +116,17 @@ export function StartRunForm({
   const [showContext, setShowContext] = useState(false)
 
   // The Context set mixes whole repos (registered project paths) and individual files (relative
-  // paths from a `#` mention or the file tree). Split out the files so they can be shown + removed.
+  // paths from a `#` mention or the file tree). Split out the files so they can be shown + removed,
+  // and count each kind separately for the section header.
   const projectPaths = new Set(projects.map(p => p.path))
   const contextFiles = [...context].filter(path => !projectPaths.has(path))
+  const selectedRepos = projects.filter(p => context.has(p.path)).length
+  const contextSummary = [
+    selectedRepos > 0 ? `${selectedRepos} project${selectedRepos > 1 ? 's' : ''}` : null,
+    contextFiles.length > 0 ? `${contextFiles.length} file${contextFiles.length > 1 ? 's' : ''}` : null,
+  ]
+    .filter(Boolean)
+    .join(' · ')
 
   // Vanilla removes the system prompt entirely, so Eco (which only trims it) has nothing
   // left to act on.
@@ -283,7 +291,7 @@ export function StartRunForm({
       {(projects.length > 0 || contextFiles.length > 0) && (
         <div className="mt-3 text-xs text-muted-foreground">
           <DisclosureToggle open={showContext} onToggle={() => setShowContext(s => !s)}>
-            Context{context.size > 0 && <span className="text-primary"> · {context.size} selected</span>}
+            Context{contextSummary && <span className="text-primary"> · {contextSummary}</span>}
           </DisclosureToggle>
           {showContext && (
             <div className="mt-2 space-y-2 rounded border border-border p-3">
