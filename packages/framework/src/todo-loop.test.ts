@@ -1,12 +1,12 @@
 import { strict as assert } from 'node:assert'
 import { test } from 'node:test'
 import { writeFileSync } from 'node:fs'
-import { mkdtemp, rm, utimes, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, utimes, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { FakeDriver } from './driver/fake.js'
 import type { ChoicePick, ChoiceRequest, FrameworkEvent } from './events.js'
-import { findTodoBacklog, parseTodoEntries, runTodoLoop } from './todo-loop.js'
+import { appendTodoEntry, findTodoBacklog, parseTodoEntries, runTodoLoop } from './todo-loop.js'
 
 async function tmpWorkspace(): Promise<string> {
   return mkdtemp(join(tmpdir(), 'framework-todo-'))
@@ -56,6 +56,36 @@ test('findTodoBacklog prefers the newest session-scoped file, falls back to flat
     await writeFile(join(cwd, 'TODO_feat-y.agent.md'), '- [x] all done\n')
     await writeFile(join(cwd, 'TODO_feat-x.agent.md'), '- [x] all done\n')
     assert.equal((await findTodoBacklog(cwd))?.name, 'TODO.md')
+  } finally {
+    await rm(cwd, { recursive: true, force: true })
+  }
+})
+
+test('findTodoBacklog reads the flat backlog from tickets/TODO.md (#629)', async () => {
+  const cwd = await tmpWorkspace()
+  try {
+    await mkdir(join(cwd, 'tickets'))
+    await writeFile(join(cwd, 'tickets/TODO.md'), '- [ ] roadmap entry\n')
+    assert.deepEqual(await findTodoBacklog(cwd), { name: 'tickets/TODO.md', entries: ['roadmap entry'] })
+
+    // A session-scoped backlog still wins over the flat one, wherever the flat one lives.
+    await writeFile(join(cwd, 'TODO_feat-x.agent.md'), '- [ ] scoped entry\n')
+    assert.equal((await findTodoBacklog(cwd))?.name, 'TODO_feat-x.agent.md')
+  } finally {
+    await rm(cwd, { recursive: true, force: true })
+  }
+})
+
+test('appendTodoEntry creates tickets/TODO.md (and its dir) when the workspace has no backlog (#629)', async () => {
+  const cwd = await tmpWorkspace()
+  try {
+    const file = await appendTodoEntry(cwd, 'Resume the paused run')
+    assert.equal(file, 'tickets/TODO.md')
+    assert.equal(await readFile(join(cwd, 'tickets/TODO.md'), 'utf8'), '- [ ] Resume the paused run\n')
+
+    // A second entry appends to the same file, not a new one.
+    await appendTodoEntry(cwd, 'And another')
+    assert.equal(await readFile(join(cwd, 'tickets/TODO.md'), 'utf8'), '- [ ] Resume the paused run\n- [ ] And another\n')
   } finally {
     await rm(cwd, { recursive: true, force: true })
   }

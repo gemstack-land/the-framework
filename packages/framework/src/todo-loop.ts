@@ -1,9 +1,12 @@
-import { readdir, readFile, stat, writeFile } from 'node:fs/promises'
-import { join } from 'node:path'
+import { mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promises'
+import { dirname, join } from 'node:path'
 import type { DriverSession } from './driver/index.js'
 import type { ChoicePick, ChoiceRequest, FrameworkEvent } from './events.js'
 import { requestChoices, runAwaitRounds } from './run.js'
+import { FLAT_TODO_FILE, findFlatTodo } from './tickets.js'
 import { createTurnSignalEmitter } from './turn-gate.js'
+
+export { FLAT_TODO_FILE, LEGACY_TODO_FILE, TICKETS_DIR } from './tickets.js'
 
 /**
  * The backlog loop (#323): once the main work settles, consume the agent's own
@@ -19,9 +22,6 @@ import { createTurnSignalEmitter } from './turn-gate.js'
 
 /** The session-scoped backlog filename the #326 prompt writes. */
 export const TODO_FILE_PATTERN = /^TODO_[a-z0-9-]+\.agent\.md$/
-
-/** The flat fallback the current pill (#301) still writes. */
-export const FLAT_TODO_FILE = 'TODO.md'
 
 /** A located backlog: its filename and the entries still open. */
 export interface TodoBacklog {
@@ -56,8 +56,9 @@ export function parseTodoEntries(md: string): string[] {
 
 /**
  * The workspace's backlog files, best first: the most recently modified
- * session-scoped `TODO_<slug>.agent.md` (#323/#326), then the flat `TODO.md`
- * the current pill writes (#301) — the same dual convention as the doc sidebar.
+ * session-scoped `TODO_<slug>.agent.md` (#323/#326), then the flat backlog
+ * (`tickets/TODO.md`, or a legacy root `TODO.md`) — the same dual convention as
+ * the doc sidebar.
  */
 async function backlogCandidates(cwd: string): Promise<string[]> {
   let names: string[]
@@ -77,7 +78,8 @@ async function backlogCandidates(cwd: string): Promise<string[]> {
   } else {
     candidates.push(...scoped)
   }
-  if (names.includes(FLAT_TODO_FILE)) candidates.push(FLAT_TODO_FILE)
+  const flat = await findFlatTodo(cwd)
+  if (flat) candidates.push(flat)
   return candidates
 }
 
@@ -97,6 +99,7 @@ export async function appendTodoEntry(cwd: string, entry: string): Promise<strin
   try {
     const existing = await readFile(path, 'utf8').catch(() => '')
     const separator = existing === '' || existing.endsWith('\n') ? '' : '\n'
+    await mkdir(dirname(path), { recursive: true }) // fresh tickets/TODO.md needs its dir
     await writeFile(path, `${existing}${separator}- [ ] ${entry}\n`, 'utf8')
     return name
   } catch {
@@ -255,7 +258,7 @@ export async function runTodoLoop(opts: TodoLoopOptions): Promise<TodoLoopResult
     emit({ kind: 'log', message: `Backlog item ${completed + 1}: ${preview}` })
     // Complete exactly the first open entry and check it off, honoring await gates.
     // A declined plan (#358) ends the item turn; the loop's stall check takes it from there.
-    const prompt = `Open \`${backlog.name}\` at the workspace root and work on the FIRST open entry only. Complete it fully and verify your work. Then update \`${backlog.name}\`: check the entry off (or remove it). Do not start any other entry.`
+    const prompt = `Open \`${backlog.name}\` in the workspace and work on the FIRST open entry only. Complete it fully and verify your work. Then update \`${backlog.name}\`: check the entry off (or remove it). Do not start any other entry.`
     await runAwaitRounds({ session, prompt, ...gateDeps })
     completed++
 

@@ -270,6 +270,8 @@ export {
   parseTodoEntries,
   TODO_FILE_PATTERN,
   FLAT_TODO_FILE,
+  LEGACY_TODO_FILE,
+  TICKETS_DIR,
   DEFAULT_MAX_TODO_ITEMS,
   type TodoBacklog,
   type TodoLoopOptions,

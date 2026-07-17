@@ -17,7 +17,7 @@ test('parseTodoItems extracts task-list entries and their checked state', () => 
 
 test('collectQueue rolls up open TODO items per project, most-open first, skipping empties', async () => {
   const docs: Record<string, WorkspaceDoc[]> = {
-    '/a': [{ name: 'TODO.md', content: '- [ ] one\n- [ ] two\n- [x] gone\n' }],
+    '/a': [{ name: 'tickets/TODO.md', content: '- [ ] one\n- [ ] two\n- [x] gone\n' }], // #629 location, matched by basename
     '/b': [{ name: 'TODO_main.agent.md', content: '- [ ] only\n' }],
     '/c': [{ name: 'PLAN.md', content: '- [ ] not a todo doc\n' }], // no TODO doc -> skipped
     '/d': [{ name: 'TODO.md', content: '# nothing checkable\n' }], // TODO but no items -> skipped

@@ -1,5 +1,6 @@
 import { readFile, readdir } from 'node:fs/promises'
 import { join } from 'node:path'
+import { findFlatTodo } from '../tickets.js'
 
 /**
  * The plan/backlog document categories the dashboard surfaces in its sidebar
@@ -7,14 +8,15 @@ import { join } from 'node:path'
  *
  * The Framework's system prompt writes these per session (#323/#326):
  * `PLAN_<SESSION>.agent.md` (the plan for now) and `TODO_<SESSION>.agent.md` (the
- * backlog), where SESSION is a git-branch slug. The flat `PLAN.md` / `TODO.md`
- * stay as a fallback for hand-written docs (and the current #301 prompt). Names are
- * matched against a flat readdir of the root, never taken from user input, so there
+ * backlog), where SESSION is a git-branch slug. The flat fallbacks are `PLAN.md`
+ * (root) and the backlog `tickets/TODO.md` (#629; `dir` marks it lives under the
+ * `tickets/` convention). Scoped and flat-root names are matched against a flat
+ * readdir of the root, never taken from user input; `dir` is a fixed slug, so there
  * is no path traversal to guard against.
  */
 export const DOC_CATEGORIES = [
   { flat: 'PLAN.md', scoped: /^PLAN_[a-z0-9-]+\.agent\.md$/ },
-  { flat: 'TODO.md', scoped: /^TODO_[a-z0-9-]+\.agent\.md$/ },
+  { flat: 'TODO.md', dir: 'tickets', scoped: /^TODO_[a-z0-9-]+\.agent\.md$/ },
 ] as const
 
 /** One surfaced document: its filename and current contents. */
@@ -41,9 +43,15 @@ async function surfacedFilenames(cwd: string): Promise<string[]> {
   }
   const present = new Set(entries)
   const names: string[] = []
-  for (const { flat, scoped } of DOC_CATEGORIES) {
-    if (present.has(flat)) names.push(flat)
-    names.push(...entries.filter(e => scoped.test(e)).sort())
+  for (const cat of DOC_CATEGORIES) {
+    if ('dir' in cat) {
+      // Flat backlog lives under `tickets/` (#629), with a legacy root fallback.
+      const flat = await findFlatTodo(cwd)
+      if (flat) names.push(flat)
+    } else if (present.has(cat.flat)) {
+      names.push(cat.flat)
+    }
+    names.push(...entries.filter(e => cat.scoped.test(e)).sort())
   }
   return names
 }

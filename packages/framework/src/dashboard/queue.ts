@@ -1,3 +1,4 @@
+import { basename } from 'node:path'
 import type { ProjectSummary } from './projects.js'
 import { readDocs, type WorkspaceDoc } from './docs.js'
 
@@ -49,7 +50,7 @@ export async function collectQueue(
   const queues: ProjectQueue[] = []
   for (const project of projects) {
     const docs = await read(project.path).catch(() => [])
-    const items = docs.filter(d => d.name.startsWith('TODO')).flatMap(d => parseTodoItems(d.content))
+    const items = docs.filter(d => basename(d.name).startsWith('TODO')).flatMap(d => parseTodoItems(d.content))
     if (items.length === 0) continue
     const open = items.filter(i => !i.done).length
     queues.push({ projectId: project.id, projectName: project.name, open, total: items.length, items })
