@@ -7,6 +7,7 @@ import {
   metaFromEvents,
   listRuns,
   readLiveMeta,
+  reconcileOrphanedRuns,
   loadRunEvents,
   RUN_META_VERSION,
   type StoreFs,
@@ -244,4 +245,37 @@ test('a fresh run archives a prior run that never got closed (crash safety) (#30
   const runs = await listRuns(CWD, fs)
   assert.equal(runs.length, 1)
   assert.equal(runs[0]!.intent, 'a blog with comments')
+})
+
+const RUNS = join(CWD, '.the-framework', 'runs')
+const runningMeta = (id: string): string =>
+  JSON.stringify({ version: RUN_META_VERSION, status: 'running', id, startedAt: AT, updatedAt: AT, passes: 0 })
+
+test('reconcileOrphanedRuns flips archived runs stuck at running to stopped (#642)', async () => {
+  const fs = memFs({
+    [join(RUNS, 'a.json')]: runningMeta('a'),
+    [join(RUNS, 'b.json')]: runningMeta('b'),
+    [join(RUNS, 'c.json')]: JSON.stringify({ version: RUN_META_VERSION, status: 'done', id: 'c', startedAt: AT, updatedAt: AT, passes: 0 }),
+  })
+  const fixed = await reconcileOrphanedRuns(CWD, fs)
+  assert.equal(fixed, 2)
+  const runs = await listRuns(CWD, fs)
+  assert.deepEqual(runs.map(r => [r.id, r.status]).sort(), [['a', 'stopped'], ['b', 'stopped'], ['c', 'done']])
+})
+
+test('reconcileOrphanedRuns flips a live run and archives it, counting it once (#642)', async () => {
+  const fs = memFs({ [META]: runningMeta('2026-live') })
+  const fixed = await reconcileOrphanedRuns(CWD, fs)
+  assert.equal(fixed, 1)
+  // The live run.json is now stopped...
+  assert.equal((await readLiveMeta(CWD, fs))!.status, 'stopped')
+  // ...and archived (as stopped) so it stays in the history list.
+  const runs = await listRuns(CWD, fs)
+  assert.deepEqual(runs.map(r => [r.id, r.status]), [['2026-live', 'stopped']])
+})
+
+test('reconcileOrphanedRuns is a no-op on a clean or empty workspace (#642)', async () => {
+  assert.equal(await reconcileOrphanedRuns(CWD, memFs()), 0)
+  const done = memFs({ [META]: JSON.stringify({ version: RUN_META_VERSION, status: 'done', id: 'd', startedAt: AT, updatedAt: AT, passes: 0 }) })
+  assert.equal(await reconcileOrphanedRuns(CWD, done), 0)
 })

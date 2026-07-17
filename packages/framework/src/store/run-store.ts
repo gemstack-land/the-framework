@@ -375,6 +375,45 @@ export async function listRuns(cwd: string, fs: StoreFs = nodeStoreFs()): Promis
 }
 
 /**
+ * Reconcile runs a dead process left marked `running`. A freshly started daemon
+ * drives no in-flight run, so at boot any run still at `running` in this workspace
+ * — the live `run.json` or an archived `runs/*.json` — is orphaned: its owning
+ * process is gone (a crash, kill, or daemon restart), yet it shows as active and
+ * its Stop is a no-op (nothing is left to read `control.jsonl`). Each is flipped to
+ * `stopped`; the live run is archived first (idempotent) so its history is kept.
+ * Returns how many were reconciled. Best-effort: a read/write error skips that run,
+ * never throws.
+ */
+export async function reconcileOrphanedRuns(cwd: string, fs: StoreFs = nodeStoreFs()): Promise<number> {
+  const dir = join(cwd, FRAMEWORK_DIR)
+  let fixed = 0
+  // Archived runs stuck at `running` (e.g. a prior live run the next run never
+  // rescued). Done before the live run so its fresh archive isn't re-counted here.
+  for (const name of await fs.readdir(join(dir, RUNS_DIR))) {
+    if (!name.endsWith('.json')) continue
+    const path = join(dir, RUNS_DIR, name)
+    try {
+      const meta = JSON.parse(await fs.read(path)) as RunMeta
+      if (meta.status !== 'running') continue
+      await fs.write(path, JSON.stringify({ ...meta, status: 'stopped' }, null, 2) + '\n')
+      fixed++
+    } catch {
+      // torn/half-written meta — skip it
+    }
+  }
+  // The live run: flip it, then archive so a crash that skipped close() still
+  // leaves the stopped run in the history list.
+  const live = await readMetaFile(fs, join(dir, META_FILE))
+  if (live?.status === 'running') {
+    const stopped: RunMeta = { ...live, status: 'stopped' }
+    await fs.write(join(dir, META_FILE), JSON.stringify(stopped, null, 2) + '\n').catch(() => {})
+    await archivePriorRun(fs, dir).catch(() => {})
+    fixed++
+  }
+  return fixed
+}
+
+/**
  * The live (in-progress) run's meta snapshot from `.the-framework/run.json`, or
  * `undefined` when none/unreadable. Unlike {@link listRuns} (which reads the
  * archived `runs/` copies written on close), this is the run the daemon is

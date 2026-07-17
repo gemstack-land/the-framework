@@ -2,7 +2,7 @@ import { spawn, type ChildProcess } from 'node:child_process'
 import { mkdir, readFile, writeFile, rm, stat } from 'node:fs/promises'
 import { basename, dirname, join, resolve } from 'node:path'
 import type { FrameworkEvent } from './events.js'
-import { FRAMEWORK_DIR } from './store/index.js'
+import { FRAMEWORK_DIR, reconcileOrphanedRuns } from './store/index.js'
 import { startDashboard, type Dashboard, type StartRunKind, type StartRunOptions, type StartRunResult, type AddProjectResult, type PreviewResult, type PreviewStatus } from './dashboard/index.js'
 import { startInterventionWatcher, postDiscord, type InterventionWatcher } from './dashboard/intervention-watcher.js'
 import { buildInterventions } from './dashboard/interventions.js'
@@ -305,6 +305,14 @@ export async function runDaemon(cwd: string, opts: RunDaemonOptions = {}): Promi
 
   // Multi-project (#392): make sure an activated home repo shows up in the Projects list.
   await registerHomeProject(cwd, env)
+
+  // Crash recovery (#642): a fresh daemon drives no in-flight run, so any run a dead
+  // process left marked `running` is orphaned — it would show as active forever with a
+  // no-op Stop. Reconcile them to `stopped` across every registered project at boot.
+  for (const record of await listProjects(undefined, env).catch(() => [])) {
+    const fixed = await reconcileOrphanedRuns(record.path).catch(() => 0)
+    if (fixed > 0) console.log(`[framework] reconciled ${fixed} orphaned run(s) in ${basename(record.path)}`)
+  }
 
   // Everything the dashboard drives per project — run spawning, project install, and app
   // previews — lives in the runtime, so this body stays about the daemon's own lifecycle.
