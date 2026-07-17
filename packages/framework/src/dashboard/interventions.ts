@@ -87,3 +87,19 @@ export async function buildInterventions(
   const seen = new Set<string>()
   return items.filter(item => (seen.has(item.url) ? false : (seen.add(item.url), true)))
 }
+
+/** The stable identity of an intervention — its PR url, which survives title edits and re-sorts. */
+export function interventionKey(item: Intervention): string {
+  return item.url
+}
+
+/**
+ * The interventions in `current` not already in `seen` (by {@link interventionKey}) — the ones
+ * that just landed on the queue. Drives the daemon's Discord watcher (#627): the watcher keeps
+ * the keys it has already announced, so only genuinely new items notify. (The dashboard keeps a
+ * client-side copy of this for browser notifications; it can't import runtime values from this
+ * package without dragging Node-only modules into the browser bundle.)
+ */
+export function pickNewInterventions(seen: ReadonlySet<string>, current: Intervention[]): Intervention[] {
+  return current.filter(item => !seen.has(interventionKey(item)))
+}

@@ -1,9 +1,10 @@
 import { spawn, type ChildProcess } from 'node:child_process'
 import { mkdir, readFile, writeFile, rm, stat } from 'node:fs/promises'
-import { dirname, join, resolve } from 'node:path'
+import { basename, dirname, join, resolve } from 'node:path'
 import type { FrameworkEvent } from './events.js'
 import { FRAMEWORK_DIR } from './store/index.js'
 import { startDashboard, type Dashboard, type StartRunKind, type StartRunOptions, type StartRunResult, type AddProjectResult, type PreviewResult, type PreviewStatus } from './dashboard/index.js'
+import { startInterventionWatcher, postDiscord, type InterventionWatcher } from './dashboard/intervention-watcher.js'
 import { startPreview, type PreviewHandle } from './preview.js'
 import { resolveDashboardBundle } from './dashboard/bundle.js'
 import { isActivated } from './project.js'
@@ -337,8 +338,26 @@ export async function runDaemon(cwd: string, opts: RunDaemonOptions = {}): Promi
     throw err
   }
 
+  // Discord notifications (#627): fire on new "needs you" items even when no dashboard is open.
+  // Opt-in by setting DISCORD_WEBHOOK; the browser-notification path needs no daemon watcher.
+  const webhook = env.DISCORD_WEBHOOK
+  let watcher: InterventionWatcher | undefined
+  if (webhook) {
+    watcher = startInterventionWatcher({
+      projects: async () =>
+        (await listProjects(undefined, env).catch(() => [])).map(p => ({
+          id: p.id,
+          path: p.path,
+          name: basename(p.path),
+          activated: true,
+        })),
+      onNew: items => postDiscord(webhook, items).catch(() => {}),
+    })
+  }
+
   await waitForShutdown(opts.signal)
 
+  watcher?.stop()
   await runtime.dispose() // stop live previews (#475) so their dev servers do not outlive us
   await dashboard.close()
   await rm(daemonStatePath(env), { force: true }).catch(() => {})
