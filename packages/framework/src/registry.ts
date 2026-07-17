@@ -38,6 +38,8 @@ export interface Preferences {
   onBeforeMergeableQuality?: boolean
   /** Give the agent a real browser via chrome-devtools-mcp during the run (#452); maps to `--browser`. */
   browser?: boolean
+  /** Fire a browser notification when a new item lands on the "needs you" queue (#627). Absent = on. */
+  notifyBrowser?: boolean
   /**
    * How much of the subscription The Framework may burn before it pauses itself
    * (#527, the settings behind #519).
@@ -143,6 +145,7 @@ const PREFERENCE_KEYS = [
   'ecoMaintenance',
   'onBeforeMergeableQuality',
   'browser',
+  'notifyBrowser',
 ] as const
 
 /** Keep only the known preference fields, so a hand-edited or browser-supplied

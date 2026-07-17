@@ -2,6 +2,7 @@ import { useState } from 'react'
 import type { Intervention } from '@gemstack/framework'
 import { onProjectFiles, onInterventions } from '../../server/reads.telefunc.js'
 import { ProjectsSidebar } from '../../components/ProjectsSidebar.js'
+import { NotificationBell } from '../../components/NotificationBell.js'
 import { RunHistory } from '../../components/RunHistory.js'
 import { ProjectHome } from '../../components/ProjectHome.js'
 import { DashboardPage } from '../../components/DashboardPage.js'
@@ -15,6 +16,8 @@ import { useRuns } from '../../lib/use-runs.js'
 import { useLoaded, usePolled } from '../../lib/use-async.js'
 import { usePersistentState } from '../../lib/use-persistent-state.js'
 import { useContextSet } from '../../lib/use-context-set.js'
+import { useInterventionNotifications } from '../../lib/use-intervention-notifications.js'
+import { usePreferences, notificationsEnabled } from '../../lib/preferences.js'
 import { pendingChoices, agentViews } from '../../lib/live-state.js'
 
 /** Stable, so `files` keeps one identity while no project is selected. */
@@ -57,6 +60,11 @@ export default function Page() {
   // the sidebar badge and the Overview card share one poll. Slow cadence — PRs change rarely and
   // each poll spawns `gh` per project.
   const { value: interventions } = usePolled<Intervention[]>(onInterventions, EMPTY_INTERVENTIONS, 15000, [])
+
+  // Fire a browser notification when a new item lands on the "needs you" queue (#627). Rides the
+  // one interventions poll above; the browser permission is the real gate (see the header bell).
+  const preferences = usePreferences()
+  useInterventionNotifications(interventions, notificationsEnabled(preferences))
 
   const onRunStarted = (intent: string) => {
     // Stay on the home launcher (it must stay visible so you can launch again); the new run
@@ -118,7 +126,10 @@ export default function Page() {
       <header className="flex items-center gap-3 border-b border-border px-4 py-3">
         <span className="font-semibold">The Framework</span>
         <Badge className="text-muted-foreground">dashboard</Badge>
-        <span className="ml-auto text-xs text-muted-foreground">Vike · React · shadcn · Telefunc</span>
+        <div className="ml-auto flex items-center gap-3">
+          <NotificationBell />
+          <span className="text-xs text-muted-foreground">Vike · React · shadcn · Telefunc</span>
+        </div>
       </header>
       <div className="flex min-h-0 flex-1">
         <ProjectsSidebar

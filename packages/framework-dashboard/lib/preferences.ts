@@ -67,3 +67,8 @@ export function usePreferences(): Preferences {
 export function autopilotEnabled(preferences: Preferences): boolean {
   return preferences.autopilot ?? true
 }
+
+/** Browser notifications default on (#627); the browser permission is still the real gate. */
+export function notificationsEnabled(preferences: Preferences): boolean {
+  return preferences.notifyBrowser ?? true
+}
