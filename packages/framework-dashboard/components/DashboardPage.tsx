@@ -1,6 +1,6 @@
 import { type ReactNode } from 'react'
-import type { DashboardData, ActiveRun, ProjectStat, ProjectQueue } from '@gemstack/framework'
-import { FolderGit2, Zap, ListChecks, History } from 'lucide-react'
+import type { DashboardData, ActiveRun, ProjectStat, ProjectQueue, Intervention } from '@gemstack/framework'
+import { FolderGit2, Zap, ListChecks, History, GitPullRequest, Inbox } from 'lucide-react'
 import { onDashboard } from '../server/reads.telefunc.js'
 import { ActivityChart } from './ActivityChart.js'
 import { RunOutcomes } from './RunOutcomes.js'
@@ -14,7 +14,13 @@ import { cn } from '../lib/utils.js'
 // how past runs ended, what the agent is working on right now, and the TODO backlog — all a
 // projection of the same files over the `onDashboard` Telefunc read, polled so it stays live.
 // Selecting anything here jumps into that project. Shown by the shell when no project is picked.
-export function DashboardPage({ onSelectProject }: { onSelectProject: (id: string) => void }) {
+export function DashboardPage({
+  onSelectProject,
+  interventions,
+}: {
+  onSelectProject: (id: string) => void
+  interventions: Intervention[]
+}) {
   const { value: data } = usePolled<DashboardData | null>(onDashboard, null, 5000, [])
 
   return (
@@ -24,6 +30,8 @@ export function DashboardPage({ onSelectProject }: { onSelectProject: (id: strin
           <h1 className="text-xl font-semibold">Overview</h1>
           <p className="text-sm text-muted-foreground">Everything the agent is doing, across every project.</p>
         </div>
+
+        <NeedsYou items={interventions} />
 
         {data === null ? (
           <p className="text-sm text-muted-foreground">Loading…</p>
@@ -93,6 +101,52 @@ export function DashboardPage({ onSelectProject }: { onSelectProject: (id: strin
         )}
       </div>
     </div>
+  )
+}
+
+// The Queue's "needs you" list (#632, part of #624): the cross-project interventions — today
+// the open PRs to review (proposals + finished work both surface as PRs). Merge to confirm,
+// close to reject; both happen on GitHub, so each item links straight out to its PR. Placed at
+// the top of the Overview as the day's actionable inbox; #627 notifications fire off the same set.
+function NeedsYou({ items }: { items: Intervention[] }) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Inbox className="h-4 w-4 text-muted-foreground" />
+          Needs you
+          {items.length > 0 && (
+            <span className="rounded-full bg-primary px-1.5 text-xs font-semibold text-primary-foreground tabular-nums">
+              {items.length}
+            </span>
+          )}
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="pt-0">
+        {items.length === 0 ? (
+          <p className="py-2 text-sm text-muted-foreground">You&apos;re all caught up — nothing to review.</p>
+        ) : (
+          <ul className="divide-y divide-border">
+            {items.map(item => (
+              <li key={`${item.projectId}#${item.number}`}>
+                <a
+                  href={item.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex items-center gap-2 py-2 hover:opacity-80"
+                  title={`Open PR #${item.number} on GitHub`}
+                >
+                  <GitPullRequest className="h-4 w-4 shrink-0 text-emerald-500" />
+                  <span className="shrink-0 text-xs font-medium tabular-nums text-muted-foreground">#{item.number}</span>
+                  <span className="truncate font-medium">{item.title}</span>
+                  <span className="ml-auto shrink-0 text-xs text-muted-foreground">{item.projectName}</span>
+                </a>
+              </li>
+            ))}
+          </ul>
+        )}
+      </CardContent>
+    </Card>
   )
 }
 
