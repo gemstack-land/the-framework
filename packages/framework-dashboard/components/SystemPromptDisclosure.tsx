@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { composeRunSystem, type EcoOptions } from '@gemstack/framework/client'
+import { DisclosureToggle } from './DisclosureToggle.js'
 
 /**
  * "See actual prompt sent" (#520): the built-in system prompt, shown in full,
@@ -42,14 +43,10 @@ export function SystemPromptDisclosure({
   })
 
   return (
-    <div className="mt-2 text-xs">
-      <button
-        type="button"
-        onClick={() => setOpen(o => !o)}
-        className="cursor-pointer text-muted-foreground hover:text-foreground"
-      >
-        {open ? '▾' : '▶'} See actual prompt sent (see system prompt)
-      </button>
+    <div className="mt-3 text-xs">
+      <DisclosureToggle open={open} onToggle={() => setOpen(o => !o)}>
+        See actual prompt sent (see system prompt)
+      </DisclosureToggle>
 
       {open && (
         <div className="mt-2 space-y-2 rounded border border-border p-3 text-muted-foreground">

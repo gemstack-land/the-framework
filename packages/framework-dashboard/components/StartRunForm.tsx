@@ -16,6 +16,7 @@ import { PresetMenu } from './PresetMenu.js'
 import { PresetCreatePanel } from './PresetCreatePanel.js'
 import { AgentModelMenu, type AgentOption } from './AgentModelMenu.js'
 import { ClaudeLogo, CodexLogo } from './agent-logos.js'
+import { DisclosureToggle } from './DisclosureToggle.js'
 import { SystemPromptDisclosure } from './SystemPromptDisclosure.js'
 import { OptionsMenu, type OptionRow } from './OptionsMenu.js'
 import { Button } from './ui/button.js'
@@ -275,14 +276,9 @@ export function StartRunForm({
 
       {projects.length > 0 && (
         <div className="mt-3 text-xs text-muted-foreground">
-          <button
-            type="button"
-            onClick={() => setShowContext(s => !s)}
-            className="flex items-center gap-1 font-medium hover:text-foreground"
-          >
-            <span className="inline-block w-3">{showContext ? '▾' : '▸'}</span>
+          <DisclosureToggle open={showContext} onToggle={() => setShowContext(s => !s)}>
             Context{context.size > 0 && <span className="text-primary"> · {context.size} selected</span>}
-          </button>
+          </DisclosureToggle>
           {showContext && (
             <div className="mt-1.5 pl-4">
               <p className="mb-1.5 text-muted-foreground/80">Focus the agent on these repos (it can still reach the rest):</p>
