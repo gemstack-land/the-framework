@@ -12,7 +12,7 @@ import { onProjects } from '../server/projects.telefunc.js'
 import { usePreferences, updatePreferences, autopilotEnabled } from '../lib/preferences.js'
 import { useLoaded } from '../lib/use-async.js'
 import { PromptEditor, type PromptEditorHandle } from './PromptEditor.js'
-import { CustomPresets } from './CustomPresets.js'
+import { PresetMenu } from './PresetMenu.js'
 import { SystemPromptDisclosure } from './SystemPromptDisclosure.js'
 import { OptionToggle, type OptionRow } from './OptionToggle.js'
 import { Button } from './ui/button.js'
@@ -205,21 +205,22 @@ export function StartRunForm({
       />
 
       <div className="mt-2 flex flex-wrap items-center gap-1.5">
-        {PRESETS.map(p => (
-          <Button
-            key={p.id}
-            type="button"
-            variant="outline"
-            size="sm"
-            disabled={busy}
-            onClick={() => {
-              editorRef.current?.loadTemplate(p.render())
-              loadPreset(p.label)
-            }}
-          >
-            {p.label}
-          </Button>
-        ))}
+        {/* Presets in one dropdown (#649): built-in + saved (#626) + "New preset". */}
+        <PresetMenu
+          builtIns={PRESETS}
+          customPresets={customPresets}
+          currentPrompt={prompt}
+          busy={busy}
+          onLoadBuiltIn={p => {
+            editorRef.current?.loadTemplate(p.render())
+            loadPreset(p.label)
+          }}
+          onUseCustom={preset => {
+            editorRef.current?.loadTemplate(preset.prompt)
+            loadPreset(preset.label)
+          }}
+          onChangeCustom={next => updatePreferences({ customPresets: next })}
+        />
         {/* Model picker (#628): sits with the presets under the textarea; persists as a preference. */}
         <label className="ml-auto flex items-center gap-1.5 text-xs text-muted-foreground" title="Model to run on (passed as --model)">
           Model
@@ -237,17 +238,6 @@ export function StartRunForm({
           </select>
         </label>
       </div>
-
-      <CustomPresets
-        presets={customPresets}
-        currentPrompt={prompt}
-        busy={busy}
-        onUse={preset => {
-          editorRef.current?.loadTemplate(preset.prompt)
-          loadPreset(preset.label)
-        }}
-        onChange={next => updatePreferences({ customPresets: next })}
-      />
 
       <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1.5 text-xs text-muted-foreground">
         {mainOptions.map(o => (
