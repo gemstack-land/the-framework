@@ -26,6 +26,23 @@ export interface ProjectRecord {
  * them over Telefunc. Flat booleans mirroring the Start form's toggles; every field is
  * optional and absent means off (Autopilot still defaults on in the UI).
  */
+
+/**
+ * A user-defined preset (#626): a named prompt the user saved to re-run their own high-signal
+ * prompts, sitting beside the built-in presets in the Start form. Just data — the label is the
+ * button, the prompt is loaded verbatim into the editor and run as a `prompt` kind (unlike the
+ * built-ins, whose text is a compiled render function). `id` is stable so edits/deletes address one.
+ */
+export interface CustomPreset {
+  id: string
+  label: string
+  prompt: string
+}
+
+/** The cap on saved custom presets, and the per-field lengths — enough for real prompts, bounded
+ * so a hand-edited or hostile registry can't bloat the home file. */
+export const CUSTOM_PRESET_LIMITS = { count: 30, label: 80, prompt: 20_000 } as const
+
 export interface Preferences {
   autopilot?: boolean
   technical?: boolean
@@ -49,6 +66,8 @@ export interface Preferences {
    * post; this is whether to).
    */
   notifyDiscord?: boolean
+  /** User-defined presets (#626): the user's own saved prompts, shown beside the built-in presets. */
+  customPresets?: CustomPreset[]
   /**
    * How much of the subscription The Framework may burn before it pauses itself
    * (#527, the settings behind #519).
@@ -170,9 +189,35 @@ function sanitizePreferences(value: unknown): Preferences {
   // `model` (#628) is the one string preference; the rest are booleans. A blank string is "no
   // choice", same as absent, so it is dropped rather than persisted.
   if (typeof input['model'] === 'string' && input['model'].trim()) preferences.model = input['model'].trim()
+  const customPresets = sanitizeCustomPresets(input['customPresets'])
+  if (customPresets.length) preferences.customPresets = customPresets
   const consumptionLimits = sanitizeConsumptionLimits(input['consumptionLimits'])
   if (consumptionLimits) preferences.consumptionLimits = consumptionLimits
   return preferences
+}
+
+/**
+ * Keep only well-formed custom presets (#626): each needs a non-empty id, label, and prompt;
+ * label/prompt are trimmed and length-capped, the list capped at {@link CUSTOM_PRESET_LIMITS.count},
+ * and duplicate ids dropped. A malformed entry is skipped, not thrown — a bad registry never breaks the read.
+ */
+function sanitizeCustomPresets(value: unknown): CustomPreset[] {
+  if (!Array.isArray(value)) return []
+  const out: CustomPreset[] = []
+  const seen = new Set<string>()
+  for (const raw of value) {
+    if (out.length >= CUSTOM_PRESET_LIMITS.count) break
+    if (typeof raw !== 'object' || raw === null) continue
+    const { id, label, prompt } = raw as Record<string, unknown>
+    if (typeof id !== 'string' || typeof label !== 'string' || typeof prompt !== 'string') continue
+    const trimmedId = id.trim()
+    const trimmedLabel = label.trim().slice(0, CUSTOM_PRESET_LIMITS.label)
+    const trimmedPrompt = prompt.trim().slice(0, CUSTOM_PRESET_LIMITS.prompt)
+    if (!trimmedId || !trimmedLabel || !trimmedPrompt || seen.has(trimmedId)) continue
+    seen.add(trimmedId)
+    out.push({ id: trimmedId, label: trimmedLabel, prompt: trimmedPrompt })
+  }
+  return out
 }
 
 /**

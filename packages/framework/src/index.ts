@@ -190,6 +190,7 @@ export {
   resolveConsumptionLimits,
   type Preferences,
   type PreferencesStore,
+  type CustomPreset,
   type RegistryFs,
 } from './registry.js'
 export {

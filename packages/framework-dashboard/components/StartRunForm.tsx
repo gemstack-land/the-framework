@@ -12,6 +12,7 @@ import { onProjects } from '../server/projects.telefunc.js'
 import { usePreferences, updatePreferences, autopilotEnabled } from '../lib/preferences.js'
 import { useLoaded } from '../lib/use-async.js'
 import { PromptEditor, type PromptEditorHandle } from './PromptEditor.js'
+import { CustomPresets } from './CustomPresets.js'
 import { SystemPromptDisclosure } from './SystemPromptDisclosure.js'
 import { OptionToggle, type OptionRow } from './OptionToggle.js'
 import { Button } from './ui/button.js'
@@ -80,6 +81,7 @@ export function StartRunForm({
   const onBeforeMergeableQuality = preferences.onBeforeMergeableQuality ?? false
   const browser = preferences.browser ?? false
   const model = preferences.model ?? '' // #628: empty = the driver's default model
+  const customPresets = preferences.customPresets ?? [] // #626: the user's own saved prompts
 
   // Context selector (#439/#314): the agent can reach every registered repo, so ticking a
   // subset narrows its focus — the picked paths become one `Context:` line in the system
@@ -235,6 +237,17 @@ export function StartRunForm({
           </select>
         </label>
       </div>
+
+      <CustomPresets
+        presets={customPresets}
+        currentPrompt={prompt}
+        busy={busy}
+        onUse={preset => {
+          editorRef.current?.loadTemplate(preset.prompt)
+          loadPreset(preset.label)
+        }}
+        onChange={next => updatePreferences({ customPresets: next })}
+      />
 
       <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1.5 text-xs text-muted-foreground">
         {mainOptions.map(o => (

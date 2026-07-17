@@ -193,6 +193,33 @@ test('writePreferences keeps the model string but drops a blank one (#628)', asy
   assert.deepEqual(await readPreferences(fs, ENV), {}) // blank -> no choice, dropped
 })
 
+test('writePreferences keeps well-formed custom presets and drops malformed ones (#626)', async () => {
+  const fs = memFs({ [FILE]: JSON.stringify([APP_A]) })
+  await writePreferences(
+    {
+      customPresets: [
+        { id: 'a', label: '  Deep review  ', prompt: '  Audit this PR.  ' }, // trimmed
+        { id: 'b', label: '', prompt: 'no label' }, // dropped (empty label)
+        { id: 'c', label: 'no prompt', prompt: '  ' }, // dropped (empty prompt)
+        { id: 'a', label: 'dup id', prompt: 'x' }, // dropped (duplicate id)
+        { label: 'no id', prompt: 'x' }, // dropped (missing id)
+        'nonsense', // dropped (not an object)
+      ],
+    } as never,
+    fs,
+    ENV,
+  )
+  assert.deepEqual(await readPreferences(fs, ENV), {
+    customPresets: [{ id: 'a', label: 'Deep review', prompt: 'Audit this PR.' }],
+  })
+})
+
+test('writePreferences omits customPresets entirely when none survive (#626)', async () => {
+  const fs = memFs({ [FILE]: JSON.stringify([APP_A]) })
+  await writePreferences({ customPresets: [{ id: '', label: 'x', prompt: 'y' }] } as never, fs, ENV)
+  assert.deepEqual(await readPreferences(fs, ENV), {}) // empty list -> field left off
+})
+
 test('addProject preserves existing preferences', async () => {
   const fs = memFs({ [FILE]: JSON.stringify({ projects: [APP_A], preferences: { autopilot: false } }) })
   await addProject('/repos/app-b', APP_B.addedAt, fs, ENV)
