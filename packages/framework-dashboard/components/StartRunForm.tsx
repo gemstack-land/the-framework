@@ -98,6 +98,7 @@ export function StartRunForm({
   const autopilot = autopilotEnabled(preferences)
   const technical = preferences.technical ?? false
   const vanilla = preferences.vanilla ?? false
+  const transparent = preferences.transparent ?? false // #625: the master off-switch (raw Claude Code)
   const eco = preferences.eco ?? false
   const ecoPlanning = preferences.ecoPlanning ?? false
   const ecoResearch = preferences.ecoResearch ?? false
@@ -132,8 +133,9 @@ export function StartRunForm({
     .join(' · ')
 
   // Vanilla removes the system prompt entirely, so Eco (which only trims it) has nothing
-  // left to act on.
-  const ecoDisabled = vanilla
+  // left to act on; Transparent (#625) turns off the whole framework, so it overrides the
+  // rest of the toggles too.
+  const ecoDisabled = vanilla || transparent
 
   // The eco drops, hoisted: the run gets them via collectOptions, and the #520
   // preview renders with them, so what you read is what gets sent.
@@ -148,7 +150,8 @@ export function StartRunForm({
       ...(autopilot ? { autopilot: true } : {}),
       ...(technical ? { technical: true } : {}),
       ...(vanilla ? { vanilla: true } : {}),
-      ...(eco && !vanilla && Object.keys(ecoDrops).length ? { eco: ecoDrops } : {}),
+      ...(transparent ? { transparent: true } : {}),
+      ...(eco && !vanilla && !transparent && Object.keys(ecoDrops).length ? { eco: ecoDrops } : {}),
       ...(onBeforeMergeableQuality ? { onBeforeMergeable: true } : {}),
       ...(browser ? { browser: true } : {}),
       ...(model ? { model } : {}),
@@ -208,12 +211,13 @@ export function StartRunForm({
   // Eco is disabled + dimmed under Vanilla (nothing left to trim); the Eco sub-drops show only
   // while Eco is on.
   const mainOptions: OptionRow[] = [
-    { key: 'autopilot', label: 'Autopilot', description: 'Auto-accepts the recommended choice after a countdown.', title: 'Auto-accept the recommended choice after a countdown; also relaxes the maintenance stance', checked: autopilot },
-    { key: 'technical', label: 'Technical control', description: 'Surfaces technical detail like tech-stack choices.', title: 'Expose technical detail (e.g. tech-stack choices)', checked: technical },
-    { key: 'vanilla', label: 'Disable system prompt', description: 'Raw Claude Code, with no added system prompt.', title: "Remove all system prompts: the same as raw Claude Code. Expand 'Actual prompt' to read what it removes.", checked: vanilla },
+    { key: 'transparent', label: 'Transparent', description: 'Raw Claude Code — turns the whole framework off.', title: 'Fully transparent (#625): run the agent exactly like plain Claude Code, with no framework system prompt, controls, dashboard, guard, or TODO loop. Overrides the options below.', checked: transparent },
+    { key: 'autopilot', label: 'Autopilot', description: 'Auto-accepts the recommended choice after a countdown.', title: 'Auto-accept the recommended choice after a countdown; also relaxes the maintenance stance', checked: autopilot && !transparent, disabled: transparent },
+    { key: 'technical', label: 'Technical control', description: 'Surfaces technical detail like tech-stack choices.', title: 'Expose technical detail (e.g. tech-stack choices)', checked: technical && !transparent, disabled: transparent },
+    { key: 'vanilla', label: 'Disable system prompt', description: 'Drops the added system prompt; keeps the run controls.', title: "Remove the built-in system prompt but keep the framework's run controls. For a fully raw run, use Transparent. Expand 'Actual prompt' to read what it removes.", checked: vanilla && !transparent, disabled: transparent },
     { key: 'eco', label: 'Eco', description: 'Trims the system prompt to save tokens.', title: 'Trim the built-in system prompt to save tokens', checked: eco && !ecoDisabled, disabled: ecoDisabled },
-    { key: 'onBeforeMergeableQuality', label: 'Post-merge cleanup', description: 'Runs quality passes once it is ready to merge.', title: "When the run signals it's ready for merge, run maintainability, readability, and security-audit passes", checked: onBeforeMergeableQuality },
-    { key: 'browser', label: 'Browser', description: 'Gives the agent a real browser to inspect pages.', title: 'Give the agent a real browser via chrome-devtools-mcp: navigate pages, read console + network, inspect the DOM, and screenshot', checked: browser },
+    { key: 'onBeforeMergeableQuality', label: 'Post-merge cleanup', description: 'Runs quality passes once it is ready to merge.', title: "When the run signals it's ready for merge, run maintainability, readability, and security-audit passes", checked: onBeforeMergeableQuality && !transparent, disabled: transparent },
+    { key: 'browser', label: 'Browser', description: 'Gives the agent a real browser to inspect pages.', title: 'Give the agent a real browser via chrome-devtools-mcp: navigate pages, read console + network, inspect the DOM, and screenshot', checked: browser && !transparent, disabled: transparent },
   ]
   const ecoOptions: OptionRow[] = [
     { key: 'ecoPlanning', label: 'Auto planning', description: 'Drops the planning section; the agent plans itself.', title: 'Drop the planning section, letting the agent plan on its own', checked: ecoPlanning },
@@ -287,6 +291,7 @@ export function StartRunForm({
         prompt={prompt}
         disabled={vanilla}
         onDisabledChange={value => updatePreferences({ vanilla: value })}
+        transparent={transparent}
         autopilot={autopilot}
         eco={eco && !vanilla ? ecoDrops : undefined}
         context={[...context]}

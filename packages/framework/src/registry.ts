@@ -55,6 +55,12 @@ export interface Preferences {
   onBeforeMergeableQuality?: boolean
   /** Give the agent a real browser via chrome-devtools-mcp during the run (#452); maps to `--browser`. */
   browser?: boolean
+  /**
+   * Transparent mode (#625): run the wrapped agent raw — no framework system prompt, emit
+   * protocols, consumption guard, dashboard, or TODO loop, so a run is identical to `claude -p`.
+   * The coarse master off-switch ("only pick what you need"); maps to `--transparent`. Absent = off.
+   */
+  transparent?: boolean
   /** Fire a browser notification when a new item lands on the "needs you" queue (#627). Absent = on. */
   notifyBrowser?: boolean
   /**
@@ -182,6 +188,7 @@ const PREFERENCE_KEYS = [
   'ecoMaintenance',
   'onBeforeMergeableQuality',
   'browser',
+  'transparent',
   'notifyBrowser',
   'notifyDiscord',
   'notifyNewActivity',

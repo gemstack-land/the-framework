@@ -22,6 +22,11 @@ test('parseFrameworkConfig reads the antiLazyPill toggle', () => {
   assert.throws(() => parseFrameworkConfig('antiLazyPill: nope\n'), /"antiLazyPill" must be a boolean/)
 })
 
+test('parseFrameworkConfig reads the transparent toggle (#625)', () => {
+  assert.deepEqual(parseFrameworkConfig('transparent: true\n'), { transparent: true })
+  assert.throws(() => parseFrameworkConfig('transparent: nope\n'), /"transparent" must be a boolean/)
+})
+
 test('parseFrameworkConfig treats an empty document as {}', () => {
   assert.deepEqual(parseFrameworkConfig(''), {})
   assert.deepEqual(parseFrameworkConfig('# just a comment\n'), {})

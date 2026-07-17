@@ -193,6 +193,11 @@ test('parseArgs reads the Global options flags: vanilla + eco (#314)', () => {
   assert.deepEqual(on.eco, { autoPlanning: true, autoResearch: false, autoMaintenance: true })
 })
 
+test('parseArgs reads --transparent, off by default (#625)', () => {
+  assert.equal(parseArgs(['x']).transparent, false)
+  assert.equal(parseArgs(['--transparent', 'x']).transparent, true)
+})
+
 test('ecoOptions returns undefined when nothing is set, else only the enabled drops (#314)', () => {
   assert.equal(ecoOptions(parseArgs(['x'])), undefined)
   assert.deepEqual(ecoOptions(parseArgs(['--eco-auto-research', 'x'])), {

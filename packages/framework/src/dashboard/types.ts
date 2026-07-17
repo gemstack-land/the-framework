@@ -20,8 +20,10 @@ export interface StartRunOptions {
   autopilot?: boolean
   /** Technical mode: expose technical detail (preset-scoped). */
   technical?: boolean
-  /** Remove the built-in #326 system prompt entirely (raw Claude Code). */
+  /** Remove the built-in #326 system prompt entirely (keeps the emit contract so the dashboard still drives it). */
   vanilla?: boolean
+  /** Transparent mode (#625): run the wrapped agent fully raw (no framework system prompt, guard, dashboard, or TODO loop); maps to `--transparent`. */
+  transparent?: boolean
   /** Fine-grained #326 section drops to save tokens. */
   eco?: EcoOptions
   /** In-context directories (#439): each becomes a `--context <dir>` flag on the spawned run. */

@@ -177,6 +177,15 @@ export interface SystemPromptOptions {
    * the block. Empty/absent adds nothing.
    */
   context?: readonly string[] | undefined
+  /**
+   * Transparent mode (#625): drop *everything* framework-authored from the system channel —
+   * the built-in prompt, the knowledge docs, AND the emit protocols — so the agent receives an
+   * empty system channel, byte-identical to raw `claude -p <prompt>`. This is stronger than
+   * `--vanilla` (which keeps the AWAIT/SIGNAL emit contract so the agent can still drive the
+   * dashboard's gates); transparent means there is no framework behavior left to signal to.
+   * Short-circuits {@link composeRunSystem}, so it overrides every other option here.
+   */
+  transparent?: boolean | undefined
 }
 
 /**
@@ -221,14 +230,17 @@ export type RunSystemOptions = SystemPromptOptions
  * inside the built-in-prompt branch.
  *
  * Order is fixed: the #326 prompt block (context / built-in prompt / user SYSTEM.md)
- * first, then the always-on emit protocols. Nothing else is appended — a
- * build run's system channel is exactly this (#547), which is what lets the dashboard
- * show the whole prompt before a run starts (#520). The protocols are unconditional —
- * they are the *emit contract* (how the agent signals an awaited choice and the
- * setSessionName()/setReadyForMerge() lifecycle), not prompt content — so the agent
- * needs them even with the built-in prompt off.
+ * first, then the emit protocols. Nothing else is appended — a build run's system channel
+ * is exactly this (#547), which is what lets the dashboard show the whole prompt before a run
+ * starts (#520). The protocols are otherwise unconditional — they are the *emit contract* (how
+ * the agent signals an awaited choice and the setSessionName()/setReadyForMerge() lifecycle),
+ * not prompt content — so the agent needs them even with the built-in prompt off (`--vanilla`).
+ *
+ * The one exception is transparent mode (#625): there is no framework behavior to signal to, so
+ * the whole channel is empty and the agent runs as raw `claude -p`.
  */
 export function composeRunSystem(opts: RunSystemOptions = {}): string {
+  if (opts.transparent) return ''
   const promptBlock = systemPromptBlock(opts)
   return [...(promptBlock ? [promptBlock] : []), AWAIT_PROTOCOL, SIGNAL_PROTOCOL].join('\n\n')
 }

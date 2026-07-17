@@ -19,6 +19,7 @@ export function SystemPromptDisclosure({
   prompt,
   disabled,
   onDisabledChange,
+  transparent,
   autopilot,
   eco,
   context,
@@ -29,6 +30,8 @@ export function SystemPromptDisclosure({
   /** The Vanilla toggle (#314), under its real name. */
   disabled: boolean
   onDisabledChange: (value: boolean) => void
+  /** Transparent mode (#625): the whole channel is empty, so the preview shows nothing wrapped. */
+  transparent?: boolean
   autopilot: boolean
   eco: EcoOptions | undefined
   context: string[]
@@ -38,6 +41,7 @@ export function SystemPromptDisclosure({
 
   const text = composeRunSystem({
     antiLazyPill: !disabled,
+    ...(transparent ? { transparent: true } : {}),
     tf: { prompt, params: { autopilot, ...(eco ? { eco } : {}) } },
     ...(context.length ? { context } : {}),
   })

@@ -18,6 +18,12 @@ export interface FrameworkFileConfig {
   event?: string
   /** Inject the built-in system prompt (#326, via #301). Default `true`; set false to remove it. */
   antiLazyPill?: boolean
+  /**
+   * Transparent mode (#625): make every run in this project a raw `claude -p` — no framework
+   * system prompt, no emit protocols, no consumption guard, no dashboard, no TODO loop. The
+   * coarse "only-pick-what-you-need" master off-switch, at the per-project tier. Default `false`.
+   */
+  transparent?: boolean
 }
 
 /** Config file names read from the workspace root, in precedence order. */
@@ -69,7 +75,7 @@ export function parseFrameworkConfig(raw: string, source = 'the-framework.yml'):
       config[key] = obj[key] as string
     }
   }
-  for (const key of ['autopilot', 'technical', 'antiLazyPill'] as const) {
+  for (const key of ['autopilot', 'technical', 'antiLazyPill', 'transparent'] as const) {
     if (obj[key] !== undefined) {
       if (typeof obj[key] !== 'boolean') throw new Error(`${source}: "${key}" must be a boolean`)
       config[key] = obj[key] as boolean

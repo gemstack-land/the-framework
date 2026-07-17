@@ -145,9 +145,15 @@ Options:
   --technical            Activate the preset's Technical mode variants.
                          (--preset / --autopilot / --technical / --kind can also be
                           set per repo in the-framework.yml; these flags override it.)
-  --vanilla              Remove the built-in system prompt entirely, so the agent
-                         runs as raw Claude Code (fully transparent). Overrides the
-                         Eco flags below (there is no built-in prompt left to trim).
+  --vanilla              Remove the built-in system prompt entirely. The agent still
+                         gets the AWAIT/SIGNAL emit contract, so it can drive the
+                         dashboard's gates; for a fully raw run use --transparent.
+                         Overrides the Eco flags below (no built-in prompt to trim).
+  --transparent          Fully transparent (#625): run the wrapped agent raw, exactly
+                         like plain "claude -p" — no framework system prompt, emit
+                         protocols, consumption guard, dashboard, or TODO loop. The
+                         coarse master off-switch; also settable per repo in
+                         the-framework.yml (transparent: true) or per user.
   --eco-auto-planning    Drop the built-in prompt's "Large scope" (planning) section.
   --eco-auto-research    Drop the built-in prompt's "Alternatives" (research) section.
   --eco-auto-maintenance Drop the built-in prompt's "Maintenance" section.
@@ -227,6 +233,9 @@ export interface CliOptions {
   technical: boolean
   /** `--vanilla`: remove the built-in #326 system prompt entirely (antiLazyPill off, #314). */
   vanilla: boolean
+  /** `--transparent` (#625): run the wrapped agent fully raw — no framework system prompt, emit
+   * protocols, consumption guard, dashboard, or TODO loop, so a run is identical to `claude -p`. */
+  transparent: boolean
   /** `--eco-*`: fine-grained #326 section drops to save tokens (#314). */
   eco: Required<EcoOptions>
   /** `--context <dir>` (repeatable): in-context directories added as one `Context:` line (#439). */
@@ -292,6 +301,7 @@ export function parseArgs(argv: string[]): CliOptions {
     autopilot: false,
     technical: false,
     vanilla: false,
+    transparent: false,
     eco: { autoPlanning: false, autoResearch: false, autoMaintenance: false },
     context: [],
     onBeforeMergeable: false,
@@ -348,6 +358,9 @@ export function parseArgs(argv: string[]): CliOptions {
         break
       case '--vanilla':
         opts.vanilla = true
+        break
+      case '--transparent':
+        opts.transparent = true
         break
       case '--on-before-mergeable':
         opts.onBeforeMergeable = true
@@ -789,12 +802,15 @@ async function resolvePromptConfig(
   fileConfig: FrameworkFileConfig,
   cwd: string,
   io: CliIO,
+  transparent: boolean,
 ): Promise<{ userSystemPrompt?: string; noBuiltinPrompt: boolean; eco?: EcoOptions }> {
   const userSystemPrompt = await loadUserSystemPrompt(cwd)
-  const noBuiltinPrompt = antiLazyPillOff(opts, fileConfig)
+  // Transparent empties the whole channel, which subsumes "no built-in prompt".
+  const noBuiltinPrompt = transparent || antiLazyPillOff(opts, fileConfig)
   const eco = ecoOptions(opts)
   if (userSystemPrompt) io.out(`◆ system prompt: ${SYSTEM_PROMPT_FILE}`)
-  if (noBuiltinPrompt) io.out(`◆ built-in system prompt: off (${opts.vanilla ? 'vanilla' : 'the-framework.yml'})`)
+  // Transparent already announced itself (guard line); don't double-report the prompt being off.
+  if (noBuiltinPrompt && !transparent) io.out(`◆ built-in system prompt: off (${opts.vanilla ? 'vanilla' : 'the-framework.yml'})`)
   else if (eco) io.out(`◆ eco: dropping ${Object.keys(eco).filter(k => eco[k as keyof EcoOptions]).join(', ')}`)
   if (opts.context.length) io.out(`◆ context: ${opts.context.join(', ')}`)
   return { ...(userSystemPrompt ? { userSystemPrompt } : {}), noBuiltinPrompt, ...(eco ? { eco } : {}) }
@@ -876,6 +892,12 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
   const fileConfig = await loadFrameworkConfig(cwd, msg => io.err(msg))
   const fromFile = describeConfigSource(opts, fileConfig)
   if (fromFile) io.out(`◆ the-framework.yml: ${fromFile}`)
+
+  // Transparent mode (#625): the coarse master off-switch — `--transparent` or the-framework.yml.
+  // When on, this run is byte-identical to raw `claude -p`: no framework system channel (composed
+  // empty below), no consumption guard, no dashboard, no TODO loop. Resolved once here so every
+  // one of those sites reads the same answer.
+  const transparent = opts.transparent || fileConfig.transparent === true
 
   // Resolve which Open Loop domain preset (+ modes + build event) to run under:
   // --preset / the-framework.yml, or none at all (#545). Nothing infers one.
@@ -963,7 +985,7 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
   // the SPA reads this one `cwd`'s event/control logs without touching the global registry, so
   // a one-shot run never pollutes the Projects list. It streams the persisted event log, so a
   // --no-persist run (or an old install missing the built bundle) runs headless.
-  const dashboard = await startRunDashboard(opts.dashboard && opts.persist, cwd, opts.port, io, {
+  const dashboard = await startRunDashboard(opts.dashboard && opts.persist && !transparent, cwd, opts.port, io, {
     headlessNote: 'continuing headless',
   })
   // The new dashboard steers this live run purely through control.jsonl (its Stop / choice
@@ -1123,15 +1145,18 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
   // a run started from a terminal is guarded exactly like one started from the
   // dashboard. `undefined` when the agent can't report a quota (the fake driver,
   // or Codex), which leaves the run ungated — the fail-open Rom confirmed.
-  const guard = startConsumptionGuard({ driver, limits: resolveConsumptionLimits(await readPreferences()) })
-  if (guard) io.out('◆ consumption limits: on')
+  // Transparent mode (#625) leaves the run fully raw, so the guard is off with it — the run is
+  // `claude -p` with no framework behavior, spend included.
+  const guard = transparent ? undefined : startConsumptionGuard({ driver, limits: resolveConsumptionLimits(await readPreferences()) })
+  if (transparent) io.out(`◆ transparent: on — raw ${AGENT_SPECS[opts.agent].label}, no framework prompt, guard, dashboard, or TODO loop`)
+  else if (guard) io.out('◆ consumption limits: on')
   else if (!fake) {
     io.out(`◆ consumption limits: off — ${AGENT_SPECS[opts.agent].label} reports no quota, so nothing gates your subscription spend.`)
   }
 
   // A user SYSTEM.md + the anti-lazy-pill toggle shape the system prompt (#301), and the eco
   // flags trim the built-in one (#314). Resolve and echo once, shared by both run paths.
-  const promptConfig = await resolvePromptConfig(opts, fileConfig, cwd, io)
+  const promptConfig = await resolvePromptConfig(opts, fileConfig, cwd, io, transparent)
 
   // The run-scoped state both run paths hand to settleRun to close out. stoppedCleanly is a
   // getter because the onEvent sink sets it as the `end` event arrives.
@@ -1169,6 +1194,7 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
         ...(guard ? { consumptionGate: guard.gate } : {}),
         ...(userSystemPrompt ? { systemPrompt: userSystemPrompt } : {}),
         ...(noBuiltinPrompt ? { antiLazyPill: false } : {}),
+        ...(transparent ? { transparent: true } : {}),
         ...(eco ? { eco } : {}),
         ...(opts.context.length ? { context: opts.context } : {}),
         ...(modeList.includes('autopilot') ? { autopilot: true } : {}),
@@ -1232,7 +1258,7 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
     ...(opts.maxPasses ? { maxPasses: opts.maxPasses } : {}),
     ...(opts.maxCost ? { budgetUsd: opts.maxCost } : {}),
     ...(guard ? { consumptionGate: guard.gate } : {}),
-    ...(opts.todoLoop ? {} : { todoLoop: false }),
+    ...(opts.todoLoop && !transparent ? {} : { todoLoop: false }),
     ...(opts.todoMaxItems ? { todoMaxItems: opts.todoMaxItems } : {}),
     ...(deploy ? { deploy } : {}),
     ...(deployTarget ? { deployTarget } : {}),
@@ -1245,6 +1271,7 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
     ...(buildEvent ? { buildEvent } : {}),
     ...(userSystemPrompt ? { systemPrompt: userSystemPrompt } : {}),
     ...(noBuiltinPrompt ? { antiLazyPill: false } : {}),
+    ...(transparent ? { transparent: true } : {}),
     ...(eco ? { eco } : {}),
     ...(opts.context.length ? { context: opts.context } : {}),
     ...(sessionLink ? { sessionLink } : {}),
