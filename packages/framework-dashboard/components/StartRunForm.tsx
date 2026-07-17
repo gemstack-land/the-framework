@@ -16,7 +16,7 @@ import { PresetMenu } from './PresetMenu.js'
 import { PresetCreatePanel } from './PresetCreatePanel.js'
 import { AgentModelMenu } from './AgentModelMenu.js'
 import { SystemPromptDisclosure } from './SystemPromptDisclosure.js'
-import { OptionToggle, type OptionRow } from './OptionToggle.js'
+import { OptionsMenu, type OptionRow } from './OptionsMenu.js'
 import { Button } from './ui/button.js'
 
 // The presets (#353/#433): each PREFILLS the textarea with a rendered prompt and runs it
@@ -181,7 +181,7 @@ export function StartRunForm({
     { key: 'autopilot', label: 'Autopilot', title: 'Auto-accept the recommended choice after a countdown; also relaxes the maintenance stance', checked: autopilot },
     { key: 'technical', label: 'Technical control', title: 'Expose technical detail (e.g. tech-stack choices)', checked: technical },
     { key: 'vanilla', label: 'Disable system prompt', title: "Remove all system prompts: the same as raw Claude Code. Expand 'See actual prompt sent' to read what it removes.", checked: vanilla },
-    { key: 'eco', label: 'Eco', title: 'Trim the built-in system prompt to save tokens', checked: eco && !ecoDisabled, disabled: ecoDisabled, dim: ecoDisabled },
+    { key: 'eco', label: 'Eco', title: 'Trim the built-in system prompt to save tokens', checked: eco && !ecoDisabled, disabled: ecoDisabled },
     { key: 'onBeforeMergeableQuality', label: 'Post-merge cleanup', title: "When the run signals it's ready for merge, run maintainability, readability, and security-audit passes", checked: onBeforeMergeableQuality },
     { key: 'browser', label: 'Browser', title: 'Give the agent a real browser via chrome-devtools-mcp: navigate pages, read console + network, inspect the DOM, and screenshot', checked: browser },
   ]
@@ -207,8 +207,8 @@ export function StartRunForm({
         disabled={busy}
       />
 
-      {/* Run controls, directly under the textarea (#649/#650): presets, agent, and model as
-          one set of matching dropdowns. */}
+      {/* Run controls, directly under the textarea (#649/#650/#654): presets and options on the
+          left, agent+model at the end — all compact matching dropdowns. */}
       <div className="mt-2 flex flex-wrap items-center gap-1.5">
         <PresetMenu
           builtIns={PRESETS}
@@ -225,16 +225,20 @@ export function StartRunForm({
           onDeleteCustom={id => updatePreferences({ customPresets: customPresets.filter(p => p.id !== id) })}
           onNewPreset={() => setAddingPreset(true)}
         />
-        {/* Agent (#650) + Model (#628) in one dropdown, each a submenu. */}
-        <AgentModelMenu
-          agent={agent}
-          agentOptions={AGENTS}
-          onAgentChange={a => updatePreferences({ agent: a })}
-          model={model}
-          modelOptions={MODELS}
-          onModelChange={m => updatePreferences({ model: m })}
-          busy={busy}
-        />
+        {/* Global options (#314) as a checkbox dropdown (#654). */}
+        <OptionsMenu options={mainOptions} ecoOptions={ecoOptions} showEco={eco && !ecoDisabled} busy={busy} />
+        {/* Agent (#650) + Model (#628) in one dropdown, each a submenu — pushed to the end. */}
+        <div className="ml-auto">
+          <AgentModelMenu
+            agent={agent}
+            agentOptions={AGENTS}
+            onAgentChange={a => updatePreferences({ agent: a })}
+            model={model}
+            modelOptions={MODELS}
+            onModelChange={m => updatePreferences({ model: m })}
+            busy={busy}
+          />
+        </div>
       </div>
 
       {addingPreset && (
@@ -258,20 +262,6 @@ export function StartRunForm({
         context={[...context]}
         busy={busy}
       />
-
-      <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1.5 text-xs text-muted-foreground">
-        {mainOptions.map(o => (
-          <OptionToggle key={o.key} option={o} busy={busy} />
-        ))}
-      </div>
-
-      {eco && !ecoDisabled && (
-        <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1.5 pl-4 text-xs text-muted-foreground">
-          {ecoOptions.map(o => (
-            <OptionToggle key={o.key} option={o} busy={busy} />
-          ))}
-        </div>
-      )}
 
       {projects.length > 0 && (
         <div className="mt-3 text-xs text-muted-foreground">

@@ -50,7 +50,7 @@ export function PresetMenu({
       <DropdownMenuTrigger
         type="button"
         disabled={busy}
-        className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'gap-1.5')}
+        className={cn(buttonVariants({ variant: 'outline', size: 'xs' }), 'gap-1.5')}
       >
         Presets
         <ChevronDown className="h-3.5 w-3.5 opacity-70" />

@@ -77,7 +77,7 @@ export function AgentModelMenu({
         type="button"
         disabled={busy}
         title="Coding agent and model for the run"
-        className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'gap-1.5 font-normal')}
+        className={cn(buttonVariants({ variant: 'outline', size: 'xs' }), 'gap-1.5 font-normal')}
       >
         {labelOf(agentOptions, agent)}
         <span className="text-[var(--color-muted-foreground)]">·</span>

@@ -1,5 +1,5 @@
 import { Menu } from '@base-ui-components/react/menu'
-import { ChevronRight } from 'lucide-react'
+import { ChevronRight, Check } from 'lucide-react'
 import type { ComponentProps } from 'react'
 import { cn } from '../../lib/utils.js'
 
@@ -35,6 +35,25 @@ export function DropdownMenuContent({
 
 export function DropdownMenuItem({ className, ...props }: ComponentProps<typeof Menu.Item>) {
   return <Menu.Item className={cn(ITEM_CLASS, className)} {...props} />
+}
+
+export function DropdownMenuCheckboxItem({
+  className,
+  children,
+  // Keep the menu open when toggling, so several options can be flipped in one pass.
+  closeOnClick = false,
+  ...props
+}: ComponentProps<typeof Menu.CheckboxItem>) {
+  return (
+    <Menu.CheckboxItem className={cn(ITEM_CLASS, className)} closeOnClick={closeOnClick} {...props}>
+      <span className="flex h-3.5 w-3.5 items-center justify-center">
+        <Menu.CheckboxItemIndicator>
+          <Check className="h-3.5 w-3.5" />
+        </Menu.CheckboxItemIndicator>
+      </span>
+      {children}
+    </Menu.CheckboxItem>
+  )
 }
 
 export function DropdownMenuSubTrigger({ className, children, ...props }: ComponentProps<typeof Menu.SubmenuTrigger>) {
