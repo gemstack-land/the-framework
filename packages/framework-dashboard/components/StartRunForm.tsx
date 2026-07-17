@@ -1,4 +1,4 @@
-import { useRef, useState, type FormEvent } from 'react'
+import { useRef, useState, type FormEvent, type ReactNode } from 'react'
 import type { ProjectSummary } from '@gemstack/framework'
 import {
   renderResearchPrompt,
@@ -15,6 +15,7 @@ import { PromptEditor, type PromptEditorHandle } from './PromptEditor.js'
 import { PresetMenu } from './PresetMenu.js'
 import { PresetCreatePanel } from './PresetCreatePanel.js'
 import { AgentModelMenu } from './AgentModelMenu.js'
+import { ClaudeLogo, CodexLogo } from './agent-logos.js'
 import { SystemPromptDisclosure } from './SystemPromptDisclosure.js'
 import { OptionsMenu, type OptionRow } from './OptionsMenu.js'
 import { Button } from './ui/button.js'
@@ -43,10 +44,11 @@ const MODELS: { value: string; label: string }[] = [
 
 // The coding agent that drives the run (#650): maps to `--agent`. Mirrors AGENTS in the
 // framework's agent.ts — kept as a client const so the dashboard bundle never imports the
-// node-only driver layer. `claude` is the default (empty flag).
-const AGENTS: { value: string; label: string }[] = [
-  { value: 'claude', label: 'Claude Code' },
-  { value: 'codex', label: 'Codex' },
+// node-only driver layer. `claude` is the default (empty flag). The logo (#656) stands in for
+// the name in the picker trigger.
+const AGENTS: { value: string; label: string; icon: ReactNode }[] = [
+  { value: 'claude', label: 'Claude Code', icon: <ClaudeLogo className="h-4 w-4" /> },
+  { value: 'codex', label: 'Codex', icon: <CodexLogo className="h-4 w-4" /> },
 ]
 
 // Start a run in the selected project (#405): the one write that goes through the daemon's

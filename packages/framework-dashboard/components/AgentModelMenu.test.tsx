@@ -47,6 +47,18 @@ describe('AgentModelMenu (#650)', () => {
     expect(onModelChange).toHaveBeenCalledWith('opus')
   })
 
+  test('renders the agent logo on the trigger, with the name in the tooltip (#656)', () => {
+    const withLogo = [
+      { value: 'claude', label: 'Claude Code', icon: <svg data-testid="claude-logo" /> },
+      { value: 'codex', label: 'Codex' },
+    ]
+    renderMenu({ agentOptions: withLogo, agent: 'claude' })
+    const trigger = screen.getByRole('button')
+    expect(trigger.querySelector('[data-testid="claude-logo"]')).toBeTruthy() // logo, not the name
+    expect(trigger.textContent).not.toContain('Claude Code')
+    expect(trigger.getAttribute('title')).toContain('Claude Code') // still accessible
+  })
+
   test('choosing an agent from its submenu reports the value', () => {
     const { onAgentChange } = renderMenu()
     fireEvent.click(screen.getByRole('button')) // open root
