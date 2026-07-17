@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { onProjectFiles } from '../../server/reads.telefunc.js'
+import type { Intervention } from '@gemstack/framework'
+import { onProjectFiles, onInterventions } from '../../server/reads.telefunc.js'
 import { ProjectsSidebar } from '../../components/ProjectsSidebar.js'
 import { RunHistory } from '../../components/RunHistory.js'
 import { ProjectHome } from '../../components/ProjectHome.js'
@@ -11,13 +12,16 @@ import { RelayView } from '../../components/RelayView.js'
 import { Badge } from '../../components/ui/badge.js'
 import { useLiveEvents } from '../../lib/use-live-events.js'
 import { useRuns } from '../../lib/use-runs.js'
-import { useLoaded } from '../../lib/use-async.js'
+import { useLoaded, usePolled } from '../../lib/use-async.js'
 import { usePersistentState } from '../../lib/use-persistent-state.js'
 import { useContextSet } from '../../lib/use-context-set.js'
 import { pendingChoices, agentViews } from '../../lib/live-state.js'
 
 /** Stable, so `files` keeps one identity while no project is selected. */
 const EMPTY_FILES: string[] = []
+
+/** Stable initial for the interventions poll, so it does not churn on every render. */
+const EMPTY_INTERVENTIONS: Intervention[] = []
 
 // The dashboard shell (#405 phase 2): Projects | Runs | main | Docs/Log rail. The main pane
 // is one of three views chosen by the Runs-rail selection: the project home/launcher (Live,
@@ -48,6 +52,11 @@ export default function Page() {
   // The selected project's files (git ls-files), fetched once here and handed to both the
   // `#` picker and the tree. Empty when no project / on the relay (no checkout).
   const files = useLoaded<string[]>(projectId ? () => onProjectFiles(projectId) : null, EMPTY_FILES, [projectId])
+
+  // The cross-project "needs you" queue (#632): open PRs to review. Polled here in the shell so
+  // the sidebar badge and the Overview card share one poll. Slow cadence — PRs change rarely and
+  // each poll spawns `gh` per project.
+  const { value: interventions } = usePolled<Intervention[]>(onInterventions, EMPTY_INTERVENTIONS, 15000, [])
 
   const onRunStarted = (intent: string) => {
     // Stay on the home launcher (it must stay visible so you can launch again); the new run
@@ -87,7 +96,7 @@ export default function Page() {
   // project streams one live feed today; per-run streams land with worktrees, #453.)
   const selectedRun = runId ? runs.find(run => run.id === runId) : undefined
   const renderMain = () => {
-    if (!projectId) return <DashboardPage onSelectProject={selectProject} />
+    if (!projectId) return <DashboardPage onSelectProject={selectProject} interventions={interventions} />
     if (runId === null)
       return (
         <ProjectHome
@@ -112,7 +121,12 @@ export default function Page() {
         <span className="ml-auto text-xs text-muted-foreground">Vike · React · shadcn · Telefunc</span>
       </header>
       <div className="flex min-h-0 flex-1">
-        <ProjectsSidebar selectedId={projectId} onSelect={selectProject} onDashboard={showDashboard} />
+        <ProjectsSidebar
+          selectedId={projectId}
+          onSelect={selectProject}
+          onDashboard={showDashboard}
+          interventionCount={interventions.length}
+        />
         <RunHistory
           projectId={projectId}
           runs={runs}

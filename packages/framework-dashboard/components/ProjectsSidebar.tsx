@@ -16,10 +16,13 @@ export function ProjectsSidebar({
   selectedId,
   onSelect,
   onDashboard,
+  interventionCount = 0,
 }: {
   selectedId: string | null
   onSelect: (id: string) => void
   onDashboard: () => void
+  /** Count for the "needs you" badge on the Overview nav (#632). 0 hides it. */
+  interventionCount?: number
 }) {
   const [projects, setProjects] = useState<ProjectSummary[] | null>(null)
 
@@ -49,6 +52,14 @@ export function ProjectsSidebar({
           )}
         >
           <LayoutDashboard className="h-4 w-4" /> Overview
+          {interventionCount > 0 && (
+            <span
+              className="ml-auto min-w-5 rounded-full bg-primary px-1.5 text-center text-xs font-semibold text-primary-foreground tabular-nums"
+              title={`${interventionCount} item(s) need you`}
+            >
+              {interventionCount}
+            </span>
+          )}
         </button>
       </nav>
       <div className="min-h-0 flex-1 overflow-y-auto">
