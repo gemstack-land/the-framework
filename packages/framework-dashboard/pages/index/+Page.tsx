@@ -127,12 +127,9 @@ export default function Page() {
       <header className="flex items-center gap-3 border-b border-border px-4 py-3">
         <span className="font-semibold">The Framework</span>
         <Badge className="text-muted-foreground">dashboard</Badge>
-        <div className="ml-auto flex items-center gap-3">
-          <div className="flex items-center gap-1">
-            <NotificationBell />
-            <DiscordToggle />
-          </div>
-          <span className="text-xs text-muted-foreground">Vike · React · shadcn · Telefunc</span>
+        <div className="ml-auto flex items-center gap-1">
+          <NotificationBell />
+          <DiscordToggle />
         </div>
       </header>
       <div className="flex min-h-0 flex-1">
