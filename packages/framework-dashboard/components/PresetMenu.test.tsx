@@ -11,55 +11,46 @@ const builtIns: BuiltInPreset[] = [
   { id: 'ux', label: 'UX', render: () => 'Improve the UX.' },
 ]
 
+const noop = () => {}
+function base() {
+  return { builtIns, customPresets: [] as CustomPreset[], busy: false, onLoadBuiltIn: noop, onUseCustom: noop, onDeleteCustom: noop, onNewPreset: noop }
+}
 /** Open the Presets dropdown so its portalled items render. */
 function openMenu() {
   fireEvent.click(screen.getByRole('button', { name: /Presets/ }))
 }
 
 describe('PresetMenu (#649)', () => {
-  test('loads a built-in preset when its menu item is chosen', () => {
+  test('loads a built-in preset when its item is chosen', () => {
     const onLoadBuiltIn = vi.fn()
-    render(
-      <PresetMenu builtIns={builtIns} customPresets={[]} currentPrompt="" busy={false} onLoadBuiltIn={onLoadBuiltIn} onUseCustom={() => {}} onChangeCustom={() => {}} />,
-    )
+    render(<PresetMenu {...base()} onLoadBuiltIn={onLoadBuiltIn} />)
     openMenu()
     fireEvent.click(screen.getByText('Research'))
     expect(onLoadBuiltIn).toHaveBeenCalledWith(builtIns[0])
   })
 
-  test('loads a saved preset when its menu item is chosen', () => {
+  test('loads a saved preset when its item is chosen', () => {
     const onUseCustom = vi.fn()
     const saved = preset('a', 'Deep review', 'Audit this.')
-    render(
-      <PresetMenu builtIns={builtIns} customPresets={[saved]} currentPrompt="" busy={false} onLoadBuiltIn={() => {}} onUseCustom={onUseCustom} onChangeCustom={() => {}} />,
-    )
+    render(<PresetMenu {...base()} customPresets={[saved]} onUseCustom={onUseCustom} />)
     openMenu()
     fireEvent.click(screen.getByText('Deep review'))
     expect(onUseCustom).toHaveBeenCalledWith(saved)
   })
 
   test('deletes a saved preset by id', () => {
-    const onChangeCustom = vi.fn()
-    render(
-      <PresetMenu builtIns={builtIns} customPresets={[preset('a', 'One', 'x'), preset('b', 'Two', 'y')]} currentPrompt="" busy={false} onLoadBuiltIn={() => {}} onUseCustom={() => {}} onChangeCustom={onChangeCustom} />,
-    )
+    const onDeleteCustom = vi.fn()
+    render(<PresetMenu {...base()} customPresets={[preset('a', 'One', 'x')]} onDeleteCustom={onDeleteCustom} />)
     openMenu()
     fireEvent.click(screen.getByRole('button', { name: 'Delete preset One' }))
-    expect(onChangeCustom).toHaveBeenCalledWith([preset('b', 'Two', 'y')])
+    expect(onDeleteCustom).toHaveBeenCalledWith('a')
   })
 
-  test('New preset opens the inline panel, prefilled from the current editor text, and saves', () => {
-    const onChangeCustom = vi.fn()
-    render(
-      <PresetMenu builtIns={builtIns} customPresets={[]} currentPrompt="my crafted prompt" busy={false} onLoadBuiltIn={() => {}} onUseCustom={() => {}} onChangeCustom={onChangeCustom} />,
-    )
+  test('New preset asks the parent to open the create panel', () => {
+    const onNewPreset = vi.fn()
+    render(<PresetMenu {...base()} onNewPreset={onNewPreset} />)
     openMenu()
     fireEvent.click(screen.getByText('New preset…'))
-    expect((screen.getByPlaceholderText(/prompt this preset runs/i) as HTMLTextAreaElement).value).toBe('my crafted prompt')
-    fireEvent.change(screen.getByPlaceholderText('Preset name'), { target: { value: 'My preset' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Save preset' }))
-    const savedList = onChangeCustom.mock.calls[0]![0] as CustomPreset[]
-    expect({ label: savedList[0]!.label, prompt: savedList[0]!.prompt }).toEqual({ label: 'My preset', prompt: 'my crafted prompt' })
-    expect(savedList[0]!.id).toBeTruthy()
+    expect(onNewPreset).toHaveBeenCalledTimes(1)
   })
 })

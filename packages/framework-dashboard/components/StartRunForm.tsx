@@ -13,6 +13,8 @@ import { usePreferences, updatePreferences, autopilotEnabled } from '../lib/pref
 import { useLoaded } from '../lib/use-async.js'
 import { PromptEditor, type PromptEditorHandle } from './PromptEditor.js'
 import { PresetMenu } from './PresetMenu.js'
+import { PresetCreatePanel } from './PresetCreatePanel.js'
+import { PickerMenu } from './PickerMenu.js'
 import { SystemPromptDisclosure } from './SystemPromptDisclosure.js'
 import { OptionToggle, type OptionRow } from './OptionToggle.js'
 import { Button } from './ui/button.js'
@@ -37,6 +39,14 @@ const MODELS: { value: string; label: string }[] = [
   { value: 'opus', label: 'Opus' },
   { value: 'sonnet', label: 'Sonnet' },
   { value: 'haiku', label: 'Haiku' },
+]
+
+// The coding agent that drives the run (#650): maps to `--agent`. Mirrors AGENTS in the
+// framework's agent.ts — kept as a client const so the dashboard bundle never imports the
+// node-only driver layer. `claude` is the default (empty flag).
+const AGENTS: { value: string; label: string }[] = [
+  { value: 'claude', label: 'Claude Code' },
+  { value: 'codex', label: 'Codex' },
 ]
 
 // Start a run in the selected project (#405): the one write that goes through the daemon's
@@ -81,7 +91,9 @@ export function StartRunForm({
   const onBeforeMergeableQuality = preferences.onBeforeMergeableQuality ?? false
   const browser = preferences.browser ?? false
   const model = preferences.model ?? '' // #628: empty = the driver's default model
+  const agent = preferences.agent ?? 'claude' // #650: which coding agent drives the run
   const customPresets = preferences.customPresets ?? [] // #626: the user's own saved prompts
+  const [addingPreset, setAddingPreset] = useState(false) // #649: the full-width "New preset" panel
 
   // Context selector (#439/#314): the agent can reach every registered repo, so ticking a
   // subset narrows its focus — the picked paths become one `Context:` line in the system
@@ -110,6 +122,7 @@ export function StartRunForm({
       ...(onBeforeMergeableQuality ? { onBeforeMergeable: true } : {}),
       ...(browser ? { browser: true } : {}),
       ...(model ? { model } : {}),
+      ...(agent && agent !== 'claude' ? { agent } : {}),
       ...(context.size ? { context: [...context] } : {}),
     }
   }
@@ -194,22 +207,12 @@ export function StartRunForm({
         disabled={busy}
       />
 
-      <SystemPromptDisclosure
-        prompt={prompt}
-        disabled={vanilla}
-        onDisabledChange={value => updatePreferences({ vanilla: value })}
-        autopilot={autopilot}
-        eco={eco && !vanilla ? ecoDrops : undefined}
-        context={[...context]}
-        busy={busy}
-      />
-
+      {/* Run controls, directly under the textarea (#649/#650): presets, agent, and model as
+          one set of matching dropdowns. */}
       <div className="mt-2 flex flex-wrap items-center gap-1.5">
-        {/* Presets in one dropdown (#649): built-in + saved (#626) + "New preset". */}
         <PresetMenu
           builtIns={PRESETS}
           customPresets={customPresets}
-          currentPrompt={prompt}
           busy={busy}
           onLoadBuiltIn={p => {
             editorRef.current?.loadTemplate(p.render())
@@ -219,25 +222,35 @@ export function StartRunForm({
             editorRef.current?.loadTemplate(preset.prompt)
             loadPreset(preset.label)
           }}
-          onChangeCustom={next => updatePreferences({ customPresets: next })}
+          onDeleteCustom={id => updatePreferences({ customPresets: customPresets.filter(p => p.id !== id) })}
+          onNewPreset={() => setAddingPreset(true)}
         />
-        {/* Model picker (#628): sits with the presets under the textarea; persists as a preference. */}
-        <label className="ml-auto flex items-center gap-1.5 text-xs text-muted-foreground" title="Model to run on (passed as --model)">
-          Model
-          <select
-            value={model}
-            disabled={busy}
-            onChange={e => updatePreferences({ model: e.target.value })}
-            className="rounded-md border border-border bg-background px-2 py-1 text-xs text-foreground disabled:opacity-50"
-          >
-            {MODELS.map(m => (
-              <option key={m.value} value={m.value}>
-                {m.label}
-              </option>
-            ))}
-          </select>
-        </label>
+        {/* Agent (#650) + Model (#628): which coding agent drives the run and on what model. */}
+        <PickerMenu value={agent} options={AGENTS} onChange={a => updatePreferences({ agent: a })} busy={busy} title="Coding agent (Claude Code or Codex)" />
+        <PickerMenu value={model} options={MODELS} onChange={m => updatePreferences({ model: m })} busy={busy} title="Model to run on (passed as --model)" />
       </div>
+
+      {addingPreset && (
+        <PresetCreatePanel
+          currentPrompt={prompt}
+          busy={busy}
+          onCancel={() => setAddingPreset(false)}
+          onSave={preset => {
+            updatePreferences({ customPresets: [...customPresets, preset] })
+            setAddingPreset(false)
+          }}
+        />
+      )}
+
+      <SystemPromptDisclosure
+        prompt={prompt}
+        disabled={vanilla}
+        onDisabledChange={value => updatePreferences({ vanilla: value })}
+        autopilot={autopilot}
+        eco={eco && !vanilla ? ecoDrops : undefined}
+        context={[...context]}
+        busy={busy}
+      />
 
       <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1.5 text-xs text-muted-foreground">
         {mainOptions.map(o => (

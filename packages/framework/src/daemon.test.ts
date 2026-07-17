@@ -66,6 +66,10 @@ test('startOptionFlags maps only enabled Global options to CLI flags (#314)', ()
   assert.deepEqual(startOptionFlags({ model: 'opus' }), ['--model', 'opus'])
   assert.deepEqual(startOptionFlags({ model: '  sonnet  ' }), ['--model', 'sonnet'])
   assert.deepEqual(startOptionFlags({ model: '   ' }), [])
+  // Agent (#650): only non-default codex emits --agent; claude is the CLI default -> no flag.
+  assert.deepEqual(startOptionFlags({ agent: 'codex' }), ['--agent', 'codex'])
+  assert.deepEqual(startOptionFlags({ agent: 'claude' }), [])
+  assert.deepEqual(startOptionFlags({ agent: '   ' }), [])
 })
 
 const logEvent = (message: string): FrameworkEvent => ({ kind: 'log', message })

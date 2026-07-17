@@ -59,6 +59,8 @@ export interface Preferences {
   notifyBrowser?: boolean
   /** The model to run on (#628), e.g. `opus` / `sonnet`; maps to a run's `--model`. Absent = the driver's default. */
   model?: string
+  /** Which coding agent drives the run (#650): `claude` or `codex`; maps to `--agent`. Absent = the default (`claude`). */
+  agent?: string
   /**
    * Post a Discord message when a new item lands on the "needs you" queue (#627). Absent = off:
    * unlike the in-browser toggle, Discord reaches you when no dashboard is open, so it is opt-in.
@@ -179,6 +181,9 @@ const PREFERENCE_KEYS = [
 
 /** Keep only the known preference fields, so a hand-edited or browser-supplied
  * object never lands junk (or the wrong type) in the user's home file. */
+/** The coding agents the dashboard offers (#650); mirrors AGENTS in agent.ts, kept local. */
+const KNOWN_AGENTS = ['claude', 'codex']
+
 function sanitizePreferences(value: unknown): Preferences {
   if (typeof value !== 'object' || value === null) return {}
   const input = value as Record<string, unknown>
@@ -186,9 +191,12 @@ function sanitizePreferences(value: unknown): Preferences {
   for (const key of PREFERENCE_KEYS) {
     if (typeof input[key] === 'boolean') preferences[key] = input[key] as boolean
   }
-  // `model` (#628) is the one string preference; the rest are booleans. A blank string is "no
+  // `model` (#628) is a free-form string preference; the rest are booleans. A blank string is "no
   // choice", same as absent, so it is dropped rather than persisted.
   if (typeof input['model'] === 'string' && input['model'].trim()) preferences.model = input['model'].trim()
+  // `agent` (#650) is constrained to the known set so junk never reaches the run; mirrors AGENTS
+  // in agent.ts (kept local so the registry doesn't import the driver layer). Default = claude.
+  if (typeof input['agent'] === 'string' && KNOWN_AGENTS.includes(input['agent'])) preferences.agent = input['agent']
   const customPresets = sanitizeCustomPresets(input['customPresets'])
   if (customPresets.length) preferences.customPresets = customPresets
   const consumptionLimits = sanitizeConsumptionLimits(input['consumptionLimits'])
