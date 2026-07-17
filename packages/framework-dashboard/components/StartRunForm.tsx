@@ -294,27 +294,31 @@ export function StartRunForm({
             Context{contextSummary && <span className="text-primary"> · {contextSummary}</span>}
           </DisclosureToggle>
           {showContext && (
-            <div className="mt-2 space-y-2 rounded border border-border p-3">
+            <div className="mt-2 grid grid-cols-1 gap-4 rounded border border-border p-3 sm:grid-cols-2">
+              {/* Projects: repo checkboxes. The agent can still reach every repo; ticking some
+                  just narrows its focus (kept in the heading's tooltip). */}
+              <div>
+                <p className="mb-1.5 text-muted-foreground/80" title="The agent can still reach every repo; ticking some just narrows its focus.">
+                  Projects
+                </p>
+                <div className="flex flex-col gap-1">
+                  {projects.map(p => (
+                    <label key={p.id} className="flex cursor-pointer items-center gap-1.5" title={p.path}>
+                      <input type="checkbox" checked={context.has(p.path)} onChange={() => toggleContext(p.path)} disabled={busy} />
+                      <span className="truncate">{p.name}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
               {/* Files picked via a `#` mention or the file tree (#661): removable with an X. */}
-              {contextFiles.length > 0 && (
-                <div>
-                  <p className="mb-1 text-muted-foreground/80">Files</p>
+              <div>
+                <p className="mb-1 text-muted-foreground/80">Files</p>
+                {contextFiles.length > 0 ? (
                   <ContextFiles files={contextFiles} onRemove={toggleContext} busy={busy} />
-                </div>
-              )}
-              {projects.length > 0 && (
-                <div>
-                  <p className="mb-1.5 text-muted-foreground/80">Focus the agent on these repos (it can still reach the rest):</p>
-                  <div className="flex flex-col gap-1">
-                    {projects.map(p => (
-                      <label key={p.id} className="flex cursor-pointer items-center gap-1.5" title={p.path}>
-                        <input type="checkbox" checked={context.has(p.path)} onChange={() => toggleContext(p.path)} disabled={busy} />
-                        <span className="truncate">{p.name}</span>
-                      </label>
-                    ))}
-                  </div>
-                </div>
-              )}
+                ) : (
+                  <p className="text-muted-foreground/60">None yet — add with # or the Files tab.</p>
+                )}
+              </div>
             </div>
           )}
         </div>
