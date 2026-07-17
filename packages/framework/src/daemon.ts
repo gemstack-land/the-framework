@@ -1,6 +1,6 @@
 import { spawn, type ChildProcess } from 'node:child_process'
 import { mkdir, readFile, writeFile, rm, stat } from 'node:fs/promises'
-import { basename, dirname, join, resolve } from 'node:path'
+import { basename, dirname, join, resolve, relative, isAbsolute } from 'node:path'
 import type { FrameworkEvent } from './events.js'
 import { FRAMEWORK_DIR, reconcileOrphanedRuns } from './store/index.js'
 import { startDashboard, type Dashboard, type StartRunKind, type StartRunOptions, type StartRunResult, type AddProjectResult, type PreviewResult, type PreviewStatus } from './dashboard/index.js'
@@ -79,15 +79,26 @@ function spawnDetached(binPath: string, args: string[]): ChildProcess {
   return child
 }
 
+/** True when `child` lives strictly inside `parent` (not equal, not outside). */
+export function isNestedWithin(child: string, parent: string): boolean {
+  const rel = relative(parent, child)
+  return rel !== '' && !rel.startsWith('..') && !isAbsolute(rel)
+}
+
 /**
  * Make sure an activated home workspace shows up in the Projects list (#392). Best-effort
  * and idempotent (addProject dedupes by path), so it never blocks the daemon coming up.
  * Called both by the foreground daemon and by `framework --daemon`'s launcher.
+ *
+ * Skips a cwd that lives inside an already-tracked project (#647): the daemon creates
+ * `.the-framework/` for its own state, so running it from a subfolder of a repo (e.g. the
+ * package dir the binary lives in) would otherwise keep re-adding a nested duplicate.
  */
 export async function registerHomeProject(cwd: string, env: NodeJS.ProcessEnv = process.env): Promise<void> {
-  if (await isActivated(cwd).catch(() => false)) {
-    await addProject(cwd, new Date().toISOString(), undefined, env).catch(() => {})
-  }
+  if (!(await isActivated(cwd).catch(() => false))) return
+  const existing = await listProjects(undefined, env).catch(() => [])
+  if (existing.some(p => isNestedWithin(cwd, p.path))) return
+  await addProject(cwd, new Date().toISOString(), undefined, env).catch(() => {})
 }
 
 /**
