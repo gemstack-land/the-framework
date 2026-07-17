@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import { ChevronDown, Check } from 'lucide-react'
 import { cn } from '../lib/utils.js'
 import { buttonVariants } from './ui/button.js'
@@ -11,82 +12,90 @@ import {
   DropdownMenuSubContent,
 } from './ui/dropdown-menu.js'
 
-// One dropdown for both the coding agent (#650) and the model (#628), each in its own submenu,
-// styled like the Presets menu so the run controls read as one set. The trigger shows the current
-// selections; a submenu item sets its value and the active one is checked.
+// The run's agent + model as one tree (#650/#656/#658): the top level is the coding agents, and
+// each agent's submenu holds only its own models. Picking a model sets both the agent and the
+// model together, so an incompatible pair (e.g. Codex + a Claude model) can't be chosen. The
+// trigger shows the current agent's logo then the model.
 
-export interface PickerOption {
+export interface ModelOption {
   value: string
   label: string
 }
 
-function labelOf(options: PickerOption[], value: string): string {
-  return (options.find(o => o.value === value) ?? options[0])?.label ?? ''
+export interface AgentOption {
+  value: string
+  label: string
+  /** The agent's logo, shown on the trigger and beside its name (#656). */
+  icon?: ReactNode
+  /** The models this agent offers; the first is its default. */
+  models: ModelOption[]
 }
 
-/** A submenu of single-select options with a check on the active one. */
-function OptionSubmenu({
-  heading,
-  options,
-  value,
-  onChange,
-}: {
-  heading: string
-  options: PickerOption[]
-  value: string
-  onChange: (value: string) => void
-}) {
-  return (
-    <DropdownMenuSub>
-      <DropdownMenuSubTrigger>
-        <span className="flex-1">{heading}</span>
-        <span className="text-[var(--color-muted-foreground)]">{labelOf(options, value)}</span>
-      </DropdownMenuSubTrigger>
-      <DropdownMenuSubContent>
-        {options.map(o => (
-          <DropdownMenuItem key={o.value} onClick={() => onChange(o.value)}>
-            <Check className={cn('h-3.5 w-3.5', o.value === value ? 'opacity-100' : 'opacity-0')} />
-            {o.label}
-          </DropdownMenuItem>
-        ))}
-      </DropdownMenuSubContent>
-    </DropdownMenuSub>
-  )
+function agentOf(agents: AgentOption[], value: string): AgentOption | undefined {
+  return agents.find(a => a.value === value) ?? agents[0]
+}
+
+/** The label for the current model within an agent's own list, falling back to its default. */
+function modelLabel(agent: AgentOption | undefined, model: string): string {
+  if (!agent) return ''
+  return (agent.models.find(m => m.value === model) ?? agent.models[0])?.label ?? ''
 }
 
 export function AgentModelMenu({
+  agents,
   agent,
-  agentOptions,
-  onAgentChange,
   model,
-  modelOptions,
-  onModelChange,
+  onChange,
   busy,
 }: {
+  agents: AgentOption[]
   agent: string
-  agentOptions: PickerOption[]
-  onAgentChange: (value: string) => void
   model: string
-  modelOptions: PickerOption[]
-  onModelChange: (value: string) => void
+  /** Set the agent and model together (a model is always picked within its agent). */
+  onChange: (agent: string, model: string) => void
   busy: boolean
 }) {
+  const current = agentOf(agents, agent)
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
         type="button"
         disabled={busy}
-        title="Coding agent and model for the run"
+        title={`Agent: ${current?.label ?? ''} · Model: ${modelLabel(current, model)}`}
         className={cn(buttonVariants({ variant: 'outline', size: 'xs' }), 'gap-1.5 font-normal')}
       >
-        {labelOf(agentOptions, agent)}
+        {current?.icon ? (
+          <span className="flex h-4 w-4 items-center justify-center">{current.icon}</span>
+        ) : (
+          current?.label
+        )}
         <span className="text-[var(--color-muted-foreground)]">·</span>
-        {labelOf(modelOptions, model)}
+        {modelLabel(current, model)}
         <ChevronDown className="h-3.5 w-3.5 opacity-70" />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start">
-        <OptionSubmenu heading="Agent" options={agentOptions} value={agent} onChange={onAgentChange} />
-        <OptionSubmenu heading="Model" options={modelOptions} value={model} onChange={onModelChange} />
+        {agents.map(a => (
+          <DropdownMenuSub key={a.value}>
+            <DropdownMenuSubTrigger>
+              <Check className={cn('h-3.5 w-3.5 shrink-0', a.value === agent ? 'opacity-100' : 'opacity-0')} />
+              {a.icon && <span className="flex h-4 w-4 items-center justify-center">{a.icon}</span>}
+              <span className="flex-1">{a.label}</span>
+            </DropdownMenuSubTrigger>
+            <DropdownMenuSubContent>
+              {a.models.map(m => (
+                <DropdownMenuItem key={m.value} onClick={() => onChange(a.value, m.value)}>
+                  <Check
+                    className={cn(
+                      'h-3.5 w-3.5 shrink-0',
+                      a.value === agent && m.value === model ? 'opacity-100' : 'opacity-0',
+                    )}
+                  />
+                  {m.label}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuSubContent>
+          </DropdownMenuSub>
+        ))}
       </DropdownMenuContent>
     </DropdownMenu>
   )
