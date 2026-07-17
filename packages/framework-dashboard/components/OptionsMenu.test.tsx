@@ -19,14 +19,14 @@ const mainOptions = (): OptionRow[] => [
 const ecoOptions = (): OptionRow[] => [{ key: 'ecoPlanning', label: 'Auto planning', title: 't', checked: false }]
 
 function open() {
-  fireEvent.click(screen.getByRole('button', { name: /Options/ }))
+  fireEvent.click(screen.getByRole('button', { name: /run options/i }))
 }
 
 describe('OptionsMenu (#654)', () => {
   test('the trigger badges how many options are on', () => {
     render(<OptionsMenu options={mainOptions()} ecoOptions={ecoOptions()} showEco={false} busy={false} />)
-    // Only Eco is checked -> the trigger reads "Options 1".
-    expect(screen.getByRole('button', { name: /Options/ }).textContent).toContain('1')
+    // Only Eco is checked -> the gear trigger shows a corner badge "1".
+    expect(screen.getByRole('button', { name: /run options/i }).textContent).toContain('1')
   })
 
   test('toggling an item writes the new value through', () => {
