@@ -199,6 +199,7 @@ export default function Page() {
           onSelect={selectRun}
           startTick={runStart.tick}
           startIntent={runStart.intent}
+          followLive={followLive}
         />
         <main className="flex min-w-0 flex-1 flex-col">{renderMain()}</main>
         <RightRail
