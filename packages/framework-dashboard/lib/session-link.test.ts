@@ -5,26 +5,23 @@ describe('describeSessionLink', () => {
   it('returns null when there is no link', () => {
     expect(describeSessionLink(null)).toBeNull()
     expect(describeSessionLink({})).toBeNull()
-    expect(describeSessionLink({ sessionId: 'abc', driver: 'claude' })).toBeNull()
+    expect(describeSessionLink({ sessionId: 'abc' })).toBeNull()
   })
 
-  it('labels the generic Claude Code entry honestly and surfaces the id separately (the bug)', () => {
-    const view = describeSessionLink({ sessionLink: 'https://claude.ai/code', sessionId: '532ccc4b', driver: 'claude' })
-    expect(view).toEqual({ href: 'https://claude.ai/code', label: 'Open Claude Code ↗', id: '532ccc4b' })
+  it('returns null for the generic Claude Code entry (opens the product page, not the session)', () => {
+    expect(describeSessionLink({ sessionLink: 'https://claude.ai/code', sessionId: '532ccc4b' })).toBeNull()
   })
 
-  it('keeps "Open session (id)" for a real deep link that encodes the id', () => {
-    const view = describeSessionLink({ sessionLink: 'https://example.com/s/532ccc4b', sessionId: '532ccc4b', driver: 'claude' })
-    expect(view).toEqual({ href: 'https://example.com/s/532ccc4b', label: 'Open session (532ccc4b) ↗', id: null })
+  it('returns null for a literal link that does not encode the id', () => {
+    expect(describeSessionLink({ sessionLink: 'https://foo.test', sessionId: 'x1' })).toBeNull()
   })
 
-  it('does not claim a session before the id is reported', () => {
-    const view = describeSessionLink({ sessionLink: 'https://claude.ai/code', driver: 'claude' })
-    expect(view).toEqual({ href: 'https://claude.ai/code', label: 'Open Claude Code ↗', id: null })
+  it('returns null before the id is reported', () => {
+    expect(describeSessionLink({ sessionLink: 'https://claude.ai/code' })).toBeNull()
   })
 
-  it('for a non-Claude custom link, shows a neutral label plus the id', () => {
-    const view = describeSessionLink({ sessionLink: 'https://foo.test', sessionId: 'x1', driver: 'codex' })
-    expect(view).toEqual({ href: 'https://foo.test', label: 'Open session ↗', id: 'x1' })
+  it('returns a link only for a real deep link that encodes the id', () => {
+    const view = describeSessionLink({ sessionLink: 'https://example.com/s/532ccc4b', sessionId: '532ccc4b' })
+    expect(view).toEqual({ href: 'https://example.com/s/532ccc4b', label: 'Open session (532ccc4b) ↗' })
   })
 })

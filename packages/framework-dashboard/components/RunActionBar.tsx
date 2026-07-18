@@ -19,9 +19,9 @@ export function RunActionBar({ projectId, events }: { projectId: string; events:
   // and a failed stop surfaces instead of silently doing nothing.
   const { busy, error, run } = useAction()
   const active = isRunActive(events)
+  // Only a real per-session deep link is shown; the generic claude.ai/code entry is a dead end,
+  // so Claude Code runs get no Open button (the session id is still in the event log).
   const session = describeSessionLink(sessionInfo(events))
-  // The bar's buttons are icon-only, so the link's label rides in the tooltip (drop its arrow).
-  const sessionTip = session && (session.id ? `${session.label.replace(' ↗', '')} — session ${session.id}` : session.label.replace(' ↗', ''))
 
   return (
     <div className="flex flex-wrap items-center gap-2 border-b border-border px-4 py-2">
@@ -59,7 +59,7 @@ export function RunActionBar({ projectId, events }: { projectId: string; events:
             >
               <ExternalLink className="h-3.5 w-3.5" />
             </TooltipTrigger>
-            <TooltipContent>{sessionTip}</TooltipContent>
+            <TooltipContent>{session.label.replace(' ↗', '')}</TooltipContent>
           </Tooltip>
         )}
       </TooltipProvider>

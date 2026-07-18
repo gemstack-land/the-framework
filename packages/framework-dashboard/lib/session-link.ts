@@ -1,37 +1,29 @@
-// Honest labeling for a run's "Open session" link. Only a URL that actually encodes the
-// session id opens *this* session. A headless Claude Code run has no per-session URL — the
-// framework defaults to the generic app entry point (claude.ai/code) as an "open the app"
-// affordance — so surfacing it as "Open session (<id>)" wrongly implies the link resolves to
-// that id. Here we detect the difference and describe the link honestly; the id, when it is
-// not encoded in the URL, is returned separately so the UI can show it as plain text.
+// A run's "Open session" link — offered only when it actually opens the run. A headless Claude
+// Code run has no per-session URL: the framework defaults to the generic claude.ai/code entry,
+// which opens the product page, not the session, so it isn't worth an action (the session id is
+// still visible in the event log). A link is returned only when the URL genuinely encodes the id —
+// a per-session deep link the user configured via `--session-link "…/{sessionId}"`.
 
 /** The minimal shape of `sessionInfo(events)` this needs, kept structural so it never
  *  couples to the framework's exact type. */
 export interface SessionLike {
   sessionLink?: string | undefined
   sessionId?: string | undefined
-  driver?: string | undefined
 }
 
 export interface SessionLinkView {
-  /** The URL to open. */
+  /** A real per-session deep link to open. */
   href: string
-  /** The honest link text. */
+  /** The link text. */
   label: string
-  /** The session id to show as separate text, or null when the link already encodes it. */
-  id: string | null
 }
 
-/** Describe a run's session link, or null when there is no link to show. */
+/** A run's per-session deep link, or null when there is none worth showing. */
 export function describeSessionLink(session?: SessionLike | null): SessionLinkView | null {
   const href = session?.sessionLink
-  if (!href) return null
   const id = session?.sessionId
-  const deep = Boolean(id && href.includes(id))
-  const label = deep
-    ? `Open session (${id}) ↗`
-    : session?.driver === 'claude'
-      ? 'Open Claude Code ↗'
-      : 'Open session ↗'
-  return { href, label, id: !deep && id ? id : null }
+  // Only a URL that actually encodes the id opens *this* session; anything else (the generic
+  // claude.ai/code entry, or a literal link) is a dead end, so show nothing.
+  if (!href || !id || !href.includes(id)) return null
+  return { href, label: `Open session (${id}) ↗` }
 }

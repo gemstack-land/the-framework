@@ -80,16 +80,14 @@ export function RunOverview({ events, showSessionLink = true }: { events: Framew
       )}
 
       {sessionLink && (
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs md:col-span-2">
-          <a href={sessionLink.href} target="_blank" rel="noreferrer" className="text-primary underline underline-offset-2">
-            {sessionLink.label}
-          </a>
-          {sessionLink.id && (
-            <span className="text-muted-foreground" title="Claude Code session id">
-              session <code className="font-mono text-[11px]">{sessionLink.id}</code>
-            </span>
-          )}
-        </div>
+        <a
+          href={sessionLink.href}
+          target="_blank"
+          rel="noreferrer"
+          className="text-xs text-primary underline underline-offset-2 md:col-span-2"
+        >
+          {sessionLink.label}
+        </a>
       )}
     </div>
   )
