@@ -648,6 +648,12 @@ export interface AwaitRoundsOptions {
    * ends when the agent stops asking — byte-identical to before this existed.
    */
   messages?: RunMessages | undefined
+  /**
+   * Resume a prior session on the OPENING prompt (#720): when the driver session was
+   * seeded with a finished run's id, this makes the first message `--resume` that
+   * conversation (full prior context) instead of starting fresh. Default off.
+   */
+  resume?: boolean | undefined
 }
 
 /** The shared deps of a turn that may hit an await gate or a chat message. */
@@ -722,7 +728,9 @@ export async function runAwaitRounds(opts: AwaitRoundsOptions): Promise<AwaitRou
   const deps: AwaitTurnDeps = { requestChoice: opts.requestChoice, emit, emitTurnSignals, signal: opts.signal }
   const signalOpt = opts.signal ? { signal: opts.signal } : {}
 
-  const opening = await session.prompt(opts.prompt, signalOpt)
+  // Resuming a finished run (#720): the opening message continues the seeded session, so the
+  // agent replies with full prior context. A fresh run leaves `resume` unset — unchanged.
+  const opening = await session.prompt(opts.prompt, { ...signalOpt, ...(opts.resume ? { resume: true } : {}) })
   emitTurnSignals(opening.text)
   const drained = await drainGates(session, opening, deps)
   if (drained.declined) return { text: drained.turn.text, declined: true, exhausted: false }

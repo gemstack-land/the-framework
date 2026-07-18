@@ -228,6 +228,8 @@ export interface CliOptions {
   agent: AgentName
   cwd?: string | undefined
   model?: string | undefined
+  /** `--resume-session <id>` (#720): continue a finished run's agent session — the prompt resumes that conversation (full prior context). Set by the dashboard when you message a run that has ended. */
+  resumeSession?: string | undefined
   scope: 'prototype' | 'full'
   preset?: string | undefined
   autopilot: boolean
@@ -425,6 +427,9 @@ export function parseArgs(argv: string[]): CliOptions {
         break
       case '--model':
         opts.model = argv[++i]
+        break
+      case '--resume-session':
+        opts.resumeSession = argv[++i]
         break
       case '--deploy':
         opts.deploy = argv[++i]
@@ -1219,6 +1224,7 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
         ...(opts.context.length ? { context: opts.context } : {}),
         ...(modeList.includes('autopilot') ? { autopilot: true } : {}),
         ...(sessionLink ? { sessionLink } : {}),
+        ...(opts.resumeSession ? { resumeSessionId: opts.resumeSession } : {}),
       })
       return {
         successLine: isResearch

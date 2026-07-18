@@ -50,6 +50,14 @@ export interface DriverStartOptions {
   /** Abort the whole session; disposing kills the underlying process. */
   signal?: AbortSignal
   /**
+   * Resume a prior agent session id (#720): seed the session so its very first
+   * prompt (with `resume`) continues that conversation instead of starting fresh.
+   * This is how a finished run is revived from the dashboard — its captured session
+   * id is threaded here so the opening message lands with the full prior context.
+   * A driver that can't resume ignores it and runs fresh (the best-effort contract).
+   */
+  resumeSessionId?: string
+  /**
    * Observe the agent's *own* progress as it works. Black-box granularity: we
    * forward these for visibility (the dashboard) but never branch control flow
    * on them. Isolated: a throwing callback must not break the run.

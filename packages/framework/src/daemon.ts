@@ -124,6 +124,10 @@ export function startOptionFlags(options: StartRunOptions): string[] {
   if (typeof options.agent === 'string' && options.agent.trim() && options.agent !== 'claude') {
     flags.push('--agent', options.agent.trim())
   }
+  // Resume a finished run's session (#720): the spawned run continues that conversation.
+  if (typeof options.resumeSession === 'string' && options.resumeSession.trim()) {
+    flags.push('--resume-session', options.resumeSession.trim())
+  }
   return flags
 }
 

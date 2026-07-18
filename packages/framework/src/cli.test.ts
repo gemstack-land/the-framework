@@ -84,6 +84,11 @@ test('parseArgs reads --browser (#452)', () => {
   assert.equal(parseArgs(['--browser', 'x']).browser, true)
 })
 
+test('parseArgs reads --resume-session to continue a finished run (#720)', () => {
+  assert.equal(parseArgs(['x']).resumeSession, undefined)
+  assert.equal(parseArgs(['prompt', 'keep going', '--resume-session', 'sess-42']).resumeSession, 'sess-42')
+})
+
 test('withBrowser folds chrome-devtools-mcp into driver options only when enabled (#452)', () => {
   const base = claudeDriverOptions({ skipPermissions: false })
   assert.equal(withBrowser(base, false).mcpServers, undefined)
