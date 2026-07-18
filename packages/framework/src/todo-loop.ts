@@ -6,7 +6,7 @@ import { requestChoices, runAwaitRounds } from './run.js'
 import { FLAT_TODO_FILE, findFlatTodo } from './tickets.js'
 import { createTurnSignalEmitter } from './turn-gate.js'
 
-export { FLAT_TODO_FILE, LEGACY_TODO_FILE, TICKETS_DIR, TICKETING_FORMAT_FILE, materializeTicketingFormat } from './tickets.js'
+export { FLAT_TODO_FILE, LEGACY_TICKETS_TODO_FILE, LEGACY_TODO_FILE, TICKETS_DIR, TICKETING_FORMAT_FILE, materializeTicketingFormat } from './tickets.js'
 
 /**
  * The backlog loop (#323): once the main work settles, consume the agent's own
@@ -57,8 +57,8 @@ export function parseTodoEntries(md: string): string[] {
 /**
  * The workspace's backlog files, best first: the most recently modified
  * session-scoped `TODO_<slug>.agent.md` (#323/#326), then the flat backlog
- * (`tickets/TODO.md`, or a legacy root `TODO.md`) — the same dual convention as
- * the doc sidebar.
+ * (`TODO-AGENTS.md`, or a legacy `tickets/TODO.md` / root `TODO.md`) — the same
+ * convention as the doc sidebar.
  */
 async function backlogCandidates(cwd: string): Promise<string[]> {
   let names: string[]
@@ -99,7 +99,7 @@ export async function appendTodoEntry(cwd: string, entry: string): Promise<strin
   try {
     const existing = await readFile(path, 'utf8').catch(() => '')
     const separator = existing === '' || existing.endsWith('\n') ? '' : '\n'
-    await mkdir(dirname(path), { recursive: true }) // fresh tickets/TODO.md needs its dir
+    await mkdir(dirname(path), { recursive: true }) // a legacy tickets/TODO.md still needs its dir
     await writeFile(path, `${existing}${separator}- [ ] ${entry}\n`, 'utf8')
     return name
   } catch {
