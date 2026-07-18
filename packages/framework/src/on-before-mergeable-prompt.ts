@@ -19,7 +19,7 @@ import { dropSection, type EcoOptions, type TfContext } from './system-prompt.js
  * valid JS. Same branch, same output, one fragment.
  *
  * Two sections: `## Maintenance` queues the quality presets, and `## Business knowledge`
- * (#537) asks the agent to fold what it learned back into {@link KNOWLEDGE_DOCS}.
+ * (#537) asks the agent to fold what it learned back into {@link BUSINESS_KNOWLEDGE_DOCS}.
  */
 export const ON_BEFORE_MERGEABLE_PROMPT_TEMPLATE = ON_BEFORE_MERGEABLE_PROMPT
 

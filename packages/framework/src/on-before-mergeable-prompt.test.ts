@@ -2,7 +2,7 @@ import { strict as assert } from 'node:assert'
 import { test } from 'node:test'
 import { renderOnBeforeMergeablePrompt, ON_BEFORE_MERGEABLE_PROMPT_TEMPLATE } from './on-before-mergeable-prompt.js'
 import { TemplateFragmentError } from './prompt-template.js'
-import { KNOWLEDGE_DOCS } from './system-prompt.js'
+import { BUSINESS_KNOWLEDGE_DOCS } from './system-prompt.js'
 
 test('ON_BEFORE_MERGEABLE_PROMPT_TEMPLATE carries the #326 on-before-mergeable block', () => {
   assert.ok(ON_BEFORE_MERGEABLE_PROMPT_TEMPLATE.includes('TODO_FILE: `TODO_<SESSION_NAME>.agent.md`'))
@@ -12,12 +12,14 @@ test('ON_BEFORE_MERGEABLE_PROMPT_TEMPLATE carries the #326 on-before-mergeable b
   }
 })
 
-test('the business-knowledge section names every knowledge doc (#537)', () => {
-  // The two halves of #537 are authored apart: `## Context` lists the docs from the
-  // KNOWLEDGE_DOCS const, this prompt names them as markdown. Pin them together, or the
-  // agent gets told to read one set of files and update another.
+test('the business-knowledge section names every business-knowledge doc (#537)', () => {
+  // The two halves of #537 are authored apart: the `Context:` block lists the docs from the
+  // BUSINESS_KNOWLEDGE_DOCS const, this prompt names them as markdown. Pin them together, or
+  // the agent gets told to read one set of files and update another. Only the business-knowledge
+  // subset is pinned: the broader CONTEXT_DOCS (#683) also lists roadmap/queue pointers the
+  // agent reads but does not update at merge, so they are deliberately absent here.
   assert.ok(ON_BEFORE_MERGEABLE_PROMPT_TEMPLATE.includes('## Business knowledge'))
-  for (const doc of KNOWLEDGE_DOCS) {
+  for (const doc of BUSINESS_KNOWLEDGE_DOCS) {
     assert.ok(ON_BEFORE_MERGEABLE_PROMPT_TEMPLATE.includes(`\`${doc.path}\``), `missing ${doc.path}`)
   }
 })

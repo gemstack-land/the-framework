@@ -88,17 +88,44 @@ export interface TfContext {
 /** The neutral context used when a caller has none: empty prompt, no modes. */
 const DEFAULT_TF: TfContext = { prompt: '', params: {} }
 
+/** A project-context document: a repo-root path and the one-line gloss shown beside it (#559). */
+export interface ContextDoc {
+  path: string
+  comment: string
+}
+
+const DECISIONS_DOC: ContextDoc = { path: 'DECISIONS.md', comment: 'decisions taken, and why' }
+const KNOWLEDGE_BASE_DOC: ContextDoc = {
+  path: 'KNOWLEDGE-BASE.md',
+  comment: 'observed facts, non-obvious knowledge, and insights relevant to the project',
+}
+
 /**
- * The project-knowledge documents (#537): what the repo knows about itself, as markdown
- * that travels with the code. {@link systemPromptBlock} puts them in front of every run
- * as in-context paths; the on-before-mergeable prompt asks the agent to update them, which is what
- * keeps them current. Repo-root, because that is the agent's cwd and where the docs live.
- * Each carries the one-line gloss Rom wants shown alongside the path (#559). README is
- * left out: a repo's own `README.md` already covers the overview.
+ * The business-knowledge docs (#537): what the repo has learned about itself, which the
+ * agent both reads at the start of a run and folds new knowledge back into at merge. The
+ * on-before-mergeable prompt's `## Business knowledge` section names this exact set, so the
+ * agent is never told to read one set of files and update another (pinned by a test). A
+ * subset of {@link CONTEXT_DOCS}.
  */
-export const KNOWLEDGE_DOCS: readonly { path: string; comment: string }[] = [
-  { path: 'DECISIONS.md', comment: 'decisions taken, and why' },
-  { path: 'KNOWLEDGE-BASE.md', comment: 'knowledge and insights related to the project' },
+export const BUSINESS_KNOWLEDGE_DOCS: readonly ContextDoc[] = [DECISIONS_DOC, KNOWLEDGE_BASE_DOC]
+
+/**
+ * Everything the agent keeps in context at the start of a run (#683), which
+ * {@link systemPromptBlock} renders as the `Context:` bullets. A superset of
+ * {@link BUSINESS_KNOWLEDGE_DOCS}: it adds `GOAL.md` and the two roadmap/queue pointers the
+ * agent reads but does *not* fold knowledge back into — `tickets/**.md` (the potential work,
+ * whose file shape is `.the-framework/ticketing-format.md`, #684) and the `TODO-AGENTS.md`
+ * task queue. Repo-root paths, because that is the agent's cwd. README is left out: a repo's
+ * own `README.md` already covers the overview. The ticket-format path is inlined rather than
+ * imported from `tickets.ts`: this module must stay free of `node:fs` (it renders in the
+ * browser, #520), and a test pins the literal to `TICKETING_FORMAT_FILE`.
+ */
+export const CONTEXT_DOCS: readonly ContextDoc[] = [
+  DECISIONS_DOC,
+  { path: 'GOAL.md', comment: 'the goal of the project' },
+  KNOWLEDGE_BASE_DOC,
+  { path: 'tickets/**.md', comment: 'things to potentially work on; format: .the-framework/ticketing-format.md' },
+  { path: 'TODO-AGENTS.md', comment: 'the AI task queue' },
 ]
 
 /** The two halves of the rendered {@link SYSTEM_PROMPT_TEMPLATE}. */
@@ -201,13 +228,13 @@ export function systemPromptBlock(opts: SystemPromptOptions = {}): string {
   // The #439 context line goes first, so it frames whatever prompt follows (or stands
   // alone under `--vanilla`, where there is no built-in prompt to frame).
   const dirs = opts.context?.map(d => d.trim()).filter(Boolean) ?? []
-  // The knowledge docs ride with the built-in prompt, not with the user's dirs: they are
+  // The context docs ride with the built-in prompt, not with the user's dirs: they are
   // ours, and `--vanilla` means no framework-authored prompt at all (#547 rule 3). They
   // render as commented bullets under the dirs (#559), so the agent sees what each is for.
-  // `--vanilla` (antiLazyPill === false) drops both the framework's knowledge docs and its
+  // `--vanilla` (antiLazyPill === false) drops both the framework's context docs and its
   // built-in prompt; one boolean drives both so they can't fall out of step.
   const includeBuiltin = opts.antiLazyPill !== false
-  const docs = includeBuiltin ? KNOWLEDGE_DOCS : []
+  const docs = includeBuiltin ? CONTEXT_DOCS : []
   if (dirs.length || docs.length) {
     const head = `Context:${dirs.length ? ` ${dirs.join(', ')}` : ''}`
     const bullets = docs.map(d => `- \`${d.path}\` (${d.comment})`)

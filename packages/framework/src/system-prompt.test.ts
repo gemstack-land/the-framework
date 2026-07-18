@@ -5,17 +5,33 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
   composeRunSystem,
-  KNOWLEDGE_DOCS,
+  BUSINESS_KNOWLEDGE_DOCS,
+  CONTEXT_DOCS,
   renderSystemPrompt,
   systemPromptBlock,
   SYSTEM_PROMPT_TEMPLATE,
 } from './system-prompt.js'
+import { TICKETING_FORMAT_FILE } from './tickets.js'
 import { loadUserSystemPrompt, SYSTEM_PROMPT_FILE } from './system-prompt-file.js'
 
-/** The knowledge docs as the commented bullets they render to (#559). */
-const KNOWLEDGE_LINES = KNOWLEDGE_DOCS.map(d => `- \`${d.path}\` (${d.comment})`).join('\n')
-/** The `Context:` block the #537 knowledge docs stand up on their own, with no dirs picked. */
+/** The context docs as the commented bullets they render to (#559/#683). */
+const KNOWLEDGE_LINES = CONTEXT_DOCS.map(d => `- \`${d.path}\` (${d.comment})`).join('\n')
+/** The `Context:` block the context docs stand up on their own, with no dirs picked. */
 const KNOWLEDGE_CONTEXT = `Context:\n${KNOWLEDGE_LINES}`
+
+test('CONTEXT_DOCS is the #683 fragment: business knowledge plus the roadmap/queue pointers', () => {
+  const paths = CONTEXT_DOCS.map(d => d.path)
+  assert.deepEqual(paths, ['DECISIONS.md', 'GOAL.md', 'KNOWLEDGE-BASE.md', 'tickets/**.md', 'TODO-AGENTS.md'])
+  // The business-knowledge docs are a subset the agent also updates at merge.
+  for (const doc of BUSINESS_KNOWLEDGE_DOCS) assert.ok(paths.includes(doc.path), `missing ${doc.path}`)
+  // GOAL / tickets / TODO-AGENTS are read-only context, so they are not in the merge-update set.
+  const businessPaths = BUSINESS_KNOWLEDGE_DOCS.map(d => d.path)
+  for (const p of ['GOAL.md', 'tickets/**.md', 'TODO-AGENTS.md']) assert.ok(!businessPaths.includes(p))
+  // The ticket-format pointer is inlined here (this module stays node-free), so pin it to the
+  // canonical constant in tickets.ts (#684) — they must never drift.
+  const tickets = CONTEXT_DOCS.find(d => d.path === 'tickets/**.md')
+  assert.ok(tickets?.comment.includes(TICKETING_FORMAT_FILE), `expected the ${TICKETING_FORMAT_FILE} pointer`)
+})
 import { AWAIT_PROTOCOL, SIGNAL_PROTOCOL } from './turn-gate.js'
 
 test('loadUserSystemPrompt reads and trims SYSTEM.md', async () => {
