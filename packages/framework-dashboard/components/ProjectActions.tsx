@@ -61,7 +61,7 @@ export function ProjectActions({ projectId }: { projectId: string }) {
             >
               <Code className="h-3.5 w-3.5" />
             </TooltipTrigger>
-            <TooltipContent>Open in editor (code, or $FRAMEWORK_EDITOR)</TooltipContent>
+            <TooltipContent>Open in your preferred editor (set it in Options; falls back to $FRAMEWORK_EDITOR / code)</TooltipContent>
           </Tooltip>
           {/* Serve (#475): one click to serve the built result, alongside the other actions. */}
           <PreviewBar projectId={projectId} inline />

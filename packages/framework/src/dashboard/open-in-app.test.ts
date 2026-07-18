@@ -1,6 +1,6 @@
 import { strict as assert } from 'node:assert'
 import { test } from 'node:test'
-import { fileManagerCommand, editorCommand, openInApp } from './open-in-app.js'
+import { fileManagerCommand, editorCommand, openInApp, detectEditors, KNOWN_EDITORS } from './open-in-app.js'
 
 test('fileManagerCommand picks the OS reveal command', () => {
   assert.deepEqual(fileManagerCommand('/p', 'darwin'), { command: 'open', args: ['/p'] })
@@ -32,4 +32,21 @@ test('openInApp reports a friendly error when the command is missing', async () 
   })
   assert.equal(result.ok, false)
   assert.match((result as { error: string }).error, /not be found|not found/i)
+})
+
+test('openInApp opens the editor with the passed-in preference (#727)', async () => {
+  const calls: { command: string; args: string[] }[] = []
+  await openInApp('/repo', 'editor', async (command, args) => void calls.push({ command, args }), 'zed')
+  assert.deepEqual(calls[0], { command: 'zed', args: ['/repo'] })
+})
+
+test('detectEditors keeps only the probed-installed editors, in catalog order (#727)', async () => {
+  const installed = new Set(['cursor', 'code'])
+  const found = await detectEditors(async bin => installed.has(bin))
+  assert.deepEqual(
+    found.map(e => e.bin),
+    KNOWN_EDITORS.filter(e => installed.has(e.bin)).map(e => e.bin),
+  )
+  // Nothing installed -> empty list (the picker then shows only "Default").
+  assert.deepEqual(await detectEditors(async () => false), [])
 })

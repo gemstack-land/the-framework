@@ -1,11 +1,12 @@
 import { getContext } from 'telefunc'
 import { appendControl } from '../control.js'
 import { openInApp, type OpenTarget, type OpenResult } from '../dashboard/open-in-app.js'
-import { resolveProjectPath } from './context.js'
+import { resolveProjectPath, contextPreferences } from './context.js'
 import type { ChoiceBy } from '../events.js'
 import type { PreviewResult, PreviewStatus, StartRunKind, StartRunOptions, StartRunResult } from '../dashboard/types.js'
 import type { ServeTarget } from '../preview.js'
 import type { DashboardContext } from '../dashboard/telefunc-serve.js'
+import type { Preferences } from '../registry.js'
 
 // The write side behind the new dashboard (#405): steering a live run. The reverse of
 // the event stream — events flow run -> events.jsonl -> Channel -> browser; steering
@@ -114,5 +115,8 @@ export async function onPreviewStatus(projectId: string): Promise<PreviewStatus>
 export async function sendOpenInApp(projectId: string, target: OpenTarget): Promise<OpenResult> {
   const cwd = await resolveProjectPath(projectId)
   if (!cwd) return { ok: false, error: 'this project has no local path on this server' }
-  return openInApp(cwd, target)
+  // #727: honour the stored editor preference; absent falls back to $FRAMEWORK_EDITOR, then `code`.
+  const editor =
+    target === 'editor' ? (await contextPreferences()?.read().catch((): Preferences => ({})))?.editor : undefined
+  return openInApp(cwd, target, undefined, editor)
 }

@@ -220,6 +220,14 @@ test('writePreferences keeps a known agent and drops an unknown one (#650)', asy
   assert.deepEqual(await readPreferences(fs, ENV), {}) // dropped
 })
 
+test('writePreferences trims a preferred editor and drops a blank one (#727)', async () => {
+  const fs = memFs({ [FILE]: JSON.stringify([APP_A]) })
+  await writePreferences({ editor: '  cursor  ' }, fs, ENV)
+  assert.deepEqual(await readPreferences(fs, ENV), { editor: 'cursor' }) // trimmed
+  await writePreferences({ editor: '   ' }, fs, ENV) // blank = no choice
+  assert.deepEqual(await readPreferences(fs, ENV), {}) // dropped
+})
+
 test('writePreferences keeps well-formed custom presets and drops malformed ones (#626)', async () => {
   const fs = memFs({ [FILE]: JSON.stringify([APP_A]) })
   await writePreferences(

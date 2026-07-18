@@ -1,4 +1,5 @@
 import { contextPreferences } from './context.js'
+import { detectEditors, type EditorInfo } from '../dashboard/open-in-app.js'
 import type { Preferences } from '../registry.js'
 
 // The user-preferences surface behind the new dashboard (#410): the Global options (Autopilot,
@@ -30,4 +31,14 @@ export async function savePreferences(preferences: Preferences): Promise<SavePre
   } catch {
     return { ok: false, error: 'failed to save preferences' }
   }
+}
+
+/**
+ * The editors installed on this server (#727), for the "Preferred editor" picker. Detection reads
+ * the daemon's own PATH, so it is gated on the same store presence as the other preference RPCs:
+ * a public host (the relay) has no local checkout to open anyway, so it returns `[]`.
+ */
+export async function onEditors(): Promise<EditorInfo[]> {
+  if (!contextPreferences()) return []
+  return detectEditors().catch(() => [])
 }

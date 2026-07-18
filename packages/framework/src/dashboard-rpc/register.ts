@@ -3,7 +3,7 @@ import { onRuns, onRun, onDocs, onProjectLog, onQueue, onOverview, onInterventio
 import { sendStop, sendChoice, sendMessage, sendStart, sendPreview, onServeTargets, sendStopPreview, onPreviewStatus, sendOpenInApp } from './control.telefunc.js'
 import { onEvents } from './events.telefunc.js'
 import { onProjects, sendAddProject } from './projects.telefunc.js'
-import { onPreferences, savePreferences } from './preferences.telefunc.js'
+import { onPreferences, savePreferences, onEditors } from './preferences.telefunc.js'
 import { onQuota } from './quota.telefunc.js'
 
 // The client bakes each RPC key from the dashboard's source path (relative to its Vite
@@ -60,5 +60,6 @@ export function registerDashboardTelefunctions(appRootDir: string = process.cwd(
   reg(sendAddProject, 'sendAddProject', projects)
   reg(onPreferences, 'onPreferences', preferences)
   reg(savePreferences, 'savePreferences', preferences)
+  reg(onEditors, 'onEditors', preferences)
   reg(onQuota, 'onQuota', quota)
 }

@@ -4,4 +4,5 @@
 // `/server/preferences.telefunc.ts` — the exact key the daemon registers the impls under (see
 // framework's dashboard-rpc/register.ts). The telefunc Vite transform turns these named
 // re-exports into client RPC stubs.
-export { onPreferences, savePreferences } from '@gemstack/framework/dashboard-rpc'
+export { onPreferences, savePreferences, onEditors } from '@gemstack/framework/dashboard-rpc'
+export type { EditorInfo } from '@gemstack/framework/dashboard-rpc'

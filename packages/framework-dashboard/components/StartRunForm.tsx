@@ -10,6 +10,7 @@ import {
 import { sendStart } from '../server/control.telefunc.js'
 import { onProjects } from '../server/projects.telefunc.js'
 import { usePreferences, updatePreferences, autopilotEnabled } from '../lib/preferences.js'
+import { useDetectedEditors } from '../lib/editors.js'
 import { useLoaded } from '../lib/use-async.js'
 import { PromptEditor, type PromptEditorHandle } from './PromptEditor.js'
 import { PresetMenu } from './PresetMenu.js'
@@ -108,6 +109,8 @@ export function StartRunForm({
   const model = preferences.model ?? '' // #628: empty = the driver's default model
   const agent = preferences.agent ?? 'claude' // #650: which coding agent drives the run
   const customPresets = preferences.customPresets ?? [] // #626: the user's own saved prompts
+  const editor = preferences.editor // #727: preferred editor; undefined = $FRAMEWORK_EDITOR / code
+  const detectedEditors = useDetectedEditors() // #727: editors installed on the daemon's machine
   const [addingPreset, setAddingPreset] = useState(false) // #649: the full-width "New preset" panel
 
   // Context selector (#439/#314): the agent can reach every registered repo, so ticking a
@@ -268,7 +271,15 @@ export function StartRunForm({
           onNewPreset={() => setAddingPreset(true)}
         />
         {/* Global options (#314) as a gear-icon checkbox dropdown (#654/#668). */}
-        <OptionsMenu options={mainOptions} ecoOptions={ecoOptions} showEco={eco && !ecoDisabled} busy={busy} />
+        <OptionsMenu
+          options={mainOptions}
+          ecoOptions={ecoOptions}
+          showEco={eco && !ecoDisabled}
+          busy={busy}
+          editor={editor}
+          editors={detectedEditors}
+          onEditorChange={e => updatePreferences({ editor: e ?? '' })}
+        />
         {/* Start run at the end of the row (#668). */}
         <Button
           type="submit"

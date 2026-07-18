@@ -82,6 +82,9 @@ export interface Preferences {
   model?: string
   /** Which coding agent drives the run (#650): `claude` or `codex`; maps to `--agent`. Absent = the default (`claude`). */
   agent?: string
+  /** Preferred editor for "Open in editor" (#727): an editor CLI (e.g. `code`, `cursor`, `zed`).
+   * Absent falls back to `$FRAMEWORK_EDITOR`, then `code`. */
+  editor?: string
   /**
    * Post a Discord message when a new item lands on the "needs you" queue (#627). Absent = off:
    * unlike the in-browser toggle, Discord reaches you when no dashboard is open, so it is opt-in.
@@ -221,6 +224,10 @@ function sanitizePreferences(value: unknown): Preferences {
   // `agent` (#650) is constrained to the known set so junk never reaches the run; mirrors AGENTS
   // in agent.ts (kept local so the registry doesn't import the driver layer). Default = claude.
   if (typeof input['agent'] === 'string' && KNOWN_AGENTS.includes(input['agent'])) preferences.agent = input['agent']
+  // `editor` (#727) is a free-form CLI name, trimmed and length-capped so junk / a huge string
+  // never lands in the file. A blank string is "no choice" (fall back to env / `code`), so dropped.
+  if (typeof input['editor'] === 'string' && input['editor'].trim())
+    preferences.editor = input['editor'].trim().slice(0, 100)
   const customPresets = sanitizeCustomPresets(input['customPresets'])
   if (customPresets.length) preferences.customPresets = customPresets
   const consumptionLimits = sanitizeConsumptionLimits(input['consumptionLimits'])
