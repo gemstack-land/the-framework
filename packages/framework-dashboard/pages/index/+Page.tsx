@@ -140,7 +140,7 @@ export default function Page() {
 
   // The live run feed is owned here so both the main view and the right rail's choice gates
   // (#440) read one shared Telefunc Channel. Hooks run before the relay early return below.
-  const events = useLiveEvents(projectId)
+  const events = useLiveEvents(projectId, runStart.tick)
   const choices = projectId ? pendingChoices(events) : []
   const views = projectId ? agentViews(events) : []
 
