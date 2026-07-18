@@ -1002,7 +1002,10 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
   let store: RunStore | undefined
   if (opts.persist) {
     try {
-      store = await RunStore.open(cwd, { fresh: true })
+      // Seed the run's intent (its prompt) so the dashboard's Runs list labels it instead of
+      // showing "(no prompt)". A build run refines this via its scope event; a prompt/research
+      // run keeps it. Research with no "what" defaults to the same "this PR" the log title uses.
+      store = await RunStore.open(cwd, { fresh: true, intent: intent || (opts.research ? 'this PR' : '') })
     } catch (err) {
       io.err(`could not persist run state (${err instanceof Error ? err.message : String(err)}); continuing without it`)
     }

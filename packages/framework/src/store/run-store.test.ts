@@ -75,6 +75,19 @@ test('fresh open truncates the log and writes an initial meta snapshot', async (
   assert.equal(meta?.startedAt, AT)
 })
 
+test('fresh open seeds the run intent into the snapshot (so prompt runs are not "(no prompt)")', async () => {
+  const fs = memFs()
+  const store = await RunStore.open(CWD, { fs, fresh: true, now: AT, intent: 'what is your name' })
+  assert.equal((await store.readMeta())?.intent, 'what is your name')
+})
+
+test('a scope event still refines a seeded intent (build path)', async () => {
+  const fs = memFs()
+  const store = await RunStore.open(CWD, { fs, fresh: true, now: AT, intent: 'build a blog' })
+  await store.append({ kind: 'bootstrap', event: { type: 'scope', scope: 'full', intent: 'a blog with comments' } })
+  assert.equal(store.snapshot().intent, 'a blog with comments')
+})
+
 test('append writes one JSONL line per event and derives meta', async () => {
   const fs = memFs()
   const store = await RunStore.open(CWD, { fs, fresh: true, now: AT })
