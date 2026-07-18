@@ -185,7 +185,9 @@ export default function Page() {
           <NotificationsMenu />
         </div>
       </header>
-      <div className="flex min-h-0 flex-1">
+      {/* The workspace row is fixed-height: each column scrolls internally, so the row itself
+          must never scroll. overflow-hidden clips any stray horizontal bleed (no page X-scroll). */}
+      <div className="flex min-h-0 flex-1 overflow-hidden">
         <ProjectsSidebar
           selectedId={projectId}
           onSelect={selectProject}
