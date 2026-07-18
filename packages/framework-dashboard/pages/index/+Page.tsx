@@ -159,7 +159,7 @@ export default function Page() {
     if (!projectId) return <DashboardPage onSelectProject={selectProject} interventions={interventions} />
     if (runId === null) {
       // Just pressed Start: follow the run's live output until the poll adopts its real id above.
-      if (followLive) return <RunLive projectId={projectId} events={events} />
+      if (followLive) return <RunLive projectId={projectId} events={events} files={files} addContext={addContext} />
       return (
         <ProjectHome
           projectId={projectId}
@@ -172,7 +172,7 @@ export default function Page() {
         />
       )
     }
-    if (selectedRun?.status === 'running') return <RunLive projectId={projectId} events={events} />
+    if (selectedRun?.status === 'running') return <RunLive projectId={projectId} events={events} files={files} addContext={addContext} />
     return <RunReplay projectId={projectId} runId={runId} />
   }
 

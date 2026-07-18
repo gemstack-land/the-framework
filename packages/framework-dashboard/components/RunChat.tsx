@@ -1,50 +1,59 @@
 import { useRef, useState } from 'react'
-import { PromptEditor, type PromptEditorHandle } from './PromptEditor.js'
-import { Button } from './ui/button.js'
+import type { ProjectSummary } from '@gemstack/framework'
+import { Composer, type ComposerHandle } from './Composer.js'
 import { sendMessage } from '../server/control.telefunc.js'
+import { onProjects } from '../server/projects.telefunc.js'
+import { useLoaded } from '../lib/use-async.js'
 
-// The live-chat composer (#714): send more messages to a running run. Reuses the same Tiptap
-// PromptEditor the launcher uses, so `/` actions and `<` tags work here too; on submit it writes
-// a `message` control entry that the run drains between turns (continuing the same session via
-// --resume). Only rendered inside RunLive, i.e. while the run is running — a finished run replays
-// without it. Presets/mentions are dropped here (a mid-run message is plain instruction).
-export function RunChat({ projectId }: { projectId: string }) {
-  const editorRef = useRef<PromptEditorHandle>(null)
-  const [text, setText] = useState('')
+// The live-chat composer (#714/#721): send more messages to a running run. Reuses the same shared
+// Composer the launcher uses, so `/` presets, `<` tags, and `@`/`#` mentions work here too, plus the
+// agent/model + options controls. On submit it writes a `message` control entry that the run drains
+// between turns (continuing the same session via --resume); the agent/model + options edit the
+// Global preferences (the defaults for the next run) — a mid-run message itself carries no options.
+// Only rendered inside RunLive, i.e. while the run is running — a finished run replays without it.
+export function RunChat({
+  projectId,
+  files,
+  addContext,
+}: {
+  projectId: string
+  /** The project's files for the `#` picker (#504), owned by the shell. */
+  files: string[]
+  /** Add a path to the run Context (from an `@`/`#` mention). */
+  addContext: (path: string) => void
+}) {
+  const composerRef = useRef<ComposerHandle>(null)
   const [sending, setSending] = useState(false)
+  // The registered projects for the `@` picker — the same list the launcher reads.
+  const projects = useLoaded<ProjectSummary[]>(onProjects, [], [])
 
-  const send = async (): Promise<void> => {
-    const message = text.trim()
-    if (!message || sending) return
+  const send = async (text: string): Promise<void> => {
+    if (sending) return
     setSending(true)
     try {
-      await sendMessage(projectId, message)
-      editorRef.current?.clear()
-      setText('')
+      await sendMessage(projectId, text)
+      composerRef.current?.clear()
     } catch {
       // Leave the text in place so the user can retry; the run may have just ended.
     } finally {
       setSending(false)
-      editorRef.current?.focus()
+      composerRef.current?.focus()
     }
   }
 
   return (
     <div className="border-t border-border p-3">
-      <PromptEditor
-        ref={editorRef}
-        projects={[]}
-        presets={[]}
-        onChange={setText}
+      <Composer
+        ref={composerRef}
+        projects={projects}
+        files={files}
+        addContext={addContext}
         onSubmit={send}
-        placeholder="Message the run…  (Cmd/Ctrl+Enter to send)"
-        disabled={sending}
+        busy={sending}
+        submitLabel="Send"
+        submitBusyLabel="Sending…"
+        placeholder="Message the run…  ( / commands · < tags · @ projects · # files )"
       />
-      <div className="mt-2 flex justify-end">
-        <Button size="sm" onClick={send} disabled={!text.trim() || sending}>
-          {sending ? 'Sending…' : 'Send'}
-        </Button>
-      </div>
     </div>
   )
 }

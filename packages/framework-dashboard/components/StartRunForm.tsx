@@ -1,72 +1,19 @@
-import { useRef, useState, type FormEvent, type ReactNode } from 'react'
+import { useRef, useState } from 'react'
 import type { ProjectSummary } from '@gemstack/framework'
-import {
-  renderResearchPrompt,
-  renderReadabilityPrompt,
-  renderMaintainabilityPrompt,
-  renderSecurityAuditPrompt,
-  renderUxPrompt,
-} from '@gemstack/framework/client'
 import { sendStart } from '../server/control.telefunc.js'
 import { onProjects } from '../server/projects.telefunc.js'
 import { usePreferences, updatePreferences, autopilotEnabled } from '../lib/preferences.js'
 import { useLoaded } from '../lib/use-async.js'
-import { PromptEditor, type PromptEditorHandle } from './PromptEditor.js'
-import { PresetMenu } from './PresetMenu.js'
-import { PresetCreatePanel } from './PresetCreatePanel.js'
-import { AgentModelMenu, type AgentOption } from './AgentModelMenu.js'
+import { Composer, type ComposerHandle } from './Composer.js'
 import { ContextFiles } from './ContextFiles.js'
-import { ClaudeLogo, CodexLogo } from './agent-logos.js'
 import { DisclosureToggle } from './DisclosureToggle.js'
 import { SystemPromptDisclosure } from './SystemPromptDisclosure.js'
-import { OptionsMenu, type OptionRow } from './OptionsMenu.js'
-import { Button } from './ui/button.js'
 
-// The presets (#353/#433): each PREFILLS the textarea with a rendered prompt and runs it
-// verbatim (`kind: 'prompt'`), the same as the old page.ts. Emptying the box falls back to
-// a normal `build` run.
-const PRESETS: { id: string; label: string; render: () => string }[] = [
-  { id: 'research', label: 'Research', render: renderResearchPrompt },
-  { id: 'readability', label: 'Readability', render: renderReadabilityPrompt },
-  { id: 'maintainability', label: 'Maintainability', render: renderMaintainabilityPrompt },
-  { id: 'security-audit', label: 'Security audit', render: renderSecurityAuditPrompt },
-  { id: 'ux', label: 'UX', render: renderUxPrompt },
-]
-
-// The agent + model tree (#650/#656/#658): each agent lists ONLY its own models, since `--model`
-// passes straight through to that agent's CLI (Claude aliases vs OpenAI ids). Picking a model in
-// an agent's submenu sets both, so an incompatible pair can't be chosen. Empty value = the
-// agent's own default (no `--model` flag). Kept as a client const so the dashboard bundle never
-// imports the node-only driver layer (mirrors AGENTS in the framework's agent.ts).
-const AGENTS: AgentOption[] = [
-  {
-    value: 'claude',
-    label: 'Claude Code',
-    icon: <ClaudeLogo className="h-4 w-4" />,
-    models: [
-      { value: '', label: 'Default model' },
-      { value: 'opus', label: 'Opus' },
-      { value: 'sonnet', label: 'Sonnet' },
-      { value: 'haiku', label: 'Haiku' },
-    ],
-  },
-  {
-    value: 'codex',
-    label: 'Codex',
-    icon: <CodexLogo className="h-4 w-4" />,
-    models: [
-      { value: '', label: 'Default model' },
-      { value: 'gpt-5-codex', label: 'GPT-5 Codex' },
-      { value: 'gpt-5', label: 'GPT-5' },
-      { value: 'o3', label: 'o3' },
-    ],
-  },
-]
-
-// Start a run in the selected project (#405): the one write that goes through the daemon's
-// own `startRun` (with its one-run-per-project busy guard), posted over Telefunc. The
-// Global options (#314/#433) ride along: Autopilot, Technical control, Vanilla, and Eco
-// (with its section drops). Shown when no run is active; a `busy` result means one already is.
+// Start a run in the selected project (#405): the one write that goes through the daemon's own
+// `startRun` (with its one-run-per-project busy guard), posted over Telefunc. The editor + control
+// row are the shared Composer (#721); this form owns the submit (sendStart with the collected
+// Global options), the system-prompt preview, and the Context selector. Shown when no run is active;
+// a `busy` result means one already is.
 export function StartRunForm({
   projectId,
   onRunStarted,
@@ -87,38 +34,33 @@ export function StartRunForm({
   toggleContext: (path: string) => void
 }) {
   const [prompt, setPrompt] = useState('')
-  const [kind, setKind] = useState<'build' | 'prompt'>('build')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [note, setNote] = useState<string | null>(null)
-  const editorRef = useRef<PromptEditorHandle>(null)
+  const composerRef = useRef<ComposerHandle>(null)
 
   // The Global options persist daemon-side (#410), shared with the choice-gate countdown.
   const preferences = usePreferences()
   const autopilot = autopilotEnabled(preferences)
-  const technical = preferences.technical ?? false
   const vanilla = preferences.vanilla ?? false
   const transparent = preferences.transparent ?? false // #625: the master off-switch (raw Claude Code)
   const eco = preferences.eco ?? false
   const ecoPlanning = preferences.ecoPlanning ?? false
   const ecoResearch = preferences.ecoResearch ?? false
   const ecoMaintenance = preferences.ecoMaintenance ?? false
+  const technical = preferences.technical ?? false
   const onBeforeMergeableQuality = preferences.onBeforeMergeableQuality ?? false
   const browser = preferences.browser ?? false
   const model = preferences.model ?? '' // #628: empty = the driver's default model
   const agent = preferences.agent ?? 'claude' // #650: which coding agent drives the run
-  const customPresets = preferences.customPresets ?? [] // #626: the user's own saved prompts
-  const [addingPreset, setAddingPreset] = useState(false) // #649: the full-width "New preset" panel
 
-  // Context selector (#439/#314): the agent can reach every registered repo, so ticking a
-  // subset narrows its focus — the picked paths become one `Context:` line in the system
-  // prompt. Loaded from the same registry the Projects sidebar shows.
+  // Context selector (#439/#314): the agent can reach every registered repo, so ticking a subset
+  // narrows its focus — the picked paths become one `Context:` line in the system prompt.
   const projects = useLoaded<ProjectSummary[]>(onProjects, [], [])
   const [showContext, setShowContext] = useState(false)
 
   // The Context set mixes whole repos (registered project paths) and individual files (relative
-  // paths from a `#` mention or the file tree). Split out the files so they can be shown + removed,
-  // and count each kind separately for the section header.
+  // paths). Split out the files so they can be shown + removed, and count each kind separately.
   const projectPaths = new Set(projects.map(p => p.path))
   const contextFiles = [...context].filter(path => !projectPaths.has(path))
   // The current project is already the run's workspace, so it isn't offered as a focus target
@@ -132,13 +74,10 @@ export function StartRunForm({
     .filter(Boolean)
     .join(' · ')
 
-  // Vanilla removes the system prompt entirely, so Eco (which only trims it) has nothing
-  // left to act on; Transparent (#625) turns off the whole framework, so it overrides the
-  // rest of the toggles too.
   const ecoDisabled = vanilla || transparent
 
-  // The eco drops, hoisted: the run gets them via collectOptions, and the #520
-  // preview renders with them, so what you read is what gets sent.
+  // The eco drops, hoisted: the run gets them via collectOptions, and the #520 preview renders with
+  // them, so what you read is what gets sent.
   const ecoDrops = {
     ...(ecoPlanning ? { autoPlanning: true } : {}),
     ...(ecoResearch ? { autoResearch: true } : {}),
@@ -160,23 +99,19 @@ export function StartRunForm({
     }
   }
 
-  const submit = async (e?: FormEvent) => {
-    e?.preventDefault()
-    const text = prompt.trim()
-    if (!text || busy) return
+  const submit = async (text: string, submitKind: 'build' | 'prompt') => {
+    if (busy) return
     setBusy(true)
     setError(null)
     setNote('Starting…')
     try {
-      const result = await sendStart(projectId, text, kind, collectOptions())
+      const result = await sendStart(projectId, text, submitKind, collectOptions())
       if (result.ok) {
-        // Show the run in the Runs rail immediately (#405): the spawned process
-        // writes its run.json a beat later, so seed an optimistic row with the
-        // typed prompt until the real running meta takes over.
+        // Show the run in the Runs rail immediately (#405): the spawned process writes its run.json
+        // a beat later, so seed an optimistic row with the typed prompt until the real meta takes over.
         onRunStarted?.(text)
-        editorRef.current?.clear()
+        composerRef.current?.clear()
         setPrompt('')
-        setKind('build')
         setNote(null)
       } else {
         setNote(null)
@@ -190,117 +125,28 @@ export function StartRunForm({
     }
   }
 
-  // A preset button (or the `/` menu) loads the rendered template into the editor, which
-  // chip-ifies its tags; the run then goes verbatim as a `prompt` kind.
-  const loadPreset = (label: string) => {
-    setKind('prompt')
-    setError(null)
-    setNote(`${label} preset loaded — review or edit, then Start`)
-  }
-
-  const onPromptChange = (value: string) => {
-    setPrompt(value)
-    // An emptied box is a fresh start: back to a normal build run.
-    if (!value.trim() && kind !== 'build') {
-      setKind('build')
-      setNote(null)
-    }
-  }
-
-  // The Global options as one table (#314). Autopilot's default-on lives in `autopilotEnabled`;
-  // Eco is disabled + dimmed under Vanilla (nothing left to trim); the Eco sub-drops show only
-  // while Eco is on.
-  const mainOptions: OptionRow[] = [
-    { key: 'transparent', label: 'Transparent', description: 'Raw Claude Code — turns the whole framework off.', title: 'Fully transparent (#625): run the agent exactly like plain Claude Code, with no framework system prompt, controls, dashboard, guard, or TODO loop. Overrides the options below.', checked: transparent },
-    { key: 'autopilot', label: 'Autopilot', description: 'Auto-accepts the recommended choice after a countdown.', title: 'Auto-accept the recommended choice after a countdown; also relaxes the maintenance stance', checked: autopilot && !transparent, disabled: transparent, disabledReason: 'off while Transparent is on' },
-    { key: 'technical', label: 'Technical control', description: 'Surfaces technical detail like tech-stack choices.', title: 'Expose technical detail (e.g. tech-stack choices)', checked: technical && !transparent, disabled: transparent, disabledReason: 'off while Transparent is on' },
-    { key: 'vanilla', label: 'Disable system prompt', description: 'Drops the added system prompt; keeps the run controls.', title: "Remove the built-in system prompt but keep the framework's run controls. For a fully raw run, use Transparent. Expand 'Actual prompt' to read what it removes.", checked: vanilla && !transparent, disabled: transparent, disabledReason: 'off while Transparent is on' },
-    { key: 'eco', label: 'Eco', description: 'Trims the system prompt to save tokens.', title: 'Trim the built-in system prompt to save tokens', checked: eco && !ecoDisabled, disabled: ecoDisabled, disabledReason: 'nothing to trim while the system prompt is off' },
-    { key: 'onBeforeMergeableQuality', label: 'Post-merge cleanup', description: 'Runs quality passes once it is ready to merge.', title: "When the run signals it's ready for merge, run maintainability, readability, and security-audit passes", checked: onBeforeMergeableQuality && !transparent, disabled: transparent, disabledReason: 'off while Transparent is on' },
-    { key: 'browser', label: 'Browser', description: 'Gives the agent a real browser to inspect pages.', title: 'Give the agent a real browser via chrome-devtools-mcp: navigate pages, read console + network, inspect the DOM, and screenshot', checked: browser && !transparent, disabled: transparent, disabledReason: 'off while Transparent is on' },
-  ]
-  const ecoOptions: OptionRow[] = [
-    { key: 'ecoPlanning', label: 'Auto planning', description: 'Drops the planning section; the agent plans itself.', title: 'Drop the planning section, letting the agent plan on its own', checked: ecoPlanning },
-    { key: 'ecoResearch', label: 'Auto research', description: 'Drops the alternatives/variability section.', title: 'Drop the alternatives/variability section', checked: ecoResearch },
-    { key: 'ecoMaintenance', label: 'Auto maintenance', description: 'Drops the maintenance section.', title: 'Drop the maintenance section', checked: ecoMaintenance },
-  ]
-
   return (
-    <form onSubmit={submit} className="border-b border-border p-4">
+    <form onSubmit={e => e.preventDefault()} className="border-b border-border p-4">
       <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Start a run</div>
-      <PromptEditor
-        ref={editorRef}
-        onChange={onPromptChange}
-        onSubmit={() => void submit()}
-        onPreset={loadPreset}
-        onMentionProject={addContext}
-        onMentionFile={addContext}
+      <Composer
+        ref={composerRef}
         projects={projects}
         files={files}
-        presets={PRESETS}
-        disabled={busy}
+        addContext={addContext}
+        onSubmit={submit}
+        onPromptChange={value => {
+          setPrompt(value)
+          if (!value.trim() && note) setNote(null)
+        }}
+        onPreset={label => {
+          setError(null)
+          setNote(`${label} preset loaded — review or edit, then Start`)
+        }}
+        busy={busy}
+        submitLabel="Start run"
+        submitBusyLabel="Starting…"
+        showShortcutHint
       />
-
-      {/* Run controls, directly under the textarea (#649/#650/#654/#668): agent+model at the start,
-          then presets and the options gear, then Start run at the end. */}
-      <div className="mt-2 flex flex-wrap items-center gap-1.5">
-        {/* Agent + model tree (#650/#658), each agent showing only its own models. */}
-        <AgentModelMenu
-          agents={AGENTS}
-          agent={agent}
-          model={model}
-          onChange={(a, m) => updatePreferences({ agent: a, model: m })}
-          busy={busy}
-        />
-        <PresetMenu
-          builtIns={PRESETS}
-          customPresets={customPresets}
-          busy={busy}
-          onLoadBuiltIn={p => {
-            editorRef.current?.loadTemplate(p.render())
-            loadPreset(p.label)
-          }}
-          onUseCustom={preset => {
-            editorRef.current?.loadTemplate(preset.prompt)
-            loadPreset(preset.label)
-          }}
-          onDeleteCustom={id => updatePreferences({ customPresets: customPresets.filter(p => p.id !== id) })}
-          onNewPreset={() => setAddingPreset(true)}
-        />
-        {/* Global options (#314) as a gear-icon checkbox dropdown (#654/#668). */}
-        <OptionsMenu options={mainOptions} ecoOptions={ecoOptions} showEco={eco && !ecoDisabled} busy={busy} />
-        {/* Start run at the end of the row (#668). */}
-        <Button
-          type="submit"
-          className="ml-auto"
-          disabled={busy || !prompt.trim()}
-          title={!prompt.trim() ? 'Type a prompt to start a run' : 'Start run  (⌘↵ / Ctrl+Enter)'}
-        >
-          {busy ? (
-            'Starting…'
-          ) : (
-            <>
-              Start run
-              {/* The editor submits on ⌘/Ctrl+Enter (#695/U13): surface the otherwise-hidden shortcut. */}
-              <kbd className="ml-1.5 hidden rounded border border-primary-foreground/30 px-1 text-[10px] font-medium text-primary-foreground/70 sm:inline">
-                ⌘↵
-              </kbd>
-            </>
-          )}
-        </Button>
-      </div>
-
-      {addingPreset && (
-        <PresetCreatePanel
-          currentPrompt={prompt}
-          busy={busy}
-          onCancel={() => setAddingPreset(false)}
-          onSave={preset => {
-            updatePreferences({ customPresets: [...customPresets, preset] })
-            setAddingPreset(false)
-          }}
-        />
-      )}
 
       <SystemPromptDisclosure
         prompt={prompt}
@@ -320,8 +166,8 @@ export function StartRunForm({
           </DisclosureToggle>
           {showContext && (
             <div className="mt-2 grid grid-cols-1 gap-4 rounded border border-border p-3 sm:grid-cols-2">
-              {/* Projects: repo checkboxes. The agent can still reach every repo; ticking some
-                  just narrows its focus (kept in the heading's tooltip). */}
+              {/* Projects: repo checkboxes. The agent can still reach every repo; ticking some just
+                  narrows its focus (kept in the heading's tooltip). */}
               <div>
                 <p className="mb-1.5 text-muted-foreground/80" title="The agent can still reach every repo; ticking some just narrows its focus.">
                   Projects
@@ -353,7 +199,6 @@ export function StartRunForm({
         </div>
       )}
 
-      {/* Start run moved up into the controls row (#668); the note + error stay below it. */}
       {error && <p className="mt-2 text-xs text-red-500">{error}</p>}
       {note && !error && <p className="mt-2 text-xs text-muted-foreground">{note}</p>}
     </form>
