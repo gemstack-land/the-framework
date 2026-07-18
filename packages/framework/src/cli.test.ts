@@ -691,6 +691,13 @@ test('a live daemon steers a dashboard-less run through its gates via control.js
         answered.add(e.id)
         await appendControl(cwd, { kind: 'choice', id: e.id, pick: e.recommended ?? e.options?.[0]?.id ?? '', by: 'user' })
       }
+      // The steered build now stays open waiting for a chat message or Stop (#714). Once it has
+      // been steered through its gate and produced its output, end it with a Stop, exactly as the
+      // dashboard's Stop button would; otherwise `done` never resolves and the run hangs.
+      if (answered.has('await-choices') && /production-grade/.test(out.join('\n'))) {
+        await appendControl(cwd, { kind: 'stop' })
+        break
+      }
       await new Promise(r => setTimeout(r, 20))
     }
 
