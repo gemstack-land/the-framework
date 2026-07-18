@@ -1,8 +1,5 @@
 import { stat } from 'node:fs/promises'
 import { join } from 'node:path'
-import { TICKETING_FORMAT } from './prompts.generated.js'
-import { THE_FRAMEWORK_DIR } from './logs.js'
-import { nodeStoreFs, type StoreFs } from './store/index.js'
 
 /**
  * The root `tickets/` directory (#629): a plain repo convention where The Framework
@@ -15,23 +12,13 @@ export const TICKETS_DIR = 'tickets'
 
 /**
  * The ticket-format spec (#684): the static reference an agent opens to learn the
- * `tickets/<DATE>_<SLUG>.md` (and `.spike.md`) file shape. Materialized under
- * `.the-framework/` beside the presets — not under `tickets/` — because it is
- * framework-authored and rides with the installed version, so it must not look like
- * a ticket. The #683 context fragment points `tickets/**.md` at this path.
+ * `tickets/<DATE>_<SLUG>.md` (and `.spike.md`) file shape. Per Rom's #674 call it ships
+ * *inside the installed package* rather than being materialized into the repo, so a future
+ * breaking change to the format rides with the package version instead of going stale in a
+ * committed file. The package ships `prompts/ticketing_format.md` (see the `files` allowlist),
+ * so an agent reads it at this cwd-relative path; the #683 context fragment points here.
  */
-export const TICKETING_FORMAT_FILE = `${THE_FRAMEWORK_DIR}/ticketing-format.md`
-
-/**
- * Write the ticket-format spec to `<cwd>/.the-framework/ticketing-format.md` so the
- * #683 context pointer resolves to a real file (#684). Mirrors {@link materializePresets}:
- * gitignored, overwritten on install, tracks the installed framework version rather than
- * going stale in the repo. Creates `.the-framework/` if it is missing.
- */
-export async function materializeTicketingFormat(cwd: string, fs: StoreFs = nodeStoreFs()): Promise<void> {
-  await fs.mkdir(join(cwd, THE_FRAMEWORK_DIR))
-  await fs.write(join(cwd, TICKETING_FORMAT_FILE), TICKETING_FORMAT)
-}
+export const TICKETING_FORMAT_FILE = 'node_modules/@gemstack/framework/prompts/ticketing_format.md'
 
 /**
  * The flat, durable backlog/roadmap file — the confirmed-task queue (the "AI task queue"

@@ -114,7 +114,7 @@ export const BUSINESS_KNOWLEDGE_DOCS: readonly ContextDoc[] = [DECISIONS_DOC, KN
  * {@link systemPromptBlock} renders as the `Context:` bullets. A superset of
  * {@link BUSINESS_KNOWLEDGE_DOCS}: it adds `GOAL.md` and the two roadmap/queue pointers the
  * agent reads but does *not* fold knowledge back into — `tickets/**.md` (the potential work,
- * whose file shape is `.the-framework/ticketing-format.md`, #684) and the `TODO_AGENTS.md`
+ * whose file shape is the packaged `ticketing_format.md` spec, #684/#674) and the `TODO_AGENTS.md`
  * task queue. Repo-root paths, because that is the agent's cwd. README is left out: a repo's
  * own `README.md` already covers the overview. The ticket-format path is inlined rather than
  * imported from `tickets.ts`: this module must stay free of `node:fs` (it renders in the
@@ -124,7 +124,7 @@ export const CONTEXT_DOCS: readonly ContextDoc[] = [
   DECISIONS_DOC,
   { path: 'GOAL.md', comment: 'the goal of the project (long-term direction, scope, non-scope, ...)' },
   KNOWLEDGE_BASE_DOC,
-  { path: 'tickets/**.md', comment: 'things to potentially work on; format: .the-framework/ticketing-format.md' },
+  { path: 'tickets/**.md', comment: 'things to potentially work on; format: node_modules/@gemstack/framework/prompts/ticketing_format.md' },
   { path: 'TODO_AGENTS.md', comment: 'the AI task queue' },
 ]
 
