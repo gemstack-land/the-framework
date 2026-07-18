@@ -117,6 +117,12 @@ export interface OpenStoreOptions {
   fresh?: boolean
   /** The wall-clock start, ISO. Injectable so tests are deterministic. */
   now?: string
+  /**
+   * The run's intent (its prompt / request) shown in the dashboard's Runs list. A build run
+   * later refines this via its `bootstrap` scope event; a `prompt`/`research` run has no scope
+   * step, so seeding it here is the only way its row shows the prompt instead of "(no prompt)".
+   */
+  intent?: string
 }
 
 /**
@@ -170,7 +176,7 @@ export function applyEventToMeta(meta: RunMeta, event: FrameworkEvent, at: strin
 }
 
 /** The seed meta a run starts from, before any event is folded in. */
-function freshMeta(startedAt: string): RunMeta {
+function freshMeta(startedAt: string, intent?: string): RunMeta {
   return {
     version: RUN_META_VERSION,
     status: 'running',
@@ -178,6 +184,7 @@ function freshMeta(startedAt: string): RunMeta {
     startedAt,
     updatedAt: startedAt,
     passes: 0,
+    ...(intent ? { intent } : {}),
   }
 }
 
@@ -256,7 +263,7 @@ export class RunStore {
     const dir = join(cwd, FRAMEWORK_DIR)
     const now = opts.now ?? new Date().toISOString()
     await fs.mkdir(dir)
-    const store = new RunStore(fs, dir, now, freshMeta(now))
+    const store = new RunStore(fs, dir, now, freshMeta(now, opts.intent))
     if (opts.fresh) {
       // A new run truncates the live log. First rescue the prior run if it never
       // got archived (e.g. a crash exited before close), so no history is lost.
