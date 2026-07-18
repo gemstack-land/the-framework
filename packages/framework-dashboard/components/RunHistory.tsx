@@ -24,6 +24,7 @@ export function RunHistory({
   onSelect,
   startTick = 0,
   startIntent = '',
+  followLive = false,
 }: {
   projectId: string | null
   runs: RunMeta[]
@@ -31,6 +32,9 @@ export function RunHistory({
   onSelect: (runId: string | null) => void
   startTick?: number
   startIntent?: string
+  /** Just started a run and following its live output (#705): highlight the running/optimistic
+   *  row at once, not the Live home row, before the poll adopts the run's real id. */
+  followLive?: boolean
 }) {
   const [optimistic, setOptimistic] = useState<string | null>(null)
 
@@ -48,7 +52,9 @@ export function RunHistory({
 
   if (!projectId) return null
 
-  const atHome = selectedRunId === null
+  // While following a just-started run, the highlight belongs on that run (its optimistic row,
+  // then its real row) — not the Live home row, even though no run id is selected yet (#705).
+  const atHome = selectedRunId === null && !followLive
 
   return (
     <aside className="flex w-60 shrink-0 flex-col border-r border-border">
@@ -63,9 +69,9 @@ export function RunHistory({
           <span className="mr-2 inline-block h-2 w-2 rounded-full bg-primary" /> Live
         </Button>
 
-        {/* A just-started run, before its run.json exists. */}
+        {/* A just-started run, before its run.json exists — highlighted while following it. */}
         {optimistic !== null && !hasRunning && (
-          <RunRow status="running" intent={optimistic} subtitle="starting…" active={false} dim onClick={() => onSelect(null)} />
+          <RunRow status="running" intent={optimistic} subtitle="starting…" active={followLive} dim onClick={() => onSelect(null)} />
         )}
 
         {runs.length === 0 && optimistic === null && (
@@ -77,7 +83,7 @@ export function RunHistory({
             status={run.status}
             intent={run.intent}
             subtitle={new Date(run.startedAt).toLocaleString()}
-            active={run.id === selectedRunId}
+            active={run.id === selectedRunId || (followLive && run.status === 'running')}
             onClick={() => onSelect(run.id)}
           />
         ))}
