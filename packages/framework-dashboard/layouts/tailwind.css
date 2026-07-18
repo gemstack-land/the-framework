@@ -7,6 +7,9 @@
 }
 
 :root {
+  /* Let the browser paint native theme-matched scrollbars + form controls (the shadcn way),
+     instead of a light OS scrollbar on the dark UI. `.dark` flips it below. */
+  color-scheme: light;
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
   --card: oklch(1 0 0);
@@ -21,6 +24,7 @@
 }
 
 .dark {
+  color-scheme: dark;
   --background: oklch(0.16 0.01 264);
   --foreground: oklch(0.95 0 0);
   --card: oklch(0.2 0.01 264);
@@ -51,32 +55,6 @@
 body {
   background-color: var(--background);
   color: var(--foreground);
-}
-
-/* Scrollbars: the OS default is a bright light track that clashes with the dark-first UI. Theme
-   them from the design tokens so they follow light/dark and read as part of the product. */
-* {
-  scrollbar-width: thin;
-  scrollbar-color: var(--border) transparent;
-}
-::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
-}
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-::-webkit-scrollbar-thumb {
-  background-color: var(--border);
-  border-radius: 9999px;
-  border: 2px solid transparent;
-  background-clip: padding-box;
-}
-::-webkit-scrollbar-thumb:hover {
-  background-color: var(--muted-foreground);
-}
-::-webkit-scrollbar-corner {
-  background: transparent;
 }
 
 /* Prompt editor (#470): live-markdown prose + token chips. Kept lightweight — the box is a
