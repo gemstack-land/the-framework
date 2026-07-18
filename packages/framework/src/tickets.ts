@@ -1,5 +1,8 @@
 import { stat } from 'node:fs/promises'
 import { join } from 'node:path'
+import { TICKETING_FORMAT } from './prompts.generated.js'
+import { THE_FRAMEWORK_DIR } from './logs.js'
+import { nodeStoreFs, type StoreFs } from './store/index.js'
 
 /**
  * The root `tickets/` directory (#629): a plain repo convention where The Framework
@@ -8,6 +11,26 @@ import { join } from 'node:path'
  * is where the durable backlog (`tickets/TODO.md`) and, later, ticket files live.
  */
 export const TICKETS_DIR = 'tickets'
+
+/**
+ * The ticket-format spec (#684): the static reference an agent opens to learn the
+ * `tickets/<DATE>_<SLUG>.md` (and `.spike.md`) file shape. Materialized under
+ * `.the-framework/` beside the presets — not under `tickets/` — because it is
+ * framework-authored and rides with the installed version, so it must not look like
+ * a ticket. The #683 context fragment points `tickets/**.md` at this path.
+ */
+export const TICKETING_FORMAT_FILE = `${THE_FRAMEWORK_DIR}/ticketing-format.md`
+
+/**
+ * Write the ticket-format spec to `<cwd>/.the-framework/ticketing-format.md` so the
+ * #683 context pointer resolves to a real file (#684). Mirrors {@link materializePresets}:
+ * gitignored, overwritten on install, tracks the installed framework version rather than
+ * going stale in the repo. Creates `.the-framework/` if it is missing.
+ */
+export async function materializeTicketingFormat(cwd: string, fs: StoreFs = nodeStoreFs()): Promise<void> {
+  await fs.mkdir(join(cwd, THE_FRAMEWORK_DIR))
+  await fs.write(join(cwd, TICKETING_FORMAT_FILE), TICKETING_FORMAT)
+}
 
 /**
  * The flat, durable backlog/roadmap file — the confirmed-task queue. Moved under

@@ -3,6 +3,7 @@ import { nodeGitRunner, type GitRunner } from './project.js'
 import { logsPath, LOGS_HEADER, THE_FRAMEWORK_DIR, gitignorePath, LOGS_GITIGNORE } from './logs.js'
 import { nodeStoreFs, type StoreFs } from './store/index.js'
 import { materializePresets } from './presets.js'
+import { materializeTicketingFormat } from './tickets.js'
 
 /**
  * Install/activate a repo for The Framework (#391): create the
@@ -63,6 +64,9 @@ export async function installProject(cwd: string, deps: InstallDeps = {}): Promi
     // of git (only LOGS.md is committed), so they are regenerated on install and track the
     // installed framework version rather than going stale in the repo's history.
     await materializePresets(cwd, fs)
+    // The ticket-format spec rides along the same way (#684): gitignored, refreshed on
+    // install, so the #683 context pointer to it resolves to a real file.
+    await materializeTicketingFormat(cwd, fs)
 
     await git(['add', '-A'], cwd)
     await git(['commit', '-m', '[The Framework] install The Framework'], cwd)
