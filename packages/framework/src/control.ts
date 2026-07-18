@@ -22,6 +22,8 @@ export type ControlEntry =
   | { kind: 'stop' }
   /** Resolve a parked choice gate: the pick for the pending {@link ChoiceRequest} id. */
   | { kind: 'choice'; id: string; pick: string | string[]; by: ChoiceBy }
+  /** A live-chat message the user sent to the running run (#714). */
+  | { kind: 'message'; text: string }
 
 /** The control log path for a workspace. */
 export function controlPath(cwd: string): string {
@@ -72,6 +74,7 @@ function isControlEntry(value: unknown): value is ControlEntry {
   if (!value || typeof value !== 'object') return false
   const v = value as Record<string, unknown>
   if (v['kind'] === 'stop') return true
+  if (v['kind'] === 'message') return typeof v['text'] === 'string' && v['text'].length > 0
   if (v['kind'] !== 'choice') return false
   if (typeof v['id'] !== 'string' || !v['id']) return false
   const pick = v['pick']

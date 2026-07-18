@@ -264,6 +264,7 @@ export {
   type ControlEntry,
   type ControlWatcher,
 } from './control.js'
+export { RunMessageQueue, type RunMessages } from './run-messages.js'
 export { runPrompt, type RunPromptOptions, type RunPromptResult } from './prompt-run.js'
 export {
   runTodoLoop,

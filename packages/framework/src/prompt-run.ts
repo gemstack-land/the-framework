@@ -6,6 +6,7 @@ import { createRunControls, emitSessionStart, endStopDetail } from './run-teleme
 import { createTurnSignalEmitter } from './turn-gate.js'
 import { type ConsumptionWindow } from './consumption.js'
 import { leaveResumeNote } from './todo-loop.js'
+import type { RunMessages } from './run-messages.js'
 
 /**
  * The direct prompt path (#331): run *one prompt* through the driver and honor
@@ -58,6 +59,12 @@ export interface RunPromptOptions {
   consumptionGate?: () => ConsumptionWindow | null
   /** Session link template for the dashboard, `{sessionId}` resolved when known. */
   sessionLink?: string
+  /**
+   * Live chat (#714): stay open after the prompt settles and take the user's own
+   * messages, each resuming the same session. Unset for a headless run, which ends
+   * when the agent stops asking — exactly as before.
+   */
+  messages?: RunMessages
 }
 
 /** What {@link runPrompt} resolves with. */
@@ -133,6 +140,7 @@ export async function runPrompt(opts: RunPromptOptions): Promise<RunPromptResult
       requestChoice: opts.requestChoice,
       emit,
       signal: runSignal,
+      ...(opts.messages ? { messages: opts.messages } : {}),
     })
     // The agent kept asking past the limit: finish with the latest turn rather than loop.
     if (rounds.exhausted) emit({ kind: 'log', message: 'Finishing the run (await limit reached).' })

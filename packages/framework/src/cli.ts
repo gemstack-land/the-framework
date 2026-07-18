@@ -41,6 +41,7 @@ import { RunStore, nodeStoreFs, type StoreFs } from './store/index.js'
 import { materializePresets } from './presets.js'
 import { daemonStatus, ensureDaemon, registerHomeProject, runDaemon, stopDaemon, DEFAULT_DAEMON_PORT } from './daemon.js'
 import { resetControl, watchControl, type ControlWatcher } from './control.js'
+import { RunMessageQueue } from './run-messages.js'
 import { nodeGitRunner } from './project.js'
 import { listProjects, readPreferences, resolveConsumptionLimits } from './registry.js'
 import { startConsumptionGuard } from './consumption-guard.js'
@@ -979,9 +980,13 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
   // to /choice, which resolves it. Aborting the run resolves any pending choice
   // (proceed) so the gate never hangs a stopped run.
   const pendingChoices = new Map<string, (pick: ChoicePick) => void>()
+  // Live-chat messages the user sends to the running run (#714). The control watcher
+  // pushes each here; the run loop drains them between turns and waits here when idle.
+  const messages = new RunMessageQueue()
   controller.signal.addEventListener('abort', () => {
     for (const resolve of pendingChoices.values()) resolve({ picked: 'proceed', by: 'auto' })
     pendingChoices.clear()
+    messages.close()
   })
   // Serve the new Vike + Telefunc dashboard (#405/#427) for this run, in single-project mode:
   // the SPA reads this one `cwd`'s event/control logs without touching the global registry, so
@@ -1024,6 +1029,10 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
       control = watchControl(cwd, entry => {
         if (entry.kind === 'stop') {
           controller.abort()
+          return
+        }
+        if (entry.kind === 'message') {
+          messages.push(entry.text)
           return
         }
         const resolve = pendingChoices.get(entry.id)
@@ -1199,6 +1208,7 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
         onEvent,
         signal: controller.signal,
         ...(requestChoice ? { requestChoice } : {}),
+        ...(requestChoice ? { messages } : {}),
         ...(opts.model ? { model: opts.model } : {}),
         ...(opts.maxCost ? { budgetUsd: opts.maxCost } : {}),
         ...(guard ? { consumptionGate: guard.gate } : {}),
@@ -1264,6 +1274,7 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
     signals,
     signal: controller.signal,
     ...(requestChoice ? { requestChoice } : {}),
+    ...(requestChoice ? { messages } : {}),
     ...(opts.model ? { model: opts.model } : {}),
     ...(opts.maxPasses ? { maxPasses: opts.maxPasses } : {}),
     ...(opts.maxCost ? { budgetUsd: opts.maxCost } : {}),

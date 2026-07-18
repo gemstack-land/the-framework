@@ -205,6 +205,36 @@ test('ClaudeCodeDriver writes an --mcp-config file for mcpServers and cleans it 
   assert.ok(!existsSync(configPath))
 })
 
+test('ClaudeCodeSession resumes the same session for a chat turn (#714)', async () => {
+  let captured: string[] = []
+  const spawn: SpawnLike = (_cmd, args) => {
+    captured = [...args]
+    // The turn reports its session id, which the session retains for a later --resume.
+    return fakeSpawn([JSON.stringify({ type: 'result', result: 'ok', session_id: 'sess-1' })])(_cmd, args, { cwd: '/ws', env: {} })
+  }
+  const session = await new ClaudeCodeDriver({ spawn }).start({ cwd: '/ws', system: 'You are a Vike expert' })
+  // A normal turn: fresh, appends the system prompt, no --resume yet.
+  await session.prompt('go')
+  assert.ok(!captured.includes('--resume'))
+  assert.ok(captured.includes('--append-system-prompt'))
+  // A chat message resumes the captured session and skips the redundant system append.
+  await session.prompt('also add dark mode', { resume: true })
+  assert.equal(captured[captured.indexOf('--resume') + 1], 'sess-1')
+  assert.ok(!captured.includes('--append-system-prompt'))
+})
+
+test('ClaudeCodeSession runs a fresh turn when resume is asked with no prior session (#714)', async () => {
+  let captured: string[] = []
+  const spawn: SpawnLike = (_cmd, args) => {
+    captured = [...args]
+    return fakeSpawn([JSON.stringify({ type: 'result', result: 'ok' })])(_cmd, args, { cwd: '/ws', env: {} })
+  }
+  const session = await new ClaudeCodeDriver({ spawn }).start({ cwd: '/ws', system: 'framing' })
+  await session.prompt('hi', { resume: true })
+  assert.ok(!captured.includes('--resume'))
+  assert.ok(captured.includes('--append-system-prompt'))
+})
+
 test('StreamJsonParser surfaces the rate-limit telemetry the agent emits per turn (#517)', () => {
   const p = new StreamJsonParser()
   // Real payload shape, captured from `claude -p --output-format stream-json`.

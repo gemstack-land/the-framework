@@ -84,6 +84,14 @@ export interface DriverPromptOptions {
   system?: string
   /** Abort just this prompt (the in-flight invocation). */
   signal?: AbortSignal
+  /**
+   * Continue the agent's *previous* turn instead of starting fresh (#714): the
+   * live-chat path resumes the same session so the message lands in the ongoing
+   * conversation with full context. Best-effort — a driver that can't resume
+   * (or has no prior turn yet) runs a fresh invocation, the normal case. Honored
+   * by the Claude Code driver via `--resume <sessionId>`.
+   */
+  resume?: boolean
 }
 
 /** The outcome of one {@link DriverSession.prompt} turn. */

@@ -23,7 +23,7 @@ import {
 } from '@gemstack/ai-autopilot'
 import { snapshotWorkspace } from './sandbox.js'
 import { type ConsumptionWindow } from './consumption.js'
-import type { Driver, DriverSession } from './driver/index.js'
+import type { Driver, DriverSession, DriverTurn } from './driver/index.js'
 import { composeRunSystem, type EcoOptions, type TfContext } from './system-prompt.js'
 import { createRunControls, emitSessionStart, endStopDetail } from './run-telemetry.js'
 import { AWAIT_PROTOCOL, CONFIRM_APPROVED, CONFIRM_DECLINED, MAX_AWAIT_ROUNDS, PLAN_DECLINED_MESSAGE, continuationPrompt, createTurnSignalEmitter, isDeclinedConfirmation, parseAwaitGate, type ParsedAwaitGate } from './turn-gate.js'
@@ -32,6 +32,7 @@ import { AWAIT_PROTOCOL, CONFIRM_APPROVED, CONFIRM_DECLINED, MAX_AWAIT_ROUNDS, P
 import { leaveResumeNote, runTodoLoop, type TodoLoopResult } from './todo-loop.js'
 import { continueAfterChoice, decideDeploy, deployWith, domainLoopChecklist, driverBuild, driverChecklist, driverImprove, driverLoopPrompts } from './steps.js'
 import { OPEN_LOOP_MODES, pickedIds, type ChoicePick, type ChoiceRequest, type FrameworkEvent } from './events.js'
+import type { RunMessages } from './run-messages.js'
 
 /**
  * The framework's default full-fledged pass budget. Higher than ai-autopilot's
@@ -206,6 +207,13 @@ export interface RunFrameworkOptions {
   todoLoop?: boolean
   /** Per-run cap on backlog entries worked (#323). Default 25. */
   todoMaxItems?: number
+  /**
+   * Live chat (#714): once the build settles, stay running and take the user's own
+   * messages, each resuming the build session for full context. Ends when the source
+   * resolves `undefined` (Stop / budget cap). Wired only for an interactive run — a
+   * headless run leaves it unset and ends when the build is done, exactly as before.
+   */
+  messages?: RunMessages
   /** Observe the unified event stream. */
   onEvent?: (event: FrameworkEvent) => void
 }
@@ -411,6 +419,16 @@ export async function runFramework(opts: RunFrameworkOptions): Promise<RunFramew
     // to boot is non-fatal. Default off, so a programmatic run never leaks a
     // process a caller that ignores `preview` would never stop.
     if (runner && s?.keepAlive) preview = await startAppPreview(runner, s, emit)
+    // Live chat (#714): with the build settled, stay open for the user's own messages,
+    // each continuing the same session. Ends on Stop / budget cap (next -> undefined).
+    if (opts.messages) {
+      await runChatPhase(session, opts.messages, { text: '' }, {
+        ...(opts.requestChoice ? { requestChoice: opts.requestChoice } : {}),
+        emit,
+        emitTurnSignals: createTurnSignalEmitter(emit),
+        signal: runSignal,
+      })
+    }
     emit({ kind: 'end', ok: true })
     return { result, detection, events, ...(preview ? { preview } : {}), ...(loop ? { loop } : {}), ...(todo ? { todo } : {}) }
   } catch (err) {
@@ -624,12 +642,73 @@ export interface AwaitRoundsOptions {
   requestChoice?: ((req: ChoiceRequest) => Promise<ChoicePick>) | undefined
   emit: (event: FrameworkEvent) => void
   signal?: AbortSignal | undefined
+  /**
+   * Live chat (#714): once the agent stops asking, stay open for the user's own
+   * messages, each resuming the same session. Unset for a headless run, which then
+   * ends when the agent stops asking — byte-identical to before this existed.
+   */
+  messages?: RunMessages | undefined
+}
+
+/** The shared deps of a turn that may hit an await gate or a chat message. */
+interface AwaitTurnDeps {
+  requestChoice?: ((req: ChoiceRequest) => Promise<ChoicePick>) | undefined
+  emit: (event: FrameworkEvent) => void
+  emitTurnSignals: (text: string) => void
+  signal?: AbortSignal | undefined
+}
+
+/**
+ * Resolve the await gates (#337/#339) a turn ended on: pick the answer, re-prompt with
+ * it, repeat until the agent stops asking or the {@link MAX_AWAIT_ROUNDS} cap trips. A
+ * declined plan (#358) stops here. Returns the settled turn plus whether it declined /
+ * was still asking at the cap. Shared by the opening prompt and each chat message.
+ */
+async function drainGates(session: DriverSession, turn: DriverTurn, deps: AwaitTurnDeps): Promise<{ turn: DriverTurn; declined: boolean; exhausted: boolean }> {
+  const signalOpt = deps.signal ? { signal: deps.signal } : {}
+  let gate = parseAwaitGate(turn.text)
+  for (let round = 0; round < MAX_AWAIT_ROUNDS && gate; round++) {
+    const answer = await resolveAwaitGate(gate, round, deps)
+    if (isDeclinedConfirmation(gate, answer)) {
+      deps.emit({ kind: 'log', message: PLAN_DECLINED_MESSAGE })
+      return { turn, declined: true, exhausted: false }
+    }
+    deps.emit({ kind: 'log', message: `Continuing with your choice: ${answer}` })
+    turn = await session.prompt(continuationPrompt(gate.title, answer), signalOpt)
+    deps.emitTurnSignals(turn.text)
+    gate = parseAwaitGate(turn.text)
+  }
+  return { turn, declined: false, exhausted: gate !== undefined }
+}
+
+/**
+ * The live-chat loop (#714): wait for the user's next message, deliver it by resuming the
+ * same session (full conversational context), then honor any await gate it produced —
+ * repeat until the source resolves `undefined` (Stop / budget cap). This is the "stay-open"
+ * lifecycle: a run keeps running as a conversation until the user ends it. Shared by the
+ * direct prompt path and the build path, which both reach it once their work has settled.
+ */
+export async function runChatPhase(session: DriverSession, messages: RunMessages, seed: DriverTurn, deps: AwaitTurnDeps): Promise<DriverTurn> {
+  const signalOpt = deps.signal ? { signal: deps.signal } : {}
+  let turn = seed
+  for (;;) {
+    const message = await messages.next(deps.signal)
+    if (message === undefined) return turn // Stop / budget cap: end the conversation.
+    deps.emit({ kind: 'log', message: `You: ${message}` })
+    turn = await session.prompt(message, { ...signalOpt, resume: true })
+    deps.emitTurnSignals(turn.text)
+    const drained = await drainGates(session, turn, deps)
+    turn = drained.turn
+    if (drained.declined) return turn
+  }
 }
 
 /**
  * Prompt the agent and honor its await gates (#337/#339) until it stops asking: resolve each
  * gate to the user's answer, re-prompt with it, and repeat up to {@link MAX_AWAIT_ROUNDS}.
- * A declined plan (#358) ends the exchange rather than re-prompting.
+ * A declined plan (#358) ends the exchange rather than re-prompting. When a live-chat
+ * {@link AwaitRoundsOptions.messages} source is wired, the run then stays open for the
+ * user's own messages (#714) rather than finishing.
  *
  * Every turn here is a turn like any other, so each one's signals are emitted. That is the
  * point of sharing this: the direct prompt path and the backlog loop each had their own copy
@@ -639,25 +718,19 @@ export interface AwaitRoundsOptions {
  * rather than a raw prompt, and skips gates entirely when headless.
  */
 export async function runAwaitRounds(opts: AwaitRoundsOptions): Promise<AwaitRoundsResult> {
-  const { session, emit, emitTurnSignals } = opts
-  const deps = { requestChoice: opts.requestChoice, emit, signal: opts.signal }
+  const { session, emit, emitTurnSignals, messages } = opts
+  const deps: AwaitTurnDeps = { requestChoice: opts.requestChoice, emit, emitTurnSignals, signal: opts.signal }
   const signalOpt = opts.signal ? { signal: opts.signal } : {}
 
-  let turn = await session.prompt(opts.prompt, signalOpt)
-  emitTurnSignals(turn.text)
-  let gate = parseAwaitGate(turn.text)
-  for (let round = 0; round < MAX_AWAIT_ROUNDS && gate; round++) {
-    const answer = await resolveAwaitGate(gate, round, deps)
-    if (isDeclinedConfirmation(gate, answer)) {
-      emit({ kind: 'log', message: PLAN_DECLINED_MESSAGE })
-      return { text: turn.text, declined: true, exhausted: false }
-    }
-    emit({ kind: 'log', message: `Continuing with your choice: ${answer}` })
-    turn = await session.prompt(continuationPrompt(gate.title, answer), signalOpt)
-    emitTurnSignals(turn.text)
-    gate = parseAwaitGate(turn.text)
-  }
-  return { text: turn.text, declined: false, exhausted: gate !== undefined }
+  const opening = await session.prompt(opts.prompt, signalOpt)
+  emitTurnSignals(opening.text)
+  const drained = await drainGates(session, opening, deps)
+  if (drained.declined) return { text: drained.turn.text, declined: true, exhausted: false }
+
+  // Live chat (#714): stay open for the user's messages until Stop. Headless leaves it unset,
+  // so the run ends here exactly as before.
+  const finalTurn = messages ? await runChatPhase(session, messages, drained.turn, deps) : drained.turn
+  return { text: finalTurn.text, declined: false, exhausted: drained.exhausted }
 }
 
 
