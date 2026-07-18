@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { FrameworkEvent } from '@gemstack/framework'
 import type { ClientChannel } from 'telefunc'
 import { onEvents } from '../server/events.telefunc.js'
+import { currentRunEvents } from './live-state.js'
 
 // The live run feed (#405), shared. The dashboard is a projection of the selected project's
 // `.the-framework/events.jsonl`, streamed over a Telefunc Channel that pushes one
@@ -30,5 +31,8 @@ export function useLiveEvents(projectId: string | null): FrameworkEvent[] {
     }
   }, [projectId])
 
-  return events
+  // Scope the accumulated feed to the run in progress. The subscription lives across run
+  // boundaries (it only resets on a project switch), so without this a second run would show
+  // the previous run's log until it finished. See {@link currentRunEvents}.
+  return useMemo(() => currentRunEvents(events), [events])
 }
