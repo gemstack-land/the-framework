@@ -53,6 +53,32 @@ body {
   color: var(--foreground);
 }
 
+/* Scrollbars: the OS default is a bright light track that clashes with the dark-first UI. Theme
+   them from the design tokens so they follow light/dark and read as part of the product. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background-color: var(--border);
+  border-radius: 9999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background-color: var(--muted-foreground);
+}
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
 /* Prompt editor (#470): live-markdown prose + token chips. Kept lightweight — the box is a
    prompt input, not a document, so just enough structure for lists/emphasis/code to read. */
 .pe-prose {
