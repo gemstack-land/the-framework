@@ -749,8 +749,8 @@ test('runFramework leaves a resume note on the backlog when it pauses (#529)', a
       }),
     )
     // The backlog is what a later run drains, so the note needs no machinery of its own.
-    // With no existing backlog, it is created at the #629 location, tickets/TODO.md.
-    const todo = await readFile(join(cwd, 'tickets/TODO.md'), 'utf8')
+    // With no existing backlog, it is created at the #682 location, the root TODO-AGENTS.md.
+    const todo = await readFile(join(cwd, 'TODO-AGENTS.md'), 'utf8')
     assert.match(todo, /^- \[ \] Resume .+$/m)
     assert.ok(events.some(e => e.kind === 'log' && e.message.includes('to pick up when the limit resets')))
   } finally {
