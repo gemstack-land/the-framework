@@ -34,17 +34,20 @@ async function withProject<T>(projectId: string, read: (cwd: string) => Promise<
 
 /**
  * The project's runs, most-recent first (or `[]`). The archived (finished) runs
- * from `runs/`, plus the live run prepended when one is going — so the sidebar
+ * from `runs/`, plus the live run prepended when one is present — so the sidebar
  * shows the in-progress run with a `running` status the moment it starts, not
  * only after it closes. The live run is skipped once it has been archived under
  * the same id (it then appears from `listRuns` instead), so there is no double.
+ * The status is not filtered on: `readLiveMeta` may have just self-healed a dead
+ * run to `stopped` (#716), and that freshly-archived row can lag `listRuns` by a
+ * poll — prepending it regardless keeps the row visible (as stopped) with no flicker.
  */
 export async function onRuns(projectId: string): Promise<RunMeta[]> {
   const cwd = await resolveProjectPath(projectId)
   if (!cwd) return []
   const archived = await listRuns(cwd).catch(() => [])
   const live = await readLiveMeta(cwd).catch(() => undefined)
-  if (live && live.status === 'running' && !archived.some(r => r.id === live.id)) {
+  if (live && !archived.some(r => r.id === live.id)) {
     return [live, ...archived]
   }
   return archived
