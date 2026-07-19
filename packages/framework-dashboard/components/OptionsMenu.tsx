@@ -119,7 +119,7 @@ export function OptionsMenu({
               <DropdownMenuCheckboxItem
                 key={o.key}
                 checked={o.checked}
-                disabled={busy}
+                disabled={busy || !!o.disabled}
                 onCheckedChange={checked => setOption(o.key, checked)}
                 title={o.title}
                 className="items-start pl-8"

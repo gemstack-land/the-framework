@@ -91,6 +91,33 @@ describe('Composer (#721)', () => {
     expect(onSubmit).toHaveBeenCalledWith('follow-up', 'build')
   })
 
+  test('option labels promise only what the code delivers (#801)', () => {
+    prefs = { onBeforeMergeableQuality: true }
+    renderComposer()
+    fireEvent.click(screen.getByRole('button', { name: 'Session options' }))
+    // Autopilot no longer claims to relax the maintenance stance: #556 took that section out of the
+    // prompt, leaving the countdown as the whole feature.
+    const autopilot = screen.getByText('Autopilot').closest('[title]')
+    expect(autopilot?.getAttribute('title')).not.toMatch(/maintenance/i)
+    expect(autopilot?.getAttribute('title')).toMatch(/countdown/i)
+  })
+
+  test('Browser is disabled with a reason off Claude Code (#801)', () => {
+    prefs = { agent: 'codex', browser: true }
+    renderComposer()
+    fireEvent.click(screen.getByRole('button', { name: 'Session options' }))
+    // The browser rides Claude Code's MCP config, so under Codex the box was checkable and inert.
+    expect(screen.getByText(/only on Claude Code/)).toBeTruthy()
+  })
+
+  test('Auto maintenance is gated on Post-merge cleanup (#801)', () => {
+    // It trims the post-merge prompt, so with that pass off it drops nothing.
+    prefs = { eco: true, ecoMaintenance: true, onBeforeMergeableQuality: false }
+    renderComposer()
+    fireEvent.click(screen.getByRole('button', { name: 'Session options' }))
+    expect(screen.getByText(/only applies while Post-merge cleanup is on/)).toBeTruthy()
+  })
+
   test('the submit button is disabled until the editor has text, then fires onSubmit', () => {
     const { onSubmit } = renderComposer()
     const submit = screen.getByRole('button', { name: 'Send' })

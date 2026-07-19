@@ -120,8 +120,9 @@ export interface RunFrameworkOptions {
   preset?: DomainPreset
   /**
    * The active modes for the run (e.g. `['autopilot']`). Narrated with the
-   * {@link preset} (which is expected to be loaded with them already applied),
-   * and `autopilot` also steers the #326 system prompt's maintenance stance.
+   * {@link preset}, which is expected to be loaded with them already applied.
+   * (`autopilot` no longer steers the system prompt: #556 moved the maintenance
+   * section out, leaving the choice-gate countdown as its whole effect. See #801.)
    */
   modes?: readonly string[]
   /**

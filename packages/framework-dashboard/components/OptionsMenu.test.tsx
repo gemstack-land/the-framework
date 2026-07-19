@@ -51,6 +51,30 @@ describe('OptionsMenu (#654)', () => {
     expect(screen.getByText('Auto planning')).toBeTruthy()
   })
 
+  test('a disabled row is greyed out and says why, and cannot be toggled', () => {
+    const options: OptionRow[] = [
+      { key: 'browser', label: 'Browser', title: 't', description: 'Gives the agent a real browser.', checked: false, disabled: true, disabledReason: 'only on Claude Code' },
+    ]
+    render(<OptionsMenu options={options} ecoOptions={ecoOptions()} showEco={false} busy={false} {...editorProps} />)
+    open()
+    expect(screen.getByText(/only on Claude Code/)).toBeTruthy()
+    fireEvent.click(screen.getByText('Browser'))
+    expect(updatePreferences).not.toHaveBeenCalled()
+  })
+
+  test('a disabled Eco sub-drop cannot be toggled either (#801)', () => {
+    // The sub-rows rendered the reason but stayed clickable, so a gated one (Auto maintenance under
+    // Post-merge cleanup) would have looked disabled and still written through.
+    const eco: OptionRow[] = [
+      { key: 'ecoMaintenance', label: 'Auto maintenance', title: 't', checked: false, disabled: true, disabledReason: 'only applies while Post-merge cleanup is on' },
+    ]
+    render(<OptionsMenu options={mainOptions()} ecoOptions={eco} showEco={true} busy={false} {...editorProps} />)
+    open()
+    expect(screen.getByText(/only applies while Post-merge cleanup is on/)).toBeTruthy()
+    fireEvent.click(screen.getByText('Auto maintenance'))
+    expect(updatePreferences).not.toHaveBeenCalled()
+  })
+
 })
 
 describe('OptionsMenu editor picker (#727)', () => {

@@ -28,7 +28,9 @@ export function collectRunOptions(preferences: Preferences, context: string[] = 
     ...(transparent ? { transparent: true } : {}),
     ...(eco && !vanilla && !transparent && Object.keys(ecoDrops).length ? { eco: ecoDrops } : {}),
     ...(onBeforeMergeableQuality ? { onBeforeMergeable: true } : {}),
-    ...(browser ? { browser: true } : {}),
+    // Claude-only (#801): another agent's driver takes no MCP servers, so sending it would only earn
+    // the CLI's "no effect" notice. Matches the box being disabled off Claude Code.
+    ...(browser && agent === 'claude' ? { browser: true } : {}),
     ...(model ? { model } : {}),
     ...(agent !== 'claude' ? { agent } : {}),
     ...(context.length ? { context } : {}),

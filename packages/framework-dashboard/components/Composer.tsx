@@ -167,17 +167,24 @@ export const Composer = forwardRef<ComposerHandle, {
   // is disabled + dimmed under Vanilla; the Eco sub-drops show only while Eco is on.
   const mainOptions: OptionRow[] = [
     { key: 'transparent', label: 'Transparent', description: 'Raw Claude Code — turns the whole framework off.', title: 'Fully transparent (#625): run the agent exactly like plain Claude Code, with no framework system prompt, controls, dashboard, guard, or TODO loop. Overrides the options below.', checked: transparent },
-    { key: 'autopilot', label: 'Autopilot', description: 'Auto-accepts the recommended choice after a countdown.', title: 'Auto-accept the recommended choice after a countdown; also relaxes the maintenance stance', checked: autopilot && !transparent, disabled: transparent, disabledReason: 'off while Transparent is on' },
+    // Says only what it does (#801): the maintenance stance it used to relax left the system prompt
+    // with that section (#556), so the countdown is the whole feature.
+    { key: 'autopilot', label: 'Autopilot', description: 'Auto-accepts the recommended choice after a countdown.', title: 'Auto-accept the recommended choice after a countdown, instead of waiting for you to pick', checked: autopilot && !transparent, disabled: transparent, disabledReason: 'off while Transparent is on' },
     { key: 'technical', label: 'Technical control', description: 'Surfaces technical detail like tech-stack choices.', title: 'Expose technical detail (e.g. tech-stack choices)', checked: technical && !transparent, disabled: transparent, disabledReason: 'off while Transparent is on' },
     { key: 'vanilla', label: 'Disable system prompt', description: 'Drops the added system prompt; keeps the session controls.', title: "Remove the built-in system prompt but keep the framework's session controls. For a fully raw session, use Transparent. Expand 'Actual prompt' to read what it removes.", checked: vanilla && !transparent, disabled: transparent, disabledReason: 'off while Transparent is on' },
     { key: 'eco', label: 'Eco', description: 'Trims the system prompt to save tokens.', title: 'Trim the built-in system prompt to save tokens', checked: eco && !ecoDisabled, disabled: ecoDisabled, disabledReason: 'nothing to trim while the system prompt is off' },
     { key: 'onBeforeMergeableQuality', label: 'Post-merge cleanup', description: 'Runs quality passes once it is ready to merge.', title: "When the session signals it's ready for merge, run maintainability, readability, and security-audit passes", checked: onBeforeMergeableQuality && !transparent, disabled: transparent, disabledReason: 'off while Transparent is on' },
-    { key: 'browser', label: 'Browser', description: 'Gives the agent a real browser to inspect pages.', title: 'Give the agent a real browser via chrome-devtools-mcp: navigate pages, read console + network, inspect the DOM, and screenshot', checked: browser && !transparent, disabled: transparent, disabledReason: 'off while Transparent is on' },
+    // Claude-only (#801): the browser is wired through Claude Code's MCP config, so another agent's
+    // driver takes no MCP servers and the box would be checkable but inert. The CLI has always
+    // warned about this (`unguardedNotices`); now the dashboard says it too.
+    { key: 'browser', label: 'Browser', description: 'Gives the agent a real browser to inspect pages.', title: 'Give the agent a real browser via chrome-devtools-mcp: navigate pages, read console + network, inspect the DOM, and screenshot', checked: browser && !transparent && agent === 'claude', disabled: transparent || agent !== 'claude', disabledReason: transparent ? 'off while Transparent is on' : 'only on Claude Code — the browser is wired through its MCP config' },
   ]
   const ecoOptions: OptionRow[] = [
     { key: 'ecoPlanning', label: 'Auto planning', description: 'Drops the planning section; the agent plans itself.', title: 'Drop the planning section, letting the agent plan on its own', checked: ecoPlanning },
     { key: 'ecoResearch', label: 'Auto research', description: 'Drops the alternatives/variability section.', title: 'Drop the alternatives/variability section', checked: ecoResearch },
-    { key: 'ecoMaintenance', label: 'Auto maintenance', description: 'Drops the maintenance section.', title: 'Drop the maintenance section', checked: ecoMaintenance },
+    // Gated on Post-merge cleanup (#801): #556 moved the Maintenance section out of the system
+    // prompt and into the on-before-mergeable prompt, so this trims nothing unless that pass runs.
+    { key: 'ecoMaintenance', label: 'Auto maintenance', description: 'Drops the maintenance section from the post-merge prompt.', title: 'Drop the Maintenance section from the post-merge cleanup prompt', checked: ecoMaintenance && onBeforeMergeableQuality, disabled: !onBeforeMergeableQuality, disabledReason: 'only applies while Post-merge cleanup is on' },
   ]
 
   const editorEl = (

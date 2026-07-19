@@ -159,7 +159,9 @@ Options:
                          the-framework.yml (transparent: true) or per user.
   --eco-auto-planning    Drop the built-in prompt's "Large scope" (planning) section.
   --eco-auto-research    Drop the built-in prompt's "Alternatives" (research) section.
-  --eco-auto-maintenance Drop the built-in prompt's "Maintenance" section.
+  --eco-auto-maintenance Drop the "Maintenance" section from the post-merge
+                         cleanup prompt. Needs --on-before-mergeable; #556 moved
+                         that section out of the built-in prompt.
                          (The --eco-* flags trim the #326 prompt to save tokens.)
   --context <dir>        Focus the agent on this directory (repeatable). Adds one
                          "Context: <dirs>" line to the system prompt; the agent can
@@ -1218,8 +1220,9 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
   }
 
   // A mode/kind given with no preset in effect has nothing to act on: note it.
-  // Autopilot is the exception — it also steers the #326 system prompt's
-  // maintenance stance, so it works preset or not.
+  // Autopilot is the exception — it auto-answers the run's choice gates, which
+  // needs no preset. (It no longer steers the prompt's maintenance stance: #556
+  // moved that section out, see #801.)
   const presetOnlyModes = modeList.filter(m => m !== 'autopilot')
   if (presetOnlyModes.length && !domainPreset) {
     io.err(`note: ${presetOnlyModes.join(' + ')} mode(s) have no effect without a preset.`)

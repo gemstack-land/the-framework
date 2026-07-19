@@ -502,7 +502,7 @@ test('runCli notes mode flags given without a preset', async () => {
   assert.ok(err.some(l => /technical mode\(s\) have no effect without a preset/.test(l)))
 })
 
-test('runCli does not note --autopilot without a preset (it steers the #326 prompt)', async () => {
+test('runCli does not note --autopilot without a preset (it auto-answers choice gates)', async () => {
   const { io, err } = capture()
   const code = await runCli(['--fake', '--no-dashboard', '--autopilot'], io)
   assert.equal(code, 0)
