@@ -35,6 +35,22 @@ describe('RunHistory (#785)', () => {
     expect(container.querySelector('.animate-pulse')).toBeNull()
   })
 
+  test('a session selected before its row lands highlights the starting row (#784)', () => {
+    // Start navigates to the run's id right away; its run.json, and so its row, arrives a beat
+    // later. The highlight belongs on the optimistic row standing in for it, not on Live.
+    const { container, rerender } = render(
+      <RunHistory projectId="p1" runs={[]} selectedRunId={null} onSelect={() => {}} startTick={0} startIntent="" />,
+    )
+    rerender(
+      <RunHistory projectId="p1" runs={[]} selectedRunId="run-2" onSelect={() => {}} startTick={1} startIntent="add dark mode" />,
+    )
+    const rows = [...container.querySelectorAll('button')]
+    const live = rows.find(row => row.textContent?.includes('Live'))
+    const starting = rows.find(row => row.textContent?.includes('starting…'))
+    expect(starting?.className).toContain('bg-accent')
+    expect(live?.className).not.toContain('bg-accent')
+  })
+
   test('a finished run is finished, never waiting', () => {
     // settledAt is cleared on `end`, but a stale one must not relabel a terminal status.
     render(

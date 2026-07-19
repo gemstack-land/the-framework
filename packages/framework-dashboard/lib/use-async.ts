@@ -15,8 +15,12 @@ function useAsyncValue<T>(
   initial: T,
   everyMs: number | null,
   deps: DependencyList,
-): { value: T; reload: () => void } {
+): { value: T; reload: () => void; loaded: boolean } {
   const [value, setValue] = useState<T>(initial)
+  // Whether `value` is an answer rather than the initial. Only a successful read sets it, so a
+  // caller that reads absence as a fact ("is this session gone, or just not fetched yet?", #784)
+  // never mistakes a daemon hiccup for an answer.
+  const [loaded, setLoaded] = useState(false)
   // Captured once, like useState's own initial: it is also what a dep change resets to,
   // and callers pass literals like `[]` that would otherwise be a new value every render.
   const initialRef = useRef(initial)
@@ -27,7 +31,9 @@ function useAsyncValue<T>(
   const apply = useCallback((token: { live: boolean }, run: () => Promise<T>) => {
     void run()
       .then(next => {
-        if (token.live) setValue(next)
+        if (!token.live) return
+        setValue(next)
+        setLoaded(true)
       })
       .catch(() => {
         // Keep whatever we last showed; the next read may well succeed.
@@ -38,6 +44,7 @@ function useAsyncValue<T>(
     const token = { live: true }
     liveRef.current = token
     setValue(initialRef.current) // a switch shows nothing rather than the last project's data
+    setLoaded(false)
     if (!load) return () => void (token.live = false)
     const run = (): void => apply(token, load)
     run()
@@ -57,7 +64,7 @@ function useAsyncValue<T>(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, deps)
 
-  return { value, reload }
+  return { value, reload, loaded }
 }
 
 /**
@@ -76,13 +83,14 @@ export function useLoaded<T>(load: (() => Promise<T>) | null, initial: T, deps: 
  * too late to wait for.
  *
  * Pass `null` for `load` when there is nothing to read yet. `load` must close over
- * exactly `deps`.
+ * exactly `deps`. `loaded` is false until the first successful read, and again after
+ * a dep change — for callers that must tell "not there" from "not read yet".
  */
 export function usePolled<T>(
   load: (() => Promise<T>) | null,
   initial: T,
   everyMs: number,
   deps: DependencyList,
-): { value: T; reload: () => void } {
+): { value: T; reload: () => void; loaded: boolean } {
   return useAsyncValue(load, initial, everyMs, deps)
 }
