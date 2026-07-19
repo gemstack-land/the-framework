@@ -103,16 +103,33 @@ export class ClaudeCodeSession implements DriverSession {
   async prompt(text: string, opts: DriverPromptOptions = {}): Promise<DriverTurn> {
     const system = combineFraming(this.startOpts.system, opts.system)
     const resumeId = opts.resume ? this.lastSessionId : undefined
-    const turn = await runClaude({
-      bin: this.config.bin ?? 'claude',
-      args: this.buildArgs(system, resumeId),
-      cwd: this.cwd,
-      env: this.config.env ?? process.env,
-      prompt: text,
-      spawn: this.config.spawn ?? (nodeSpawn as unknown as SpawnLike),
-      emit: makeEmit(this.startOpts.onEvent, 'claude-code'),
-      signals: combineSignals(this.startOpts.signal, opts.signal),
-    })
+    const emit = makeEmit(this.startOpts.onEvent, 'claude-code')
+    const signals = combineSignals(this.startOpts.signal, opts.signal)
+    const run = (id: string | undefined): Promise<DriverTurn> =>
+      runClaude({
+        bin: this.config.bin ?? 'claude',
+        args: this.buildArgs(system, id),
+        cwd: this.cwd,
+        env: this.config.env ?? process.env,
+        prompt: text,
+        spawn: this.config.spawn ?? (nodeSpawn as unknown as SpawnLike),
+        emit,
+        signals,
+      })
+
+    let turn: DriverTurn
+    try {
+      turn = await run(resumeId)
+    } catch (err) {
+      // The id we captured outlives what the CLI will resume (#778) — its retention, a
+      // cleared history, another machine. There is no way to ask first, so let it fail
+      // once and continue as a fresh conversation (which gets the system framing back)
+      // rather than losing the message the user already typed.
+      if (resumeId === undefined || !isConversationGone(err) || signals.some(s => s.aborted)) throw err
+      this.lastSessionId = undefined
+      emit({ type: 'notice', message: 'That conversation is no longer available; continuing without its history.' })
+      turn = await run(undefined)
+    }
     // Track the agent's session so a later resume continues this exact conversation.
     if (turn.sessionId) this.lastSessionId = turn.sessionId
     return turn
@@ -168,6 +185,14 @@ export class ClaudeCodeSession implements DriverSession {
     }
     return this.mcpConfigPath
   }
+}
+
+/** How the CLI reports that the session id we asked it to resume is gone from its history (#778). */
+const CONVERSATION_GONE = /No conversation found with session ID/i
+
+/** Whether a failed turn failed because the conversation we tried to resume no longer exists. */
+function isConversationGone(err: unknown): boolean {
+  return CONVERSATION_GONE.test(err instanceof Error ? err.message : String(err))
 }
 
 /** @deprecated Use {@link RunAgentCliOptions}. */

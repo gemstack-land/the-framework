@@ -73,6 +73,8 @@ function formatDriverEvent(event: DriverEvent): string {
       return `    ${formatRateLimit(event.limit)}`
     case 'error':
       return `  ! agent error: ${event.message}`
+    case 'notice':
+      return `  ~ ${event.message}`
   }
 }
 

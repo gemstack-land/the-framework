@@ -258,3 +258,5 @@ export type DriverEvent =
   | { type: 'rate-limit'; limit: DriverRateLimit }
   /** The agent (or its transport) errored. */
   | { type: 'error'; message: string }
+  /** Something the driver worked around, worth telling the user about (#778). */
+  | { type: 'notice'; message: string }
