@@ -67,6 +67,8 @@ pnpm typecheck
 pnpm test
 ```
 
+Working on `@gemstack/framework`, run `pnpm build` first: the framework tests need the dashboard bundle. Without `packages/framework-dashboard/dist/client`, the daemon answers `/_telefunc` with a 503 text body and `daemon.test.ts` fails on `JSON.parse` (`SyntaxError: Unexpected token 'h'`), which reads like a real regression but is a missing build step.
+
 This is a pnpm + Turborepo + Changesets monorepo. Runnable examples live under [`examples/`](./examples) — e.g. [`mcp-quickstart`](./examples/mcp-quickstart), [`autopilot-quickstart`](./examples/autopilot-quickstart) (Supervisor + runner + surfaces), and [`bootstrap-quickstart`](./examples/bootstrap-quickstart) (the whole bootstrap flow, offline). See [`.changeset/README.md`](./.changeset/README.md) for the release flow.
 
 ## Origin
