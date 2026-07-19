@@ -10,6 +10,7 @@ import {
   readLiveMeta,
   readLiveMetas,
   archiveWorktreeRun,
+  restoreArchivedRun,
   listWorktreeDirs,
   reconcileOrphanedRuns,
   loadRunEvents,
@@ -455,4 +456,50 @@ test('listWorktreeDirs names the run of each worktree, ignoring anything else in
   })
   assert.deepEqual((await listWorktreeDirs(CWD, fs)).sort(), ['r1', 'r2'])
   assert.deepEqual(await listWorktreeDirs(join(CWD, 'never-ran'), fs), [])
+})
+
+// #762: messaging a stopped run continues THAT run, so the history shows one row rather than an
+// unrelated-looking second one. The follow-up is still a separate process; what makes it one run is
+// that it reopens the same log instead of truncating it.
+test('continueRun reopens the existing run: same id, same log, running again (#762)', async () => {
+  const fs = memFs({
+    [META]: JSON.stringify({ version: 1, status: 'stopped', id: 'r1', startedAt: AT, updatedAt: AT, passes: 3, intent: 'build a blog' }),
+    [EVENTS]: '{"kind":"log","message":"first leg"}\n',
+  })
+  const store = await RunStore.open(CWD, { fs, continueRun: true, now: '2026-07-04T01:00:00.000Z' })
+  const meta = await store.readMeta()
+  assert.equal(meta?.id, 'r1', 'the same run, so the rail shows one row')
+  assert.equal(meta?.status, 'running', 'live again')
+  assert.equal(meta?.intent, 'build a blog', 'and keeps what it was originally asked to do')
+  assert.equal(meta?.passes, 3, 'and what it already did')
+  assert.equal(fs.files.get(EVENTS), '{"kind":"log","message":"first leg"}\n', 'the earlier output survives')
+
+  // The continuing process owns it now, so a liveness probe reads it as alive, not orphaned (#716).
+  assert.equal(meta?.pid, process.pid)
+
+  await store.append({ kind: 'log', message: 'second leg' })
+  assert.match(fs.files.get(EVENTS)!, /first leg[\s\S]*second leg/, 'the second leg appends to the same log')
+})
+
+test('continueRun with nothing to reopen falls back to a fresh run (#762)', async () => {
+  const store = await RunStore.open(CWD, { fs: memFs(), continueRun: true, fresh: true, now: AT, id: 'r9' })
+  assert.equal((await store.readMeta())?.id, 'r9')
+  assert.equal((await store.readMeta())?.status, 'running')
+})
+
+test('restoreArchivedRun puts a torn-down run history back in its worktree (#762)', async () => {
+  // #737 moved the history to the repo and removed the checkout; continuing needs it back.
+  const fs = memFs({
+    [join(CWD, '.the-framework', 'runs', 'r1.json')]: JSON.stringify({ version: 1, status: 'done', id: 'r1', startedAt: AT, updatedAt: AT, passes: 1 }),
+    [join(CWD, '.the-framework', 'runs', 'r1.jsonl')]: '{"kind":"log","message":"archived"}\n',
+  })
+  const wt = join(CWD, '.the-framework', 'worktrees', 'r1')
+  assert.equal(await restoreArchivedRun(CWD, wt, 'r1', fs), true)
+  assert.equal(fs.files.get(join(wt, '.the-framework', 'events.jsonl')), '{"kind":"log","message":"archived"}\n')
+  assert.equal((JSON.parse(fs.files.get(join(wt, '.the-framework', 'run.json'))!) as RunMeta).id, 'r1')
+
+  // Idempotent: a checkout that already holds a live run keeps it (its log is the newer one).
+  assert.equal(await restoreArchivedRun(CWD, wt, 'r1', fs), false)
+  // Nothing archived, nothing to do.
+  assert.equal(await restoreArchivedRun(CWD, join(CWD, 'nope'), 'r404', memFs()), false)
 })

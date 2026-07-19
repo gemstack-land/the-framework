@@ -41,6 +41,12 @@ export interface StartRunOptions {
   agent?: string
   /** Resume a finished run's conversation (#720): its captured agent session id; maps to `--resume-session`. The run's prompt continues that session (full prior context) instead of starting fresh. Sent with `kind: 'prompt'` when you message a run that has ended. */
   resumeSession?: string
+  /**
+   * Continue this run rather than starting a new one (#762): the follow-up writes into that run's
+   * own log, on its own branch, so a stopped run you message again stays one row in the history
+   * instead of spawning an unrelated-looking second one.
+   */
+  continueRunId?: string
 }
 
 /**

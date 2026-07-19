@@ -11,12 +11,15 @@ import { usePreferences } from '../lib/preferences.js'
 // match the one the run used (resume is per-agent). Only rendered when the run has a session id.
 export function RunResumeChat({
   projectId,
+  runId,
   sessionId,
   files,
   addContext,
   onRunStarted,
 }: {
   projectId: string
+  /** The run being continued (#762), so the follow-up reopens it instead of starting a new one. */
+  runId: string
   /** The finished run's agent session id, to resume. */
   sessionId: string
   files: string[]
@@ -40,6 +43,9 @@ export function RunResumeChat({
       const agent = preferences.agent ?? 'claude'
       const result = await sendStart(projectId, text, 'prompt', {
         resumeSession: sessionId,
+        // Continue this run rather than opening a new row (#762): the follow-up writes into the
+        // same run, on the same branch, so one thing you asked for stays one entry.
+        continueRunId: runId,
         ...(model ? { model } : {}),
         ...(agent && agent !== 'claude' ? { agent } : {}),
       })

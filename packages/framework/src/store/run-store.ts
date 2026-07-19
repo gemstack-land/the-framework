@@ -153,6 +153,15 @@ export interface OpenStoreOptions {
    * timestamps taken a moment apart. Ignored unless path-safe.
    */
   id?: string
+  /**
+   * Reopen the run already at this path instead of starting a new one (#762): keep its event log
+   * and its original intent, and flip it back to `running` under this process. What makes a
+   * continued run one row in the history rather than two: the follow-up is a second process, but
+   * it writes into the same run.
+   *
+   * Falls back to a fresh run when there is nothing to reopen.
+   */
+  continueRun?: boolean
 }
 
 /**
@@ -302,6 +311,16 @@ export class RunStore {
     await fs.mkdir(dir)
     const owner = opts.owner ?? { pid: process.pid, host: hostname() }
     const store = new RunStore(fs, dir, now, freshMeta(now, opts.intent, owner, opts.id))
+    if (opts.continueRun) {
+      // Reopen: the log stays, the row keeps its original intent, and this process takes ownership
+      // so a liveness probe (#716) reads the run as alive rather than as an orphan.
+      const prior = await readMetaFile(fs, store.metaPath)
+      if (prior) {
+        store.meta = { ...prior, status: 'running', pid: owner.pid, host: owner.host, updatedAt: now }
+        await store.writeMeta()
+        return store
+      }
+    }
     if (opts.fresh) {
       // A new run truncates the live log. First rescue the prior run if it never
       // got archived (e.g. a crash exited before close), so no history is lost.
@@ -397,6 +416,35 @@ async function archivePriorRun(fs: StoreFs, dir: string): Promise<void> {
   if (!meta?.id || !isSafeRunId(meta.id)) return
   if (await fs.exists(archivePaths(dir, meta.id).meta)) return
   await archiveRun(fs, dir, meta, join(dir, EVENTS_FILE))
+}
+
+/**
+ * Put an archived run's history back where a run reads it (#762), so a continued run picks up its
+ * own log rather than starting empty. The inverse of {@link archiveWorktreeRun}: teardown moved the
+ * history to the repo, and continuing needs it in the checkout again.
+ *
+ * A no-op when the worktree already holds a live run (nothing to restore, and its log is newer),
+ * or when there is no archive. Never throws.
+ */
+export async function restoreArchivedRun(
+  repo: string,
+  worktree: string,
+  runId: string,
+  fs: StoreFs = nodeStoreFs(),
+): Promise<boolean> {
+  try {
+    if (!isSafeRunId(runId)) return false
+    const dir = join(worktree, FRAMEWORK_DIR)
+    if (await fs.exists(join(dir, META_FILE))) return false
+    const archive = archivePaths(join(repo, FRAMEWORK_DIR), runId)
+    if (!(await fs.exists(archive.meta))) return false
+    await fs.mkdir(dir)
+    await fs.write(join(dir, EVENTS_FILE), (await fs.exists(archive.events)) ? await fs.read(archive.events) : '')
+    await fs.write(join(dir, META_FILE), await fs.read(archive.meta))
+    return true
+  } catch {
+    return false
+  }
 }
 
 /**

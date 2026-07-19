@@ -11,6 +11,10 @@ import {
   linkDependencies,
   excludeDependencyLinks,
   archiveWorktreeRun,
+  restoreArchivedRun,
+  attachWorktree,
+  worktreePath,
+  listRuns,
   removeWorktree,
   pruneWorktrees,
 } from './store/index.js'
@@ -489,6 +493,32 @@ function createProjectRuntime({ cwd, env, binPath }: ProjectRuntimeOptions): Pro
    * main checkout, which is exactly the pre-#736 behavior — and keeps its pre-#736 limit of
    * one run at a time, since those runs *would* collide. Signalled by the absent `runId`.
    */
+  /**
+   * Put a continued run (#762) back in its own checkout: the same worktree if it was retained, else
+   * its own branch checked out fresh. Its archived history is restored into the checkout so the run
+   * reopens its log rather than starting empty, which is what keeps it one row.
+   *
+   * The branch is the session's if the agent named one, else the run-id branch it started on.
+   * Returns undefined when none of that is possible, so the caller can fall back to a new run.
+   */
+  const continueWorkspace = async (projectCwd: string, runId: string): Promise<{ cwd: string; runId: string } | undefined> => {
+    try {
+      const path = worktreePath(projectCwd, runId)
+      const existing = await stat(path).then(s => s.isDirectory()).catch(() => false)
+      if (!existing) {
+        const archived = (await listRuns(projectCwd).catch(() => [])).find(run => run.id === runId)
+        const branch = archived?.sessionName ? `the-framework/${archived.sessionName}` : runBranchName(runId)
+        await attachWorktree(projectCwd, { runId, branch })
+        await linkDependencies(projectCwd, path).catch(() => [])
+      }
+      await restoreArchivedRun(projectCwd, path, runId).catch(() => false)
+      return { cwd: path, runId }
+    } catch (err) {
+      console.log(`[framework] could not continue run ${runId} (${err instanceof Error ? err.message : String(err)}); starting a new one`)
+      return undefined
+    }
+  }
+
   const allocateWorkspace = async (projectCwd: string, runId: string): Promise<{ cwd: string; runId?: string }> => {
     try {
       const worktree = await addWorktree(projectCwd, { runId, branch: runBranchName(runId) })
@@ -553,7 +583,9 @@ function createProjectRuntime({ cwd, env, binPath }: ProjectRuntimeOptions): Pro
       return { ok: false, error: err instanceof Error ? err.message : String(err) }
     }
 
-    const workspace = await allocateWorkspace(projectCwd, runIdFromStartedAt(new Date().toISOString()))
+    // Continuing an existing run (#762) reuses its id, checkout and log; anything else is new.
+    const continued = options.continueRunId ? await continueWorkspace(projectCwd, options.continueRunId) : undefined
+    const workspace = continued ?? (await allocateWorkspace(projectCwd, runIdFromStartedAt(new Date().toISOString())))
     // A run in its own worktree is keyed by that worktree, so it never collides with a
     // sibling; a fallback run is keyed by the project, restoring the one-at-a-time guard.
     const key = workspace.runId ? `${projectKey}::${workspace.runId}` : projectKey
@@ -582,6 +614,8 @@ function createProjectRuntime({ cwd, env, binPath }: ProjectRuntimeOptions): Pro
         '--cwd',
         workspace.cwd,
         ...(workspace.runId ? ['--run-id', workspace.runId] : []),
+        // Reopen the run's log instead of truncating it: the follow-up IS that run.
+        ...(continued ? ['--continue-run'] : []),
       ])
       // The run narrates itself through its own `.the-framework/events.jsonl`, which the
       // dashboard streams over a Telefunc Channel; the daemon just tracks liveness.

@@ -34,6 +34,7 @@ function renderChat(over: Partial<Parameters<typeof RunResumeChat>[0]> = {}) {
   render(
     <RunResumeChat
       projectId="p1"
+      runId="2026-07-19T10-00-00-000Z"
       sessionId="sess-42"
       files={[]}
       addContext={vi.fn()}

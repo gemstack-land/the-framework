@@ -53,7 +53,7 @@ export function RunReplay({
         <EventList events={events} stick={false} />
       )}
       {sessionId && (
-        <RunResumeChat projectId={projectId} sessionId={sessionId} files={files} addContext={addContext} onRunStarted={onRunStarted} />
+        <RunResumeChat projectId={projectId} runId={runId} sessionId={sessionId} files={files} addContext={addContext} onRunStarted={onRunStarted} />
       )}
     </>
   )

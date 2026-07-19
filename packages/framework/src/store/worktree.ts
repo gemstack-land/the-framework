@@ -68,6 +68,24 @@ export async function addWorktree(
 }
 
 /**
+ * Check an *existing* branch out into a run's worktree (#762): `git worktree add <path> <branch>`,
+ * no `-b`. Continuing a run puts it back on the branch its work is already on, rather than
+ * branching again from HEAD and stranding what it did last time.
+ *
+ * Rejects on git failure, like {@link addWorktree}: a continued run needs its checkout.
+ */
+export async function attachWorktree(
+  repo: string,
+  opts: { runId: string; branch: string },
+  run: GitRunner = nodeGitRunner(),
+): Promise<AddedWorktree> {
+  if (!isSafeRunId(opts.runId)) throw new Error(`unsafe run id: ${opts.runId}`)
+  const path = worktreePath(repo, opts.runId)
+  await run(['worktree', 'add', path, opts.branch], repo)
+  return { path, branch: opts.branch }
+}
+
+/**
  * Every worktree registered for the repo (the main checkout included). Forgiving:
  * a non-repo / git failure yields `[]` so a reconcile scan never throws.
  */

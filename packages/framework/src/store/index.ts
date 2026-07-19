@@ -9,6 +9,7 @@ export {
   loadRunEvents,
   readLiveMetas,
   archiveWorktreeRun,
+  restoreArchivedRun,
   listWorktreeDirs,
   runIdFromStartedAt,
   isSafeRunId,
@@ -26,6 +27,7 @@ export {
 } from './run-store.js'
 export {
   addWorktree,
+  attachWorktree,
   listWorktrees,
   parseWorktreeList,
   removeWorktree,

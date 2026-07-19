@@ -234,6 +234,12 @@ export interface CliOptions {
    * the session. Absent for a plain `framework "..."`, which runs in the user's own checkout.
    */
   runId?: string | undefined
+  /**
+   * `--continue-run` (#762): this run continues the run `--run-id` names rather than starting a new
+   * one. The store reopens that run's log instead of truncating it, so messaging a stopped run
+   * stays one row in the history.
+   */
+  continueRun?: boolean | undefined
   model?: string | undefined
   /** `--resume-session <id>` (#720): continue a finished run's agent session — the prompt resumes that conversation (full prior context). Set by the dashboard when you message a run that has ended. */
   resumeSession?: string | undefined
@@ -434,6 +440,9 @@ export function parseArgs(argv: string[]): CliOptions {
         break
       case '--run-id':
         opts.runId = argv[++i]
+        break
+      case '--continue-run':
+        opts.continueRun = true
         break
       case '--model':
         opts.model = argv[++i]
@@ -1030,6 +1039,8 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
         intent: intent || (opts.research ? 'this PR' : ''),
         // Adopt the daemon's id (#736) so the run and the worktree it lives in share one.
         ...(opts.runId ? { id: opts.runId } : {}),
+        // Continuing (#762): keep the existing log rather than starting this run's history over.
+        ...(opts.continueRun ? { continueRun: true } : {}),
       })
     } catch (err) {
       io.err(`could not persist run state (${err instanceof Error ? err.message : String(err)}); continuing without it`)
