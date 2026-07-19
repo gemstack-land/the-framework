@@ -102,6 +102,8 @@ export interface RunFrameworkOptions {
    * is the historical config key: #326 is the anti-lazy-pill's (#297) successor.
    */
   antiLazyPill?: boolean
+  /** This run has a real browser (#824), so the system channel says so. */
+  browser?: boolean
   /** Transparent mode (#625): empty the system channel entirely (raw `claude -p`); overrides antiLazyPill/eco. */
   transparent?: boolean
   /** Eco fine-grained control (#314): drop the enabled #326 sections to save tokens. */
@@ -294,6 +296,7 @@ export async function runFramework(opts: RunFrameworkOptions): Promise<RunFramew
   // direct-prompt path so the two can never drift (the drift behind #500).
   const system = composeRunSystem({
     antiLazyPill: opts.antiLazyPill,
+    browser: opts.browser,
     transparent: opts.transparent,
     user: opts.systemPrompt,
     tf,

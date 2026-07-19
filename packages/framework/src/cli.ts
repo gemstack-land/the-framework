@@ -1233,6 +1233,12 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
     ? fakeDriver()
     : createDriver({ agent: opts.agent, claudeOpts: withBrowser(claudeOpts, opts.browser, sharedBrowser?.browserUrl) })
 
+  // Whether the agent actually ends up with browser tools, which is narrower than the flag: they
+  // ride Claude Code's MCP config, so `--browser` on another agent wires nothing (see
+  // `unguardedNotices`), and the fake driver has no tools at all. The system channel must only
+  // claim a browser the run really has (#824).
+  const browserAttached = opts.browser && !fake && opts.agent === 'claude'
+
   // The preview of that browser (#802): the agent's Chrome is headless, so when it parks on an
   // `await-browser` gate (#796) there is nothing for a human to click. This serves it. Opening
   // the stream costs nothing while the page is still — Chrome only emits a frame on a change.
@@ -1309,6 +1315,7 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
         ...(guard ? { consumptionGate: guard.gate } : {}),
         ...(userSystemPrompt ? { systemPrompt: userSystemPrompt } : {}),
         ...(noBuiltinPrompt ? { antiLazyPill: false } : {}),
+        ...(browserAttached ? { browser: true } : {}),
         ...(transparent ? { transparent: true } : {}),
         ...(eco ? { eco } : {}),
         ...(opts.context.length ? { context: opts.context } : {}),
@@ -1388,6 +1395,7 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
     ...(buildEvent ? { buildEvent } : {}),
     ...(userSystemPrompt ? { systemPrompt: userSystemPrompt } : {}),
     ...(noBuiltinPrompt ? { antiLazyPill: false } : {}),
+    ...(browserAttached ? { browser: true } : {}),
     ...(transparent ? { transparent: true } : {}),
     ...(eco ? { eco } : {}),
     ...(opts.context.length ? { context: opts.context } : {}),
