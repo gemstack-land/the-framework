@@ -221,6 +221,61 @@ test('following survives a browser that stops answering', async () => {
   }
 })
 
+test('a still page keeps re-sending its frame so the pane paints (#818)', async () => {
+  // Chrome holds the last MJPEG part back until the next boundary arrives, so one frame on a
+  // page that never changes rendered as nothing. Found against a real run: the bridge served a
+  // good JPEG and the pane stayed blank.
+  const cdp = fakeCdp()
+  const stream = await startBrowserStream({
+    browserUrl: 'http://127.0.0.1:9333',
+    connect: async () => cdp.session,
+    listTargets: async () => [page()],
+    followIntervalMs: 0,
+    repeatIntervalMs: 20,
+  })
+  assert.ok(stream)
+  try {
+    cdp.frame(Buffer.from([1, 2, 3]).toString('base64'))
+    const res = await fetch(`${stream.url}/stream`)
+    const reader = res.body?.getReader()
+
+    // Two parts out of one screencast frame: nothing else changed the page.
+    const first = await reader?.read()
+    const second = await reader?.read()
+    const seen = Buffer.concat([Buffer.from(first?.value ?? []), Buffer.from(second?.value ?? [])]).toString('latin1')
+    assert.equal(seen.split('--frame').length - 1, 2, 'the frame repeats, terminating the part before it')
+
+    await reader?.cancel()
+  } finally {
+    await stream?.close()
+  }
+})
+
+test('the repeat stops when nobody is watching', async () => {
+  // The interval must not keep writing into a closed response.
+  const cdp = fakeCdp()
+  const stream = await startBrowserStream({
+    browserUrl: 'http://127.0.0.1:9333',
+    connect: async () => cdp.session,
+    listTargets: async () => [page()],
+    followIntervalMs: 0,
+    repeatIntervalMs: 10,
+  })
+  assert.ok(stream)
+  try {
+    cdp.frame(Buffer.from([1, 2, 3]).toString('base64'))
+    const res = await fetch(`${stream.url}/stream`)
+    await res.body?.cancel()
+    await new Promise(r => setTimeout(r, 60))
+    // Still serving: a viewer leaving must not take the bridge down with it.
+    const again = await fetch(`${stream.url}/stream`)
+    assert.equal(again.status, 200)
+    await again.body?.cancel()
+  } finally {
+    await stream?.close()
+  }
+})
+
 test('close stops the screencast and frees the port', async () => {
   const cdp = fakeCdp()
   const stream = await startBrowserStream({
