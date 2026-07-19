@@ -479,6 +479,21 @@ test('runCli rejects an unknown --preset with a usage error (exit 2)', async () 
   assert.ok(err.some(l => /unknown --preset: nope/.test(l)))
 })
 
+test('runCli rejects --resume-session on a build run rather than dropping it (#782)', async () => {
+  const { io, err } = capture()
+  const code = await runCli(['--fake', '--no-dashboard', '--resume-session', 'sess-42'], io)
+  assert.equal(code, 2)
+  assert.ok(err.some(l => /--resume-session only applies to a prompt run/.test(l)))
+})
+
+test('runCli honors --resume-session on the prompt path it belongs to (#782)', async () => {
+  const { io, err } = capture()
+  // The dashboard's continuation always runs here, so the guard must never fire on it.
+  const code = await runCli(['prompt', 'keep going', '--fake', '--no-dashboard', '--resume-session', 'sess-42'], io)
+  assert.notEqual(code, 2)
+  assert.ok(!err.some(l => /--resume-session only applies/.test(l)))
+})
+
 test('runCli notes mode flags given without a preset', async () => {
   const { io, err } = capture()
   // --fake so the note fires before any real run; unknown-preset path is not hit.

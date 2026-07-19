@@ -926,6 +926,17 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
   // one of those sites reads the same answer.
   const transparent = opts.transparent || fileConfig.transparent === true
 
+  // Only the direct-prompt path resumes a conversation (#782): a build run rebuilds the
+  // scope/build framing a resumed transcript already carries, so it takes no session id and
+  // used to drop the flag on the floor. Silently losing the context you asked to continue
+  // from is the worst outcome, so say so and stop rather than run a fresh session that looks
+  // like a resumed one.
+  if (opts.resumeSession && !(opts.research || opts.directPrompt || transparent)) {
+    io.err('--resume-session only applies to a prompt run, e.g. `framework prompt "keep going" --resume-session <id>`.')
+    io.err('Run `framework --help` for usage.')
+    return 2
+  }
+
   // Resolve which Open Loop domain preset (+ modes + build event) to run under:
   // --preset / the-framework.yml, or none at all (#545). Nothing infers one.
   const merged = mergeRunConfig(opts, fileConfig)
