@@ -1,8 +1,8 @@
-import { Fragment, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Check, FileIcon } from 'lucide-react'
 import { onProjectFileStatus } from '../server/reads.telefunc.js'
 import { usePolled } from '../lib/use-async.js'
-import { FileDiffHover } from './FileDiffHover.js'
+import { FilePreviewHover } from './FilePreview.js'
 import {
   Files,
   FolderItem,
@@ -136,13 +136,13 @@ export function FileTree({
               {name}
             </FileItem>
           )
-          // Only a changed file has a diff to show, so only it gets the hover card (#816).
-          return git ? (
-            <FileDiffHover key={path} projectId={projectId} runId={runId} path={path}>
+          // Every file previews on hover: a changed one shows its diff (#816), an unchanged one
+          // its contents (#828). `git` picks which read the card makes, so the tree's own status
+          // map answers that rather than a second server lookup.
+          return (
+            <FilePreviewHover key={path} projectId={projectId} runId={runId} path={path} changed={Boolean(git)}>
               {item}
-            </FileDiffHover>
-          ) : (
-            <Fragment key={path}>{item}</Fragment>
+            </FilePreviewHover>
           )
         })}
     </>

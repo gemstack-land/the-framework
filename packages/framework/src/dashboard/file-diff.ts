@@ -1,5 +1,10 @@
 import { nodeGitRunner, type GitRunner } from '../project.js'
 import type { FileGitStatus } from './file-status.js'
+import { cutToPreview, readConfinedFile, safeRepoPath } from './file-read.js'
+
+// `safeRepoPath` moved to file-read.js with #828, where the unchanged-file preview shares it.
+// Re-exported so this stays the import site it has been.
+export { safeRepoPath }
 
 // One changed file's diff for the tree's hover card (#816) and the run view's Changes section
 // (#817). The tree already says a file is M/U/D; this says what actually changed, without
@@ -18,7 +23,7 @@ export interface FileDiff {
   patch: string
   added: number
   removed: number
-  /** The patch hit {@link MAX_DIFF_LINES} and was cut. */
+  /** The patch hit the preview cap and was cut. */
   truncated: boolean
   /** Nothing textual to show (git reports a binary change, or the file is not UTF-8 text). */
   binary: boolean
@@ -32,22 +37,6 @@ export interface FileChange {
   removed: number
   /** Line counts are unavailable (a binary file, or an untracked one too large to count). */
   binary: boolean
-}
-
-/** Cap a patch so one enormous file can't flood a hover card or the event stream. */
-const MAX_DIFF_LINES = 500
-
-/**
- * Whether a client-supplied path may be read: repo-relative, no traversal, no absolute path, no
- * leading `-` (git would read it as a flag), and never into `.git` (config and credentials live
- * there). Rejecting is the whole contract; the caller resolves it against a checkout it chose.
- */
-export function safeRepoPath(path: string): boolean {
-  if (!path || path.length > 1024 || path.includes('\0')) return false
-  if (path.startsWith('/') || path.startsWith('-') || /^[a-zA-Z]:/.test(path)) return false
-  const parts = path.split(/[\\/]/)
-  if (parts[0] === '.git') return false
-  return parts.every(part => part !== '' && part !== '.' && part !== '..')
 }
 
 /** Drop git's `diff --git` / `index` / `mode` preamble, keeping the `---`/`+++`/hunk body. */
@@ -67,12 +56,6 @@ function countChanges(patch: string): { added: number; removed: number } {
     else if (line.startsWith('-')) removed++
   }
   return { added, removed }
-}
-
-function cut(patch: string): { patch: string; truncated: boolean } {
-  const lines = patch.split('\n')
-  if (lines.length <= MAX_DIFF_LINES) return { patch, truncated: false }
-  return { patch: lines.slice(0, MAX_DIFF_LINES).join('\n'), truncated: true }
 }
 
 /** An untracked file has no blob to diff against, so render its contents as all-added. */
@@ -101,16 +84,10 @@ export async function readFileDiff(
   if (!safeRepoPath(path)) return null
 
   if (status === 'untracked') {
-    const { readFile } = await import('node:fs/promises')
-    const { join, resolve, sep } = await import('node:path')
-    const full = resolve(cwd, path)
-    // Belt and braces: the string guard above already rejects traversal, but a symlink inside
-    // the repo could still point out of it, and this read follows links.
-    if (!full.startsWith(resolve(cwd) + sep)) return null
-    const raw = await readFile(join(cwd, path)).catch(() => null)
+    const raw = await readConfinedFile(cwd, path)
     if (!raw) return null
     if (raw.includes(0)) return { path, status, patch: '', added: 0, removed: 0, truncated: false, binary: true }
-    const { patch, truncated } = cut(asAllAdded(raw.toString('utf8')))
+    const { body: patch, truncated } = cutToPreview(asAllAdded(raw.toString('utf8')))
     return { path, status, patch, ...countChanges(patch), truncated, binary: false }
   }
 
@@ -122,7 +99,7 @@ export async function readFileDiff(
   if (!raw.trim()) return null
   if (/^Binary files /m.test(raw)) return { path, status, patch: '', added: 0, removed: 0, truncated: false, binary: true }
 
-  const { patch, truncated } = cut(hunksOnly(raw))
+  const { body: patch, truncated } = cutToPreview(hunksOnly(raw))
   if (!patch) return null
   return { path, status, patch, ...countChanges(patch), truncated, binary: false }
 }

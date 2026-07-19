@@ -13,6 +13,7 @@ import type { RunWorktree } from '../dashboard/types.js'
 import { crawlRepoFiles } from '../project.js'
 import { readFileStatuses, type FileGitStatus } from '../dashboard/file-status.js'
 import { readFileDiff, readFileChanges, type FileDiff, type FileChange } from '../dashboard/file-diff.js'
+import { readFileContent, type FileContent } from '../dashboard/file-read.js'
 import { contextProjects, resolveProjectPath, resolveRunPath } from './context.js'
 import type { FrameworkEvent } from '../events.js'
 
@@ -215,6 +216,20 @@ export async function onRunChanges(projectId: string, runId?: string): Promise<F
   if (!cwd) return []
   const statuses = await readFileStatuses(cwd).catch((): Record<string, FileGitStatus> => ({}))
   return readFileChanges(cwd, statuses).catch(() => [])
+}
+
+/**
+ * One unchanged file's contents, for the tree's hover card (#828). Null when the path is unsafe
+ * (see `safeRepoPath`), outside the checkout, or unreadable. Reads the run's own worktree when
+ * `runId` names one, so it shows the copy the tree is listing (#815).
+ *
+ * The caller picks this or {@link onFileDiff} from the status the tree already holds; a changed
+ * file has a diff worth seeing, an unchanged one has only itself.
+ */
+export async function onFileContent(projectId: string, path: string, runId?: string): Promise<FileContent | null> {
+  const cwd = await resolveRunPath(projectId, runId)
+  if (!cwd) return null
+  return readFileContent(cwd, path).catch(() => null)
 }
 
 /** The project's GitHub URL from its `origin` remote (#489), or null (no remote / not GitHub / relay). */

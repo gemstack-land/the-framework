@@ -152,3 +152,15 @@ test('readFileChanges on a clean checkout is empty and asks git nothing', async 
   })
   assert.deepEqual(changes, [])
 })
+
+test('an untracked file reached through a symlink out of the repo is refused', async () => {
+  // The untracked branch reads the file itself rather than asking git, so it carries the same
+  // containment duty as the contents preview and goes through the same confined read (#828).
+  const { mkdir, symlink } = await import('node:fs/promises')
+  const dir = await mkdtemp(join(tmpdir(), 'file-diff-link-'))
+  const outside = await mkdtemp(join(tmpdir(), 'file-diff-out-'))
+  await writeFile(join(outside, 'secret.txt'), 'token')
+  await mkdir(join(dir, 'src'))
+  await symlink(join(outside, 'secret.txt'), join(dir, 'src', 'link.txt'))
+  assert.equal(await readFileDiff(dir, 'src/link.txt', 'untracked', async () => ''), null)
+})

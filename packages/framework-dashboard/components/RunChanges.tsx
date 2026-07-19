@@ -3,7 +3,7 @@ import { ChevronRight } from 'lucide-react'
 import type { FileChange } from '@gemstack/framework'
 import { onRunChanges } from '../server/reads.telefunc.js'
 import { usePolled } from '../lib/use-async.js'
-import { FileDiffCard } from './FileDiffHover.js'
+import { FilePreviewCard } from './FilePreview.js'
 import { DiffStat } from './DiffView.js'
 import { cn } from '../lib/utils.js'
 
@@ -60,7 +60,7 @@ function ChangeRow({ projectId, runId, change }: { projectId: string; runId: str
           you actually ask for a file's diff. */}
       {open && (
         <div className="border-t border-border bg-muted/30">
-          <FileDiffCard projectId={projectId} runId={runId} path={change.path} />
+          <FilePreviewCard projectId={projectId} runId={runId} path={change.path} />
         </div>
       )}
     </li>

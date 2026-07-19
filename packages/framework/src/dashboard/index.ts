@@ -18,6 +18,7 @@ export { buildOverview, type Overview, type ActiveRun, type RecentProject, type 
 export { buildDashboard, type DashboardData, type ProjectStat, type ActivityDay, type DashboardDeps } from './dashboard.js'
 export { readGitStatus, type GitStatus, type LinkedPr } from './git-status.js'
 export { readFileDiff, readFileChanges, safeRepoPath, type FileDiff, type FileChange } from './file-diff.js'
+export { readFileContent, type FileContent } from './file-read.js'
 export {
   readRunHandoff,
   runBranchFor,

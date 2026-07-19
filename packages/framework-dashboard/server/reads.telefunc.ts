@@ -3,4 +3,4 @@
 // the client bakes the RPC key `/server/reads.telefunc.ts` — the exact key the daemon
 // registers the impls under (see framework's dashboard-rpc/register.ts). The telefunc
 // Vite transform turns these named re-exports into client RPC stubs.
-export { onRuns, onRun, onDocs, onProjectLog, onQueue, onOverview, onInterventions, onActivity, onDashboard, onGithubUrl, onGitStatus, onProjectFiles, onProjectFileStatus, onFileDiff, onRunChanges, onRetainedWorktrees, onRunWorktree, onRunHandoff } from '@gemstack/framework/dashboard-rpc'
+export { onRuns, onRun, onDocs, onProjectLog, onQueue, onOverview, onInterventions, onActivity, onDashboard, onGithubUrl, onGitStatus, onProjectFiles, onProjectFileStatus, onFileDiff, onRunChanges, onFileContent, onRetainedWorktrees, onRunWorktree, onRunHandoff } from '@gemstack/framework/dashboard-rpc'
