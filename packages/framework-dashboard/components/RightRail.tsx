@@ -29,7 +29,7 @@ export function RightRail({
   hasBrowser = false,
 }: {
   projectId: string | null
-  /** The selected run, so a choice pick resolves that run's gate (#749). */
+  /** The selected run: resolves a choice pick's gate (#749) and scopes the tree to its worktree (#815). */
   runId?: string | null | undefined
   choices: ChoiceRequest[]
   views: AgentView[]
@@ -117,7 +117,7 @@ export function RightRail({
       </div>
       <div className="flex min-h-0 flex-1 flex-col">
         {tab === 'files' && hasFiles ? (
-          <FileTree projectId={projectId} files={files} selected={context} onToggle={toggleContext} />
+          <FileTree projectId={projectId} runId={runId} files={files} selected={context} onToggle={toggleContext} />
         ) : tab === 'choices' && hasChoices ? (
           <ChoicesRail projectId={projectId} runId={runId} choices={choices} />
         ) : tab === 'views' && hasViews ? (

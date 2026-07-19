@@ -81,9 +81,16 @@ export default function Page() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId])
 
-  // The selected project's files (git ls-files), fetched once here and handed to both the
-  // `#` picker and the tree. Empty when no project / on the relay (no checkout).
-  const files = useLoaded<string[]>(projectId ? () => onProjectFiles(projectId) : null, EMPTY_FILES, [projectId])
+  // The selected project's files (git ls-files), handed to both the `#` picker and the tree.
+  // Empty when no project / on the relay (no checkout). Scoped to the selected session's
+  // worktree (#815), the same checkout the action bar's branch, Serve and open-folder act on;
+  // polled so a file the run creates shows up rather than waiting for a reload.
+  const { value: files } = usePolled<string[]>(
+    projectId ? () => onProjectFiles(projectId, runId ?? undefined) : null,
+    EMPTY_FILES,
+    10_000,
+    [projectId, runId],
+  )
 
   // The cross-project "needs you" queue (#632): open PRs to review. Polled here in the shell so
   // the sidebar badge and the Overview card share one poll. Slow cadence — PRs change rarely and

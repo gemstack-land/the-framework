@@ -70,23 +70,28 @@ const byName = (a: { name: string }, b: { name: string }) => a.name.localeCompar
 
 export function FileTree({
   projectId,
+  runId,
   files,
   selected,
   onToggle,
 }: {
   projectId: string
+  /** The selected run, so the dots describe its worktree and not the project root (#815). */
+  runId?: string | null | undefined
   files: string[]
   selected: Set<string>
   onToggle: (path: string) => void
 }) {
   const [query, setQuery] = useState('')
 
-  // Per-file git status for the dots (#492): polled so it tracks a run editing files.
+  // Per-file git status for the dots (#492): polled so it tracks a run editing files. Scoped to
+  // the selected run's worktree (#815) so the dots agree with the branch and Serve in the action
+  // bar right above, which have resolved the worktree since #738.
   const { value: status } = usePolled<Record<string, FileGitStatus>>(
-    () => onProjectFileStatus(projectId),
+    () => onProjectFileStatus(projectId, runId ?? undefined),
     EMPTY_STATUS,
     8_000,
-    [projectId],
+    [projectId, runId],
   )
 
   const folderStatus = useMemo(() => foldersFromStatus(status), [status])
