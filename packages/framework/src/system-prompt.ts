@@ -1,6 +1,6 @@
 import { renderTemplate } from './prompt-template.js'
 import { SYSTEM_PROMPT } from './prompts.generated.js'
-import { AWAIT_PROTOCOL, SIGNAL_PROTOCOL } from './turn-gate.js'
+import { AWAIT_PROTOCOL, BROWSER_PROTOCOL, SIGNAL_PROTOCOL } from './turn-gate.js'
 
 // No Node imports here, deliberately. This module composes the prompt and the
 // dashboard renders it in the browser (#520), so reading the user's SYSTEM.md off
@@ -213,6 +213,12 @@ export interface SystemPromptOptions {
    * Short-circuits {@link composeRunSystem}, so it overrides every other option here.
    */
   transparent?: boolean | undefined
+  /**
+   * This run has a real browser attached (#824). Adds the section telling the agent so: the
+   * tools are wired through MCP, which the agent discovers, but nothing otherwise says to prefer
+   * them — so it reaches for `WebFetch`, and the browser (and its preview) sits unused.
+   */
+  browser?: boolean | undefined
 }
 
 /**
@@ -269,5 +275,10 @@ export type RunSystemOptions = SystemPromptOptions
 export function composeRunSystem(opts: RunSystemOptions = {}): string {
   if (opts.transparent) return ''
   const promptBlock = systemPromptBlock(opts)
-  return [...(promptBlock ? [promptBlock] : []), AWAIT_PROTOCOL, SIGNAL_PROTOCOL].join('\n\n')
+  // The browser section rides with the protocols, not with the built-in prompt: like them it
+  // describes what this run can do, so `--vanilla` (no framework prompt) still gets it — the
+  // tools are there either way.
+  // Ahead of the protocols, so the signal protocol stays the last thing in the channel (#547).
+  const browser = opts.browser ? [BROWSER_PROTOCOL] : []
+  return [...(promptBlock ? [promptBlock] : []), ...browser, AWAIT_PROTOCOL, SIGNAL_PROTOCOL].join('\n\n')
 }

@@ -1,5 +1,5 @@
 import type { FrameworkEvent } from './events.js'
-import { PROTOCOLS_AWAIT, PROTOCOLS_SIGNAL } from './prompts.generated.js'
+import { PROTOCOLS_BROWSER, PROTOCOLS_AWAIT, PROTOCOLS_SIGNAL } from './prompts.generated.js'
 import type { ChoicesOption } from './run.js'
 import type { MultiSelectOption } from './run.js'
 
@@ -14,6 +14,13 @@ import type { MultiSelectOption } from './run.js'
  * #326 wording still being written. The text lives in `prompts/protocols/await.md` (#551).
  */
 export const AWAIT_PROTOCOL = PROTOCOLS_AWAIT
+
+/**
+ * Told to the agent only when the run has a browser (#824): that it has one, and that anything
+ * it needs to see or act on goes through the chrome-devtools tools rather than `WebFetch`.
+ * Lives in `prompts/protocols/browser.md`.
+ */
+export const BROWSER_PROTOCOL = PROTOCOLS_BROWSER
 
 /**
  * The session-lifecycle protocol (#326): the code side of the `setSessionName()` and

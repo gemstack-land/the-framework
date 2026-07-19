@@ -32,7 +32,7 @@ test('CONTEXT_DOCS is the #683 fragment: business knowledge plus the roadmap/que
   const tickets = CONTEXT_DOCS.find(d => d.path === 'tickets/**.md')
   assert.ok(tickets?.comment.includes(TICKETING_FORMAT_FILE), `expected the ${TICKETING_FORMAT_FILE} pointer`)
 })
-import { AWAIT_PROTOCOL, SIGNAL_PROTOCOL } from './turn-gate.js'
+import { AWAIT_PROTOCOL, BROWSER_PROTOCOL, SIGNAL_PROTOCOL } from './turn-gate.js'
 
 test('loadUserSystemPrompt reads and trims SYSTEM.md', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'system-prompt-'))
@@ -256,6 +256,27 @@ test('composeRunSystem appends nothing after the protocols, whatever the options
   })
   assert.equal(system, [block, AWAIT_PROTOCOL, SIGNAL_PROTOCOL].join('\n\n'))
   assert.ok(system.endsWith(SIGNAL_PROTOCOL), 'the signal protocol is the last thing in the channel')
+})
+
+test('composeRunSystem says nothing about a browser unless the run has one (#824)', () => {
+  // The default: no browser wired, so no claim of one. An agent told it has tools it does not
+  // have is worse than one that reaches for WebFetch.
+  assert.ok(!composeRunSystem().includes(BROWSER_PROTOCOL))
+})
+
+test('composeRunSystem tells the agent it has a browser when the run does (#824)', () => {
+  // Without this the chrome-devtools tools are wired but never mentioned, so the agent uses
+  // WebFetch and the browser (and its preview) sits on about:blank for the whole run.
+  const system = composeRunSystem({ browser: true })
+  assert.ok(system.includes(BROWSER_PROTOCOL))
+  assert.ok(system.endsWith(SIGNAL_PROTOCOL), 'the signal protocol is still last (#547)')
+})
+
+test('the browser section survives --vanilla but not transparent (#824)', () => {
+  // It describes what the run can do, like the emit protocols, so dropping the built-in prompt
+  // keeps it. Transparent means an empty channel, so nothing at all.
+  assert.ok(composeRunSystem({ antiLazyPill: false, browser: true }).includes(BROWSER_PROTOCOL))
+  assert.equal(composeRunSystem({ transparent: true, browser: true }), '')
 })
 
 test('composeRunSystem keeps the emit protocols even with the built-in prompt off (#500/#501)', () => {
