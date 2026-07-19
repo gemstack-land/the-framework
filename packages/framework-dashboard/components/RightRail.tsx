@@ -19,6 +19,7 @@ type Tab = 'files' | 'choices' | 'views' | 'docs' | 'log'
 // jumps to whatever the run most wants seen: a choice gate first, else a fresh view.
 export function RightRail({
   projectId,
+  runId,
   choices,
   views,
   files,
@@ -26,6 +27,8 @@ export function RightRail({
   toggleContext,
 }: {
   projectId: string | null
+  /** The selected run, so a choice pick resolves that run's gate (#749). */
+  runId?: string | null | undefined
   choices: ChoiceRequest[]
   views: AgentView[]
   /** The project's files for the Files tab tree (#492); empty on the relay. */
@@ -100,7 +103,7 @@ export function RightRail({
         {tab === 'files' && hasFiles ? (
           <FileTree projectId={projectId} files={files} selected={context} onToggle={toggleContext} />
         ) : tab === 'choices' && hasChoices ? (
-          <ChoicesRail projectId={projectId} choices={choices} />
+          <ChoicesRail projectId={projectId} runId={runId} choices={choices} />
         ) : tab === 'views' && hasViews ? (
           <ViewsRail views={views} />
         ) : tab === 'log' ? (

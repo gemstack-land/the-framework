@@ -145,7 +145,7 @@ export default function Page() {
 
   // The live run feed is owned here so both the main view and the right rail's choice gates
   // (#440) read one shared Telefunc Channel. Hooks run before the relay early return below.
-  const events = useLiveEvents(projectId, runStart.tick)
+  const events = useLiveEvents(projectId, runId, runStart.tick)
   const choices = projectId ? pendingChoices(events) : []
   const views = projectId ? agentViews(events) : []
 
@@ -157,8 +157,8 @@ export default function Page() {
   if (relayRun) return <RelayView runId={relayRun} />
 
   // Route the main pane: the Overview dashboard when no project is selected (#471); else the
-  // project home/launcher, a running run's live output, or a finished run's replay. (One
-  // project streams one live feed today; per-run streams land with worktrees, #453.)
+  // project home/launcher, a running run's live output, or a finished run's replay. Each live
+  // run streams its own feed and is steered by its own id (#749).
   const selectedRun = runId ? runs.find(run => run.id === runId) : undefined
   const renderMain = () => {
     if (!projectId) return <DashboardPage onSelectProject={selectProject} interventions={interventions} />
@@ -177,7 +177,8 @@ export default function Page() {
         />
       )
     }
-    if (selectedRun?.status === 'running') return <RunLive projectId={projectId} events={events} files={files} addContext={addContext} />
+    if (selectedRun?.status === 'running')
+      return <RunLive projectId={projectId} runId={runId} events={events} files={files} addContext={addContext} />
     return <RunReplay projectId={projectId} runId={runId} files={files} addContext={addContext} onRunStarted={onRunStarted} />
   }
 
@@ -221,6 +222,7 @@ export default function Page() {
         <main className="flex min-w-0 flex-1 flex-col">{renderMain()}</main>
         <RightRail
           projectId={projectId}
+          runId={runId}
           choices={choices}
           views={views}
           files={files}

@@ -10,10 +10,13 @@ import { sendMessage } from '../server/control.telefunc.js'
 // Only rendered inside RunLive, i.e. while the run is running — a finished run replays without it.
 export function RunChat({
   projectId,
+  runId,
   files,
   addContext,
 }: {
   projectId: string
+  /** Which run the message goes to (#749); absent falls back to the project's control log. */
+  runId?: string | null | undefined
   /** The project's files for the `#` picker (#504), owned by the shell. */
   files: string[]
   /** Add a path to the run Context (from an `@`/`#` mention). */
@@ -26,7 +29,7 @@ export function RunChat({
     if (sending) return
     setSending(true)
     try {
-      await sendMessage(projectId, text)
+      await sendMessage(projectId, text, runId ?? undefined)
       composerRef.current?.clear()
     } catch {
       // Leave the text in place so the user can retry; the run may have just ended.

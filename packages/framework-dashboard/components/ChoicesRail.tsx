@@ -7,7 +7,16 @@ import { ChoicePanel } from './ChoicePanel.js'
 // top-nav jumps between the sets; the first (topmost) gate is `active`, so Ctrl+Enter
 // accepts it unambiguously. Gates clear themselves as their `choice-resolved` events stream
 // in (pendingChoices drops them); an empty list means there is nothing to decide right now.
-export function ChoicesRail({ projectId, choices }: { projectId: string; choices: ChoiceRequest[] }) {
+export function ChoicesRail({
+  projectId,
+  runId,
+  choices,
+}: {
+  projectId: string
+  /** Which run the picks resolve (#749), forwarded to each panel. */
+  runId?: string | null | undefined
+  choices: ChoiceRequest[]
+}) {
   const scroller = useRef<HTMLDivElement>(null)
   const panels = useRef(new Map<string, HTMLDivElement>())
 
@@ -43,7 +52,7 @@ export function ChoicesRail({ projectId, choices }: { projectId: string; choices
               else panels.current.delete(c.id)
             }}
           >
-            <ChoicePanel projectId={projectId} choice={c} active={i === 0} />
+            <ChoicePanel projectId={projectId} runId={runId} choice={c} active={i === 0} />
           </div>
         ))}
       </div>

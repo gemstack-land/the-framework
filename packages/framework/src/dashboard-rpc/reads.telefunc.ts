@@ -10,7 +10,7 @@ import { githubUrlFor } from '../dashboard/github.js'
 import { readGitStatus, type GitStatus } from '../dashboard/git-status.js'
 import { crawlRepoFiles } from '../project.js'
 import { readFileStatuses, type FileGitStatus } from '../dashboard/file-status.js'
-import { contextProjects, resolveProjectPath } from './context.js'
+import { contextProjects, resolveProjectPath, resolveRunPath } from './context.js'
 import type { FrameworkEvent } from '../events.js'
 
 // The read model behind the new dashboard (#405): the run history, a run's replay, the
@@ -30,22 +30,6 @@ import type { FrameworkEvent } from '../events.js'
 async function withProject<T>(projectId: string, read: (cwd: string) => Promise<T>, empty: T): Promise<T> {
   const cwd = await resolveProjectPath(projectId)
   return cwd ? read(cwd).catch(() => empty) : empty
-}
-
-/**
- * The checkout a read should target: a live run's own worktree when `runId` names one (#738),
- * else the project root. Since #736 a run edits its worktree, not the user's checkout, so the
- * branch / dirty flag / file dots shown beside a run have to come from there — asking the
- * project root would report the user's own working tree instead of the run's.
- *
- * An unknown or finished `runId` falls back to the project root rather than failing: the run's
- * worktree may already be gone, and the project's own status is still the sane thing to show.
- */
-async function resolveRunPath(projectId: string, runId?: string): Promise<string | undefined> {
-  const cwd = await resolveProjectPath(projectId)
-  if (!cwd || !runId) return cwd
-  const live = await readLiveMetas(cwd).catch(() => [])
-  return live.find(run => run.id === runId)?.cwd ?? cwd
 }
 
 /**
