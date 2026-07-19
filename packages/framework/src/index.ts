@@ -325,6 +325,12 @@ export {
   SUGGEST_NEW_TICKETS_PARAMS,
 } from './suggest-new-tickets-preset.js'
 export {
+  renderSuggestTicketsToWorkOnPrompt,
+  SUGGEST_TICKETS_TO_WORK_ON_PRESET_NAME,
+  SUGGEST_TICKETS_TO_WORK_ON_PROMPT_TEMPLATE,
+  SUGGEST_TICKETS_TO_WORK_ON_PARAMS,
+} from './suggest-tickets-to-work-on-preset.js'
+export {
   renderSpikeAndPlanPrompt,
   SPIKE_AND_PLAN_PRESET_NAME,
   SPIKE_AND_PLAN_PROMPT_TEMPLATE,

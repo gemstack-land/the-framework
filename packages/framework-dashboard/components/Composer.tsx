@@ -7,6 +7,7 @@ import {
   renderSecurityAuditPrompt,
   renderUxPrompt,
   renderSuggestNewTicketsPrompt,
+  renderSuggestTicketsToWorkOnPrompt,
   renderSpikeAndPlanPrompt,
   renderQuickWinsPrompt,
 } from '@gemstack/framework/client'
@@ -23,13 +24,19 @@ import { Button } from './ui/button.js'
 
 // The presets (#353/#433): each PREFILLS the editor with a rendered prompt and runs it verbatim
 // (`kind: 'prompt'`). Emptying the box falls back to a normal `build` run.
-const PRESETS: { id: string; label: string; render: () => string }[] = [
+const PRESETS: { id: string; label: string; render: () => string; tooltip?: string }[] = [
   { id: 'research', label: 'Research', render: renderResearchPrompt },
   { id: 'readability', label: 'Readability', render: renderReadabilityPrompt },
   { id: 'maintainability', label: 'Maintainability', render: renderMaintainabilityPrompt },
   { id: 'security-audit', label: 'Security audit', render: renderSecurityAuditPrompt },
   { id: 'ux', label: 'UX', render: renderUxPrompt },
   { id: 'suggest-new-tickets', label: 'Suggest new tickets', render: renderSuggestNewTicketsPrompt },
+  {
+    id: 'suggest-tickets-to-work-on',
+    label: 'Suggest tickets to work on',
+    render: renderSuggestTicketsToWorkOnPrompt,
+    tooltip: 'Add tickets to queue (TODO_AGENTS.md)',
+  },
   { id: 'spike-and-plan', label: 'Spike & plan', render: renderSpikeAndPlanPrompt },
   { id: 'quick-wins', label: 'Quick wins', render: renderQuickWinsPrompt },
 ]
