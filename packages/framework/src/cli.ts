@@ -1151,6 +1151,10 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
   const logTitle = intent || (opts.research ? 'this PR' : '')
   let logSessionId: string | undefined
   let logSessionLink: string | undefined
+  // The browser preview's port, announced on the first `session` event rather than when the
+  // bridge opens (#829). The dashboard renders only the tail from the last `session` event, so
+  // anything emitted ahead of it is dropped from the run's view.
+  let pendingBrowserPort: number | undefined
   const onEvent = (event: FrameworkEvent) => {
     if (event.kind === 'session' && event.sessionLink) logSessionLink = event.sessionLink
     else if (event.kind === 'session-update') {
@@ -1179,6 +1183,13 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
     io.out(formatFrameworkEvent(event))
     void store?.append(event)
     publisher?.publish(event)
+
+    // Right after the session opens, so it lands inside the slice the dashboard renders.
+    if (event.kind === 'session' && pendingBrowserPort !== undefined) {
+      const port = pendingBrowserPort
+      pendingBrowserPort = undefined
+      onEvent({ kind: 'browser-stream', port })
+    }
   }
 
   // Fire the #326 on-before-mergeable prompt once a --on-before-mergeable run has settled and the agent
@@ -1248,10 +1259,11 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
   // A dashboard-started run is spawned with its stdout discarded, so printing the URL reaches
   // nobody (#813). The port goes through onEvent — persisted and published live — which is how
   // the dashboard finds the pane to render.
-  // Through onEvent rather than a print: a dashboard-started run is spawned with its stdout
-  // discarded, so a printed URL reaches nobody (#813). This persists and publishes the port,
-  // which is how the dashboard finds the pane to render — and still prints, on a terminal run.
-  if (browserStream) onEvent({ kind: 'browser-stream', port: browserStream.port })
+  // Held until the session opens (see `pendingBrowserPort`) rather than emitted here: the bridge
+  // exists before the run does, and an event ahead of `session` never reaches the dashboard (#829).
+  // It travels as an event at all because a dashboard-started run is spawned with its stdout
+  // discarded, so a printed URL reaches nobody (#813).
+  if (browserStream) pendingBrowserPort = browserStream.port
 
   // The consumption limits (#519/#531). Read from the user's own file rather than
   // taken as a flag: unlike autopilot or eco, a limit is not a per-run choice, so
