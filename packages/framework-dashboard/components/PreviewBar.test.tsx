@@ -31,7 +31,7 @@ describe('PreviewBar serve picker (#651)', () => {
     expect(screen.getAllByRole('button')).toHaveLength(1)
     fireEvent.click(screen.getByRole('button'))
     // No target id → the daemon serves the root/remembered default.
-    await waitFor(() => expect(sendPreview).toHaveBeenCalledWith('p1', undefined))
+    await waitFor(() => expect(sendPreview).toHaveBeenCalledWith('p1', undefined, undefined))
   })
 
   test('a multi-target repo offers a picker; choosing an app serves that target', async () => {
@@ -41,7 +41,7 @@ describe('PreviewBar serve picker (#651)', () => {
     await waitFor(() => expect(screen.getAllByRole('button')).toHaveLength(2))
     fireEvent.click(screen.getAllByRole('button')[1]!) // open the caret dropdown
     fireEvent.click(await screen.findByText('api'))
-    await waitFor(() => expect(sendPreview).toHaveBeenCalledWith('p2', 'apps/api'))
+    await waitFor(() => expect(sendPreview).toHaveBeenCalledWith('p2', 'apps/api', undefined))
   })
 
   test('the multi-target primary button serves the last pick (no explicit id)', async () => {
@@ -49,6 +49,25 @@ describe('PreviewBar serve picker (#651)', () => {
     render(<PreviewBar projectId="p3" inline />)
     await waitFor(() => expect(screen.getAllByRole('button')).toHaveLength(2))
     fireEvent.click(screen.getAllByRole('button')[0]!) // the primary Serve
-    await waitFor(() => expect(sendPreview).toHaveBeenCalledWith('p3', undefined))
+    await waitFor(() => expect(sendPreview).toHaveBeenCalledWith('p3', undefined, undefined))
+  })
+})
+
+describe('PreviewBar addressing (#797)', () => {
+  test("a session's Serve addresses that session, so it boots the session's own worktree", async () => {
+    onServeTargets.mockResolvedValueOnce([{ id: '.', label: 'app', dir: '', script: 'dev' }])
+    render(<PreviewBar projectId="p1" runId="run-1" inline />)
+    await waitFor(() => expect(onServeTargets).toHaveBeenCalledWith('p1', 'run-1'))
+    // The rehydrate has to be run-addressed too, or a reload adopts the project preview's URL
+    // as if it were the session's.
+    expect(onPreviewStatus).toHaveBeenCalledWith('p1', 'run-1')
+    fireEvent.click(screen.getByRole('button')) // icon-only inline control
+    await waitFor(() => expect(sendPreview).toHaveBeenCalledWith('p1', undefined, 'run-1'))
+  })
+
+  test('the project home stays unaddressed, serving the project checkout', async () => {
+    onServeTargets.mockResolvedValueOnce([{ id: '.', label: 'app', dir: '', script: 'dev' }])
+    render(<PreviewBar projectId="p1" inline />)
+    await waitFor(() => expect(onServeTargets).toHaveBeenCalledWith('p1', undefined))
   })
 })

@@ -1,7 +1,7 @@
 import { getContext } from 'telefunc'
 import { appendControl, type ControlEntry } from '../control.js'
 import { openInApp, type OpenTarget, type OpenResult } from '../dashboard/open-in-app.js'
-import { resolveProjectPath, resolveRunPath, contextPreferences } from './context.js'
+import { resolveProjectPath, resolveRunPath, contextPreferences, contextPreview } from './context.js'
 import { isSafeRunId, readLiveMetas, removeWorktree, pruneWorktrees, worktreePath } from '../store/index.js'
 import type { ChoiceBy } from '../events.js'
 import type {
@@ -78,6 +78,9 @@ export async function sendMessage(projectId: string, text: string, runId?: strin
  * archived into the repo when it finished, so removal costs no history.
  */
 export async function sendRemoveWorktree(projectId: string, runId: string): Promise<RemoveWorktreeResult> {
+  // Read the context before the first await: telefunc only exposes it synchronously, at the top
+  // of the telefunction. Through the tolerant accessor, since this is also called directly.
+  const preview = contextPreview()
   const cwd = await resolveProjectPath(projectId)
   if (!cwd) return { ok: false, error: 'this project has no local path on this server' }
   if (!isSafeRunId(runId)) return { ok: false, error: `invalid session id: ${runId}` }
@@ -86,6 +89,9 @@ export async function sendRemoveWorktree(projectId: string, runId: string): Prom
     return { ok: false, error: 'that session is still going; stop it before removing its worktree' }
   }
   try {
+    // A retained worktree can still be serving (#797), and that dev server holds the tree being
+    // removed. Stop it first rather than pulling the directory out from under it.
+    await preview?.stop(projectId, runId)
     await removeWorktree(cwd, worktreePath(cwd, runId))
     await pruneWorktrees(cwd)
     return { ok: true }
@@ -121,10 +127,12 @@ export async function sendStart(
  * (like `sendStart`). Idempotent — opening while a preview is up returns the running one.
  * Returns an error result when Preview is not enabled on this host (the relay/per-run view).
  */
-export async function sendPreview(projectId: string, targetId?: string): Promise<PreviewResult> {
+export async function sendPreview(projectId: string, targetId?: string, runId?: string): Promise<PreviewResult> {
   const { preview } = getContext<DashboardContext>()
   if (!preview) return { ok: false, error: 'preview is not enabled on this server' }
-  return preview.start(projectId, targetId)
+  // With a session id this serves that session's own worktree (#797). Without one it is the
+  // project's checkout, which is what the project home asks for.
+  return preview.start(projectId, targetId, runId)
 }
 
 /**
@@ -132,23 +140,23 @@ export async function sendPreview(projectId: string, targetId?: string): Promise
  * that has a dev/serve script. A single-package repo returns at most one, so the button stays a
  * plain Serve; a monorepo returns several to choose from. Empty when Preview is not enabled.
  */
-export async function onServeTargets(projectId: string): Promise<ServeTarget[]> {
+export async function onServeTargets(projectId: string, runId?: string): Promise<ServeTarget[]> {
   const { preview } = getContext<DashboardContext>()
   if (!preview) return []
-  return preview.targets(projectId)
+  return preview.targets(projectId, runId)
 }
 
 /** Stop a project's Preview (#475). A no-op when none is running, or Preview is not enabled. */
-export async function sendStopPreview(projectId: string): Promise<void> {
+export async function sendStopPreview(projectId: string, runId?: string): Promise<void> {
   const { preview } = getContext<DashboardContext>()
-  if (preview) await preview.stop(projectId)
+  if (preview) await preview.stop(projectId, runId)
 }
 
 /** Report whether a project's Preview is already running (#475), so a reload rehydrates the button. */
-export async function onPreviewStatus(projectId: string): Promise<PreviewStatus> {
+export async function onPreviewStatus(projectId: string, runId?: string): Promise<PreviewStatus> {
   const { preview } = getContext<DashboardContext>()
   if (!preview) return { running: false }
-  return preview.status(projectId)
+  return preview.status(projectId, runId)
 }
 
 /**
