@@ -67,7 +67,7 @@ describe('RunResumeChat (#720)', () => {
     expect(text).toBe('and now dark mode')
     expect(kind).toBe('prompt') // a continuation is a prompt run
     expect(options.resumeSession).toBe('sess-42') // seeded with the finished run's session
-    await waitFor(() => expect(onRunStarted).toHaveBeenCalledWith('and now dark mode'))
+    await waitFor(() => expect(onRunStarted).toHaveBeenCalledWith('and now dark mode', undefined))
   })
 
   test('surfaces the busy guard instead of jumping', async () => {

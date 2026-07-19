@@ -21,7 +21,7 @@ export function RunResumeChat({
   sessionId: string
   files: string[]
   addContext: (path: string) => void
-  onRunStarted: (intent: string) => void
+  onRunStarted: (intent: string, runId?: string) => void
 }) {
   const composerRef = useRef<ComposerHandle>(null)
   const [busy, setBusy] = useState(false)
@@ -45,7 +45,7 @@ export function RunResumeChat({
       })
       if (result.ok) {
         composerRef.current?.clear()
-        onRunStarted(text) // jump to the new (resumed) run's live output
+        onRunStarted(text, result.runId) // select the run we just started (#761)
       } else {
         setError(result.busy ? 'A run is already active for this project.' : result.error)
       }

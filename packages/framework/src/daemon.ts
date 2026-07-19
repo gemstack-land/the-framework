@@ -592,7 +592,8 @@ function createProjectRuntime({ cwd, env, binPath }: ProjectRuntimeOptions): Pro
       child.once('error', settle)
       child.once('exit', settle)
       if (child.pid !== undefined) activeRuns.set(key, child.pid)
-      return { ok: true }
+      // Hand back the run's id (#761) so the dashboard can select this run rather than guess.
+      return { ok: true, ...(workspace.runId ? { runId: workspace.runId } : {}) }
     } finally {
       starting.delete(key)
     }

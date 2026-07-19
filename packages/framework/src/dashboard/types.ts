@@ -54,7 +54,13 @@ export type StartRunKind = 'build' | 'research' | 'prompt'
 
 /** The outcome of a Start attempt (#345). */
 export type StartRunResult =
-  | { ok: true }
+  /**
+   * `runId` is the id the daemon allocated for the run (#761), present whenever it got its own
+   * worktree. The dashboard needs it to select the run it just started: with concurrent runs
+   * (#736) it can no longer find that run by looking for "the running one", because the previous
+   * run is still running and the new one has not written its `run.json` yet.
+   */
+  | { ok: true; runId?: string }
   | { ok: false; busy?: boolean; error: string }
 
 /** The outcome of a Preview attempt (#475): the live URL, or why not. */

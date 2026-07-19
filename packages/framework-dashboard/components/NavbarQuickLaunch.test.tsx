@@ -70,7 +70,7 @@ describe('NavbarQuickLaunch (#723)', () => {
     expect(text).toBe('add a test')
     expect(kind).toBe('build')
     expect(typeof options).toBe('object')
-    await waitFor(() => expect(onRunStarted).toHaveBeenCalledWith('add a test'))
+    await waitFor(() => expect(onRunStarted).toHaveBeenCalledWith('add a test', undefined))
   })
 
   test('surfaces the busy guard when a run is already active', async () => {
@@ -80,5 +80,24 @@ describe('NavbarQuickLaunch (#723)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Start' }))
     await waitFor(() => expect(screen.getByText(/run is already active/i)).toBeTruthy())
     expect(onRunStarted).not.toHaveBeenCalled()
+  })
+
+  // #761: the shell has to select the run it just started. Before this, it took "whichever run is
+  // running", which with concurrent runs (#736) is the PREVIOUS one — the new run has not written
+  // its run.json yet — so starting a second run navigated to the first.
+  test('hands the started run id up, so the shell selects that run and not another', async () => {
+    sendStart.mockResolvedValue({ ok: true, runId: '2026-07-19T12-00-00-000Z' })
+    const { onRunStarted } = renderQL()
+    fireEvent.change(screen.getByLabelText('prompt'), { target: { value: 'second run' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Start' }))
+    await waitFor(() => expect(onRunStarted).toHaveBeenCalledWith('second run', '2026-07-19T12-00-00-000Z'))
+  })
+
+  test('a run with no worktree reports no id, and the shell falls back as before', async () => {
+    sendStart.mockResolvedValue({ ok: true })
+    const { onRunStarted } = renderQL()
+    fireEvent.change(screen.getByLabelText('prompt'), { target: { value: 'no worktree' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Start' }))
+    await waitFor(() => expect(onRunStarted).toHaveBeenCalledWith('no worktree', undefined))
   })
 })

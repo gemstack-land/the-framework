@@ -59,6 +59,8 @@ export default function Page() {
   // run is a detached process that writes its run.json a beat later), so follow the shared live
   // feed until the poll surfaces the real run row, which the effect below adopts as the selection.
   const [followLive, setFollowLive] = useState(false)
+  // The id the daemon gave the run we just started (#761), so the poll selects that exact run.
+  const [startedRunId, setStartedRunId] = useState<string | null>(null)
 
   const { runs, reload } = useRuns(projectId)
 
@@ -98,13 +100,14 @@ export default function Page() {
   const { value: activity } = usePolled<Activity[]>(browserActivity ? onActivity : null, EMPTY_ACTIVITY, 15000, [browserActivity])
   useActivityNotifications(activity, browserActivity)
 
-  const onRunStarted = (intent: string) => {
+  const onRunStarted = (intent: string, startedId?: string) => {
     // Jump to the new run's live output. Reset to the home/Live row first (a no-op from the launcher,
     // where it already is) so a navbar quick-launch (#723) or resuming a finished run (#720) jumps to
-    // live even from a finished run's replay; `followLive` streams the shared feed until the poll
-    // adopts the new run's real id below. The new run just appends to the rail; reload so its real
+    // live even from a finished run's replay; `followLive` streams that run's feed until the poll
+    // surfaces its row below. The new run just appends to the rail; reload so its real
     // row shows up quickly.
     setRunId(null)
+    setStartedRunId(startedId ?? null)
     setRunStart(prev => ({ tick: prev.tick + 1, intent }))
     setFollowLive(true)
     reload()
@@ -112,20 +115,30 @@ export default function Page() {
 
   // Adopt the started run's real id as the selection the moment the poll surfaces it as running,
   // so the view follows its normal running -> done -> replay lifecycle and the rail highlights the
-  // run's own row. Until then `followLive` shows the shared live output.
+  // run's own row. Until then `followLive` shows the started run's output.
+  //
+  // Only ever the run we started (#761). This used to take "the running one", which was safe while
+  // a project could only have one; with concurrent runs (#736) the previous run is still running
+  // and the new one has not written its `run.json` yet, so that guess selected the OLD run and
+  // navigated away from the one just started. `startedRunId` is the id the daemon allocated, so
+  // there is nothing to infer. A run with no worktree (the non-git fallback) reports no id, and
+  // keeps the old behavior — there, one run at a time still holds, so the guess is still safe.
   useEffect(() => {
     if (!followLive) return
-    const running = runs.find(run => run.status === 'running')
-    if (running) {
-      setRunId(running.id)
+    const started = startedRunId
+      ? runs.find(run => run.id === startedRunId)
+      : runs.find(run => run.status === 'running')
+    if (started) {
+      setRunId(started.id)
       setFollowLive(false)
     }
-  }, [followLive, runs])
+  }, [followLive, runs, startedRunId])
 
   // Selecting a run (or the Live/Home row) from the rail is always an explicit choice, so it
   // ends the just-started follow.
   const selectRun = (id: string | null) => {
     setFollowLive(false)
+    setStartedRunId(null)
     setRunId(id)
   }
 

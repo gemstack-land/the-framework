@@ -24,7 +24,7 @@ export function NavbarQuickLaunch({
   files: string[]
   context: Set<string>
   addContext: (path: string) => void
-  onRunStarted: (intent: string) => void
+  onRunStarted: (intent: string, runId?: string) => void
   className?: string
 }) {
   const composerRef = useRef<ComposerHandle>(null)
@@ -51,7 +51,7 @@ export function NavbarQuickLaunch({
       const result = await sendStart(projectId, text, kind, collectRunOptions(preferences, [...context]))
       if (result.ok) {
         composerRef.current?.clear()
-        onRunStarted(text) // jump to the new run's live output
+        onRunStarted(text, result.runId) // select the run we just started (#761)
       } else {
         setError(result.busy ? 'A run is already active for this project.' : result.error)
       }

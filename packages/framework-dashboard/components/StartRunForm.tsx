@@ -24,7 +24,7 @@ export function StartRunForm({
   toggleContext,
 }: {
   projectId: string
-  onRunStarted?: ((intent: string) => void) | undefined
+  onRunStarted?: ((intent: string, runId?: string) => void) | undefined
   /** The project's files for the `#` picker (#504), owned by the shell. */
   files: string[]
   /** The run Context set, shared with the right-rail file tree (#492) — owned by the shell. */
@@ -88,7 +88,7 @@ export function StartRunForm({
       if (result.ok) {
         // Show the run in the Runs rail immediately (#405): the spawned process writes its run.json
         // a beat later, so seed an optimistic row with the typed prompt until the real meta takes over.
-        onRunStarted?.(text)
+        onRunStarted?.(text, result.runId) // select the run we just started (#761)
         composerRef.current?.clear()
         setPrompt('')
         setNote(null)
