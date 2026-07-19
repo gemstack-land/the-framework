@@ -27,14 +27,14 @@ export function ProjectsSidebar({
 }) {
   const [projects, setProjects] = useState<ProjectSummary[] | null>(null)
 
+  // A selection that names no registered project used to bounce to the Overview from here. The
+  // selection is the URL now (#784), so that would silently rewrite a link someone pasted, which
+  // reads as "the link worked, you clicked the wrong one". The shell says so instead; this rail
+  // just lists what is registered. (What it guarded against — a remembered id going stale, #475 —
+  // went away with the remembered id.)
   const reload = useCallback(() => {
-    void onProjects().then(list => {
-      setProjects(list)
-      // If the remembered selection (#475) points at a project that no longer exists, fall
-      // back to the Overview page rather than showing a stale/empty project.
-      if (selectedId !== null && !list.some(p => p.id === selectedId)) onDashboard()
-    })
-  }, [selectedId, onDashboard])
+    void onProjects().then(setProjects)
+  }, [])
 
   useEffect(() => {
     reload()

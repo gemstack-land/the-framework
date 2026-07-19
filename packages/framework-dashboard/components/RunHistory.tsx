@@ -33,8 +33,9 @@ export function RunHistory({
   onSelect: (runId: string | null) => void
   startTick?: number
   startIntent?: string
-  /** Just started a run and following its live output (#705): highlight the running/optimistic
-   *  row at once, not the Live home row, before the poll adopts the run's real id. */
+  /** Just started a run that reported no id, so there is nothing selected to highlight yet (#705):
+   *  put the highlight on the running/optimistic row rather than the Live home row until the
+   *  shell adopts the run's real id. A run that did report one is selected by URL instead (#784). */
   followLive?: boolean
 }) {
   const [optimistic, setOptimistic] = useState<string | null>(null)
@@ -57,6 +58,9 @@ export function RunHistory({
   // While following a just-started run, the highlight belongs on that run (its optimistic row,
   // then its real row) — not the Live home row, even though no run id is selected yet (#705).
   const atHome = selectedRunId === null && !followLive
+  // A session selected but not in the list is one just started, whose row lands with its run.json
+  // a beat later (#784): the optimistic row is standing in for it, so highlight that.
+  const starting = followLive || (selectedRunId !== null && !runs.some(run => run.id === selectedRunId))
 
   return (
     <aside className="flex w-60 shrink-0 flex-col border-r border-border">
@@ -73,7 +77,7 @@ export function RunHistory({
 
         {/* A just-started run, before its run.json exists — highlighted while following it. */}
         {optimistic !== null && !hasRunning && (
-          <RunRow status="running" intent={optimistic} subtitle="starting…" active={followLive} dim onClick={() => onSelect(null)} />
+          <RunRow status="running" intent={optimistic} subtitle="starting…" active={starting} dim onClick={() => onSelect(null)} />
         )}
 
         {runs.length === 0 && optimistic === null && (
