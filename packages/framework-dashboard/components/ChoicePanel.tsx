@@ -15,10 +15,13 @@ import { cn } from '../lib/utils.js'
 // `active` (the first gate in the right rail, #440) binds Ctrl+Enter to Accept.
 export function ChoicePanel({
   projectId,
+  runId,
   choice,
   active = false,
 }: {
   projectId: string
+  /** Which run the pick resolves (#749); absent falls back to the project's control log. */
+  runId?: string | null | undefined
   choice: ChoiceRequest
   active?: boolean
 }) {
@@ -34,7 +37,7 @@ export function ChoicePanel({
   const post = (pick: string | string[], by: 'user' | 'autopilot' = 'user') => {
     setBusy(true)
     setError(null)
-    void sendChoice(projectId, choice.id, pick, by).catch(() => {
+    void sendChoice(projectId, choice.id, pick, by, runId ?? undefined).catch(() => {
       setBusy(false)
       setError('Could not send your choice — try again.')
     })

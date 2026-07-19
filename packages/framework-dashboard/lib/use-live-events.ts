@@ -8,8 +8,13 @@ import { currentRunEvents } from './live-state.js'
 // `.the-framework/events.jsonl`, streamed over a Telefunc Channel that pushes one
 // `FrameworkEvent` per new line. Both the main event view and the right rail's choice gates
 // (#440) read this same stream, so the subscription lives here and each consumer owns one
-// channel for its project rather than opening a second.
-export function useLiveEvents(projectId: string | null, resetKey?: unknown): FrameworkEvent[] {
+// channel rather than opening a second.
+//
+// The feed is per RUN, not per project (#749): each run tails its own worktree's log since #736,
+// so the selected run id picks the log to follow. Changing it resubscribes, which is what makes
+// selecting run A vs run B show different output. Omitted (the relay, or a Start whose id has not
+// been adopted yet) falls back to the project root.
+export function useLiveEvents(projectId: string | null, runId?: string | null, resetKey?: unknown): FrameworkEvent[] {
   const [events, setEvents] = useState<FrameworkEvent[]>([])
 
   // Drop the accumulated feed at a run boundary the caller knows about (a fresh Start bumps
@@ -27,7 +32,7 @@ export function useLiveEvents(projectId: string | null, resetKey?: unknown): Fra
     if (!projectId) return
     let channel: ClientChannel<never, FrameworkEvent> | undefined
     let cancelled = false
-    void onEvents(projectId).then(ch => {
+    void onEvents(projectId, runId ?? undefined).then(ch => {
       if (cancelled) {
         void ch.close()
         return
@@ -39,7 +44,8 @@ export function useLiveEvents(projectId: string | null, resetKey?: unknown): Fra
       cancelled = true
       void channel?.close()
     }
-  }, [projectId])
+    // runId is a dependency: selecting another run must resubscribe to that run's log (#749).
+  }, [projectId, runId])
 
   // Scope the accumulated feed to the run in progress. The subscription lives across run
   // boundaries (it only resets on a project switch), so without this a second run would show

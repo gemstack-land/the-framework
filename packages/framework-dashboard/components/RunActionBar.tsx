@@ -14,7 +14,16 @@ import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from './ui/t
 // finished replay (RunReplay), so the controls stay put when a run reaches Done. Serve is a
 // project-level action (always available); Stop shows only while the run is active; Open session
 // appears once the run has reported one (honestly labeled — see describeSessionLink).
-export function RunActionBar({ projectId, events }: { projectId: string; events: FrameworkEvent[] }) {
+export function RunActionBar({
+  projectId,
+  runId,
+  events,
+}: {
+  projectId: string
+  /** Which run Stop addresses (#749); absent falls back to the project's own control log. */
+  runId?: string | null | undefined
+  events: FrameworkEvent[]
+}) {
   // Stop routes through useAction like every other mutation: a click disables + shows "Stopping…"
   // and a failed stop surfaces instead of silently doing nothing.
   const { busy, error, run } = useAction()
@@ -36,7 +45,7 @@ export function RunActionBar({ projectId, events }: { projectId: string; events:
                   variant="outline"
                   size="icon-sm"
                   disabled={busy}
-                  onClick={() => void run(() => sendStop(projectId), 'Could not stop the run.')}
+                  onClick={() => void run(() => sendStop(projectId, runId ?? undefined), 'Could not stop the run.')}
                 />
               }
             >

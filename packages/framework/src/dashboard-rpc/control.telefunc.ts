@@ -1,7 +1,7 @@
 import { getContext } from 'telefunc'
 import { appendControl, type ControlEntry } from '../control.js'
 import { openInApp, type OpenTarget, type OpenResult } from '../dashboard/open-in-app.js'
-import { resolveProjectPath, contextPreferences } from './context.js'
+import { resolveProjectPath, resolveRunPath, contextPreferences } from './context.js'
 import type { ChoiceBy } from '../events.js'
 import type { PreviewResult, PreviewStatus, StartRunKind, StartRunOptions, StartRunResult } from '../dashboard/types.js'
 import type { ServeTarget } from '../preview.js'
@@ -10,25 +10,29 @@ import type { Preferences } from '../registry.js'
 
 // The write side behind the new dashboard (#405): steering a live run. The reverse of
 // the event stream — events flow run -> events.jsonl -> Channel -> browser; steering
-// flows browser -> here -> the project's `.the-framework/control.jsonl` -> run, which
-// tails that file and aborts or resolves its gate. Same file-is-the-seam design as the
-// daemon's legacy onStop/onChoice (#344/#393), so any live run in the project is
-// steerable. (Starting a run needs a spawn + the daemon's busy guard, so `sendStart`
+// flows browser -> here -> the run's `.the-framework/control.jsonl` -> run, which tails that
+// file and aborts or resolves its gate. Same file-is-the-seam design as the daemon's legacy
+// onStop/onChoice (#344/#393). Each steering call takes the run id (#749): a run tails the
+// log inside its own worktree since #736, so the entry has to be written there. (Starting a run needs a spawn + the daemon's busy guard, so `sendStart`
 // lands with the daemon-serves-the-bundle wiring, not here.)
 
 /**
- * Resolve the project's local path and append one steering entry to its `control.jsonl`.
- * A no-op when the project has no local path (the read-only relay), so the run channel is
- * only ever written by a host that owns the workspace.
+ * Resolve the checkout to steer and append one entry to its `control.jsonl`. A no-op when
+ * there is no local path (the read-only relay), so the run channel is only ever written by a
+ * host that owns the workspace.
+ *
+ * The `runId` is what makes steering land (#749): a run tails the control log inside its own
+ * worktree, so an entry written to the project root reaches nothing. Absent, it addresses the
+ * project root, which is still right for a run that has no worktree (the non-git fallback).
  */
-async function appendControlFor(projectId: string, entry: ControlEntry): Promise<void> {
-  const cwd = await resolveProjectPath(projectId)
+async function appendControlFor(projectId: string, entry: ControlEntry, runId?: string): Promise<void> {
+  const cwd = await resolveRunPath(projectId, runId)
   if (cwd) await appendControl(cwd, entry)
 }
 
-/** Stop the project's live run (the Stop button): append a stop entry to its control log. */
-export async function sendStop(projectId: string): Promise<void> {
-  await appendControlFor(projectId, { kind: 'stop' })
+/** Stop a live run (the Stop button): append a stop entry to the run's control log. */
+export async function sendStop(projectId: string, runId?: string): Promise<void> {
+  await appendControlFor(projectId, { kind: 'stop' }, runId)
 }
 
 /**
@@ -41,8 +45,9 @@ export async function sendChoice(
   id: string,
   pick: string | string[],
   by: ChoiceBy = 'user',
+  runId?: string,
 ): Promise<void> {
-  await appendControlFor(projectId, { kind: 'choice', id, pick, by })
+  await appendControlFor(projectId, { kind: 'choice', id, pick, by }, runId)
 }
 
 /**
@@ -50,10 +55,10 @@ export async function sendChoice(
  * that the run drains between turns, continuing the same session via `--resume`. Empty
  * messages are dropped.
  */
-export async function sendMessage(projectId: string, text: string): Promise<void> {
+export async function sendMessage(projectId: string, text: string, runId?: string): Promise<void> {
   const message = text.trim()
   if (!message) return
-  await appendControlFor(projectId, { kind: 'message', text: message })
+  await appendControlFor(projectId, { kind: 'message', text: message }, runId)
 }
 
 /**
