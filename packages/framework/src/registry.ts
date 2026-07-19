@@ -82,6 +82,8 @@ export interface Preferences {
   model?: string
   /** Which coding agent drives the run (#650): `claude` or `codex`; maps to `--agent`. Absent = the default (`claude`). */
   agent?: string
+  /** Dashboard color theme (#725): `system` (follow the OS, the default), `light`, or `dark`. Absent = system. */
+  theme?: 'system' | 'light' | 'dark'
   /**
    * Post a Discord message when a new item lands on the "needs you" queue (#627). Absent = off:
    * unlike the in-browser toggle, Discord reaches you when no dashboard is open, so it is opt-in.
@@ -208,6 +210,9 @@ const PREFERENCE_KEYS = [
 /** The coding agents the dashboard offers (#650); mirrors AGENTS in agent.ts, kept local. */
 const KNOWN_AGENTS = ['claude', 'codex']
 
+/** The color themes the dashboard offers (#725); anything else means the default `system`. */
+const KNOWN_THEMES = ['system', 'light', 'dark'] as const
+
 function sanitizePreferences(value: unknown): Preferences {
   if (typeof value !== 'object' || value === null) return {}
   const input = value as Record<string, unknown>
@@ -221,6 +226,10 @@ function sanitizePreferences(value: unknown): Preferences {
   // `agent` (#650) is constrained to the known set so junk never reaches the run; mirrors AGENTS
   // in agent.ts (kept local so the registry doesn't import the driver layer). Default = claude.
   if (typeof input['agent'] === 'string' && KNOWN_AGENTS.includes(input['agent'])) preferences.agent = input['agent']
+  // `theme` (#725) is constrained to the known set; anything else (incl. absent) means the default
+  // `system`, so it is simply dropped rather than persisted.
+  if (typeof input['theme'] === 'string' && (KNOWN_THEMES as readonly string[]).includes(input['theme']))
+    preferences.theme = input['theme'] as (typeof KNOWN_THEMES)[number]
   const customPresets = sanitizeCustomPresets(input['customPresets'])
   if (customPresets.length) preferences.customPresets = customPresets
   const consumptionLimits = sanitizeConsumptionLimits(input['consumptionLimits'])

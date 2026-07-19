@@ -9,6 +9,7 @@ vi.mock('../lib/preferences.js', () => ({
   usePreferences: () => prefs,
   updatePreferences,
   autopilotEnabled: (p: Preferences) => p.autopilot ?? true,
+  themePreference: (p: Preferences) => p.theme ?? 'system',
 }))
 
 // Stub the Tiptap editor (it needs a real DOM/ProseMirror): a plain input driving onChange, a

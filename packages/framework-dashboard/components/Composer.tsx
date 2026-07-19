@@ -8,7 +8,7 @@ import {
   renderUxPrompt,
   renderSuggestNewTicketsPrompt,
 } from '@gemstack/framework/client'
-import { usePreferences, updatePreferences, autopilotEnabled } from '../lib/preferences.js'
+import { usePreferences, updatePreferences, autopilotEnabled, themePreference } from '../lib/preferences.js'
 import { PromptEditor, type PromptEditorHandle } from './PromptEditor.js'
 import { PresetCreatePanel } from './PresetCreatePanel.js'
 import { PresetMenu } from './PresetMenu.js'
@@ -113,6 +113,7 @@ export const Composer = forwardRef<ComposerHandle, {
   const model = preferences.model ?? '' // #628: empty = the driver's default model
   const agent = preferences.agent ?? 'claude' // #650: which coding agent drives the run
   const customPresets = preferences.customPresets ?? [] // #626: the user's own saved prompts
+  const theme = themePreference(preferences) // #725: system (default) / light / dark
 
   // Vanilla removes the system prompt (nothing left for Eco to trim); Transparent turns off the
   // whole framework, so it overrides the rest too.
@@ -231,7 +232,14 @@ export const Composer = forwardRef<ComposerHandle, {
           onDeleteCustom={id => updatePreferences({ customPresets: customPresets.filter(p => p.id !== id) })}
           onNewPreset={() => setAddingPreset(true)}
         />
-        <OptionsMenu options={mainOptions} ecoOptions={ecoOptions} showEco={eco && !ecoDisabled} busy={busy} />
+        <OptionsMenu
+          options={mainOptions}
+          ecoOptions={ecoOptions}
+          showEco={eco && !ecoDisabled}
+          busy={busy}
+          theme={theme}
+          onThemeChange={t => updatePreferences({ theme: t })}
+        />
         <Button
           type="submit"
           onClick={submit}

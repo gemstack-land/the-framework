@@ -24,27 +24,44 @@ function open() {
 
 describe('OptionsMenu (#654)', () => {
   test('the trigger badges how many options are on', () => {
-    render(<OptionsMenu options={mainOptions()} ecoOptions={ecoOptions()} showEco={false} busy={false} />)
+    render(<OptionsMenu options={mainOptions()} ecoOptions={ecoOptions()} showEco={false} busy={false} theme="system" onThemeChange={() => {}} />)
     // Only Eco is checked -> the gear trigger shows a corner badge "1".
     expect(screen.getByRole('button', { name: /run options/i }).textContent).toContain('1')
   })
 
   test('toggling an item writes the new value through', () => {
-    render(<OptionsMenu options={mainOptions()} ecoOptions={ecoOptions()} showEco={false} busy={false} />)
+    render(<OptionsMenu options={mainOptions()} ecoOptions={ecoOptions()} showEco={false} busy={false} theme="system" onThemeChange={() => {}} />)
     open()
     fireEvent.click(screen.getByText('Autopilot'))
     expect(updatePreferences).toHaveBeenCalledWith({ autopilot: true })
   })
 
   test('hides the Eco sub-drops when Eco does not apply', () => {
-    render(<OptionsMenu options={mainOptions()} ecoOptions={ecoOptions()} showEco={false} busy={false} />)
+    render(<OptionsMenu options={mainOptions()} ecoOptions={ecoOptions()} showEco={false} busy={false} theme="system" onThemeChange={() => {}} />)
     open()
     expect(screen.queryByText('Auto planning')).toBeNull()
   })
 
   test('shows the Eco sub-drops when Eco applies', () => {
-    render(<OptionsMenu options={mainOptions()} ecoOptions={ecoOptions()} showEco={true} busy={false} />)
+    render(<OptionsMenu options={mainOptions()} ecoOptions={ecoOptions()} showEco={true} busy={false} theme="system" onThemeChange={() => {}} />)
     open()
     expect(screen.getByText('Auto planning')).toBeTruthy()
+  })
+
+  test('picking a theme calls onThemeChange with the chosen value (#725)', () => {
+    const onThemeChange = vi.fn()
+    render(
+      <OptionsMenu
+        options={mainOptions()}
+        ecoOptions={ecoOptions()}
+        showEco={false}
+        busy={false}
+        theme="system"
+        onThemeChange={onThemeChange}
+      />,
+    )
+    open()
+    fireEvent.click(screen.getByText('Dark'))
+    expect(onThemeChange).toHaveBeenCalledWith('dark')
   })
 })
