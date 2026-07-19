@@ -36,7 +36,7 @@ interface PromptEditorProps {
   projects: ProjectSummary[]
   /** The current project's files, repo-relative, for the `#` picker (#504). */
   files?: string[]
-  presets: { id: string; label: string; render: () => string }[]
+  presets: { id: string; label: string; render: () => string; tooltip?: string | undefined }[]
   /** The user's saved presets (#626), loaded verbatim from the `/` menu (#722). */
   customPresets?: CustomPreset[]
   /** Open the create panel from the `/` menu's "New preset…" (#722). Omit where there is no panel
@@ -128,7 +128,7 @@ export const PromptEditor = forwardRef<PromptEditorHandle, PromptEditorProps>(fu
           const q = query.toLowerCase()
           const presetItems: SuggestionItem[] = presetsRef.current
             .filter(p => p.id.includes(query) || p.label.toLowerCase().includes(q))
-            .map(p => ({ id: `preset:${p.id}`, label: `/${p.id}`, hint: p.label, group: 'Presets' }))
+            .map(p => ({ id: `preset:${p.id}`, label: `/${p.id}`, hint: p.label, group: 'Presets', ...(p.tooltip ? { title: p.tooltip } : {}) }))
           // The user's saved presets (#626) load verbatim; they live in the same `/` group as the
           // built-ins now that the standalone Presets dropdown is gone (#722).
           const customItems: SuggestionItem[] = customPresetsRef.current

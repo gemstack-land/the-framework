@@ -10,6 +10,8 @@ export interface SuggestionItem {
   hint?: string | undefined
   /** Optional section header; consecutive items with the same group render under one label. */
   group?: string | undefined
+  /** Hover text, for an item whose label and hint don't say where its output lands (#698). */
+  title?: string | undefined
 }
 
 export interface SuggestionListProps {
@@ -69,6 +71,7 @@ export const SuggestionList = forwardRef<SuggestionListRef, SuggestionListProps>
           )}
           <button
             type="button"
+            {...(item.title ? { title: item.title } : {})}
             onMouseDown={e => {
               e.preventDefault()
               command(item)
