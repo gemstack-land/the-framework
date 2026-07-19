@@ -27,9 +27,8 @@ import { startInterventionWatcher, postDiscord, type InterventionWatcher } from 
 import { buildInterventions } from './dashboard/interventions.js'
 import { startActivityWatcher, postActivityDiscord, type ActivityWatcher } from './dashboard/activity-watcher.js'
 import { defaultQuotaSource } from './dashboard/quota.js'
-import { startAutoPm } from './auto-pm.js'
+import { startAutoPm, AUTO_PM_JOBS } from './auto-pm.js'
 import { findTodoBacklog } from './todo-loop.js'
-import { renderSpikeAndPlanPrompt } from './spike-and-plan-preset.js'
 import { startPreview, detectServeTargets, type PreviewHandle, type ServeTarget } from './preview.js'
 import { resolveDashboardBundle } from './dashboard/bundle.js'
 import { isActivated } from './project.js'
@@ -442,16 +441,17 @@ export async function runDaemon(cwd: string, opts: RunDaemonOptions = {}): Promi
     })
   }
 
-  // Auto PM (#685): while the queue is dry and there is quota to spare, spike & plan tickets
-  // rather than let the day's allowance expire unused. Gated on the `autoPm` preference, read
-  // per tick so the toggle takes effect without a daemon restart.
+  // Auto PM (#685/#773): while the queue is dry and there is quota to spare, harvest quick-wins
+  // and spike & plan tickets rather than let the day's allowance expire unused. Gated on the
+  // `autoPm` preference, read per tick so the toggle takes effect without a daemon restart.
   const autoPm = startAutoPm({
     projects: listSummaries,
+    jobs: AUTO_PM_JOBS,
     enabled: async () => (await readPrefs()).autoPm === true,
     backlogEmpty: async project => (await findTodoBacklog(project.path)) === undefined,
     activeRuns: project => runtime.activeRunCount(project.id),
     quota: async () => (await quota.read()).limits,
-    start: async project => (await runtime.onStart(renderSpikeAndPlanPrompt(), 'prompt', {}, project.id)).ok,
+    start: async (project, job) => (await runtime.onStart(job.prompt, 'prompt', {}, project.id)).ok,
     log: message => console.log(message),
   })
 

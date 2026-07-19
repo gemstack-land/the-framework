@@ -8,6 +8,7 @@ import {
   renderUxPrompt,
   renderSuggestNewTicketsPrompt,
   renderSpikeAndPlanPrompt,
+  renderQuickWinsPrompt,
 } from '@gemstack/framework/client'
 import { usePreferences, updatePreferences, autopilotEnabled, themePreference } from '../lib/preferences.js'
 import { useDetectedEditors } from '../lib/editors.js'
@@ -30,6 +31,7 @@ const PRESETS: { id: string; label: string; render: () => string }[] = [
   { id: 'ux', label: 'UX', render: renderUxPrompt },
   { id: 'suggest-new-tickets', label: 'Suggest new tickets', render: renderSuggestNewTicketsPrompt },
   { id: 'spike-and-plan', label: 'Spike & plan', render: renderSpikeAndPlanPrompt },
+  { id: 'quick-wins', label: 'Quick wins', render: renderQuickWinsPrompt },
 ]
 
 // The agent + model tree (#650/#656/#658): each agent lists ONLY its own models, since `--model`

@@ -326,7 +326,14 @@ export {
   SPIKE_AND_PLAN_PARAMS,
 } from './spike-and-plan-preset.js'
 export {
+  renderQuickWinsPrompt,
+  QUICK_WINS_PRESET_NAME,
+  QUICK_WINS_PROMPT_TEMPLATE,
+  QUICK_WINS_PARAMS,
+} from './quick-wins-preset.js'
+export {
   startAutoPm,
+  AUTO_PM_JOBS,
   autoPmDecision,
   quotaHeadroom,
   DEFAULT_MIN_FREE_PERCENT,
@@ -337,6 +344,7 @@ export {
   type AutoPmDeps,
   type AutoPmLoop,
   type AutoPmProject,
+  type AutoPmJob,
 } from './auto-pm.js'
 export {
   PRESETS,

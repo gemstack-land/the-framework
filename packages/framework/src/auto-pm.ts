@@ -1,4 +1,6 @@
 import type { ConsumptionStatus, LimitStatus } from './consumption.js'
+import { renderSpikeAndPlanPrompt, SPIKE_AND_PLAN_PRESET_NAME } from './spike-and-plan-preset.js'
+import { renderQuickWinsPrompt, QUICK_WINS_PRESET_NAME } from './quick-wins-preset.js'
 
 /**
  * Auto PM (#685): spend leftover subscription quota on product management instead of
@@ -99,6 +101,33 @@ export function autoPmDecision(input: AutoPmInputs): AutoPmDecision {
   return quotaHeadroom(input.quota, input.minFreePercent ?? DEFAULT_MIN_FREE_PERCENT)
 }
 
+/**
+ * One thing auto PM knows how to do while the machine is idle (#773).
+ *
+ * The jobs form a cycle, and the order matters: [Quick wins] turns existing plans into queued
+ * work, [Spike & plan] turns tickets into plans. Harvesting first means a machine that already
+ * has plans starts *doing* rather than planning more. Once a job queues something the sweep
+ * stands down anyway — the backlog is no longer empty — so the next idle moment picks up the
+ * rotation where it left off.
+ */
+export interface AutoPmJob {
+  /** Stable id, used for the rotation and the log line. */
+  name: string
+  /** The prompt to run, verbatim. */
+  prompt: string
+  /** What it is doing, as the log line says it ("harvesting quick-wins"). */
+  describe: string
+}
+
+/**
+ * The default cycle: harvest the plans we have (#773), then make more plans (#685). Quick wins
+ * lead because a machine sitting on unharvested plans should start doing rather than planning.
+ */
+export const AUTO_PM_JOBS: readonly AutoPmJob[] = [
+  { name: QUICK_WINS_PRESET_NAME, prompt: renderQuickWinsPrompt(), describe: 'harvesting quick-wins from the plans' },
+  { name: SPIKE_AND_PLAN_PRESET_NAME, prompt: renderSpikeAndPlanPrompt(), describe: 'spiking & planning tickets' },
+]
+
 /** A project the sweep considers. */
 export interface AutoPmProject {
   /** Registry id, as `start` and the live-run lookup take it. */
@@ -119,8 +148,10 @@ export interface AutoPmDeps {
   activeRuns(project: AutoPmProject): number
   /** The current consumption reading, or `undefined` when there is none. */
   quota(): Promise<ConsumptionStatus | undefined>
+  /** The jobs to rotate through, in cycle order. */
+  jobs: readonly AutoPmJob[]
   /** Start the PM run. Resolves false when the daemon refused, so the cooldown is not armed. */
-  start(project: AutoPmProject): Promise<boolean>
+  start(project: AutoPmProject, job: AutoPmJob): Promise<boolean>
   /** Progress line. */
   log(message: string): void
   /** Override the tick interval. */
@@ -153,6 +184,9 @@ export interface AutoPmLoop {
 export function startAutoPm(deps: AutoPmDeps): AutoPmLoop {
   const now = deps.now ?? (() => Date.now())
   const lastStart = new Map<string, number>()
+  // Where each project is in the job cycle. Per project, not global: two repos idle at once
+  // should each work through the rotation, not take alternate halves of it.
+  const nextJob = new Map<string, number>()
   let sweeping = false
 
   const tick = async (): Promise<void> => {
@@ -179,11 +213,17 @@ export function startAutoPm(deps: AutoPmDeps): AutoPmLoop {
           ...(deps.cooldownMs !== undefined ? { cooldownMs: deps.cooldownMs } : {}),
         })
         if (!decision.start) continue
+        const index = nextJob.get(project.id) ?? 0
+        const job = deps.jobs[index % deps.jobs.length]
+        if (!job) continue
         // Armed before the spawn, not after: starting is slow, and a tick that overlapped the
         // spawn would otherwise see no live run yet and start a second one.
         lastStart.set(project.id, now())
-        deps.log(`[framework] auto PM: spiking & planning tickets in ${project.path}`)
-        if (!(await deps.start(project).catch(() => false))) {
+        deps.log(`[framework] auto PM: ${job.describe} in ${project.path}`)
+        if (await deps.start(project, job).catch(() => false)) {
+          // Advanced only on a start that took, so a refused job is retried rather than skipped.
+          nextJob.set(project.id, index + 1)
+        } else {
           lastStart.delete(project.id)
           deps.log(`[framework] auto PM: could not start a run in ${project.path}`)
         }
