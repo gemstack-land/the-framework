@@ -5,9 +5,9 @@ import { sendStop } from '../server/control.telefunc.js'
 import { useAction } from '../lib/use-action.js'
 import { isRunActive } from '../lib/live-state.js'
 import { describeSessionLink } from '../lib/session-link.js'
-import { PreviewBar } from './PreviewBar.js'
 import { RemoveWorktreeButton } from './RemoveWorktreeButton.js'
-import { WorktreeChip } from './WorktreeChip.js'
+import { WorkspaceActions } from './WorkspaceActions.js'
+import { GitStatusBar } from './GitStatusBar.js'
 import { Button, buttonVariants } from './ui/button.js'
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from './ui/tooltip.js'
 
@@ -44,16 +44,17 @@ export function RunActionBar({
   return (
     <div className="flex flex-wrap items-center gap-2 border-b border-border px-4 py-2">
       <TooltipProvider delay={300} closeDelay={0}>
-        {/* Where this session is working (#798): its branch, whether it is holding uncommitted
-            work, and a way into the checkout. Only a run has one, so the project home has none. */}
-        {runId && <WorktreeChip projectId={projectId} runId={runId} />}
+        {/* Where this session is working (#798/#809): the same status the project home shows,
+            read from this session's own worktree — its branch, whether it is holding uncommitted
+            work, its size on disk, and the PR its branch has. */}
+        <GitStatusBar projectId={projectId} runId={runId} inline />
         {error && <span className="text-xs text-red-500">{error}</span>}
         {/* What the session IS sits at the start of the bar; what you can DO to it sits at the end,
             so the buttons keep one home as the row's contents come and go (Stop only while it runs,
             Remove only on a retained worktree, Open session only once one is reported). */}
         <div className="min-w-0 flex-1" />
-        {/* Serve what THIS session built (#797): its own worktree, not the project's checkout. */}
-        <PreviewBar projectId={projectId} runId={runId} inline />
+        {/* GitHub, folder, editor and Serve, addressed to this session's worktree (#809). */}
+        <WorkspaceActions projectId={projectId} runId={runId} />
         {active && (
           <Tooltip>
             <TooltipTrigger

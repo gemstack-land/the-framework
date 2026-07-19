@@ -1,3 +1,4 @@
+import type { LinkedPr } from './git-status.js'
 import type { EcoOptions } from '../system-prompt.js'
 
 // The dashboard's request/result vocabulary (#345/#396/#475): the shapes the Start / Add /
@@ -97,4 +98,6 @@ export interface RunWorktree {
   branch?: string
   /** Size on disk, bytes. Only read once nothing is writing to it, and best-effort even then. */
   sizeBytes?: number
+  /** The PR opened for this checkout's branch (#809), when there is one. */
+  pr?: LinkedPr
 }

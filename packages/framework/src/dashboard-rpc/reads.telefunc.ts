@@ -108,6 +108,9 @@ export async function onRunWorktree(projectId: string, runId: string): Promise<R
     dirty: status?.dirty ?? false,
     ...(status?.branch ? { branch: status.branch } : {}),
     ...(size !== undefined ? { sizeBytes: size } : {}),
+    // The same read already looked the PR up (#809): a session's branch is exactly the thing
+    // that has one, so the session's bar can show it like the project's does.
+    ...(status?.pr ? { pr: status.pr } : {}),
   }
 }
 
