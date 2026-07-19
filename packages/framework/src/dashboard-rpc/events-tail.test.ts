@@ -1,6 +1,6 @@
 import { strict as assert } from 'node:assert'
 import { test } from 'node:test'
-import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { appendFile, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { FrameworkEvent } from '../events.js'
@@ -22,7 +22,11 @@ test('tailEvents seeds with what is already logged, then follows appends', async
   try {
     await sleep(150)
     assert.deepEqual(seen, ['first'])
-    await writeFile(path, line('first') + line('second'))
+    // Append, the way a run writes its log. This used to rewrite the whole file, which truncates
+    // it first — and a poll landing in that instant makes the tailer do exactly what it is built
+    // to do (#567): treat the log as rewritten, reset, and replay `first`. The rewrite path is
+    // covered on purpose by the next test; this one is about following appends (#811).
+    await appendFile(path, line('second'))
     await sleep(1400) // fs.watch is unreliable on CI; wait out the poll backstop behind it
     assert.deepEqual(seen, ['first', 'second'])
   } finally {
