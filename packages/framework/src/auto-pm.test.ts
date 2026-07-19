@@ -5,7 +5,9 @@ import {
   quotaHeadroom,
   startAutoPm,
   DEFAULT_MIN_FREE_PERCENT,
+  AUTO_PM_JOBS,
   type AutoPmDeps,
+  type AutoPmJob,
   type AutoPmProject,
 } from './auto-pm.js'
 import { ConsumptionMeter, consumptionStatus, DEFAULT_CONSUMPTION_LIMITS, type ConsumptionStatus } from './consumption.js'
@@ -90,26 +92,34 @@ test('quotaHeadroom refuses when no limit is enabled, having no budget to call s
   assert.match(decision.start === false ? decision.reason : '', /no consumption limit is enabled/)
 })
 
+const JOBS: readonly AutoPmJob[] = [
+  { name: 'first', prompt: 'do the first thing', describe: 'doing the first thing' },
+  { name: 'second', prompt: 'do the second thing', describe: 'doing the second thing' },
+]
+
 /** A loop wired to one idle project, with every reading overridable per test. */
 function harness(overrides: Partial<AutoPmDeps> = {}) {
   const project: AutoPmProject = { id: 'p1', path: '/repo' }
   const started: string[] = []
+  const ran: string[] = []
   const logs: string[] = []
   const deps: AutoPmDeps = {
     projects: async () => [project],
+    jobs: JOBS,
     enabled: async () => true,
     backlogEmpty: async () => true,
     activeRuns: () => 0,
     quota: async () => status(1),
-    start: async p => {
+    start: async (p, job) => {
       started.push(p.id)
+      ran.push(job.name)
       return true
     },
     log: message => logs.push(message),
     now: () => T0,
     ...overrides,
   }
-  return { loop: startAutoPm(deps), started, logs }
+  return { loop: startAutoPm(deps), started, ran, logs }
 }
 
 test('startAutoPm starts a run for an idle project (#685)', async () => {
@@ -156,4 +166,38 @@ test('startAutoPm survives a project whose backlog cannot be read (#685)', async
   await loop.tick()
   loop.stop()
   assert.deepEqual(started, [])
+})
+
+test('AUTO_PM_JOBS harvests before it plans (#773)', () => {
+  // Quick wins lead: a machine that already has plans should start doing, not planning more.
+  assert.deepEqual(AUTO_PM_JOBS.map(j => j.name), ['quick-wins', 'spike-and-plan'])
+})
+
+test('startAutoPm walks the job cycle across idle moments (#773)', async () => {
+  // The cooldown normally spaces these out; zero it so one test can see the whole rotation.
+  const { loop, ran } = harness({ cooldownMs: 0 })
+  await loop.tick()
+  await loop.tick()
+  await loop.tick()
+  loop.stop()
+  assert.deepEqual(ran, ['first', 'second', 'first'])
+})
+
+test('startAutoPm retries the same job when the start was refused (#773)', async () => {
+  // Advancing on a refusal would silently skip a job nobody ever ran.
+  const ran: string[] = []
+  let attempts = 0
+  const { loop } = harness({
+    cooldownMs: 0,
+    start: async (_p, job) => {
+      attempts++
+      if (attempts === 1) return false
+      ran.push(job.name)
+      return true
+    },
+  })
+  await loop.tick()
+  await loop.tick()
+  loop.stop()
+  assert.deepEqual(ran, ['first'])
 })
