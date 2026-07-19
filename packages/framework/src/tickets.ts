@@ -12,7 +12,7 @@ export const TICKETS_DIR = 'tickets'
 
 /**
  * The ticket-format spec (#684): the static reference an agent opens to learn the
- * `tickets/<DATE>_<SLUG>.md` (and `.spike.md`) file shape. Per Rom's #674 call it ships
+ * `tickets/<DATE>_<SLUG>.md` (and `.spike.md` / `.plan.md`) file shape. Per the #674 call it ships
  * *inside the installed package* rather than being materialized into the repo, so a future
  * breaking change to the format rides with the package version instead of going stale in a
  * committed file. The package ships `prompts/ticketing_format.md` (see the `files` allowlist),
