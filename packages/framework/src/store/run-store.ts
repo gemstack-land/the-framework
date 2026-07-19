@@ -115,6 +115,12 @@ export interface RunMeta {
    * you — which `status` cannot carry because it only changes when the run ends.
    */
   settledAt?: string
+  /**
+   * The loopback port the run's browser preview is listening on (#813), or absent when the run
+   * has no browser. What lets the daemon proxy the pane: the port is allocated per run and the
+   * dashboard is a different process, so meta is the only place it can learn it.
+   */
+  browserStreamPort?: number
 }
 
 /**
@@ -213,6 +219,9 @@ export function applyEventToMeta(meta: RunMeta, event: FrameworkEvent, at: strin
       }
       break
     }
+    case 'browser-stream':
+      next.browserStreamPort = event.port
+      break
     case 'settled':
       next.settledAt = at
       break
@@ -224,6 +233,9 @@ export function applyEventToMeta(meta: RunMeta, event: FrameworkEvent, at: strin
       next.status = event.ok ? 'done' : event.stopped ? 'stopped' : 'failed'
       delete next.pendingChoice // a finished run is not awaiting anything
       delete next.settledAt // nor is it waiting on you
+      // The bridge dies with the run, so a kept port would send the pane at whatever else
+      // the OS handed that number next.
+      delete next.browserStreamPort
       break
     default:
       break

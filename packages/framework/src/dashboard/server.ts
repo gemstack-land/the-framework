@@ -4,6 +4,7 @@ import type { ProjectsProvider } from './projects.js'
 import { registryPreferencesStore, type PreferencesStore } from '../registry.js'
 import { defaultQuotaSource, type QuotaSource } from './quota.js'
 import { serveClientBundle } from './static.js'
+import { BROWSER_PROXY_PREFIX, handleBrowserProxy } from './browser-proxy.js'
 import { makeTelefuncMount } from './telefunc-serve.js'
 import type { AddProjectResult, PreviewResult, PreviewStatus, StartRunKind, StartRunOptions, StartRunResult } from './types.js'
 import type { ServeTarget } from '../preview.js'
@@ -137,6 +138,14 @@ export function startDashboard(opts: DashboardOptions = {}): Promise<Dashboard> 
     const { pathname } = new URL(req.url ?? '/', 'http://localhost')
     if (pathname === '/_telefunc' || pathname.startsWith('/_telefunc/')) {
       void telefuncMount(req, res)
+      return
+    }
+    // The browser preview (#813) is proxied, not Telefunc'd: it is an endless MJPEG body and a
+    // raw input POST, neither of which is an RPC.
+    if (pathname.startsWith(`${BROWSER_PROXY_PREFIX}/`)) {
+      void handleBrowserProxy(req, res).then(handled => {
+        if (!handled) void serveClientBundle(req, res, clientBundleDir)
+      })
       return
     }
     void serveClientBundle(req, res, clientBundleDir)

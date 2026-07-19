@@ -1239,7 +1239,13 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
   const browserStream = sharedBrowser
     ? await startBrowserStream({ browserUrl: sharedBrowser.browserUrl, connect: connectCdp }).catch(() => undefined)
     : undefined
-  if (browserStream) io.out(`◆ browser preview: ${browserStream.url}/stream`)
+  // A dashboard-started run is spawned with its stdout discarded, so printing the URL reaches
+  // nobody (#813). The port goes through onEvent — persisted and published live — which is how
+  // the dashboard finds the pane to render.
+  // Through onEvent rather than a print: a dashboard-started run is spawned with its stdout
+  // discarded, so a printed URL reaches nobody (#813). This persists and publishes the port,
+  // which is how the dashboard finds the pane to render — and still prints, on a terminal run.
+  if (browserStream) onEvent({ kind: 'browser-stream', port: browserStream.port })
 
   // The consumption limits (#519/#531). Read from the user's own file rather than
   // taken as a flag: unlike autopilot or eco, a limit is not a per-run choice, so

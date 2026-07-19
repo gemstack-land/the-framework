@@ -22,6 +22,8 @@ import { AddressInfo } from 'node:net'
 export interface BrowserStream {
   /** Where the dashboard points an `<img>` (`/stream`) and posts input (`/input`). */
   url: string
+  /** The loopback port {@link url} is on, published on the run's log so the daemon can proxy it (#813). */
+  port: number
   /** Stop streaming and close the server. Safe to call twice. */
   close(): Promise<void>
 }
@@ -225,6 +227,7 @@ export async function startBrowserStream(opts: {
   let closed = false
   return {
     url: `http://127.0.0.1:${port}`,
+    port,
     close: async () => {
       if (closed) return
       closed = true

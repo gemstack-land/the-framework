@@ -101,6 +101,14 @@ export type FrameworkEvent =
    * the dashboard shows a live preview link (torn down on Ctrl+C).
    */
   | { kind: 'preview'; url: string; command: string }
+  /**
+   * The run's browser preview is up and listening on this loopback port (#813).
+   *
+   * Only the port travels. The dashboard reaches the stream through the daemon, which proxies
+   * to this port, so the run's bridge stays same-origin-invisible and unreachable from the web.
+   * Frames themselves never enter the log: someone will type a password into that pane.
+   */
+  | { kind: 'browser-stream'; port: number }
   /** A framework-level log line. */
   | { kind: 'log'; message: string }
   /**

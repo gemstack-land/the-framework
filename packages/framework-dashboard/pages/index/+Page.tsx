@@ -259,6 +259,7 @@ export default function Page() {
           files={files}
           context={context}
           toggleContext={toggleContext}
+          hasBrowser={selectedRun?.status === 'running' && selectedRun.browserStreamPort !== undefined}
         />
       </div>
     </div>

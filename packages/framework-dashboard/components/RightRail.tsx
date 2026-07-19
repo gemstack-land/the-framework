@@ -5,12 +5,13 @@ import { ProjectLogPanel } from './ProjectLogPanel.js'
 import { ChoicesRail } from './ChoicesRail.js'
 import { ViewsRail } from './ViewsRail.js'
 import { FileTree } from './FileTree.js'
+import { BrowserPanel } from './BrowserPanel.js'
 import type { AgentView } from '../lib/live-state.js'
 import { Badge } from './ui/badge.js'
 import { Button } from './ui/button.js'
 import { cn } from '../lib/utils.js'
 
-type Tab = 'files' | 'choices' | 'views' | 'docs' | 'log'
+type Tab = 'files' | 'choices' | 'views' | 'browser' | 'docs' | 'log'
 
 // The right sidebar (#314 third rail): the interactive choice gates the run parks on
 // (#440), the ad-hoc markdown views the agent pushes (#441), the surfaced docs (PLAN/TODO),
@@ -25,6 +26,7 @@ export function RightRail({
   files,
   context,
   toggleContext,
+  hasBrowser = false,
 }: {
   projectId: string | null
   /** The selected run, so a choice pick resolves that run's gate (#749). */
@@ -37,6 +39,8 @@ export function RightRail({
   context: Set<string>
   /** Toggle a file path in the Context. */
   toggleContext: (path: string) => void
+  /** Whether the selected run is serving a browser preview (#813), i.e. it was started with Browser on. */
+  hasBrowser?: boolean
 }) {
   const [tab, setTab] = useState<Tab>('docs')
   // Once the user picks a tab, stop auto-defaulting (#695/U22) — only a genuinely new choice
@@ -73,11 +77,23 @@ export function RightRail({
     ...(hasFiles ? ['files' as const] : []),
     ...(hasChoices ? ['choices' as const] : []),
     ...(hasViews ? ['views' as const] : []),
+    // Only when the run actually has one (#813) — a dead tab teaches people the preview is broken.
+    ...(hasBrowser && runId ? ['browser' as const] : []),
     'docs',
     'log',
   ]
   const label = (t: Tab) =>
-    t === 'files' ? 'Files' : t === 'choices' ? 'Choices' : t === 'views' ? 'Views' : t === 'docs' ? 'Docs' : 'Log'
+    t === 'files'
+      ? 'Files'
+      : t === 'choices'
+        ? 'Choices'
+        : t === 'views'
+          ? 'Views'
+          : t === 'browser'
+            ? 'Browser'
+            : t === 'docs'
+              ? 'Docs'
+              : 'Log'
   // The Files badge counts only selected files, not whole-repo entries (#661): the shared context
   // set also holds project paths (from the Start form's repo checkboxes), which aren't in `files`.
   const selectedFiles = files.filter(f => context.has(f)).length
@@ -106,6 +122,8 @@ export function RightRail({
           <ChoicesRail projectId={projectId} runId={runId} choices={choices} />
         ) : tab === 'views' && hasViews ? (
           <ViewsRail views={views} />
+        ) : tab === 'browser' && hasBrowser && runId ? (
+          <BrowserPanel projectId={projectId} runId={runId} />
         ) : tab === 'log' ? (
           <ProjectLogPanel projectId={projectId} />
         ) : (
