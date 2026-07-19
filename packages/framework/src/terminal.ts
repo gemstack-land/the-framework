@@ -28,6 +28,8 @@ export function formatFrameworkEvent(event: FrameworkEvent): string {
       return `  session: ${event.name}`
     case 'ready-for-merge':
       return `✓ ready for merge`
+    case 'settled':
+      return `◆ done for now — waiting for your next message`
     case 'usage': {
       const turns = `over ${event.turns} turn${event.turns === 1 ? '' : 's'}`
       // No price to show: report the tokens the agent *did* report, rather than a

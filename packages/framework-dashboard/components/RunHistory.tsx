@@ -88,6 +88,7 @@ export function RunHistory({
             // Following live highlights the newest running run, not every one of them (#738):
             // `runs` is newest-first, so that is the first with a running status.
             active={run.id === selectedRunId || (followLive && run.id === newestRunningId)}
+            waiting={run.settledAt !== undefined}
             onClick={() => onSelect(run.id)}
           />
         ))}
@@ -96,7 +97,8 @@ export function RunHistory({
   )
 }
 
-// One run row: a pulsing dot + RUNNING badge for a live run, else the terminal-status badge.
+// One run row: a pulsing dot + RUNNING badge for a working run, a still dot + WAITING for one
+// parked on the user (#785), else the terminal-status badge.
 function RunRow({
   status,
   intent,
@@ -104,6 +106,7 @@ function RunRow({
   active,
   onClick,
   dim = false,
+  waiting = false,
 }: {
   status: RunStatus
   intent: string | undefined
@@ -111,7 +114,11 @@ function RunRow({
   active: boolean
   onClick: () => void
   dim?: boolean
+  /** Live, but parked on the user rather than working (#785). */
+  waiting?: boolean
 }) {
+  // Only a live run can be waiting on you; a finished one is just finished.
+  const parked = waiting && status === 'running'
   return (
     <Button
       variant="ghost"
@@ -123,8 +130,14 @@ function RunRow({
       onClick={onClick}
     >
       <span className="flex w-full items-center gap-2">
-        {status === 'running' && <span className="inline-block h-2 w-2 shrink-0 animate-pulse rounded-full bg-primary" />}
-        <Badge className={cn('shrink-0 border-transparent px-0 text-[10px] uppercase', STATUS_TONE[status])}>{status}</Badge>
+        {/* The dot means "the agent is working", so a run parked on you gets a still one (#785):
+            it used to pulse identically whether it was mid-edit or had been idle for an hour. */}
+        {status === 'running' && (
+          <span className={cn('inline-block h-2 w-2 shrink-0 rounded-full', parked ? 'bg-muted-foreground' : 'animate-pulse bg-primary')} />
+        )}
+        <Badge className={cn('shrink-0 border-transparent px-0 text-[10px] uppercase', parked ? 'text-muted-foreground' : STATUS_TONE[status])}>
+          {parked ? 'waiting' : status}
+        </Badge>
         <span className="truncate text-xs font-normal text-muted-foreground">{subtitle}</span>
       </span>
       <span className="w-full truncate text-sm font-medium">{intent || '(no prompt)'}</span>

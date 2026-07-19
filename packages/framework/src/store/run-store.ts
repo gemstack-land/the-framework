@@ -106,6 +106,15 @@ export interface RunMeta {
    * paused waiting for the user's answer — the second "needs you" source after open PRs (#624).
    */
   pendingChoice?: { id: string; title: string }
+  /**
+   * When the run settled and parked on the user (#785), or absent while the agent is working.
+   *
+   * Deliberately not a {@link RunStatus} value: the run IS still live while it waits (its
+   * process is alive, it still takes messages, it still holds the project), and a dozen readers
+   * key "live" off `status === 'running'`. This is the orthogonal fact — working, or waiting on
+   * you — which `status` cannot carry because it only changes when the run ends.
+   */
+  settledAt?: string
 }
 
 /**
@@ -204,9 +213,17 @@ export function applyEventToMeta(meta: RunMeta, event: FrameworkEvent, at: strin
       }
       break
     }
+    case 'settled':
+      next.settledAt = at
+      break
+    case 'driver':
+      // Any new turn means the agent is working again, so the run is no longer parked (#785).
+      if (event.event.type === 'start') delete next.settledAt
+      break
     case 'end':
       next.status = event.ok ? 'done' : event.stopped ? 'stopped' : 'failed'
       delete next.pendingChoice // a finished run is not awaiting anything
+      delete next.settledAt // nor is it waiting on you
       break
     default:
       break

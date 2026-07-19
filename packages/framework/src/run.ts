@@ -703,6 +703,9 @@ export async function runChatPhase(session: DriverSession, messages: RunMessages
   let turn = seed
   let exhausted = false
   for (;;) {
+    // Parked on the user (#785): the work is settled and nothing is running until a message
+    // arrives. Said out loud each time round, so a reader can tell waiting from working.
+    deps.emit({ kind: 'settled' })
     const message = await messages.next(deps.signal)
     if (message === undefined) return { turn, exhausted } // Stop / budget cap: end the conversation.
     deps.emit({ kind: 'log', message: `You: ${message}` })

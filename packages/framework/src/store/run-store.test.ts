@@ -167,6 +167,24 @@ test('applyEventToMeta marks a user-stopped run as stopped, not failed (#218)', 
   assert.equal(stopped.status, 'stopped')
 })
 
+test('applyEventToMeta tracks whether the run is working or parked on the user (#785)', () => {
+  const base = metaFromEvents(RUN.slice(0, 4), AT)
+  assert.equal(base.settledAt, undefined, 'a working run is not parked')
+
+  const parked = applyEventToMeta(base, { kind: 'settled' }, AT)
+  assert.equal(parked.settledAt, AT)
+  assert.equal(parked.status, 'running', 'still live: it holds the project and takes messages')
+
+  // The user answers: the next turn starts, so it is working again.
+  const working = applyEventToMeta(parked, { kind: 'driver', event: { type: 'start', prompt: 'and dark mode' } }, AT)
+  assert.equal(working.settledAt, undefined)
+
+  // A run that has ended is not waiting on anyone.
+  const ended = applyEventToMeta(applyEventToMeta(base, { kind: 'settled' }, AT), { kind: 'end', ok: true }, AT)
+  assert.equal(ended.settledAt, undefined)
+  assert.equal(ended.status, 'done')
+})
+
 test('applyEventToMeta records the session name + ready-for-merge lifecycle signals (#326)', () => {
   const base = metaFromEvents(RUN.slice(0, 4), AT)
   assert.equal(base.sessionName, undefined)

@@ -123,6 +123,16 @@ export type FrameworkEvent =
    */
   | { kind: 'ready-for-merge' }
   /**
+   * The work has settled and the run is parked on the user (#785): it stays open as a
+   * conversation (#714), so its process is still alive and it still takes messages, but
+   * the agent is not doing anything until you say something.
+   *
+   * Emitted each time the run parks, and undone by the next `driver` `start` — so "is it
+   * working or waiting for me" is answerable from the event log rather than inferred from
+   * a status that only changes when the run ends.
+   */
+  | { kind: 'settled' }
+  /**
    * Cumulative token + cost usage for the run so far (#322). Emitted after each
    * agent turn that reports usage; the dashboard renders a live spend readout and
    * the run stops itself once `costUsd` reaches the budget cap, if one is set.
