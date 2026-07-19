@@ -94,6 +94,13 @@ export interface Preferences {
    * post; this is whether to).
    */
   notifyDiscord?: boolean
+  /**
+   * Auto PM (#685): let the daemon start a PM run by itself when the agent queue has run dry
+   * and there is plenty of budget left, so leftover subscription quota goes on the roadmap
+   * instead of expiring. **Absent = off**: it spends the user's allowance without being asked,
+   * so it is opt-in like {@link notifyDiscord} rather than a baseline.
+   */
+  autoPm?: boolean
   /** User-defined presets (#626): the user's own saved prompts, shown beside the built-in presets. */
   customPresets?: CustomPreset[]
   /**
@@ -206,6 +213,7 @@ const PREFERENCE_KEYS = [
   'notifyDiscord',
   'notifyNewActivity',
   'notifyHumanIntervention',
+  'autoPm',
 ] as const
 
 /** Keep only the known preference fields, so a hand-edited or browser-supplied

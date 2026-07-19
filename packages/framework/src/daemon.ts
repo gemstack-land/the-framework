@@ -26,6 +26,10 @@ import { startDashboard, type Dashboard, type StartRunKind, type StartRunOptions
 import { startInterventionWatcher, postDiscord, type InterventionWatcher } from './dashboard/intervention-watcher.js'
 import { buildInterventions } from './dashboard/interventions.js'
 import { startActivityWatcher, postActivityDiscord, type ActivityWatcher } from './dashboard/activity-watcher.js'
+import { defaultQuotaSource } from './dashboard/quota.js'
+import { startAutoPm } from './auto-pm.js'
+import { findTodoBacklog } from './todo-loop.js'
+import { renderSpikeAndPlanPrompt } from './spike-and-plan-preset.js'
 import { startPreview, detectServeTargets, type PreviewHandle, type ServeTarget } from './preview.js'
 import { resolveDashboardBundle } from './dashboard/bundle.js'
 import { isActivated } from './project.js'
@@ -364,8 +368,12 @@ export async function runDaemon(cwd: string, opts: RunDaemonOptions = {}): Promi
   // reach the browser through the Telefunc request context. A missing bundle (a broken
   // install) surfaces as a 503 from the server.
   const clientBundleDir = await resolveDashboardBundle()
+  // Owned here rather than left to the dashboard (#685): auto PM has to consult the same
+  // long-lived meter the usage panel draws, and a second poller would double a rate-limited read.
+  const quota = defaultQuotaSource()
   const dashboard: Dashboard = await startDashboard({
     port,
+    quota,
     onStart: runtime.onStart,
     onAddProject: runtime.onAddProject,
     onPreview: runtime.onPreview,
@@ -434,8 +442,25 @@ export async function runDaemon(cwd: string, opts: RunDaemonOptions = {}): Promi
     })
   }
 
+  // Auto PM (#685): while the queue is dry and there is quota to spare, spike & plan tickets
+  // rather than let the day's allowance expire unused. Gated on the `autoPm` preference, read
+  // per tick so the toggle takes effect without a daemon restart.
+  const autoPm = startAutoPm({
+    projects: listSummaries,
+    enabled: async () => (await readPrefs()).autoPm === true,
+    backlogEmpty: async project => (await findTodoBacklog(project.path)) === undefined,
+    activeRuns: project => runtime.activeRunCount(project.id),
+    quota: async () => (await quota.read()).limits,
+    start: async project => (await runtime.onStart(renderSpikeAndPlanPrompt(), 'prompt', {}, project.id)).ok,
+    log: message => console.log(message),
+  })
+
   await waitForShutdown(opts.signal)
 
+  autoPm.stop()
+  // Stopped here as well as by the dashboard: a broken install serves 503s without ever taking
+  // ownership of the source we handed in, and that poller would go on reading by itself.
+  quota.stop()
   watcher?.stop()
   activityWatcher?.stop()
   await runtime.dispose() // stop live previews (#475) so their dev servers do not outlive us
@@ -461,6 +486,8 @@ interface ProjectRuntime {
   onServeTargets: (targetProjectId?: string) => Promise<ServeTarget[]>
   onStopPreview: (targetProjectId?: string) => Promise<void>
   onPreviewStatus: (targetProjectId?: string) => PreviewStatus
+  /** Live runs on a project (#685), so a background job can tell an idle project from a busy one. */
+  activeRunCount: (targetProjectId: string) => number
   /** Stop every live preview so their dev servers do not outlive the daemon (#475). */
   dispose: () => Promise<void>
 }
@@ -762,12 +789,27 @@ function createProjectRuntime({ cwd, env, binPath }: ProjectRuntimeOptions): Pro
     return handle ? { running: true, url: handle.url, command: handle.command } : { running: false }
   }
 
+  /**
+   * How many runs are live on a project (#685). Run keys are `<projectKey>::<runId>`, or the
+   * bare project key for a run that got no worktree, so both spellings count. The pid is
+   * re-checked rather than trusted: `settle` clears the entry on exit, but a run whose exit
+   * event never arrived would otherwise keep a project looking busy forever.
+   */
+  const activeRunCount = (targetProjectId: string): number => {
+    let live = 0
+    for (const [key, pid] of activeRuns) {
+      if (key !== targetProjectId && !key.startsWith(`${targetProjectId}::`)) continue
+      if (isProcessAlive(pid)) live++
+    }
+    return live + [...starting].filter(key => key === targetProjectId || key.startsWith(`${targetProjectId}::`)).length
+  }
+
   const dispose = async (): Promise<void> => {
     await Promise.all([...activePreviews.values()].map(p => p.stop().catch(() => {})))
     activePreviews.clear()
   }
 
-  return { onStart, onAddProject, onPreview, onServeTargets, onStopPreview, onPreviewStatus, dispose }
+  return { onStart, onAddProject, onPreview, onServeTargets, onStopPreview, onPreviewStatus, activeRunCount, dispose }
 }
 
 /** Resolve on SIGINT/SIGTERM, or when the optional abort signal fires. */

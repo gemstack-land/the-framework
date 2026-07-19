@@ -1,0 +1,159 @@
+import { strict as assert } from 'node:assert'
+import { test } from 'node:test'
+import {
+  autoPmDecision,
+  quotaHeadroom,
+  startAutoPm,
+  DEFAULT_MIN_FREE_PERCENT,
+  type AutoPmDeps,
+  type AutoPmProject,
+} from './auto-pm.js'
+import { ConsumptionMeter, consumptionStatus, DEFAULT_CONSUMPTION_LIMITS, type ConsumptionStatus } from './consumption.js'
+
+const T0 = 1_800_000_000_000
+
+/** A status whose windows read `weekPercent` of the account's week as spent. */
+function status(weekPercent: number | undefined): ConsumptionStatus {
+  const meter = new ConsumptionMeter()
+  if (weekPercent !== undefined) {
+    // Two samples, because the meter measures the delta between readings, not an absolute.
+    meter.record({ at: T0 - 1000, weeklyPercent: 0 })
+    meter.record({ at: T0, weeklyPercent: weekPercent })
+  }
+  return consumptionStatus({ meter, limits: DEFAULT_CONSUMPTION_LIMITS, now: T0 })
+}
+
+/** The happy inputs, so each test names only the condition it is about. */
+const IDLE = { enabled: true, backlogEmpty: true, activeRuns: 0, quota: status(1) } as const
+
+test('autoPmDecision starts when the queue is dry and the budget is barely touched (#685)', () => {
+  assert.deepEqual(autoPmDecision(IDLE), { start: true })
+})
+
+test('autoPmDecision does nothing while the preference is off (#685)', () => {
+  const decision = autoPmDecision({ ...IDLE, enabled: false })
+  assert.equal(decision.start, false)
+})
+
+test('autoPmDecision leaves a busy project alone (#685)', () => {
+  // A live run is already spending the quota; a second one started unasked would race it.
+  const decision = autoPmDecision({ ...IDLE, activeRuns: 1 })
+  assert.equal(decision.start, false)
+  assert.match(decision.start === false ? decision.reason : '', /already going/)
+})
+
+test('autoPmDecision waits while the queue still has entries (#685)', () => {
+  // #685 is only about the dry-queue case: with work queued, the backlog loop has it.
+  const decision = autoPmDecision({ ...IDLE, backlogEmpty: false })
+  assert.equal(decision.start, false)
+  assert.match(decision.start === false ? decision.reason : '', /still has open entries/)
+})
+
+test('autoPmDecision holds off during the cooldown after a start (#685)', () => {
+  const decision = autoPmDecision({ ...IDLE, sinceLastStartMs: 60_000 })
+  assert.equal(decision.start, false)
+  const later = autoPmDecision({ ...IDLE, sinceLastStartMs: 60 * 60_000 })
+  assert.deepEqual(later, { start: true })
+})
+
+test('quotaHeadroom refuses to start when the quota cannot be read (#685)', () => {
+  // The inverse of the per-run guard's fail-open (#519): that one must never STOP the user's
+  // own work, this one must never START work nobody asked for on an unknown budget.
+  const decision = quotaHeadroom(undefined, DEFAULT_MIN_FREE_PERCENT)
+  assert.equal(decision.start, false)
+  assert.match(decision.start === false ? decision.reason : '', /could not be read/)
+})
+
+test('quotaHeadroom refuses while a window has no reading yet (#685)', () => {
+  const decision = quotaHeadroom(status(undefined), DEFAULT_MIN_FREE_PERCENT)
+  assert.equal(decision.start, false)
+  assert.match(decision.start === false ? decision.reason : '', /no reading yet/)
+})
+
+test('quotaHeadroom refuses once a window is past the threshold (#685)', () => {
+  // The 5h budget is 12 points, so 10 points spent is ~83% of it: well past half.
+  const decision = quotaHeadroom(status(10), DEFAULT_MIN_FREE_PERCENT)
+  assert.equal(decision.start, false)
+  assert.match(decision.start === false ? decision.reason : '', /% used/)
+})
+
+test('quotaHeadroom refuses when no limit is enabled, having no budget to call spare (#685)', () => {
+  const meter = new ConsumptionMeter()
+  meter.record({ at: T0 - 1000, weeklyPercent: 0 })
+  meter.record({ at: T0, weeklyPercent: 1 })
+  const off = { enabled: false, percent: 20 }
+  const decision = quotaHeadroom(
+    consumptionStatus({ meter, limits: { daily: off, fiveHour: off, session: off }, now: T0 }),
+    DEFAULT_MIN_FREE_PERCENT,
+  )
+  assert.equal(decision.start, false)
+  assert.match(decision.start === false ? decision.reason : '', /no consumption limit is enabled/)
+})
+
+/** A loop wired to one idle project, with every reading overridable per test. */
+function harness(overrides: Partial<AutoPmDeps> = {}) {
+  const project: AutoPmProject = { id: 'p1', path: '/repo' }
+  const started: string[] = []
+  const logs: string[] = []
+  const deps: AutoPmDeps = {
+    projects: async () => [project],
+    enabled: async () => true,
+    backlogEmpty: async () => true,
+    activeRuns: () => 0,
+    quota: async () => status(1),
+    start: async p => {
+      started.push(p.id)
+      return true
+    },
+    log: message => logs.push(message),
+    now: () => T0,
+    ...overrides,
+  }
+  return { loop: startAutoPm(deps), started, logs }
+}
+
+test('startAutoPm starts a run for an idle project (#685)', async () => {
+  const { loop, started } = harness()
+  await loop.tick()
+  loop.stop()
+  assert.deepEqual(started, ['p1'])
+})
+
+test('startAutoPm starts nothing while the preference is off (#685)', async () => {
+  const { loop, started } = harness({ enabled: async () => false })
+  await loop.tick()
+  loop.stop()
+  assert.deepEqual(started, [])
+})
+
+test('startAutoPm does not start a second run for the same project (#685)', async () => {
+  // The cooldown is what stops a tick that lands before the spawn registers from doubling up.
+  const { loop, started } = harness()
+  await loop.tick()
+  await loop.tick()
+  loop.stop()
+  assert.deepEqual(started, ['p1'])
+})
+
+test('startAutoPm re-arms when the start was refused (#685)', async () => {
+  // A refused start spent nothing, so holding the cooldown would strand the project.
+  let attempts = 0
+  const { loop } = harness({
+    start: async () => {
+      attempts++
+      return attempts > 1
+    },
+  })
+  await loop.tick()
+  await loop.tick()
+  loop.stop()
+  assert.equal(attempts, 2)
+})
+
+test('startAutoPm survives a project whose backlog cannot be read (#685)', async () => {
+  // An unreadable queue is not an empty one: it must not trigger a run, nor throw the sweep.
+  const { loop, started } = harness({ backlogEmpty: async () => Promise.reject(new Error('nope')) })
+  await loop.tick()
+  loop.stop()
+  assert.deepEqual(started, [])
+})

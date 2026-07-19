@@ -142,6 +142,23 @@ export function UsagePanel() {
             ))}
           </div>
         ) : null}
+
+        {view ? (
+          <div className="space-y-1 border-t pt-4">
+            <label className="flex cursor-pointer items-center gap-1.5 text-sm">
+              <input
+                type="checkbox"
+                checked={preferences.autoPm ?? false}
+                onChange={e => updatePreferences({ autoPm: e.target.checked })}
+              />
+              <span className="font-medium text-foreground">Spend what's left on the roadmap</span>
+            </label>
+            <p className="text-xs text-muted-foreground">
+              When nothing is running and the queue is empty, spike &amp; plan tickets rather than let the
+              budget expire. Only while every limit above still has half its budget free.
+            </p>
+          </div>
+        ) : null}
       </CardContent>
     </Card>
   )

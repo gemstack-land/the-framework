@@ -320,6 +320,25 @@ export {
   SUGGEST_NEW_TICKETS_PARAMS,
 } from './suggest-new-tickets-preset.js'
 export {
+  renderSpikeAndPlanPrompt,
+  SPIKE_AND_PLAN_PRESET_NAME,
+  SPIKE_AND_PLAN_PROMPT_TEMPLATE,
+  SPIKE_AND_PLAN_PARAMS,
+} from './spike-and-plan-preset.js'
+export {
+  startAutoPm,
+  autoPmDecision,
+  quotaHeadroom,
+  DEFAULT_MIN_FREE_PERCENT,
+  DEFAULT_AUTO_PM_INTERVAL_MS,
+  DEFAULT_AUTO_PM_COOLDOWN_MS,
+  type AutoPmInputs,
+  type AutoPmDecision,
+  type AutoPmDeps,
+  type AutoPmLoop,
+  type AutoPmProject,
+} from './auto-pm.js'
+export {
   PRESETS,
   PRESET_DIR,
   presetFilePath,
