@@ -10,6 +10,7 @@ import {
   readLiveMeta,
   reconcileOrphanedRuns,
   loadRunEvents,
+  runIdFromStartedAt,
   RUN_META_VERSION,
   type StoreFs,
   type RunMeta,
@@ -335,4 +336,15 @@ test('readLiveMeta does not trust a pid from a different host (#716)', async () 
   const fs = memFs({ [META]: ownedMeta('2026-remote', 4242, 'other-box') })
   const live = await readLiveMeta(CWD, fs, () => false)
   assert.equal(live!.status, 'running') // a dead-looking pid on another host is unknowable here
+})
+
+test('fresh open adopts the id the daemon allocated, ignoring an unsafe one (#736)', async () => {
+  // The daemon names the run's worktree with the id before spawning it, so the run must
+  // record that id rather than derive a second one from its own start time.
+  const adopted = await RunStore.open(CWD, { fs: memFs(), fresh: true, now: AT, id: 'run-42' })
+  assert.equal((await adopted.readMeta())?.id, 'run-42')
+
+  // A traversal-shaped id is dropped for the derived one: the id names a directory.
+  const unsafe = await RunStore.open(CWD, { fs: memFs(), fresh: true, now: AT, id: '../evil' })
+  assert.equal((await unsafe.readMeta())?.id, runIdFromStartedAt(AT))
 })

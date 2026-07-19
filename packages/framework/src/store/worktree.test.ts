@@ -12,6 +12,9 @@ import {
   removeWorktree,
   pruneWorktrees,
   worktreePath,
+  runBranchName,
+  currentBranch,
+  renameRunBranch,
   FRAMEWORK_DIR,
 } from './index.js'
 
@@ -134,4 +137,38 @@ test('add/list/remove round-trips against a real git repo', async () => {
   } finally {
     await rm(repo, { recursive: true, force: true })
   }
+})
+
+test('runBranchName names the branch after the run id (#736)', () => {
+  assert.equal(runBranchName('2026-07-19T10-00-00-000Z'), 'the-framework/run-2026-07-19T10-00-00-000Z')
+})
+
+test('currentBranch reads the checked-out branch, and reads detached/non-repo as undefined', async () => {
+  assert.equal(await currentBranch(REPO, recordingGit('the-framework/run-1\n')), 'the-framework/run-1')
+  assert.equal(await currentBranch(REPO, recordingGit('HEAD\n')), undefined, 'detached HEAD is not a branch')
+  assert.equal(await currentBranch(REPO, failingGit), undefined)
+})
+
+test('renameRunBranch renames only while the worktree is still on the run-id branch (#736)', async () => {
+  // On the run-id branch: renamed to the session name.
+  const onRunBranch = recordingGit('the-framework/run-1\n')
+  assert.equal(await renameRunBranch('/wt', 'the-framework/run-1', 'the-framework/add-auth', onRunBranch), true)
+  assert.deepEqual(onRunBranch.calls[1]?.args, ['branch', '-m', 'the-framework/run-1', 'the-framework/add-auth'])
+
+  // The agent already made its own branch (today's #326 prompt still tells it to):
+  // there is nothing to rename, and we must not touch the branch it is sitting on.
+  const selfBranched = recordingGit('the-framework/add-auth\n')
+  assert.equal(await renameRunBranch('/wt', 'the-framework/run-1', 'the-framework/add-auth', selfBranched), false)
+  assert.equal(selfBranched.calls.length, 1, 'only the read, never a rename')
+})
+
+test('renameRunBranch never throws: a run outlives a failed rename', async () => {
+  // Reads the branch fine, then fails the rename (e.g. the target name is taken).
+  let call = 0
+  const failsOnRename: GitRunner = async () => {
+    if (call++ === 0) return 'the-framework/run-1\n'
+    throw new Error('a branch named the-framework/x already exists')
+  }
+  assert.equal(await renameRunBranch('/wt', 'the-framework/run-1', 'the-framework/x', failsOnRename), false)
+  assert.equal(await renameRunBranch('/wt', 'a', 'b', failingGit), false)
 })

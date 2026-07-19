@@ -37,7 +37,7 @@ import { loadUserSystemPrompt, SYSTEM_PROMPT_FILE } from './system-prompt-file.j
 import { checkForUpdate, formatUpdateStatus, nodeVersionFetcher } from './update-check.js'
 import { appendLog, type LogEntry } from './logs.js'
 import { preflight } from './preflight.js'
-import { RunStore, nodeStoreFs, type StoreFs } from './store/index.js'
+import { RunStore, nodeStoreFs, renameRunBranch, runBranchName, type StoreFs } from './store/index.js'
 import { materializePresets } from './presets.js'
 import { daemonStatus, ensureDaemon, registerHomeProject, runDaemon, stopDaemon, DEFAULT_DAEMON_PORT } from './daemon.js'
 import { resetControl, watchControl, type ControlWatcher } from './control.js'
@@ -227,6 +227,13 @@ export interface CliOptions {
   /** `--agent <claude|codex>`: which agent CLI drives the run (#542). Default `claude`. */
   agent: AgentName
   cwd?: string | undefined
+  /**
+   * `--run-id <id>` (#736): the id the daemon allocated for this run before spawning it. Its
+   * presence says the framework owns this run's checkout — `--cwd` is a worktree the daemon
+   * created on a `the-framework/run-<id>` branch, which the run renames once the agent names
+   * the session. Absent for a plain `framework "..."`, which runs in the user's own checkout.
+   */
+  runId?: string | undefined
   model?: string | undefined
   /** `--resume-session <id>` (#720): continue a finished run's agent session — the prompt resumes that conversation (full prior context). Set by the dashboard when you message a run that has ended. */
   resumeSession?: string | undefined
@@ -424,6 +431,9 @@ export function parseArgs(argv: string[]): CliOptions {
       }
       case '--cwd':
         opts.cwd = argv[++i]
+        break
+      case '--run-id':
+        opts.runId = argv[++i]
         break
       case '--model':
         opts.model = argv[++i]
@@ -1015,7 +1025,12 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
       // Seed the run's intent (its prompt) so the dashboard's Runs list labels it instead of
       // showing "(no prompt)". A build run refines this via its scope event; a prompt/research
       // run keeps it. Research with no "what" defaults to the same "this PR" the log title uses.
-      store = await RunStore.open(cwd, { fresh: true, intent: intent || (opts.research ? 'this PR' : '') })
+      store = await RunStore.open(cwd, {
+        fresh: true,
+        intent: intent || (opts.research ? 'this PR' : ''),
+        // Adopt the daemon's id (#736) so the run and the worktree it lives in share one.
+        ...(opts.runId ? { id: opts.runId } : {}),
+      })
     } catch (err) {
       io.err(`could not persist run state (${err instanceof Error ? err.message : String(err)}); continuing without it`)
     }
@@ -1099,7 +1114,12 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
       if (event.sessionLink) logSessionLink = event.sessionLink
     }
     if (event.kind === 'ready-for-merge') sawReadyForMerge = true
-    if (event.kind === 'session-name') sessionName = event.name
+    if (event.kind === 'session-name') {
+      sessionName = event.name
+      // The framework-owned checkout (#736) was branched as `the-framework/run-<id>` before a
+      // name existed; put the readable name on it now. No-ops when the agent branched itself.
+      if (opts.runId) void renameRunBranch(cwd, runBranchName(opts.runId), `the-framework/${event.name}`)
+    }
     if (event.kind === 'end') {
       if (event.stopped) stoppedCleanly = true
       const entry = runLogEntry({

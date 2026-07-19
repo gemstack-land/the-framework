@@ -26,8 +26,12 @@ export {
   removeWorktree,
   pruneWorktrees,
   worktreePath,
+  runBranchName,
+  currentBranch,
+  renameRunBranch,
   WORKTREES_DIR,
   type WorktreeInfo,
   type AddWorktreeOptions,
   type AddedWorktree,
 } from './worktree.js'
+export { linkDependencies, findDependencyDirs, nodeLinkFs, type LinkFs } from './worktree-deps.js'

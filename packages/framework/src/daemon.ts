@@ -2,7 +2,14 @@ import { spawn, type ChildProcess } from 'node:child_process'
 import { mkdir, readFile, writeFile, rm, stat } from 'node:fs/promises'
 import { basename, dirname, join, resolve, relative, isAbsolute } from 'node:path'
 import type { FrameworkEvent } from './events.js'
-import { FRAMEWORK_DIR, reconcileOrphanedRuns } from './store/index.js'
+import {
+  FRAMEWORK_DIR,
+  reconcileOrphanedRuns,
+  runIdFromStartedAt,
+  addWorktree,
+  runBranchName,
+  linkDependencies,
+} from './store/index.js'
 import { startDashboard, type Dashboard, type StartRunKind, type StartRunOptions, type StartRunResult, type AddProjectResult, type PreviewResult, type PreviewStatus } from './dashboard/index.js'
 import { startInterventionWatcher, postDiscord, type InterventionWatcher } from './dashboard/intervention-watcher.js'
 import { buildInterventions } from './dashboard/interventions.js'
@@ -448,13 +455,14 @@ interface ProjectRuntime {
 
 /**
  * The daemon's per-project runtime (#393): the run and preview state keyed by project id,
- * plus the RPCs the dashboard invokes over Telefunc. Each project runs at most one run and
- * one preview at a time, independently. The home `cwd` is the default target — a request
+ * plus the RPCs the dashboard invokes over Telefunc. A project runs any number of concurrent
+ * runs (each in its own worktree, #736) and one preview. The home `cwd` is the default target — a request
  * with no project id (or the home id) resolves to it without a registry lookup. Split out of
  * {@link runDaemon} so the daemon body reads as lifecycle and this reads as business logic.
  */
 function createProjectRuntime({ cwd, env, binPath }: ProjectRuntimeOptions): ProjectRuntime {
   const homeId = projectId(resolve(cwd))
+  // Live run pids, keyed per run rather than per project (#736) — see onStart for the key.
   const activeRuns = new Map<string, number>()
   const starting = new Set<string>() // reserved keys mid-spawn, to close the async gap
   const activePreviews = new Map<string, PreviewHandle>()
@@ -467,18 +475,58 @@ function createProjectRuntime({ cwd, env, binPath }: ProjectRuntimeOptions): Pro
     return records.find(record => record.id === id)?.path
   }
 
-  // Start-from-dashboard (#345): spawn `framework "<prompt>" --no-dashboard --cwd <project>`
+  /**
+   * The checkout a run gets (#736). Each run is given its own git worktree under the
+   * project's `.the-framework/worktrees/<runId>`, on a `the-framework/run-<runId>` branch,
+   * so N runs on one repo never fight over the working tree — and the user's own checkout,
+   * uncommitted work included, is left untouched.
+   *
+   * A project that cannot provide one (not a git repo, or any git failure) falls back to the
+   * main checkout, which is exactly the pre-#736 behavior — and keeps its pre-#736 limit of
+   * one run at a time, since those runs *would* collide. Signalled by the absent `runId`.
+   */
+  const allocateWorkspace = async (projectCwd: string, runId: string): Promise<{ cwd: string; runId?: string }> => {
+    try {
+      const worktree = await addWorktree(projectCwd, { runId, branch: runBranchName(runId) })
+      // `node_modules` is gitignored, so a fresh worktree has none: link the parent's in.
+      await linkDependencies(projectCwd, worktree.path).catch(() => [])
+      return { cwd: worktree.path, runId }
+    } catch (err) {
+      console.log(`[framework] no worktree for ${basename(projectCwd)} (${err instanceof Error ? err.message : String(err)}); running in the main checkout`)
+      return { cwd: projectCwd }
+    }
+  }
+
+  // Start-from-dashboard (#345): spawn `framework "<prompt>" --no-dashboard --cwd <checkout>`
   // as a detached child — the same spawn ensureDaemon uses for the daemon itself. The run
   // streams into the page via its tailed event log, and its gates + Stop steer through the
-  // control channel (#344). One run per project (#393): while that project's child is alive,
-  // Start for it is refused (the #322 runaway concern).
+  // control channel (#344).
+  //
+  // Concurrency is per run, not per project (#736): the #393 one-run-per-project refusal
+  // existed because two runs shared one working tree, and worktrees remove that collision.
+  // Rom's call on the cap is unbounded ("the best solution for the user unless/until we
+  // stumble upon issues"), so the guard now only refuses a duplicate of the *same* checkout —
+  // which in practice means the fallback path above.
   const onStart = async (
     prompt: string,
     kind: StartRunKind,
     options: StartRunOptions = {},
     targetProjectId?: string,
   ): Promise<StartRunResult> => {
-    const key = targetProjectId ?? homeId
+    const projectKey = targetProjectId ?? homeId
+    const projectCwd = await resolveProject(targetProjectId)
+    if (!projectCwd) return { ok: false, error: `unknown project: ${targetProjectId}` }
+    let realBin: string
+    try {
+      realBin = resolveSpawnBin(binPath)
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : String(err) }
+    }
+
+    const workspace = await allocateWorkspace(projectCwd, runIdFromStartedAt(new Date().toISOString()))
+    // A run in its own worktree is keyed by that worktree, so it never collides with a
+    // sibling; a fallback run is keyed by the project, restoring the one-at-a-time guard.
+    const key = workspace.runId ? `${projectKey}::${workspace.runId}` : projectKey
     const active = activeRuns.get(key)
     if (starting.has(key) || (active !== undefined && isProcessAlive(active))) {
       return { ok: false, busy: true, error: 'a run is already active for this project; stop it or wait for it to finish' }
@@ -486,14 +534,6 @@ function createProjectRuntime({ cwd, env, binPath }: ProjectRuntimeOptions): Pro
     activeRuns.delete(key)
     starting.add(key)
     try {
-      const projectCwd = await resolveProject(targetProjectId)
-      if (!projectCwd) return { ok: false, error: `unknown project: ${targetProjectId}` }
-      let realBin: string
-      try {
-        realBin = resolveSpawnBin(binPath)
-      } catch (err) {
-        return { ok: false, error: err instanceof Error ? err.message : String(err) }
-      }
       // [Research] (#331) runs the research subcommand; its empty prompt is fine
       // (the "what" defaults to `this PR` in the CLI). A `prompt` kind (#353) is a
       // preset the user reviewed in the textarea: run it verbatim, never re-render.
@@ -503,9 +543,19 @@ function createProjectRuntime({ cwd, env, binPath }: ProjectRuntimeOptions): Pro
           : kind === 'prompt'
             ? ['prompt', prompt]
             : [prompt]
-      const child = spawnDetached(realBin, [...runArgs, ...startOptionFlags(options), '--no-dashboard', '--cwd', projectCwd])
+      // `--run-id` hands the run the id its worktree is named with, so the directory and the
+      // run recorded inside it are one string — and tells it the framework owns its branch.
+      const child = spawnDetached(realBin, [
+        ...runArgs,
+        ...startOptionFlags(options),
+        '--no-dashboard',
+        '--cwd',
+        workspace.cwd,
+        ...(workspace.runId ? ['--run-id', workspace.runId] : []),
+      ])
       // The run narrates itself through its own `.the-framework/events.jsonl`, which the
-      // dashboard streams over a Telefunc Channel; the daemon just tracks liveness.
+      // dashboard streams over a Telefunc Channel; the daemon just tracks liveness. The
+      // worktree is left in place on exit — archiving its history and tearing it down is #737.
       child.once('error', () => activeRuns.delete(key))
       child.once('exit', () => activeRuns.delete(key))
       if (child.pid !== undefined) activeRuns.set(key, child.pid)

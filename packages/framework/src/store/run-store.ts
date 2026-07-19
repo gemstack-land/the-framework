@@ -137,6 +137,13 @@ export interface OpenStoreOptions {
    * fresh store *is* the run's owner. Injectable so tests can seed a specific (dead) pid.
    */
   owner?: RunOwner
+  /**
+   * The run's id, overriding the one derived from {@link OpenStoreOptions.now}. The daemon
+   * allocates the id before it spawns the run (it names the run's worktree with it, #736) and
+   * passes it in, so the worktree directory and the run inside it are one string rather than two
+   * timestamps taken a moment apart. Ignored unless path-safe.
+   */
+  id?: string
 }
 
 /**
@@ -196,11 +203,11 @@ export interface RunOwner {
 }
 
 /** The seed meta a run starts from, before any event is folded in. */
-function freshMeta(startedAt: string, intent?: string, owner?: RunOwner): RunMeta {
+function freshMeta(startedAt: string, intent?: string, owner?: RunOwner, id?: string): RunMeta {
   return {
     version: RUN_META_VERSION,
     status: 'running',
-    id: runIdFromStartedAt(startedAt),
+    id: id && isSafeRunId(id) ? id : runIdFromStartedAt(startedAt),
     startedAt,
     updatedAt: startedAt,
     passes: 0,
@@ -285,7 +292,7 @@ export class RunStore {
     const now = opts.now ?? new Date().toISOString()
     await fs.mkdir(dir)
     const owner = opts.owner ?? { pid: process.pid, host: hostname() }
-    const store = new RunStore(fs, dir, now, freshMeta(now, opts.intent, owner))
+    const store = new RunStore(fs, dir, now, freshMeta(now, opts.intent, owner, opts.id))
     if (opts.fresh) {
       // A new run truncates the live log. First rescue the prior run if it never
       // got archived (e.g. a crash exited before close), so no history is lost.

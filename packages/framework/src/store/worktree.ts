@@ -20,6 +20,15 @@ export function worktreePath(repo: string, runId: string): string {
   return join(repo, FRAMEWORK_DIR, WORKTREES_DIR, runId)
 }
 
+/**
+ * The branch a framework-allocated worktree starts on (#736). The run id exists
+ * before the session name does, so the branch is created from the id and renamed
+ * by {@link renameRunBranch} once the agent picks a name.
+ */
+export function runBranchName(runId: string): string {
+  return `the-framework/run-${runId}`
+}
+
 /** One entry parsed from `git worktree list --porcelain`. */
 export interface WorktreeInfo {
   /** Absolute worktree path (the main checkout included). */
@@ -108,6 +117,47 @@ export async function removeWorktree(repo: string, path: string, run: GitRunner 
     await run(['worktree', 'remove', '--force', path], repo)
   } catch {
     // Already removed, or never registered: nothing to do.
+  }
+}
+
+/**
+ * The branch checked out at `path`, or `undefined` when detached / not a repo.
+ * Forgiving, like {@link listWorktrees}: callers use it to decide, not to fail.
+ */
+export async function currentBranch(path: string, run: GitRunner = nodeGitRunner()): Promise<string | undefined> {
+  try {
+    const name = (await run(['rev-parse', '--abbrev-ref', 'HEAD'], path)).trim()
+    return name && name !== 'HEAD' ? name : undefined
+  } catch {
+    return undefined
+  }
+}
+
+/**
+ * Rename a run's branch once the agent names the session (#736): the worktree is
+ * created on `the-framework/run-<runId>` before a name exists, and this puts the
+ * readable `the-framework/<sessionName>` on it.
+ *
+ * Only renames when `path` is still on `from`. The #326 system prompt currently
+ * tells the agent to create and check out its own `the-framework/<name>` branch,
+ * and until that step is dropped there (the prompt ships verbatim from the issue,
+ * so it is not ours to edit) the agent may already have moved off `from` — in
+ * which case it named the branch itself and there is nothing to rename. Returns
+ * whether it renamed, and never throws: a run must not die over a branch name.
+ */
+export async function renameRunBranch(
+  path: string,
+  from: string,
+  to: string,
+  run: GitRunner = nodeGitRunner(),
+): Promise<boolean> {
+  if ((await currentBranch(path, run)) !== from) return false
+  try {
+    await run(['branch', '-m', from, to], path)
+    return true
+  } catch {
+    // Target name taken, or an invalid slug: keep the run-id branch.
+    return false
   }
 }
 

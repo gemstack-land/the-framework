@@ -1,6 +1,6 @@
 import { strict as assert } from 'node:assert'
 import { test } from 'node:test'
-import { mkdtemp, writeFile, appendFile, rm, mkdir, readFile } from 'node:fs/promises'
+import { mkdtemp, writeFile, appendFile, rm, mkdir, readFile, realpath, stat } from 'node:fs/promises'
 import { spawn } from 'node:child_process'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
@@ -20,6 +20,7 @@ import {
 import { EVENTS_FILE, FRAMEWORK_DIR } from './store/index.js'
 import { controlPath } from './control.js'
 import { projectId, listProjects, addProject } from './registry.js'
+import { nodeGitRunner } from './project.js'
 
 // The new dashboard steers + starts over Telefunc (#405/#426), not the retired /api/* HTTP
 // routes. Post an RPC to the daemon's in-process `/_telefunc` mount (same-origin), keyed by
@@ -327,7 +328,85 @@ test('onServeTargets lists a monorepo\'s servable apps over telefunc (#651)', as
   }
 })
 
-test('sendStart spawns the run child (prompt, --no-dashboard, --cwd) one at a time (#345)', async () => {
+test('a git project starts concurrent runs, each in its own worktree (#736)', async () => {
+  // realpath: on macOS tmpdir sits under the /var -> /private/var symlink, and git
+  // reports the resolved path (same gotcha as the worktree module's own round-trip test).
+  const cwd = await realpath(await mkdtemp(join(tmpdir(), 'framework-daemon-git-')))
+  const git = nodeGitRunner()
+  const ac = new AbortController()
+  try {
+    await mkdir(join(cwd, FRAMEWORK_DIR), { recursive: true })
+    await git(['init'], cwd)
+    await git(['config', 'user.email', 't@t'], cwd)
+    await git(['config', 'user.name', 't'], cwd)
+    await writeFile(join(cwd, 'README.md'), '# t\n')
+    await git(['add', '-A'], cwd)
+    await git(['commit', '-m', 'init'], cwd)
+
+    // The stub logs to the *repo*, not to its own --cwd: each run now gets a different one.
+    const stub = join(cwd, 'stub-cli.cjs')
+    await writeFile(
+      stub,
+      `const fs = require('node:fs')
+fs.appendFileSync(${JSON.stringify(join(cwd, 'started.log'))}, JSON.stringify(process.argv.slice(2)) + '\\n')
+setTimeout(() => {}, 800)
+`,
+    )
+    const env = await configEnv(cwd)
+    const done = runDaemon(cwd, { port: 0, signal: ac.signal, binPath: stub, env })
+    let state = await readDaemonState(env)
+    for (let i = 0; i < 100 && !state; i++) {
+      await new Promise(r => setTimeout(r, 20))
+      state = await readDaemonState(env)
+    }
+    assert.ok(state, 'daemon wrote its state file')
+
+    // The whole point of #736: the second Start is no longer refused as busy while the
+    // first child is alive, because the two no longer share a working tree.
+    const first = await sendStart(state!.url, cwd, 'a blog')
+    const second = await sendStart(state!.url, cwd, 'another app')
+    assert.equal(first.ok, true)
+    assert.equal(second.ok, true, 'a concurrent run on the same project is allowed')
+
+    let lines: string[] = []
+    for (let i = 0; i < 100 && lines.length < 2; i++) {
+      await new Promise(r => setTimeout(r, 20))
+      lines = await readFile(join(cwd, 'started.log'), 'utf8').then(
+        s => s.split('\n').filter(Boolean),
+        () => [],
+      )
+    }
+    assert.equal(lines.length, 2, 'both children spawned')
+
+    const runs = lines.map(line => {
+      const args = JSON.parse(line) as string[]
+      return { cwd: args[args.indexOf('--cwd') + 1]!, runId: args[args.indexOf('--run-id') + 1]! }
+    })
+    for (const run of runs) {
+      assert.equal(run.cwd, join(cwd, FRAMEWORK_DIR, 'worktrees', run.runId), 'ran in the worktree named by its run id')
+      assert.equal((await stat(run.cwd)).isDirectory(), true, 'the worktree checkout exists')
+      assert.equal((await stat(join(run.cwd, 'README.md'))).isFile(), true, 'with the repo content in it')
+    }
+    assert.notEqual(runs[0]!.cwd, runs[1]!.cwd, 'the two runs got different checkouts')
+
+    // Each run is on its own `the-framework/run-<id>` branch, and the user's own checkout
+    // was never moved off the branch it was sitting on.
+    const branches = await git(['branch', '--format=%(refname:short)'], cwd)
+    for (const run of runs) assert.ok(branches.includes(`the-framework/run-${run.runId}`), `branch for ${run.runId}`)
+    const head = (await git(['rev-parse', '--abbrev-ref', 'HEAD'], cwd)).trim()
+    assert.equal(head.startsWith('the-framework/run-'), false, 'the main checkout stayed on its own branch')
+
+    ac.abort()
+    await done
+  } finally {
+    ac.abort()
+    await rm(cwd, { recursive: true, force: true })
+  }
+})
+
+test('sendStart spawns the run child (prompt, --no-dashboard, --cwd) one at a time when the project has no worktree (#345)', async () => {
+  // A non-git workspace cannot be given a worktree, so runs share the one checkout and the
+  // pre-#736 one-at-a-time guard still applies. tmpWorkspace() is deliberately not a repo.
   const cwd = await tmpWorkspace()
   // A stub CLI standing in for the framework bin: it records its argv, then
   // stays alive briefly so the one-run-at-a-time guard has a window to trip.
