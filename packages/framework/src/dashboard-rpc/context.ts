@@ -1,5 +1,6 @@
 import { getContext } from 'telefunc'
-import { readLiveMetas } from '../store/index.js'
+import { readLiveMetas, worktreePath, isSafeRunId } from '../store/index.js'
+import { nodeFs } from '../node-fs.js'
 import { defaultProjectsProvider, type ProjectsProvider } from '../dashboard/projects.js'
 import type { DashboardContext, EventsSource } from '../dashboard/telefunc-serve.js'
 import type { PreferencesStore } from '../registry.js'
@@ -46,9 +47,21 @@ export function resolveProjectPath(projectId: string): Promise<string | undefine
  */
 export async function resolveRunPath(projectId: string, runId?: string): Promise<string | undefined> {
   const cwd = await resolveProjectPath(projectId)
-  if (!cwd || !runId) return cwd
+  if (!cwd || !runId || !isSafeRunId(runId)) return cwd
   const live = await readLiveMetas(cwd).catch(() => [])
-  return live.find(run => run.id === runId)?.cwd ?? cwd
+  const running = live.find(run => run.id === runId)?.cwd
+  if (running) return running
+  // Not in the live list yet. That is the normal state for the first seconds of a run (#766): the
+  // daemon creates the worktree and spawns the process, and only then does the run write its
+  // `run.json`, so a lookup by run state misses a run that certainly exists. The directory is named
+  // with the run id and is there before the process starts, so ask the filesystem instead.
+  //
+  // This matters beyond a slow first read: a Telefunc Channel resolves its path once, when the
+  // client subscribes. Falling back to the project root here does not self-correct a moment later
+  // — it tails the wrong file for the life of the subscription, which is how a newly started run
+  // ended up showing a previous run's output.
+  const path = worktreePath(cwd, runId)
+  return (await nodeFs().isDirectory(path)) ? path : cwd
 }
 
 /**

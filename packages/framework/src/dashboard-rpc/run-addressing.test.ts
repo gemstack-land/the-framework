@@ -145,3 +145,38 @@ test('onRetainedWorktrees hides a live run, and lists one that has finished (#73
     await rm(ctx.dir, { recursive: true, force: true })
   }
 })
+
+// #766: for the first seconds of a run there is a worktree but no `run.json` yet. Resolving by run
+// state misses it and falls back to the project root, and because a Telefunc Channel resolves its
+// path once at subscribe time, the feed then tails the root's log — a previous run's output — for
+// the life of the subscription. Resolve by the directory, which the daemon creates before it spawns.
+test('a run that has a worktree but has not written its state yet still resolves to it (#766)', async () => {
+  const ctx = await projectWithWorktreeRun()
+  try {
+    const fresh = '2026-07-19T11-30-00-000Z'
+    const worktree = join(ctx.dir, FRAMEWORK_DIR, WORKTREES_DIR, fresh)
+    await mkdir(worktree, { recursive: true }) // the daemon has made the checkout; the run has not started writing
+    await sendStop(ctx.projectId, fresh)
+    assert.deepEqual(
+      await entries(join(worktree, FRAMEWORK_DIR, CONTROL_FILE)),
+      [{ kind: 'stop' }],
+      'addressed at the run whose worktree exists, not the project root',
+    )
+    assert.deepEqual(await entries(ctx.rootControl), [], 'the project root is left alone')
+  } finally {
+    ctx.restore()
+    await rm(ctx.dir, { recursive: true, force: true })
+  }
+})
+
+test('a run id with no worktree at all still falls back to the project root (#766)', async () => {
+  const ctx = await projectWithWorktreeRun()
+  try {
+    // The non-git fallback path, and any run whose worktree has since been removed.
+    await sendStop(ctx.projectId, '2026-07-19T11-45-00-000Z')
+    assert.deepEqual(await entries(ctx.rootControl), [{ kind: 'stop' }])
+  } finally {
+    ctx.restore()
+    await rm(ctx.dir, { recursive: true, force: true })
+  }
+})
