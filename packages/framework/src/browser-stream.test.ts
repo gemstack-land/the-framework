@@ -221,6 +221,73 @@ test('following survives a browser that stops answering', async () => {
   }
 })
 
+test('a still page keeps re-sending its frame so the pane paints (#818)', async () => {
+  // Chrome holds the last MJPEG part back until the next boundary arrives, so one frame on a
+  // page that never changes rendered as nothing. Found against a real run: the bridge served a
+  // good JPEG and the pane stayed blank.
+  const cdp = fakeCdp()
+  const stream = await startBrowserStream({
+    browserUrl: 'http://127.0.0.1:9333',
+    connect: async () => cdp.session,
+    listTargets: async () => [page()],
+    followIntervalMs: 0,
+    repeatIntervalMs: 20,
+  })
+  assert.ok(stream)
+  try {
+    cdp.frame(Buffer.from([1, 2, 3]).toString('base64'))
+    const res = await fetch(`${stream.url}/stream`)
+    const reader = res.body?.getReader()
+
+    // More than one part out of a single screencast frame: nothing else changed the page, so
+    // every part after the first is the repeat. Counted as "at least two" rather than exactly
+    // two — how many repeats land in a given read is a matter of timing, and pinning the number
+    // made this fail on a busier machine.
+    // Bounded: without the repeat there is simply no second part, and waiting forever for one
+    // would report as a timeout rather than as this assertion.
+    let boundaries = 0
+    const deadline = Date.now() + 5000
+    while (boundaries < 2 && Date.now() < deadline) {
+      const chunk = await Promise.race([
+        reader?.read(),
+        new Promise<undefined>(r => setTimeout(() => r(undefined), 1000)),
+      ])
+      if (!chunk || chunk.done) break
+      boundaries += Buffer.from(chunk.value).toString('latin1').split('--frame').length - 1
+    }
+    assert.ok(boundaries >= 2, `the frame repeats, terminating the part before it (saw ${boundaries})`)
+
+    await reader?.cancel()
+  } finally {
+    await stream?.close()
+  }
+})
+
+test('the repeat stops when nobody is watching', async () => {
+  // The interval must not keep writing into a closed response.
+  const cdp = fakeCdp()
+  const stream = await startBrowserStream({
+    browserUrl: 'http://127.0.0.1:9333',
+    connect: async () => cdp.session,
+    listTargets: async () => [page()],
+    followIntervalMs: 0,
+    repeatIntervalMs: 10,
+  })
+  assert.ok(stream)
+  try {
+    cdp.frame(Buffer.from([1, 2, 3]).toString('base64'))
+    const res = await fetch(`${stream.url}/stream`)
+    await res.body?.cancel()
+    await new Promise(r => setTimeout(r, 60))
+    // Still serving: a viewer leaving must not take the bridge down with it.
+    const again = await fetch(`${stream.url}/stream`)
+    assert.equal(again.status, 200)
+    await again.body?.cancel()
+  } finally {
+    await stream?.close()
+  }
+})
+
 test('close stops the screencast and frees the port', async () => {
   const cdp = fakeCdp()
   const stream = await startBrowserStream({

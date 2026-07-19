@@ -134,6 +134,8 @@ export async function startBrowserStream(opts: {
   listTargets?: (browserUrl: string) => Promise<CdpPageTarget[]>
   /** How often to check whether the agent moved to another tab. 0 disables following. */
   followIntervalMs?: number
+  /** How often to re-send the newest frame so a still page still paints (#818). */
+  repeatIntervalMs?: number
 }): Promise<BrowserStream | undefined> {
   const listTargets = opts.listTargets ?? defaultListTargets
   const targets = await listTargets(opts.browserUrl).catch(() => [])
@@ -163,6 +165,22 @@ export async function startBrowserStream(opts: {
    * page happened to be first while the agent works somewhere else — the exact failure the
    * #609 spike reproduced. Cheap: one `/json/list` on an interval, re-attach only on change.
    */
+  /**
+   * Re-send the newest frame while anyone is watching (#818).
+   *
+   * Chrome does not finalize a `multipart/x-mixed-replace` part until the next boundary arrives,
+   * so the most recent frame is always held back unpainted. A still page never produces that next
+   * frame, which left the pane blank while holding a perfectly good JPEG — and a still page is
+   * exactly the case this exists for: a run parked on a login wall is not repainting itself.
+   *
+   * Repeating the frame supplies the boundary. Loopback only, and only while a viewer is attached.
+   */
+  const repeat = setInterval(() => {
+    if (!latest || viewers.size === 0) return
+    for (const res of viewers) res.write(framePart(BOUNDARY, latest))
+  }, opts.repeatIntervalMs ?? 1000)
+  repeat.unref?.()
+
   const followMs = opts.followIntervalMs ?? 2000
   const follow = followMs
     ? setInterval(() => {
@@ -232,6 +250,7 @@ export async function startBrowserStream(opts: {
       if (closed) return
       closed = true
       if (follow) clearInterval(follow)
+      clearInterval(repeat)
       for (const res of viewers) res.end()
       viewers.clear()
       await session.send('Page.stopScreencast').catch(() => {})
