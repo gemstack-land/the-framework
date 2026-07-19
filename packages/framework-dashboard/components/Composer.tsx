@@ -84,8 +84,12 @@ export const Composer = forwardRef<ComposerHandle, {
   placeholder?: string | undefined
   /** Show the ⌘↵ hint on the submit button (the launcher's Start). */
   showShortcutHint?: boolean | undefined
+  /** Compact single-row form for the navbar quick-launch (#723): editor + submit, no control row
+   *  or preset panel. The `/` `<` `@` `#` triggers still work; agent/model + options come from the
+   *  shared prefs the launcher sets. */
+  compact?: boolean | undefined
 }>(function Composer(
-  { projects, files, addContext, onSubmit, onPromptChange, onPreset, busy, submitLabel, submitBusyLabel, placeholder, showShortcutHint = false },
+  { projects, files, addContext, onSubmit, onPromptChange, onPreset, busy, submitLabel, submitBusyLabel, placeholder, showShortcutHint = false, compact = false },
   ref,
 ) {
   const [prompt, setPrompt] = useState('')
@@ -160,21 +164,45 @@ export const Composer = forwardRef<ComposerHandle, {
     { key: 'ecoMaintenance', label: 'Auto maintenance', description: 'Drops the maintenance section.', title: 'Drop the maintenance section', checked: ecoMaintenance },
   ]
 
+  const editorEl = (
+    <PromptEditor
+      ref={editorRef}
+      compact={compact}
+      onChange={onPromptEdit}
+      onSubmit={submit}
+      onPreset={loadPreset}
+      onMentionProject={addContext}
+      onMentionFile={addContext}
+      projects={projects}
+      files={files}
+      presets={PRESETS}
+      disabled={busy}
+      {...(placeholder ? { placeholder } : {})}
+    />
+  )
+
+  // Compact (#723): one row of editor + submit for the navbar. The `/` `<` `@` `#` triggers still
+  // work in the editor; the agent/model + options controls are dropped (they come from prefs).
+  if (compact) {
+    return (
+      <div className="flex items-start gap-2">
+        <div className="min-w-0 flex-1">{editorEl}</div>
+        <Button
+          type="submit"
+          size="sm"
+          onClick={submit}
+          disabled={busy || !prompt.trim()}
+          title={!prompt.trim() ? 'Type a prompt first' : `${submitLabel}  (⌘↵ / Ctrl+Enter)`}
+        >
+          {busy ? submitBusyLabel : submitLabel}
+        </Button>
+      </div>
+    )
+  }
+
   return (
     <>
-      <PromptEditor
-        ref={editorRef}
-        onChange={onPromptEdit}
-        onSubmit={submit}
-        onPreset={loadPreset}
-        onMentionProject={addContext}
-        onMentionFile={addContext}
-        projects={projects}
-        files={files}
-        presets={PRESETS}
-        disabled={busy}
-        {...(placeholder ? { placeholder } : {})}
-      />
+      {editorEl}
 
       {/* Run controls, directly under the editor (#649/#650/#654/#668): agent+model at the start,
           then presets and the options gear, then submit at the end. */}

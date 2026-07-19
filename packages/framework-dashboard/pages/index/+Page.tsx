@@ -4,6 +4,7 @@ import { onProjectFiles, onInterventions, onActivity } from '../../server/reads.
 import { onProjects } from '../../server/projects.telefunc.js'
 import { ProjectsSidebar } from '../../components/ProjectsSidebar.js'
 import { NotificationsMenu } from '../../components/NotificationsMenu.js'
+import { NavbarQuickLaunch } from '../../components/NavbarQuickLaunch.js'
 import { RunHistory } from '../../components/RunHistory.js'
 import { ProjectHome } from '../../components/ProjectHome.js'
 import { DashboardPage } from '../../components/DashboardPage.js'
@@ -97,8 +98,11 @@ export default function Page() {
   useActivityNotifications(activity, browserActivity)
 
   const onRunStarted = (intent: string) => {
-    // Jump to the new run's live output (the launcher stays on the "Live" row, one click back).
+    // Jump to the new run's live output. Reset to the home/Live row first (a no-op from the launcher,
+    // where it already is) so a navbar quick-launch (#723) jumps to live even from a finished run's
+    // replay; `followLive` streams the shared feed until the poll adopts the new run's real id below.
     // The new run just appends to the rail; reload so its real row shows up quickly.
+    setRunId(null)
     setRunStart(prev => ({ tick: prev.tick + 1, intent }))
     setFollowLive(true)
     reload()
@@ -179,9 +183,20 @@ export default function Page() {
   return (
     <div className="flex h-screen flex-col">
       <header className="flex items-center gap-3 border-b border-border px-4 py-3">
-        <span className="font-semibold">The Framework</span>
-        <Badge className="text-muted-foreground">dashboard</Badge>
-        <div className="ml-auto flex items-center gap-1">
+        <span className="shrink-0 font-semibold">The Framework</span>
+        <Badge className="shrink-0 text-muted-foreground">dashboard</Badge>
+        {/* Global quick-launch (#723): start a run in the selected project from anywhere. */}
+        <NavbarQuickLaunch
+          className="mx-2 min-w-0 flex-1"
+          projectId={projectId}
+          projectName={projectName}
+          projects={projects}
+          files={files}
+          context={context}
+          addContext={addContext}
+          onRunStarted={onRunStarted}
+        />
+        <div className="flex shrink-0 items-center gap-1">
           <NotificationsMenu />
         </div>
       </header>

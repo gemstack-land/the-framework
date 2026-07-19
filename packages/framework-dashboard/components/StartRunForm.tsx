@@ -3,6 +3,7 @@ import type { ProjectSummary } from '@gemstack/framework'
 import { sendStart } from '../server/control.telefunc.js'
 import { onProjects } from '../server/projects.telefunc.js'
 import { usePreferences, updatePreferences, autopilotEnabled } from '../lib/preferences.js'
+import { collectRunOptions } from '../lib/run-options.js'
 import { useLoaded } from '../lib/use-async.js'
 import { Composer, type ComposerHandle } from './Composer.js'
 import { ContextFiles } from './ContextFiles.js'
@@ -48,11 +49,6 @@ export function StartRunForm({
   const ecoPlanning = preferences.ecoPlanning ?? false
   const ecoResearch = preferences.ecoResearch ?? false
   const ecoMaintenance = preferences.ecoMaintenance ?? false
-  const technical = preferences.technical ?? false
-  const onBeforeMergeableQuality = preferences.onBeforeMergeableQuality ?? false
-  const browser = preferences.browser ?? false
-  const model = preferences.model ?? '' // #628: empty = the driver's default model
-  const agent = preferences.agent ?? 'claude' // #650: which coding agent drives the run
 
   // Context selector (#439/#314): the agent can reach every registered repo, so ticking a subset
   // narrows its focus — the picked paths become one `Context:` line in the system prompt.
@@ -74,29 +70,12 @@ export function StartRunForm({
     .filter(Boolean)
     .join(' · ')
 
-  const ecoDisabled = vanilla || transparent
-
-  // The eco drops, hoisted: the run gets them via collectOptions, and the #520 preview renders with
-  // them, so what you read is what gets sent.
+  // The eco drops for the system-prompt preview (#520): what the run trims is what you read. The run
+  // itself gets them via collectRunOptions (which recomputes them from the same prefs).
   const ecoDrops = {
     ...(ecoPlanning ? { autoPlanning: true } : {}),
     ...(ecoResearch ? { autoResearch: true } : {}),
     ...(ecoMaintenance ? { autoMaintenance: true } : {}),
-  }
-
-  const collectOptions = () => {
-    return {
-      ...(autopilot ? { autopilot: true } : {}),
-      ...(technical ? { technical: true } : {}),
-      ...(vanilla ? { vanilla: true } : {}),
-      ...(transparent ? { transparent: true } : {}),
-      ...(eco && !vanilla && !transparent && Object.keys(ecoDrops).length ? { eco: ecoDrops } : {}),
-      ...(onBeforeMergeableQuality ? { onBeforeMergeable: true } : {}),
-      ...(browser ? { browser: true } : {}),
-      ...(model ? { model } : {}),
-      ...(agent && agent !== 'claude' ? { agent } : {}),
-      ...(context.size ? { context: [...context] } : {}),
-    }
   }
 
   const submit = async (text: string, submitKind: 'build' | 'prompt') => {
@@ -105,7 +84,7 @@ export function StartRunForm({
     setError(null)
     setNote('Starting…')
     try {
-      const result = await sendStart(projectId, text, submitKind, collectOptions())
+      const result = await sendStart(projectId, text, submitKind, collectRunOptions(preferences, [...context]))
       if (result.ok) {
         // Show the run in the Runs rail immediately (#405): the spawned process writes its run.json
         // a beat later, so seed an optimistic row with the typed prompt until the real meta takes over.
