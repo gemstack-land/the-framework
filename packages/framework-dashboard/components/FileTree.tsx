@@ -1,7 +1,8 @@
-import { useMemo, useState } from 'react'
+import { Fragment, useMemo, useState } from 'react'
 import { Check, FileIcon } from 'lucide-react'
 import { onProjectFileStatus } from '../server/reads.telefunc.js'
 import { usePolled } from '../lib/use-async.js'
+import { FileDiffHover } from './FileDiffHover.js'
 import {
   Files,
   FolderItem,
@@ -124,9 +125,8 @@ export function FileTree({
           const name = path.slice(path.lastIndexOf('/') + 1)
           const isOn = selected.has(path)
           const git = status[path]
-          return (
+          const item = (
             <FileItem
-              key={path}
               icon={isOn ? Check : FileIcon}
               title={path}
               className={'pointer-events-auto cursor-pointer' + (isOn ? ' text-primary' : '')}
@@ -135,6 +135,14 @@ export function FileTree({
             >
               {name}
             </FileItem>
+          )
+          // Only a changed file has a diff to show, so only it gets the hover card (#816).
+          return git ? (
+            <FileDiffHover key={path} projectId={projectId} runId={runId} path={path}>
+              {item}
+            </FileDiffHover>
+          ) : (
+            <Fragment key={path}>{item}</Fragment>
           )
         })}
     </>

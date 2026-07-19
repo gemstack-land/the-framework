@@ -1,5 +1,5 @@
 import { __decorateTelefunction } from 'telefunc'
-import { onRuns, onRun, onDocs, onProjectLog, onQueue, onOverview, onInterventions, onActivity, onDashboard, onGithubUrl, onGitStatus, onProjectFiles, onProjectFileStatus, onRetainedWorktrees, onRunWorktree, onRunHandoff } from './reads.telefunc.js'
+import { onRuns, onRun, onDocs, onProjectLog, onQueue, onOverview, onInterventions, onActivity, onDashboard, onGithubUrl, onGitStatus, onProjectFiles, onProjectFileStatus, onFileDiff, onRetainedWorktrees, onRunWorktree, onRunHandoff } from './reads.telefunc.js'
 import { sendStop, sendChoice, sendMessage, sendStart, sendPreview, onServeTargets, sendStopPreview, onPreviewStatus, sendOpenInApp, sendRemoveWorktree, sendPushBranch, sendOpenPullRequest } from './control.telefunc.js'
 import { onEvents } from './events.telefunc.js'
 import { onProjects, sendAddProject } from './projects.telefunc.js'
@@ -49,6 +49,7 @@ export function registerDashboardTelefunctions(appRootDir: string = process.cwd(
   reg(onRunHandoff, 'onRunHandoff', reads)
   reg(onProjectFiles, 'onProjectFiles', reads)
   reg(onProjectFileStatus, 'onProjectFileStatus', reads)
+  reg(onFileDiff, 'onFileDiff', reads)
   reg(sendStop, 'sendStop', control)
   reg(sendChoice, 'sendChoice', control)
   reg(sendMessage, 'sendMessage', control)

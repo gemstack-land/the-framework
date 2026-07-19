@@ -12,6 +12,7 @@ import { readRunHandoff, runBranchFor, type RunHandoff } from '../dashboard/run-
 import type { RunWorktree } from '../dashboard/types.js'
 import { crawlRepoFiles } from '../project.js'
 import { readFileStatuses, type FileGitStatus } from '../dashboard/file-status.js'
+import { readFileDiff, type FileDiff } from '../dashboard/file-diff.js'
 import { contextProjects, resolveProjectPath, resolveRunPath } from './context.js'
 import type { FrameworkEvent } from '../events.js'
 
@@ -181,6 +182,23 @@ export async function onProjectFiles(projectId: string, runId?: string): Promise
 export async function onProjectFileStatus(projectId: string, runId?: string): Promise<Record<string, FileGitStatus>> {
   const cwd = await resolveRunPath(projectId, runId)
   return cwd ? readFileStatuses(cwd).catch(() => ({})) : {}
+}
+
+/**
+ * One changed file's diff, for the tree's hover card (#816). Null when the path is not a changed
+ * file, is unsafe (see `safeRepoPath`), or there is no checkout. Reads the run's own worktree when
+ * `runId` names one, so it shows the same change the tree dotted (#815).
+ *
+ * The status comes from the same `git status` the dots do, rather than from the caller: a client
+ * that thinks a file is untracked must not be able to make the server read it as one.
+ */
+export async function onFileDiff(projectId: string, path: string, runId?: string): Promise<FileDiff | null> {
+  const cwd = await resolveRunPath(projectId, runId)
+  if (!cwd) return null
+  const statuses = await readFileStatuses(cwd).catch((): Record<string, FileGitStatus> => ({}))
+  const status = statuses[path]
+  if (!status) return null
+  return readFileDiff(cwd, path, status).catch(() => null)
 }
 
 /** The project's GitHub URL from its `origin` remote (#489), or null (no remote / not GitHub / relay). */

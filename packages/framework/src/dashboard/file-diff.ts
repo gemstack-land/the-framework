@@ -1,0 +1,118 @@
+import { nodeGitRunner, type GitRunner } from '../project.js'
+import type { FileGitStatus } from './file-status.js'
+
+// One changed file's diff for the tree's hover card (#816) and the run view's Changes section
+// (#817). The tree already says a file is M/U/D; this says what actually changed, without
+// leaving the dashboard for `git diff`. Read against whatever checkout the caller resolved, so
+// a session's hover shows its worktree and not the project root (#815).
+//
+// This is the first read that takes a caller-supplied path, so the guard is here rather than at
+// the call site: `safeRepoPath` is the only way in, and every caller goes through it.
+
+/** One file's diff, capped so a hover card can render it. */
+export interface FileDiff {
+  /** The repo-relative path asked for. */
+  path: string
+  status: FileGitStatus
+  /** Unified diff body, hunks only (git's `diff --git` / index preamble is dropped). */
+  patch: string
+  added: number
+  removed: number
+  /** The patch hit {@link MAX_DIFF_LINES} and was cut. */
+  truncated: boolean
+  /** Nothing textual to show (git reports a binary change, or the file is not UTF-8 text). */
+  binary: boolean
+}
+
+/** Cap a patch so one enormous file can't flood a hover card or the event stream. */
+const MAX_DIFF_LINES = 500
+
+/**
+ * Whether a client-supplied path may be read: repo-relative, no traversal, no absolute path, no
+ * leading `-` (git would read it as a flag), and never into `.git` (config and credentials live
+ * there). Rejecting is the whole contract; the caller resolves it against a checkout it chose.
+ */
+export function safeRepoPath(path: string): boolean {
+  if (!path || path.length > 1024 || path.includes('\0')) return false
+  if (path.startsWith('/') || path.startsWith('-') || /^[a-zA-Z]:/.test(path)) return false
+  const parts = path.split(/[\\/]/)
+  if (parts[0] === '.git') return false
+  return parts.every(part => part !== '' && part !== '.' && part !== '..')
+}
+
+/** Drop git's `diff --git` / `index` / `mode` preamble, keeping the `---`/`+++`/hunk body. */
+function hunksOnly(patch: string): string {
+  const lines = patch.split('\n')
+  const start = lines.findIndex(line => line.startsWith('--- ') || line.startsWith('@@'))
+  return (start === -1 ? [] : lines.slice(start)).join('\n').trimEnd()
+}
+
+/** Count the +/- lines of a unified patch, ignoring the `---`/`+++` file headers. */
+function countChanges(patch: string): { added: number; removed: number } {
+  let added = 0
+  let removed = 0
+  for (const line of patch.split('\n')) {
+    if (line.startsWith('+++') || line.startsWith('---')) continue
+    if (line.startsWith('+')) added++
+    else if (line.startsWith('-')) removed++
+  }
+  return { added, removed }
+}
+
+function cut(patch: string): { patch: string; truncated: boolean } {
+  const lines = patch.split('\n')
+  if (lines.length <= MAX_DIFF_LINES) return { patch, truncated: false }
+  return { patch: lines.slice(0, MAX_DIFF_LINES).join('\n'), truncated: true }
+}
+
+/** An untracked file has no blob to diff against, so render its contents as all-added. */
+function asAllAdded(text: string): string {
+  const lines = text.split('\n')
+  if (lines[lines.length - 1] === '') lines.pop() // a trailing newline is not a line
+  return lines.map(line => `+${line}`).join('\n')
+}
+
+/**
+ * The diff for one changed file in the checkout at `cwd`.
+ *
+ * Tracked files diff against `HEAD`, not the index, so a change the agent staged still shows;
+ * that also matches `git status --porcelain`, which is what dotted the file in the first place.
+ * An untracked file is rendered as all-added from its contents, since `git diff --no-index`
+ * exits non-zero on a difference and would read as a failure here.
+ *
+ * Returns null when the path is unsafe, unreadable, or has no diff to show.
+ */
+export async function readFileDiff(
+  cwd: string,
+  path: string,
+  status: FileGitStatus,
+  git: GitRunner = nodeGitRunner(),
+): Promise<FileDiff | null> {
+  if (!safeRepoPath(path)) return null
+
+  if (status === 'untracked') {
+    const { readFile } = await import('node:fs/promises')
+    const { join, resolve, sep } = await import('node:path')
+    const full = resolve(cwd, path)
+    // Belt and braces: the string guard above already rejects traversal, but a symlink inside
+    // the repo could still point out of it, and this read follows links.
+    if (!full.startsWith(resolve(cwd) + sep)) return null
+    const raw = await readFile(join(cwd, path)).catch(() => null)
+    if (!raw) return null
+    if (raw.includes(0)) return { path, status, patch: '', added: 0, removed: 0, truncated: false, binary: true }
+    const { patch, truncated } = cut(asAllAdded(raw.toString('utf8')))
+    return { path, status, patch, ...countChanges(patch), truncated, binary: false }
+  }
+
+  // `HEAD` is missing in a repo with no commits yet; the working-tree diff is the honest answer
+  // there rather than an error.
+  const raw = await git(['diff', '--unified=3', 'HEAD', '--', path], cwd)
+    .catch(() => git(['diff', '--unified=3', '--', path], cwd))
+    .catch(() => '')
+  if (!raw.trim()) return null
+  if (/^Binary files /m.test(raw)) return { path, status, patch: '', added: 0, removed: 0, truncated: false, binary: true }
+
+  const { patch, truncated } = cut(hunksOnly(raw))
+  if (!patch) return null
+  return { path, status, patch, ...countChanges(patch), truncated, binary: false }
+}
