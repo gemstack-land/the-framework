@@ -1,5 +1,5 @@
 import { getContext } from 'telefunc'
-import { appendControl } from '../control.js'
+import { appendControl, type ControlEntry } from '../control.js'
 import { openInApp, type OpenTarget, type OpenResult } from '../dashboard/open-in-app.js'
 import { resolveProjectPath, contextPreferences } from './context.js'
 import type { ChoiceBy } from '../events.js'
@@ -16,10 +16,19 @@ import type { Preferences } from '../registry.js'
 // steerable. (Starting a run needs a spawn + the daemon's busy guard, so `sendStart`
 // lands with the daemon-serves-the-bundle wiring, not here.)
 
+/**
+ * Resolve the project's local path and append one steering entry to its `control.jsonl`.
+ * A no-op when the project has no local path (the read-only relay), so the run channel is
+ * only ever written by a host that owns the workspace.
+ */
+async function appendControlFor(projectId: string, entry: ControlEntry): Promise<void> {
+  const cwd = await resolveProjectPath(projectId)
+  if (cwd) await appendControl(cwd, entry)
+}
+
 /** Stop the project's live run (the Stop button): append a stop entry to its control log. */
 export async function sendStop(projectId: string): Promise<void> {
-  const cwd = await resolveProjectPath(projectId)
-  if (cwd) await appendControl(cwd, { kind: 'stop' })
+  await appendControlFor(projectId, { kind: 'stop' })
 }
 
 /**
@@ -33,21 +42,18 @@ export async function sendChoice(
   pick: string | string[],
   by: ChoiceBy = 'user',
 ): Promise<void> {
-  const cwd = await resolveProjectPath(projectId)
-  if (cwd) await appendControl(cwd, { kind: 'choice', id, pick, by })
+  await appendControlFor(projectId, { kind: 'choice', id, pick, by })
 }
 
 /**
  * Send a live-chat message to the project's running run (#714): append a `message` entry
  * that the run drains between turns, continuing the same session via `--resume`. Empty
- * messages are dropped. A no-op when the project has no local path (the read-only relay),
- * so the run channel is only ever written by a host that owns the workspace.
+ * messages are dropped.
  */
 export async function sendMessage(projectId: string, text: string): Promise<void> {
   const message = text.trim()
   if (!message) return
-  const cwd = await resolveProjectPath(projectId)
-  if (cwd) await appendControl(cwd, { kind: 'message', text: message })
+  await appendControlFor(projectId, { kind: 'message', text: message })
 }
 
 /**
