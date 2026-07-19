@@ -18,6 +18,8 @@ import {
   commitPendingWork,
   removeWorktree,
   pruneWorktrees,
+  readLiveMetas,
+  isSafeRunId,
 } from './store/index.js'
 import { startDashboard, type Dashboard, type StartRunKind, type StartRunOptions, type StartRunResult, type AddProjectResult, type PreviewResult, type PreviewStatus } from './dashboard/index.js'
 import { startInterventionWatcher, postDiscord, type InterventionWatcher } from './dashboard/intervention-watcher.js'
@@ -485,6 +487,20 @@ function createProjectRuntime({ cwd, env, binPath }: ProjectRuntimeOptions): Pro
   }
 
   /**
+   * The checkout a *session* is working in (#797): its own worktree, else the project's tree.
+   * Same resolution the read and control RPCs use — live metas first, then the directory, which
+   * exists before the run has written its `run.json`.
+   */
+  const resolveRunCheckout = async (projectCwd: string, runId: string | undefined): Promise<string> => {
+    if (!runId || !isSafeRunId(runId)) return projectCwd
+    const live = await readLiveMetas(projectCwd).catch(() => [])
+    const running = live.find(run => run.id === runId)?.cwd
+    if (running) return running
+    const path = worktreePath(projectCwd, runId)
+    return (await stat(path).then(s => s.isDirectory()).catch(() => false)) ? path : projectCwd
+  }
+
+  /**
    * The checkout a run gets (#736). Each run is given its own git worktree under the
    * project's `.the-framework/worktrees/<runId>`, on a `the-framework/run-<runId>` branch,
    * so N runs on one repo never fight over the working tree — and the user's own checkout,
@@ -547,8 +563,12 @@ function createProjectRuntime({ cwd, env, binPath }: ProjectRuntimeOptions): Pro
    * Best-effort from end to end: this runs off a process-exit event with nothing to return to,
    * so a failure here must not take the daemon down.
    */
-  const tearDownWorktree = async (projectCwd: string, worktree: string): Promise<void> => {
+  const tearDownWorktree = async (projectCwd: string, worktree: string, runId?: string): Promise<void> => {
     try {
+      // A session can be serving its own checkout (#797), and that dev server holds the directory
+      // it is about to lose. Stop it first, whether or not the worktree ends up removed: the run
+      // is over, so the preview is serving a tree nothing is working on.
+      await onStopPreview(projectKeyFor(projectCwd), runId)
       const meta = await archiveWorktreeRun(worktree, projectCwd)
       if (meta?.status !== 'done') return // failed / stopped / unreadable: keep it for inspection
       // A finished run can still be holding an uncommitted edit (#786), and removing the
@@ -629,7 +649,7 @@ function createProjectRuntime({ cwd, env, binPath }: ProjectRuntimeOptions): Pro
       // dashboard streams over a Telefunc Channel; the daemon just tracks liveness.
       const settle = (): void => {
         activeRuns.delete(key)
-        if (workspace.runId) void tearDownWorktree(projectCwd, workspace.cwd)
+        if (workspace.runId) void tearDownWorktree(projectCwd, workspace.cwd, workspace.runId)
       }
       child.once('error', settle)
       child.once('exit', settle)
@@ -671,6 +691,15 @@ function createProjectRuntime({ cwd, env, binPath }: ProjectRuntimeOptions): Pro
   // key and evict it the moment it stops serving (stop, or a self-exit: crash / build error /
   // the user killing it), so previewStatus never reports a dead URL and the idempotent open
   // below never hands back a corpse instead of restarting.
+  //
+  // Since #797 the key carries the session too, because a session serves its OWN worktree: one
+  // preview per project as before, plus one per session that asks for it, each pointing at the
+  // tree it belongs to. Keyed by project alone, a session's Serve booted the project's checkout
+  // and showed you code that session never wrote.
+  const previewKeyFor = (projectKey: string, runId?: string): string =>
+    runId ? `${projectKey}::${runId}` : projectKey
+  /** The project half of a preview key from a checkout: the registry id every RPC keys by. */
+  const projectKeyFor = (projectCwd: string): string => projectId(resolve(projectCwd))
   const trackPreview = (key: string, handle: PreviewHandle): void => {
     activePreviews.set(key, handle)
     void handle.exited.then(() => {
@@ -681,44 +710,51 @@ function createProjectRuntime({ cwd, env, binPath }: ProjectRuntimeOptions): Pro
   // without re-choosing. In-memory: a live preview already rehydrates via onPreviewStatus, and
   // the pick resets on daemon restart (the picker still lists everything).
   const lastServeTarget = new Map<string, string>()
-  const onServeTargets = async (targetProjectId?: string): Promise<ServeTarget[]> => {
+  const onServeTargets = async (targetProjectId?: string, runId?: string): Promise<ServeTarget[]> => {
     const projectCwd = await resolveProject(targetProjectId)
-    return projectCwd ? detectServeTargets(projectCwd).catch(() => []) : []
+    if (!projectCwd) return []
+    // Detected in the checkout that will actually be served: a session's branch may have added or
+    // removed a servable package, and offering the project's list would offer apps it cannot serve.
+    const serveCwd = await resolveRunCheckout(projectCwd, runId)
+    return detectServeTargets(serveCwd).catch(() => [])
   }
-  const onPreview = async (targetProjectId?: string, targetId?: string): Promise<PreviewResult> => {
-    const key = targetProjectId ?? homeId
+  const onPreview = async (targetProjectId?: string, targetId?: string, runId?: string): Promise<PreviewResult> => {
+    const projectKey = targetProjectId ?? homeId
+    const key = previewKeyFor(projectKey, runId)
     const existing = activePreviews.get(key)
     if (existing) return { ok: true, url: existing.url, command: existing.command }
     const projectCwd = await resolveProject(targetProjectId)
     if (!projectCwd) return { ok: false, error: `unknown project: ${targetProjectId}` }
+    const serveCwd = await resolveRunCheckout(projectCwd, runId)
     try {
       // Resolve the pick: an explicit choice, else the one remembered from last time. Both are
       // matched against the live target list so a stale/unknown id falls back to the root default.
-      const wantId = targetId ?? lastServeTarget.get(key)
-      const target = wantId ? (await detectServeTargets(projectCwd).catch(() => [])).find(t => t.id === wantId) : undefined
-      const handle = await startPreview(target ? { cwd: projectCwd, target } : { cwd: projectCwd })
+      // The memory is per project, not per session: which app you serve is a property of the repo.
+      const wantId = targetId ?? lastServeTarget.get(projectKey)
+      const target = wantId ? (await detectServeTargets(serveCwd).catch(() => [])).find(t => t.id === wantId) : undefined
+      const handle = await startPreview(target ? { cwd: serveCwd, target } : { cwd: serveCwd })
       // A racing second open won the slot while we were booting: keep theirs, drop ours.
       const raced = activePreviews.get(key)
       if (raced) {
         await handle.stop().catch(() => {})
         return { ok: true, url: raced.url, command: raced.command }
       }
-      if (target) lastServeTarget.set(key, target.id)
+      if (target) lastServeTarget.set(projectKey, target.id)
       trackPreview(key, handle)
       return { ok: true, url: handle.url, command: handle.command }
     } catch (err) {
       return { ok: false, error: err instanceof Error ? err.message : String(err) }
     }
   }
-  const onStopPreview = async (targetProjectId?: string): Promise<void> => {
-    const key = targetProjectId ?? homeId
+  const onStopPreview = async (targetProjectId?: string, runId?: string): Promise<void> => {
+    const key = previewKeyFor(targetProjectId ?? homeId, runId)
     const handle = activePreviews.get(key)
     if (!handle) return
     activePreviews.delete(key)
     await handle.stop().catch(() => {})
   }
-  const onPreviewStatus = (targetProjectId?: string): PreviewStatus => {
-    const handle = activePreviews.get(targetProjectId ?? homeId)
+  const onPreviewStatus = (targetProjectId?: string, runId?: string): PreviewStatus => {
+    const handle = activePreviews.get(previewKeyFor(targetProjectId ?? homeId, runId))
     return handle ? { running: true, url: handle.url, command: handle.command } : { running: false }
   }
 

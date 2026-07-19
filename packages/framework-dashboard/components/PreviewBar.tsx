@@ -16,7 +16,21 @@ import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuIte
 // Multi-package repos (#651): a monorepo has several servable apps, so onServeTargets lists them
 // and the Serve button becomes a split control — the primary serves the last pick (the daemon
 // remembers), a caret opens the picker. A single-app repo keeps the plain one-click button.
-export function PreviewBar({ projectId, inline = false }: { projectId: string; inline?: boolean }) {
+//
+// `runId` serves that session's own worktree (#797). Sitting in a session's action bar without it,
+// this booted the *project's* checkout: you pressed Serve on a session and looked at an app built
+// from code that session never wrote. Each session gets its own preview, so two can serve at once
+// (dev servers pick their own free port), and the project home keeps serving the main checkout.
+export function PreviewBar({
+  projectId,
+  runId,
+  inline = false,
+}: {
+  projectId: string
+  /** The session whose worktree to serve; absent serves the project's checkout. */
+  runId?: string | null | undefined
+  inline?: boolean
+}) {
   const [url, setUrl] = useState<string | null>(null)
   const [command, setCommand] = useState<string | null>(null)
   const [targets, setTargets] = useState<ServeTarget[]>([])
@@ -30,22 +44,22 @@ export function PreviewBar({ projectId, inline = false }: { projectId: string; i
     setCommand(null)
     setTargets([])
     reset()
-    void onPreviewStatus(projectId).then(status => {
+    void onPreviewStatus(projectId, runId ?? undefined).then(status => {
       if (!live || !status.running) return
       setUrl(status.url ?? null)
       setCommand(status.command ?? null)
     })
-    void onServeTargets(projectId).then(list => {
+    void onServeTargets(projectId, runId ?? undefined).then(list => {
       if (live) setTargets(list)
     })
     return () => {
       live = false
     }
-  }, [projectId, reset])
+  }, [projectId, runId, reset])
 
   // Serve the given app (or the daemon's remembered/default one when no id is passed).
   const open = async (targetId?: string) => {
-    const result = await run(() => sendPreview(projectId, targetId), 'Failed to start the preview.')
+    const result = await run(() => sendPreview(projectId, targetId, runId ?? undefined), 'Failed to start the preview.')
     if (result?.ok) {
       setUrl(result.url)
       setCommand(result.command)
@@ -54,7 +68,7 @@ export function PreviewBar({ projectId, inline = false }: { projectId: string; i
 
   const stop = async () => {
     const stopped = await run(async () => {
-      await sendStopPreview(projectId)
+      await sendStopPreview(projectId, runId ?? undefined)
       return true as const
     }, 'Failed to stop the preview.')
     if (stopped) {

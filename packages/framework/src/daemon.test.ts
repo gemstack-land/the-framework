@@ -17,7 +17,7 @@ import {
   registerHomeProject,
   isNestedWithin,
 } from './daemon.js'
-import { EVENTS_FILE, FRAMEWORK_DIR } from './store/index.js'
+import { EVENTS_FILE, FRAMEWORK_DIR, addWorktree } from './store/index.js'
 import { controlPath } from './control.js'
 import { projectId, listProjects, addProject } from './registry.js'
 import { nodeGitRunner } from './project.js'
@@ -320,6 +320,66 @@ test('onServeTargets lists a monorepo\'s servable apps over telefunc (#651)', as
       ['apps/api:start', 'apps/web:dev'],
       'lists only servable workspace apps, sorted; the non-servable package is excluded',
     )
+    ac.abort()
+    await done
+  } finally {
+    ac.abort()
+    await rm(cwd, { recursive: true, force: true })
+  }
+})
+
+test("a session's Serve reads its own worktree, not the project's checkout (#797)", async () => {
+  // The point of the change: Serve inside a session used to boot the project's tree, so you
+  // pressed it on a session and got an app built from code that session never wrote. Here the
+  // worktree has an app the project's checkout does not, so the two lists cannot be confused.
+  const cwd = await realpath(await mkdtemp(join(tmpdir(), 'framework-daemon-serve-')))
+  const git = nodeGitRunner()
+  const env = await configEnv(cwd)
+  const ac = new AbortController()
+  try {
+    await git(['init'], cwd)
+    await git(['config', 'user.email', 'test@example.com'], cwd)
+    await git(['config', 'user.name', 'Test'], cwd)
+    await writeFile(join(cwd, 'package.json'), JSON.stringify({ name: 'root', scripts: { dev: 'vite' } }))
+    await git(['add', '-A'], cwd)
+    await git(['commit', '-m', 'init'], cwd)
+
+    // A session's worktree, with a servable app that exists only on its branch.
+    const runId = '2026-07-19T12-00-00-000Z'
+    await addWorktree(cwd, { runId, branch: 'the-framework/session' })
+    const worktree = join(cwd, FRAMEWORK_DIR, 'worktrees', runId)
+    await writeFile(join(worktree, 'pnpm-workspace.yaml'), 'packages:\n  - "apps/*"\n')
+    await mkdir(join(worktree, 'apps', 'new-thing'), { recursive: true })
+    await writeFile(
+      join(worktree, 'apps', 'new-thing', 'package.json'),
+      JSON.stringify({ name: 'new-thing', scripts: { dev: 'vite' } }),
+    )
+
+    const done = runDaemon(cwd, { port: 0, signal: ac.signal, env })
+    let state = await readDaemonState(env)
+    for (let i = 0; i < 100 && !state; i++) {
+      await new Promise(r => setTimeout(r, 20))
+      state = await readDaemonState(env)
+    }
+    assert.ok(state, 'daemon wrote its state file')
+
+    const idsFor = async (runArg?: string): Promise<string[]> => {
+      const targets = (await callTelefunc(state!.url, '/server/control.telefunc.ts', 'onServeTargets', [
+        homeId(cwd),
+        ...(runArg ? [runArg] : []),
+      ])) as Array<{ id: string }>
+      return targets.map(t => t.id).sort()
+    }
+
+    assert.deepEqual(await idsFor(), ['.'], "the project's checkout serves only its own root app")
+    assert.deepEqual(
+      await idsFor(runId),
+      ['.', 'apps/new-thing'],
+      "the session's checkout serves what its branch added",
+    )
+    // An unknown session falls back to the project rather than failing, like every other
+    // run-addressed call.
+    assert.deepEqual(await idsFor('2026-01-01T00-00-00-000Z'), ['.'])
     ac.abort()
     await done
   } finally {

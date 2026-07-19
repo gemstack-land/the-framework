@@ -44,8 +44,8 @@ export function RunActionBar({
   return (
     <div className="flex flex-wrap items-center gap-2 border-b border-border px-4 py-2">
       <TooltipProvider delay={300} closeDelay={0}>
-        {/* Serve the project's built result (its own icon button + tooltip). */}
-        <PreviewBar projectId={projectId} inline />
+        {/* Serve what THIS session built (#797): its own worktree, not the project's checkout. */}
+        <PreviewBar projectId={projectId} runId={runId} inline />
         {/* Where this session is working (#798): its branch, whether it is holding uncommitted
             work, and a way into the checkout. Only a run has one, so the project home has none. */}
         {runId && <WorktreeChip projectId={projectId} runId={runId} />}

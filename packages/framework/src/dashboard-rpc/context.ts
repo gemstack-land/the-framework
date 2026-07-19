@@ -65,6 +65,16 @@ export async function resolveRunPath(projectId: string, runId?: string): Promise
 }
 
 /**
+ * The Preview handler set on the context (#475), or undefined where Preview is not wired (the
+ * relay, or a call made outside a request). Read through the same tolerant accessor as the rest:
+ * `sendRemoveWorktree` stops a session's preview before taking its checkout away (#797), and that
+ * telefunction is also called directly by tests, where there is no context at all.
+ */
+export function contextPreview(): DashboardContext['preview'] {
+  return fromContext(ctx => ctx.preview)
+}
+
+/**
  * The in-memory {@link EventsSource} on the context, or undefined (#426). Only the relay
  * sets one — it has no `.the-framework/events.jsonl` on disk, so `onEvents` streams from
  * the relay's in-memory run instead. Unset on the daemon/foreground, where `onEvents`
