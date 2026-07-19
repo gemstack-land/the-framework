@@ -3,6 +3,7 @@ import { onProjectLog } from '../server/reads.telefunc.js'
 import { Badge } from './ui/badge.js'
 import { usePolled } from '../lib/use-async.js'
 import { cn } from '../lib/utils.js'
+import { formatDateTime } from '../lib/format-date.js'
 
 const STATUS_TONE: Record<string, string> = {
   running: 'text-primary',
@@ -28,7 +29,7 @@ export function ProjectLogPanel({ projectId }: { projectId: string | null }) {
           <div className="flex items-center gap-2">
             <Badge className="text-[10px] uppercase text-muted-foreground">{log.kind}</Badge>
             <Badge className={cn('border-transparent px-0 text-[10px] uppercase', STATUS_TONE[log.status])}>{log.status}</Badge>
-            <span className="ml-auto text-xs text-muted-foreground">{new Date(log.at).toLocaleString()}</span>
+            <span className="ml-auto text-xs text-muted-foreground">{formatDateTime(log.at)}</span>
           </div>
           <p className="mt-1 text-sm">{log.title}</p>
         </li>

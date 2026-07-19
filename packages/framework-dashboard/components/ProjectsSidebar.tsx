@@ -5,6 +5,7 @@ import { onProjects, sendAddProject } from '../server/projects.telefunc.js'
 import { useAction } from '../lib/use-action.js'
 import { Button } from './ui/button.js'
 import { cn } from '../lib/utils.js'
+import { formatDateTime } from '../lib/format-date.js'
 
 // The Projects sidebar (#406/#314). Loads the registry over a Telefunc RPC and lets the
 // user pick which project's live stream to watch, or add a new one (#396/#433) via the
@@ -93,7 +94,7 @@ export function ProjectsSidebar({
               <span className="truncate font-medium">{p.name}</span>
             </span>
             <span className="truncate pl-4 text-xs font-normal text-muted-foreground">
-              {p.lastActivityAt ? new Date(p.lastActivityAt).toLocaleString() : 'no activity yet'}
+              {formatDateTime(p.lastActivityAt, 'no activity yet')}
             </span>
           </Button>
           ))}

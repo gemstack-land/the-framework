@@ -9,6 +9,7 @@ import { UsagePanel } from './UsagePanel.js'
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card.js'
 import { usePolled } from '../lib/use-async.js'
 import { cn } from '../lib/utils.js'
+import { formatDate } from '../lib/format-date.js'
 
 // The Overview dashboard page (#471). What used to be a cramped, collapsible section in the
 // first sidebar is now a proper at-a-glance landing: KPI tiles, a two-week activity chart,
@@ -308,7 +309,7 @@ function ProjectsTable({ projects, onSelectProject }: { projects: ProjectStat[];
               <td className="py-2 pr-4 text-right tabular-nums">{p.runs}</td>
               <td className="py-2 pr-4 text-right tabular-nums">{p.openTodos || '—'}</td>
               <td className="py-2 text-right text-xs text-muted-foreground">
-                {p.lastActivityAt ? new Date(p.lastActivityAt).toLocaleDateString() : '—'}
+                {formatDate(p.lastActivityAt)}
               </td>
             </tr>
           ))}
