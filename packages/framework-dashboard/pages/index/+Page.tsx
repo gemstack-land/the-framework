@@ -145,6 +145,7 @@ export default function Page() {
   const selectProject = (id: string) => {
     setProjectId(id) // persisted, so a refresh returns here
     setRunId(null) // switching projects always returns to the home launcher
+    setStartedRunId(null) // and never keeps another project's run in play (#770)
     setFollowLive(false)
     resetContext() // the picked context is the old project's — start fresh
   }
@@ -154,12 +155,18 @@ export default function Page() {
   const showDashboard = () => {
     setProjectId(null)
     setRunId(null)
+    setStartedRunId(null)
     setFollowLive(false)
   }
 
   // The live run feed is owned here so both the main view and the right rail's choice gates
   // (#440) read one shared Telefunc Channel. Hooks run before the relay early return below.
-  const events = useLiveEvents(projectId, runId, runStart.tick)
+  // The run whose feed and controls are in play. `runId` once the poll has surfaced the run;
+  // `startedRunId` covers the gap right after Start, before its row exists (#770). Without that
+  // fallback the feed subscribes with no run id, which resolves to the project root — so a new run
+  // showed the PREVIOUS run's log for a beat before correcting itself.
+  const activeRunId = runId ?? startedRunId
+  const events = useLiveEvents(projectId, activeRunId, runStart.tick)
   const choices = projectId ? pendingChoices(events) : []
   const views = projectId ? agentViews(events) : []
 
@@ -178,7 +185,8 @@ export default function Page() {
     if (!projectId) return <DashboardPage onSelectProject={selectProject} interventions={interventions} />
     if (runId === null) {
       // Just pressed Start: follow the run's live output until the poll adopts its real id above.
-      if (followLive) return <RunLive projectId={projectId} events={events} files={files} addContext={addContext} />
+      if (followLive)
+        return <RunLive projectId={projectId} runId={activeRunId} events={events} files={files} addContext={addContext} />
       return (
         <ProjectHome
           projectId={projectId}
@@ -192,7 +200,7 @@ export default function Page() {
       )
     }
     if (selectedRun?.status === 'running')
-      return <RunLive projectId={projectId} runId={runId} events={events} files={files} addContext={addContext} />
+      return <RunLive projectId={projectId} runId={activeRunId} events={events} files={files} addContext={addContext} />
     return <RunReplay projectId={projectId} runId={runId} files={files} addContext={addContext} onRunStarted={onRunStarted} />
   }
 
@@ -237,7 +245,7 @@ export default function Page() {
         <main className="flex min-w-0 flex-1 flex-col">{renderMain()}</main>
         <RightRail
           projectId={projectId}
-          runId={runId}
+          runId={activeRunId}
           choices={choices}
           views={views}
           files={files}
