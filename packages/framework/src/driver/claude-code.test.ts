@@ -223,6 +223,19 @@ test('ClaudeCodeSession resumes the same session for a chat turn (#714)', async 
   assert.ok(!captured.includes('--append-system-prompt'))
 })
 
+test('ClaudeCodeSession seeds a given session id so the opening prompt resumes it (#720)', async () => {
+  let captured: string[] = []
+  const spawn: SpawnLike = (_cmd, args) => {
+    captured = [...args]
+    return fakeSpawn([JSON.stringify({ type: 'result', result: 'ok', session_id: 'sess-42' })])(_cmd, args, { cwd: '/ws', env: {} })
+  }
+  // A finished run's session id is threaded in at start; the very first `resume` prompt continues it.
+  const session = await new ClaudeCodeDriver({ spawn }).start({ cwd: '/ws', system: 'framing', resumeSessionId: 'sess-42' })
+  await session.prompt('keep going', { resume: true })
+  assert.equal(captured[captured.indexOf('--resume') + 1], 'sess-42')
+  assert.ok(!captured.includes('--append-system-prompt')) // the resumed transcript already carries its framing
+})
+
 test('ClaudeCodeSession runs a fresh turn when resume is asked with no prior session (#714)', async () => {
   let captured: string[] = []
   const spawn: SpawnLike = (_cmd, args) => {

@@ -228,6 +228,14 @@ test('writePreferences trims a preferred editor and drops a blank one (#727)', a
   assert.deepEqual(await readPreferences(fs, ENV), {}) // dropped
 })
 
+test('writePreferences keeps a known theme and drops an unknown one (#725)', async () => {
+  const fs = memFs({ [FILE]: JSON.stringify([APP_A]) })
+  await writePreferences({ theme: 'dark' }, fs, ENV)
+  assert.deepEqual(await readPreferences(fs, ENV), { theme: 'dark' })
+  await writePreferences({ theme: 'solarized' } as never, fs, ENV) // not in the known set
+  assert.deepEqual(await readPreferences(fs, ENV), {}) // dropped, falls back to system
+})
+
 test('writePreferences keeps well-formed custom presets and drops malformed ones (#626)', async () => {
   const fs = memFs({ [FILE]: JSON.stringify([APP_A]) })
   await writePreferences(

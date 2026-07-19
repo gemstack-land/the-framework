@@ -72,6 +72,10 @@ test('startOptionFlags maps only enabled Global options to CLI flags (#314)', ()
   assert.deepEqual(startOptionFlags({ agent: 'codex' }), ['--agent', 'codex'])
   assert.deepEqual(startOptionFlags({ agent: 'claude' }), [])
   assert.deepEqual(startOptionFlags({ agent: '   ' }), [])
+  // Resume a finished run's session (#720): maps to --resume-session, trimmed; blank -> no flag.
+  assert.deepEqual(startOptionFlags({ resumeSession: 'sess-42' }), ['--resume-session', 'sess-42'])
+  assert.deepEqual(startOptionFlags({ resumeSession: '  sess-7  ' }), ['--resume-session', 'sess-7'])
+  assert.deepEqual(startOptionFlags({ resumeSession: '   ' }), [])
 })
 
 const logEvent = (message: string): FrameworkEvent => ({ kind: 'log', message })

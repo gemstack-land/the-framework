@@ -39,6 +39,8 @@ interface PromptEditorProps {
   presets: { id: string; label: string; render: () => string }[]
   disabled?: boolean
   placeholder?: string
+  /** A shorter surface for the navbar quick-launch (#723): starts one line tall instead of ~three. */
+  compact?: boolean
 }
 
 /** Insert a token chip at the suggestion range, followed by a space. */
@@ -63,7 +65,7 @@ function applyTemplate(editor: Editor, text: string): void {
 }
 
 export const PromptEditor = forwardRef<PromptEditorHandle, PromptEditorProps>(function PromptEditor(
-  { onChange, onSubmit, onPreset, onMentionProject, onMentionFile, projects, files = [], presets, disabled = false, placeholder = 'Describe what to build…  ( / commands · < tags · @ projects · # files )' },
+  { onChange, onSubmit, onPreset, onMentionProject, onMentionFile, projects, files = [], presets, disabled = false, placeholder = 'Describe what to build…  ( / commands · < tags · @ projects · # files )', compact = false },
   ref,
 ) {
   const [isEmpty, setIsEmpty] = useState(true)
@@ -227,7 +229,9 @@ export const PromptEditor = forwardRef<PromptEditorHandle, PromptEditorProps>(fu
     <div className="relative">
       <EditorContent
         editor={editor}
-        className="max-h-64 min-h-[4.5rem] w-full overflow-y-auto rounded-md border border-border bg-transparent p-2 text-sm focus-within:ring-2 focus-within:ring-[var(--color-primary)]"
+        className={`w-full overflow-y-auto rounded-md border border-border bg-transparent p-2 text-sm focus-within:ring-2 focus-within:ring-[var(--color-primary)] ${
+          compact ? 'max-h-32 min-h-9' : 'max-h-64 min-h-[4.5rem]'
+        }`}
       />
       {isEmpty && (
         <span className="pointer-events-none absolute left-2 top-2 text-sm text-muted-foreground">{placeholder}</span>

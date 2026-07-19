@@ -314,6 +314,12 @@ export {
   UX_PARAMS,
 } from './ux-preset.js'
 export {
+  renderSuggestNewTicketsPrompt,
+  SUGGEST_NEW_TICKETS_PRESET_NAME,
+  SUGGEST_NEW_TICKETS_PROMPT_TEMPLATE,
+  SUGGEST_NEW_TICKETS_PARAMS,
+} from './suggest-new-tickets-preset.js'
+export {
   PRESETS,
   PRESET_DIR,
   presetFilePath,

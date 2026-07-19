@@ -44,4 +44,17 @@ describe('preferences', () => {
     await flush()
     expect(result.current).toEqual({ autopilot: false, technical: true })
   })
+
+  test('themePreference falls back to system and resolvedDark honours the choice (#725)', async () => {
+    const { themePreference, resolvedDark } = await import('./preferences.js')
+
+    expect(themePreference({})).toBe('system')
+    expect(themePreference({ theme: 'light' })).toBe('light')
+
+    // Fixed choices ignore the OS; `system` follows it.
+    expect(resolvedDark('dark', false)).toBe(true)
+    expect(resolvedDark('light', true)).toBe(false)
+    expect(resolvedDark('system', true)).toBe(true)
+    expect(resolvedDark('system', false)).toBe(false)
+  })
 })

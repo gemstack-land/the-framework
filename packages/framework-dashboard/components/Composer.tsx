@@ -6,8 +6,9 @@ import {
   renderMaintainabilityPrompt,
   renderSecurityAuditPrompt,
   renderUxPrompt,
+  renderSuggestNewTicketsPrompt,
 } from '@gemstack/framework/client'
-import { usePreferences, updatePreferences, autopilotEnabled } from '../lib/preferences.js'
+import { usePreferences, updatePreferences, autopilotEnabled, themePreference } from '../lib/preferences.js'
 import { useDetectedEditors } from '../lib/editors.js'
 import { PromptEditor, type PromptEditorHandle } from './PromptEditor.js'
 import { PresetCreatePanel } from './PresetCreatePanel.js'
@@ -25,6 +26,7 @@ const PRESETS: { id: string; label: string; render: () => string }[] = [
   { id: 'maintainability', label: 'Maintainability', render: renderMaintainabilityPrompt },
   { id: 'security-audit', label: 'Security audit', render: renderSecurityAuditPrompt },
   { id: 'ux', label: 'UX', render: renderUxPrompt },
+  { id: 'suggest-new-tickets', label: 'Suggest new tickets', render: renderSuggestNewTicketsPrompt },
 ]
 
 // The agent + model tree (#650/#656/#658): each agent lists ONLY its own models, since `--model`
@@ -85,8 +87,12 @@ export const Composer = forwardRef<ComposerHandle, {
   placeholder?: string | undefined
   /** Show the ⌘↵ hint on the submit button (the launcher's Start). */
   showShortcutHint?: boolean | undefined
+  /** Compact single-row form for the navbar quick-launch (#723): editor + submit, no control row
+   *  or preset panel. The `/` `<` `@` `#` triggers still work; agent/model + options come from the
+   *  shared prefs the launcher sets. */
+  compact?: boolean | undefined
 }>(function Composer(
-  { projects, files, addContext, onSubmit, onPromptChange, onPreset, busy, submitLabel, submitBusyLabel, placeholder, showShortcutHint = false },
+  { projects, files, addContext, onSubmit, onPromptChange, onPreset, busy, submitLabel, submitBusyLabel, placeholder, showShortcutHint = false, compact = false },
   ref,
 ) {
   const [prompt, setPrompt] = useState('')
@@ -110,6 +116,7 @@ export const Composer = forwardRef<ComposerHandle, {
   const customPresets = preferences.customPresets ?? [] // #626: the user's own saved prompts
   const editor = preferences.editor // #727: preferred editor; undefined = $FRAMEWORK_EDITOR / code
   const detectedEditors = useDetectedEditors() // #727: editors installed on the daemon's machine
+  const theme = themePreference(preferences) // #725: system (default) / light / dark
 
   // Vanilla removes the system prompt (nothing left for Eco to trim); Transparent turns off the
   // whole framework, so it overrides the rest too.
@@ -163,21 +170,45 @@ export const Composer = forwardRef<ComposerHandle, {
     { key: 'ecoMaintenance', label: 'Auto maintenance', description: 'Drops the maintenance section.', title: 'Drop the maintenance section', checked: ecoMaintenance },
   ]
 
+  const editorEl = (
+    <PromptEditor
+      ref={editorRef}
+      compact={compact}
+      onChange={onPromptEdit}
+      onSubmit={submit}
+      onPreset={loadPreset}
+      onMentionProject={addContext}
+      onMentionFile={addContext}
+      projects={projects}
+      files={files}
+      presets={PRESETS}
+      disabled={busy}
+      {...(placeholder ? { placeholder } : {})}
+    />
+  )
+
+  // Compact (#723): one row of editor + submit for the navbar. The `/` `<` `@` `#` triggers still
+  // work in the editor; the agent/model + options controls are dropped (they come from prefs).
+  if (compact) {
+    return (
+      <div className="flex items-start gap-2">
+        <div className="min-w-0 flex-1">{editorEl}</div>
+        <Button
+          type="submit"
+          size="sm"
+          onClick={submit}
+          disabled={busy || !prompt.trim()}
+          title={!prompt.trim() ? 'Type a prompt first' : `${submitLabel}  (⌘↵ / Ctrl+Enter)`}
+        >
+          {busy ? submitBusyLabel : submitLabel}
+        </Button>
+      </div>
+    )
+  }
+
   return (
     <>
-      <PromptEditor
-        ref={editorRef}
-        onChange={onPromptEdit}
-        onSubmit={submit}
-        onPreset={loadPreset}
-        onMentionProject={addContext}
-        onMentionFile={addContext}
-        projects={projects}
-        files={files}
-        presets={PRESETS}
-        disabled={busy}
-        {...(placeholder ? { placeholder } : {})}
-      />
+      {editorEl}
 
       {/* Run controls, directly under the editor (#649/#650/#654/#668): agent+model at the start,
           then presets and the options gear, then submit at the end. */}
@@ -212,6 +243,8 @@ export const Composer = forwardRef<ComposerHandle, {
           editor={editor}
           editors={detectedEditors}
           onEditorChange={e => updatePreferences({ editor: e ?? '' })}
+          theme={theme}
+          onThemeChange={t => updatePreferences({ theme: t })}
         />
         <Button
           type="submit"

@@ -95,6 +95,9 @@ export class ClaudeCodeSession implements DriverSession {
   ) {
     this.cwd = startOpts.cwd
     this.id = `claude-code-${++sessionCounter}`
+    // Resume a finished run (#720): seeding lastSessionId makes the very first `resume` prompt
+    // `--resume` this conversation, exactly as a mid-run chat turn continues its own session.
+    this.lastSessionId = startOpts.resumeSessionId
   }
 
   async prompt(text: string, opts: DriverPromptOptions = {}): Promise<DriverTurn> {

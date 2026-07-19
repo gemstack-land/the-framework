@@ -1,6 +1,7 @@
 import { strict as assert } from 'node:assert'
 import { test } from 'node:test'
 import { FakeDriver } from './driver/fake.js'
+import type { Driver, DriverSession, DriverStartOptions } from './driver/types.js'
 import type { ChoicePick, ChoiceRequest, FrameworkEvent } from './events.js'
 import { runPrompt } from './prompt-run.js'
 import { RunMessageQueue } from './run-messages.js'
@@ -33,6 +34,40 @@ test('runPrompt runs a gateless prompt straight through and emits session + end'
   assert.deepEqual(events.at(-1), { kind: 'end', ok: true })
   // No gate, so nothing paused.
   assert.equal(events.some(e => e.kind === 'choice'), false)
+})
+
+test('runPrompt seeds the driver and resumes the opening prompt for a finished-run session (#720)', async () => {
+  let startOpts: DriverStartOptions | undefined
+  let openingResume: boolean | undefined
+  let openingText: string | undefined
+  // A capturing driver: the fake records prompt text but not its options, and we need to see the
+  // start seed + the opening prompt's `resume` flag — the whole point of the auto-resume path.
+  const driver: Driver = {
+    name: 'capture',
+    start(opts) {
+      startOpts = opts
+      let first = true
+      const session: DriverSession = {
+        id: 'x',
+        cwd: opts.cwd,
+        prompt(text, o = {}) {
+          if (first) {
+            first = false
+            openingResume = o.resume
+            openingText = text
+          }
+          return Promise.resolve({ text: 'continued', sessionId: 'sess-42' })
+        },
+        dispose: () => Promise.resolve(),
+      }
+      return Promise.resolve(session)
+    },
+  }
+  const { text } = await runPrompt({ prompt: 'keep going', driver, cwd: '/ws', resumeSessionId: 'sess-42', onEvent: () => {} })
+  assert.equal(text, 'continued')
+  assert.equal(startOpts?.resumeSessionId, 'sess-42') // the session is seeded with the finished run's id
+  assert.equal(openingResume, true) // the opening message --resumes it
+  assert.equal(openingText, 'keep going') // sent raw: the resumed transcript already carries its framing
 })
 
 test('runPrompt stays open for a live-chat message and delivers it as a turn (#714)', async () => {

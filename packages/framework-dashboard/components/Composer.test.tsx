@@ -9,6 +9,7 @@ vi.mock('../lib/preferences.js', () => ({
   usePreferences: () => prefs,
   updatePreferences,
   autopilotEnabled: (p: Preferences) => p.autopilot ?? true,
+  themePreference: (p: Preferences) => p.theme ?? 'system',
 }))
 // The editor picker (#727) detects installed editors over Telefunc; stub it to none in the test.
 vi.mock('../lib/editors.js', () => ({ useDetectedEditors: () => [] }))
@@ -63,6 +64,18 @@ describe('Composer (#721)', () => {
     expect(screen.getByRole('button', { name: 'Run options' })).toBeTruthy()
     expect(screen.getByTitle(/Agent: Claude Code/)).toBeTruthy() // the agent/model trigger
     expect(screen.getByRole('button', { name: /Start run/ })).toBeTruthy()
+  })
+
+  test('compact (#723) drops the control row, keeping only the editor + submit', () => {
+    const { onSubmit } = renderComposer({ compact: true, submitLabel: 'Start' })
+    // The redundant control row is gone in compact form.
+    expect(screen.queryByText('Presets')).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Run options' })).toBeNull()
+    expect(screen.queryByTitle(/Agent: Claude Code/)).toBeNull()
+    // The editor + submit still work (so `/` `<` `@` `#` triggers remain live in the editor).
+    fireEvent.change(screen.getByLabelText('prompt'), { target: { value: 'quick run' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Start' }))
+    expect(onSubmit).toHaveBeenCalledWith('quick run', 'build')
   })
 
   test('the submit button is disabled until the editor has text, then fires onSubmit', () => {

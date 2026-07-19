@@ -68,6 +68,18 @@ export function autopilotEnabled(preferences: Preferences): boolean {
   return preferences.autopilot ?? true
 }
 
+export type ThemePreference = NonNullable<Preferences['theme']>
+
+/** The chosen dashboard theme (#725); absent follows the OS (`system`). */
+export function themePreference(preferences: Preferences): ThemePreference {
+  return preferences.theme ?? 'system'
+}
+
+/** Whether the dark palette applies, given the theme choice and the OS's dark preference. */
+export function resolvedDark(theme: ThemePreference, systemDark: boolean): boolean {
+  return theme === 'dark' || (theme === 'system' && systemDark)
+}
+
 /** Browser notifications default on (#627); the browser permission is still the real gate. */
 export function notificationsEnabled(preferences: Preferences): boolean {
   return preferences.notifyBrowser ?? true

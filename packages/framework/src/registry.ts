@@ -85,6 +85,8 @@ export interface Preferences {
   /** Preferred editor for "Open in editor" (#727): an editor CLI (e.g. `code`, `cursor`, `zed`).
    * Absent falls back to `$FRAMEWORK_EDITOR`, then `code`. */
   editor?: string
+  /** Dashboard color theme (#725): `system` (follow the OS, the default), `light`, or `dark`. Absent = system. */
+  theme?: 'system' | 'light' | 'dark'
   /**
    * Post a Discord message when a new item lands on the "needs you" queue (#627). Absent = off:
    * unlike the in-browser toggle, Discord reaches you when no dashboard is open, so it is opt-in.
@@ -211,6 +213,9 @@ const PREFERENCE_KEYS = [
 /** The coding agents the dashboard offers (#650); mirrors AGENTS in agent.ts, kept local. */
 const KNOWN_AGENTS = ['claude', 'codex']
 
+/** The color themes the dashboard offers (#725); anything else means the default `system`. */
+const KNOWN_THEMES = ['system', 'light', 'dark'] as const
+
 function sanitizePreferences(value: unknown): Preferences {
   if (typeof value !== 'object' || value === null) return {}
   const input = value as Record<string, unknown>
@@ -228,6 +233,10 @@ function sanitizePreferences(value: unknown): Preferences {
   // never lands in the file. A blank string is "no choice" (fall back to env / `code`), so dropped.
   if (typeof input['editor'] === 'string' && input['editor'].trim())
     preferences.editor = input['editor'].trim().slice(0, 100)
+  // `theme` (#725) is constrained to the known set; anything else (incl. absent) means the default
+  // `system`, so it is simply dropped rather than persisted.
+  if (typeof input['theme'] === 'string' && (KNOWN_THEMES as readonly string[]).includes(input['theme']))
+    preferences.theme = input['theme'] as (typeof KNOWN_THEMES)[number]
   const customPresets = sanitizeCustomPresets(input['customPresets'])
   if (customPresets.length) preferences.customPresets = customPresets
   const consumptionLimits = sanitizeConsumptionLimits(input['consumptionLimits'])
