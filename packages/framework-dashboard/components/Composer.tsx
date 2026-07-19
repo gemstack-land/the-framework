@@ -12,7 +12,6 @@ import { usePreferences, updatePreferences, autopilotEnabled, themePreference } 
 import { useDetectedEditors } from '../lib/editors.js'
 import { PromptEditor, type PromptEditorHandle } from './PromptEditor.js'
 import { PresetCreatePanel } from './PresetCreatePanel.js'
-import { PresetMenu } from './PresetMenu.js'
 import { AgentModelMenu, type AgentOption } from './AgentModelMenu.js'
 import { OptionsMenu, type OptionRow } from './OptionsMenu.js'
 import { ClaudeLogo, CodexLogo } from './agent-logos.js'
@@ -182,6 +181,10 @@ export const Composer = forwardRef<ComposerHandle, {
       projects={projects}
       files={files}
       presets={PRESETS}
+      customPresets={customPresets}
+      // The `/` menu offers "New preset…" only in the full composer, where the create panel renders;
+      // the compact navbar launch has no panel, so it gets no callback (and no item).
+      {...(compact ? {} : { onNewPreset: () => setAddingPreset(true) })}
       disabled={busy}
       {...(placeholder ? { placeholder } : {})}
     />
@@ -220,21 +223,6 @@ export const Composer = forwardRef<ComposerHandle, {
           onChange={(a, m) => updatePreferences({ agent: a, model: m })}
           busy={busy}
         />
-        <PresetMenu
-          builtIns={PRESETS}
-          customPresets={customPresets}
-          busy={busy}
-          onLoadBuiltIn={p => {
-            editorRef.current?.loadTemplate(p.render())
-            loadPreset(p.label)
-          }}
-          onUseCustom={preset => {
-            editorRef.current?.loadTemplate(preset.prompt)
-            loadPreset(preset.label)
-          }}
-          onDeleteCustom={id => updatePreferences({ customPresets: customPresets.filter(p => p.id !== id) })}
-          onNewPreset={() => setAddingPreset(true)}
-        />
         <OptionsMenu
           options={mainOptions}
           ecoOptions={ecoOptions}
@@ -245,6 +233,10 @@ export const Composer = forwardRef<ComposerHandle, {
           onEditorChange={e => updatePreferences({ editor: e ?? '' })}
           theme={theme}
           onThemeChange={t => updatePreferences({ theme: t })}
+          // Preset loading + "New preset…" moved to the `/` menu (#722); the gear keeps the manage
+          // side, deleting a saved preset.
+          customPresets={customPresets}
+          onDeleteCustomPreset={id => updatePreferences({ customPresets: customPresets.filter(p => p.id !== id) })}
         />
         <Button
           type="submit"

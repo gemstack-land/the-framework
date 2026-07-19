@@ -58,9 +58,10 @@ beforeEach(() => {
 afterEach(cleanup)
 
 describe('Composer (#721)', () => {
-  test('renders the full control row: agent/model, presets, options gear, and the submit button', () => {
+  test('renders the full control row: agent/model, options gear, and the submit button', () => {
     renderComposer({ submitLabel: 'Start run' })
-    expect(screen.getByText('Presets')).toBeTruthy()
+    // The standalone Presets dropdown is gone (#722): presets load from the editor's `/` menu.
+    expect(screen.queryByText('Presets')).toBeNull()
     expect(screen.getByRole('button', { name: 'Run options' })).toBeTruthy()
     expect(screen.getByTitle(/Agent: Claude Code/)).toBeTruthy() // the agent/model trigger
     expect(screen.getByRole('button', { name: /Start run/ })).toBeTruthy()
@@ -69,7 +70,6 @@ describe('Composer (#721)', () => {
   test('compact (#723) drops the control row, keeping only the editor + submit', () => {
     const { onSubmit } = renderComposer({ compact: true, submitLabel: 'Start' })
     // The redundant control row is gone in compact form.
-    expect(screen.queryByText('Presets')).toBeNull()
     expect(screen.queryByRole('button', { name: 'Run options' })).toBeNull()
     expect(screen.queryByTitle(/Agent: Claude Code/)).toBeNull()
     // The editor + submit still work (so `/` `<` `@` `#` triggers remain live in the editor).

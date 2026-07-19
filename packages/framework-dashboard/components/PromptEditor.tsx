@@ -1,5 +1,5 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react'
-import type { ProjectSummary } from '@gemstack/framework'
+import type { ProjectSummary, CustomPreset } from '@gemstack/framework'
 import { EditorContent, useEditor } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import { Markdown } from 'tiptap-markdown'
@@ -37,6 +37,11 @@ interface PromptEditorProps {
   /** The current project's files, repo-relative, for the `#` picker (#504). */
   files?: string[]
   presets: { id: string; label: string; render: () => string }[]
+  /** The user's saved presets (#626), loaded verbatim from the `/` menu (#722). */
+  customPresets?: CustomPreset[]
+  /** Open the create panel from the `/` menu's "New preset…" (#722). Omit where there is no panel
+   *  (the compact navbar launch), which also drops the item. */
+  onNewPreset?: () => void
   disabled?: boolean
   placeholder?: string
   /** A shorter surface for the navbar quick-launch (#723): starts one line tall instead of ~three. */
@@ -65,7 +70,7 @@ function applyTemplate(editor: Editor, text: string): void {
 }
 
 export const PromptEditor = forwardRef<PromptEditorHandle, PromptEditorProps>(function PromptEditor(
-  { onChange, onSubmit, onPreset, onMentionProject, onMentionFile, projects, files = [], presets, disabled = false, placeholder = 'Describe what to build…  ( / commands · < tags · @ projects · # files )', compact = false },
+  { onChange, onSubmit, onPreset, onMentionProject, onMentionFile, projects, files = [], presets, customPresets = [], onNewPreset, disabled = false, placeholder = 'Describe what to build…  ( / commands · < tags · @ projects · # files )', compact = false },
   ref,
 ) {
   const [isEmpty, setIsEmpty] = useState(true)
@@ -74,6 +79,8 @@ export const PromptEditor = forwardRef<PromptEditorHandle, PromptEditorProps>(fu
   const projectsRef = useRef(projects)
   const filesRef = useRef(files)
   const presetsRef = useRef(presets)
+  const customPresetsRef = useRef(customPresets)
+  const onNewPresetRef = useRef(onNewPreset)
   const onPresetRef = useRef(onPreset)
   const onMentionRef = useRef(onMentionProject)
   const onMentionFileRef = useRef(onMentionFile)
@@ -83,6 +90,8 @@ export const PromptEditor = forwardRef<PromptEditorHandle, PromptEditorProps>(fu
     projectsRef.current = projects
     filesRef.current = files
     presetsRef.current = presets
+    customPresetsRef.current = customPresets
+    onNewPresetRef.current = onNewPreset
     onPresetRef.current = onPreset
     onMentionRef.current = onMentionProject
     onMentionFileRef.current = onMentionFile
@@ -116,16 +125,28 @@ export const PromptEditor = forwardRef<PromptEditorHandle, PromptEditorProps>(fu
         char: '/',
         key: 'slash',
         items: query => {
+          const q = query.toLowerCase()
           const presetItems: SuggestionItem[] = presetsRef.current
-            .filter(p => p.id.includes(query) || p.label.toLowerCase().includes(query))
+            .filter(p => p.id.includes(query) || p.label.toLowerCase().includes(q))
             .map(p => ({ id: `preset:${p.id}`, label: `/${p.id}`, hint: p.label, group: 'Presets' }))
-          const actionItems: SuggestionItem[] = ACTION_TOKENS.filter(a => a.label.toLowerCase().includes(query)).map(a => ({
+          // The user's saved presets (#626) load verbatim; they live in the same `/` group as the
+          // built-ins now that the standalone Presets dropdown is gone (#722).
+          const customItems: SuggestionItem[] = customPresetsRef.current
+            .filter(p => p.label.toLowerCase().includes(q))
+            .map(p => ({ id: `custom-preset:${p.id}`, label: p.label, hint: 'saved preset', group: 'Presets' }))
+          // "New preset…" to capture the current prompt (#722), only where the create panel exists
+          // (the full composer, not the compact navbar launch, which passes no onNewPreset).
+          const newPresetItem: SuggestionItem[] =
+            onNewPresetRef.current && 'new preset'.includes(q)
+              ? [{ id: 'new-preset', label: 'New preset…', hint: 'save the current prompt', group: 'Presets' }]
+              : []
+          const actionItems: SuggestionItem[] = ACTION_TOKENS.filter(a => a.label.toLowerCase().includes(q)).map(a => ({
             id: `action:${a.text}`,
             label: a.label,
             hint: a.hint,
             group: 'Actions',
           }))
-          return [...presetItems, ...actionItems]
+          return [...presetItems, ...customItems, ...newPresetItem, ...actionItems]
         },
         onSelect: (item, { editor: ed, range }) => {
           if (item.id.startsWith('preset:')) {
@@ -134,6 +155,20 @@ export const PromptEditor = forwardRef<PromptEditorHandle, PromptEditorProps>(fu
               loadTemplateInto(ed, preset.render())
               onPresetRef.current?.(preset.label)
             }
+            return
+          }
+          if (item.id.startsWith('custom-preset:')) {
+            const preset = customPresetsRef.current.find(p => `custom-preset:${p.id}` === item.id)
+            if (preset) {
+              loadTemplateInto(ed, preset.prompt)
+              onPresetRef.current?.(preset.label)
+            }
+            return
+          }
+          if (item.id === 'new-preset') {
+            // Drop the `/query` trigger so the create panel captures the real prompt, not the slash.
+            ed.chain().focus().deleteRange(range).run()
+            onNewPresetRef.current?.()
             return
           }
           const action = ACTION_TOKENS.find(a => `action:${a.text}` === item.id)

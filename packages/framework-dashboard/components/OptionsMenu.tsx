@@ -1,5 +1,5 @@
-import type { Preferences } from '@gemstack/framework'
-import { Settings, Check, Monitor, Sun, Moon, type LucideIcon } from 'lucide-react'
+import type { Preferences, CustomPreset } from '@gemstack/framework'
+import { Settings, Check, Monitor, Sun, Moon, X, type LucideIcon } from 'lucide-react'
 import { updatePreferences, type ThemePreference } from '../lib/preferences.js'
 import type { EditorInfo } from '../server/preferences.telefunc.js'
 import { cn } from '../lib/utils.js'
@@ -65,6 +65,8 @@ export function OptionsMenu({
   onEditorChange,
   theme,
   onThemeChange,
+  customPresets = [],
+  onDeleteCustomPreset = () => {},
 }: {
   options: OptionRow[]
   ecoOptions: OptionRow[]
@@ -81,6 +83,10 @@ export function OptionsMenu({
   theme: ThemePreference
   /** Pick a new theme; persisted by the caller. */
   onThemeChange: (theme: ThemePreference) => void
+  /** The user's saved presets (#626); managed here now the Presets dropdown is gone (#722). */
+  customPresets?: CustomPreset[]
+  /** Delete a saved preset by id. */
+  onDeleteCustomPreset?: (id: string) => void
 }) {
   const activeCount = options.filter(o => o.checked && !o.disabled).length
   // Detected editors, plus the stored one as a "custom" row when it isn't auto-detected (e.g. a
@@ -186,6 +192,29 @@ export function OptionsMenu({
             )
           })}
         </DropdownMenuGroup>
+        {customPresets.length > 0 && (
+          <DropdownMenuGroup>
+            <DropdownMenuSeparator />
+            <DropdownMenuLabel>Your presets</DropdownMenuLabel>
+            {customPresets.map(p => (
+              // Loading moved to the `/` menu (#722); this row is manage-only, so its sole action is
+              // the trailing delete. Keep the menu open so several can be removed in one go.
+              <DropdownMenuItem key={p.id} closeOnClick={false} className="items-center gap-2">
+                <span className="flex-1 truncate">{p.label}</span>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => onDeleteCustomPreset(p.id)}
+                  title={`Delete "${p.label}"`}
+                  aria-label={`Delete preset ${p.label}`}
+                  className="rounded p-0.5 text-[var(--color-muted-foreground)] hover:text-red-500"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuGroup>
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
   )
