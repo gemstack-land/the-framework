@@ -56,12 +56,13 @@ export function AgentModelMenu({
   busy: boolean
 }) {
   const current = agentOf(agents, agent)
+  const currentModelLabel = modelLabel(current, model)
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
         type="button"
         disabled={busy}
-        title={`Agent: ${current?.label ?? ''} · Model: ${modelLabel(current, model)}`}
+        title={`Agent: ${current?.label ?? ''} · Model: ${currentModelLabel}`}
         className={cn(buttonVariants({ variant: 'outline', size: 'xs' }), 'gap-1.5 font-normal')}
       >
         {current?.icon ? (
@@ -70,7 +71,7 @@ export function AgentModelMenu({
           current?.label
         )}
         <span className="text-[var(--color-muted-foreground)]">·</span>
-        {modelLabel(current, model)}
+        {currentModelLabel}
         <ChevronDown className="h-3.5 w-3.5 opacity-70" />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start">

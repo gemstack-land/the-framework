@@ -30,7 +30,7 @@ export function collectRunOptions(preferences: Preferences, context: string[] = 
     ...(onBeforeMergeableQuality ? { onBeforeMergeable: true } : {}),
     ...(browser ? { browser: true } : {}),
     ...(model ? { model } : {}),
-    ...(agent && agent !== 'claude' ? { agent } : {}),
+    ...(agent !== 'claude' ? { agent } : {}),
     ...(context.length ? { context } : {}),
   }
 }

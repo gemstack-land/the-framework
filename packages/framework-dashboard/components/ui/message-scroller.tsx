@@ -16,9 +16,9 @@ import { cn } from '../../lib/utils.js'
 // icon placeholder, and the scrollbar-plugin utilities dropped (the app paints native scrollbars
 // via color-scheme, #710).
 
-export function MessageScrollerProvider(props: ComponentProps<typeof MessageScrollerPrimitive.Provider>) {
-  return <MessageScrollerPrimitive.Provider {...props} />
-}
+// The Provider needs no styling (no data-slot / className), so it is the primitive's directly,
+// re-exported for a uniform `message-scroller` import site rather than wrapped for nothing.
+export const MessageScrollerProvider = MessageScrollerPrimitive.Provider
 
 export function MessageScroller({ className, ...props }: ComponentProps<typeof MessageScrollerPrimitive.Root>) {
   return (
