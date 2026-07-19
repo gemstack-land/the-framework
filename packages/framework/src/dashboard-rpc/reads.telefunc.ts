@@ -8,6 +8,7 @@ import { buildActivity, type Activity } from '../dashboard/activity.js'
 import { buildDashboard, type DashboardData } from '../dashboard/dashboard.js'
 import { githubUrlFor } from '../dashboard/github.js'
 import { readGitStatus, type GitStatus } from '../dashboard/git-status.js'
+import { readRunHandoff, runBranchFor, type RunHandoff } from '../dashboard/run-handoff.js'
 import type { RunWorktree } from '../dashboard/types.js'
 import { crawlRepoFiles } from '../project.js'
 import { readFileStatuses, type FileGitStatus } from '../dashboard/file-status.js'
@@ -198,4 +199,29 @@ export async function onGitStatus(projectId: string, runId?: string): Promise<Gi
   const cwd = await resolveRunPath(projectId, runId)
   if (!cwd) return null
   return (await readGitStatus(cwd)) ?? null
+}
+
+/**
+ * The end-of-session handoff (#799): the branch a finished session left its work on, what it
+ * committed, what it changed, and whether that has been pushed or opened as a PR.
+ *
+ * Read from the *project* checkout against the session's branch, not from the session's worktree.
+ * A clean run's worktree is removed when it finishes, and `resolveRunPath` then falls back to the
+ * project root — so a worktree-addressed read reports the project's own branch and the user's own
+ * uncommitted changes as though they were the session's. The branch is what outlives the run, so
+ * the branch is what this asks about.
+ */
+export async function onRunHandoff(projectId: string, runId: string): Promise<RunHandoff | null> {
+  const cwd = await resolveProjectPath(projectId)
+  if (!cwd || !isSafeRunId(runId)) return null
+  const run = await runMetaFor(cwd, runId)
+  if (!run) return null
+  return (await readRunHandoff(cwd, runBranchFor(run)).catch(() => undefined)) ?? null
+}
+
+/** One run's meta, live or archived (live wins, as in {@link onRuns}). */
+async function runMetaFor(cwd: string, runId: string): Promise<RunMeta | undefined> {
+  const live = (await readLiveMetas(cwd).catch(() => [])).find(run => run.id === runId)
+  if (live) return live
+  return (await listRuns(cwd).catch(() => [])).find(run => run.id === runId)
 }

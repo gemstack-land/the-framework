@@ -534,6 +534,12 @@ fs.appendFileSync(${JSON.stringify(join(cwd, 'started.log'))}, runId + '\\n')
       if (!gone) await new Promise(r => setTimeout(r, 20))
     }
     assert.equal(gone, true, 'and its worktree is removed')
+    // The branch is the only handle left on the work once the checkout goes, so it is recorded
+    // while the worktree still exists (#799) — otherwise the handoff has nothing to read.
+    const doneMeta = JSON.parse(
+      await readFile(join(cwd, FRAMEWORK_DIR, 'runs', `${doneId}.json`), 'utf8'),
+    ) as { branch?: string }
+    assert.equal(doneMeta.branch, `the-framework/run-${doneId}`, "the finished run's branch is recorded")
 
     // A failure: history archived too, but the checkout is kept so it can be inspected.
     const failedId = await runWith('failed', 2)

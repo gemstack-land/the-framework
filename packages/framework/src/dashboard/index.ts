@@ -18,6 +18,22 @@ export { buildOverview, type Overview, type ActiveRun, type RecentProject, type 
 export { buildDashboard, type DashboardData, type ProjectStat, type ActivityDay, type DashboardDeps } from './dashboard.js'
 export { readGitStatus, type GitStatus, type LinkedPr } from './git-status.js'
 export {
+  readRunHandoff,
+  runBranchFor,
+  pushRunBranch,
+  openRunPullRequest,
+  nodeGhRunner,
+  nodeGhBranchPrLookup,
+  type RunHandoff,
+  type HandoffCommit,
+  type HandoffFile,
+  type HandoffResult,
+  type PullRequestDraft,
+  type GhRunner,
+  type BranchPrLookup,
+  type RunHandoffDeps,
+} from './run-handoff.js'
+export {
   buildInterventions,
   nodeGhPrLister,
   type Intervention,

@@ -1,0 +1,240 @@
+import { test } from 'node:test'
+import assert from 'node:assert/strict'
+import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { execFile } from 'node:child_process'
+import { promisify } from 'node:util'
+import { readRunHandoff, runBranchFor, pushRunBranch, openRunPullRequest, gitReason } from './run-handoff.js'
+import { nodeGitRunner, type GitRunner } from '../project.js'
+
+const exec = promisify(execFile)
+const SEP = String.fromCharCode(31)
+
+/** A GitRunner answering from a table, recording what it was asked. */
+function fakeGit(answers: Record<string, string>): { git: GitRunner; calls: string[][] } {
+  const calls: string[][] = []
+  const git: GitRunner = async args => {
+    calls.push(args)
+    const key = args.join(' ')
+    const hit = Object.entries(answers).find(([prefix]) => key.startsWith(prefix))
+    if (!hit) throw new Error(`no stub for: ${key}`)
+    return hit[1]
+  }
+  return { git, calls }
+}
+
+const REPO = { 'rev-parse --git-dir': '.git' }
+
+test('the recorded branch wins over both derivations (#799)', () => {
+  assert.equal(runBranchFor({ id: 'r1', branch: 'feat/mine', sessionName: 'named' }), 'feat/mine')
+  assert.equal(runBranchFor({ id: 'r1', sessionName: 'named' }), 'the-framework/named')
+  assert.equal(runBranchFor({ id: 'r1' }), 'the-framework/run-r1')
+})
+
+test('a non-repo yields no handoff at all', async () => {
+  const { git } = fakeGit({})
+  assert.equal(await readRunHandoff('/nowhere', 'b', { git }), undefined)
+})
+
+test('a branch that no longer exists reports exists:false rather than failing', async () => {
+  const { git } = fakeGit({ ...REPO, 'rev-parse --verify --quiet refs/heads/gone': '', remote: 'origin\n' })
+  const handoff = await readRunHandoff('/repo', 'gone', { git, pr: async () => undefined })
+  assert.equal(handoff?.exists, false)
+  assert.equal(handoff?.empty, true)
+  assert.equal(handoff?.hasRemote, true)
+})
+
+test('a session that changed nothing is reported empty, not as an empty branch', async () => {
+  const { git } = fakeGit({
+    ...REPO,
+    'rev-parse --verify --quiet refs/heads/the-framework/quiet': 'abc123\n',
+    remote: 'origin\n',
+    'symbolic-ref': 'origin/main\n',
+    log: '',
+    diff: '',
+    'rev-parse --verify --quiet refs/remotes': '',
+    branch: '',
+  })
+  const handoff = await readRunHandoff('/repo', 'the-framework/quiet', { git, pr: async () => undefined })
+  assert.equal(handoff?.empty, true)
+  assert.deepEqual(handoff?.commits, [])
+  assert.equal(handoff?.insertions, 0)
+})
+
+test('commits, files and line counts come back for a branch with work', async () => {
+  const { git } = fakeGit({
+    ...REPO,
+    'rev-parse --verify --quiet refs/heads/the-framework/work': 'tip\n',
+    remote: 'origin\n',
+    'symbolic-ref': 'origin/main\n',
+    log: `deadbeefcafe${SEP}add the thing\nfeedface1234${SEP}fix: a subject with spaces\n`,
+    diff: '3\t1\tsrc/a.ts\n-\t-\tlogo.png\n',
+    'rev-parse --verify --quiet refs/remotes/origin/the-framework/work': 'tip\n',
+    branch: '',
+  })
+  const handoff = await readRunHandoff('/repo', 'the-framework/work', { git, pr: async () => undefined })
+  assert.equal(handoff?.empty, false)
+  assert.equal(handoff?.base, 'origin/main')
+  assert.deepEqual(
+    handoff?.commits.map(c => [c.short, c.subject]),
+    [
+      ['deadbee', 'add the thing'],
+      ['feedfac', 'fix: a subject with spaces'],
+    ],
+  )
+  assert.equal(handoff?.insertions, 3)
+  assert.equal(handoff?.deletions, 1)
+  // A binary file is listed but contributes no line counts.
+  assert.equal(handoff?.files.find(f => f.path === 'logo.png')?.binary, true)
+  // The remote is at the same commit, so there is nothing to push.
+  assert.equal(handoff?.pushed, true)
+})
+
+test('an unpushed branch and a repo with no remote are distinguished', async () => {
+  const base = {
+    ...REPO,
+    'rev-parse --verify --quiet refs/heads/b': 'tip\n',
+    'symbolic-ref': 'origin/main\n',
+    log: `sha${SEP}s\n`,
+    diff: '1\t0\ta.ts\n',
+    branch: '',
+  }
+  const unpushed = await readRunHandoff('/repo', 'b', {
+    git: fakeGit({ ...base, remote: 'origin\n', 'rev-parse --verify --quiet refs/remotes': '' }).git,
+    pr: async () => undefined,
+  })
+  assert.equal(unpushed?.hasRemote, true)
+  assert.equal(unpushed?.pushed, false)
+
+  const noRemote = await readRunHandoff('/repo', 'b', {
+    git: fakeGit({ ...base, remote: '' }).git,
+    pr: async () => undefined,
+  })
+  assert.equal(noRemote?.hasRemote, false)
+  assert.equal(noRemote?.pushed, false)
+})
+
+test('the PR is looked up for the session branch, not the checkout HEAD (#799)', async () => {
+  const { git } = fakeGit({
+    ...REPO,
+    'rev-parse --verify --quiet refs/heads/the-framework/x': 'tip\n',
+    remote: 'origin\n',
+    'symbolic-ref': 'origin/main\n',
+    log: `sha${SEP}s\n`,
+    diff: '',
+    'rev-parse --verify --quiet refs/remotes': '',
+    branch: '',
+  })
+  const asked: string[] = []
+  const handoff = await readRunHandoff('/repo', 'the-framework/x', {
+    git,
+    pr: async (_cwd, branch) => {
+      asked.push(branch)
+      return { number: 7, url: 'https://example.test/7', state: 'OPEN', title: 'the pr' }
+    },
+  })
+  assert.deepEqual(asked, ['the-framework/x'])
+  assert.equal(handoff?.pr?.number, 7)
+})
+
+test('a failed push comes back as an error rather than throwing', async () => {
+  const git: GitRunner = async () => {
+    throw new Error('no upstream configured')
+  }
+  const result = await pushRunBranch('/repo', 'b', git)
+  assert.deepEqual(result, { ok: false, error: 'no upstream configured' })
+})
+
+test("a push failure shows git's reason, not the command echoed back", () => {
+  // execFile buries the useful line under its own 'Command failed:' preamble.
+  const err = new Error("Command failed: git push --set-upstream origin b\nfatal: 'origin' does not appear to be a git repository\n")
+  assert.equal(gitReason(err), "fatal: 'origin' does not appear to be a git repository")
+  assert.equal(gitReason(new Error('something odd')), 'something odd')
+})
+
+test('opening a PR pushes first and returns the URL gh printed', async () => {
+  const pushes: string[][] = []
+  const ghCalls: string[][] = []
+  const result = await openRunPullRequest(
+    '/repo',
+    'the-framework/x',
+    { title: 'A title', body: 'A body', base: 'main' },
+    {
+      git: async args => {
+        pushes.push(args)
+        return ''
+      },
+      gh: async args => {
+        ghCalls.push(args)
+        return 'https://github.com/o/r/pull/12\n'
+      },
+    },
+  )
+  assert.deepEqual(result, { ok: true, url: 'https://github.com/o/r/pull/12' })
+  assert.deepEqual(pushes, [['push', '--set-upstream', 'origin', 'the-framework/x']])
+  const args = ghCalls[0] ?? []
+  assert.deepEqual(args.slice(0, 4), ['pr', 'create', '--head', 'the-framework/x'])
+  assert.ok(args.includes('--base') && args.includes('main'))
+  // Not a draft: the interventions queue (#632) lists open non-draft PRs as "needs you".
+  assert.ok(!args.includes('--draft'))
+})
+
+test('a PR is not opened when the push fails', async () => {
+  let ghRan = false
+  const result = await openRunPullRequest(
+    '/repo',
+    'b',
+    { title: 't', body: 'b' },
+    {
+      git: async () => {
+        throw new Error('remote rejected')
+      },
+      gh: async () => {
+        ghRan = true
+        return ''
+      },
+    },
+  )
+  assert.deepEqual(result, { ok: false, error: 'remote rejected' })
+  assert.equal(ghRan, false)
+})
+
+test('a real repo: the branch outlives its worktree and still reports its work (#799)', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'handoff-'))
+  const git = nodeGitRunner()
+  try {
+    await exec('git', ['init', '-b', 'main', dir])
+    await exec('git', ['config', 'user.email', 'test@example.com'], { cwd: dir })
+    await exec('git', ['config', 'user.name', 'Test'], { cwd: dir })
+    await writeFile(join(dir, 'README.md'), 'base\n')
+    await exec('git', ['add', '-A'], { cwd: dir })
+    await exec('git', ['commit', '-m', 'base'], { cwd: dir })
+
+    // A session's work, on its own branch, exactly as teardown leaves it.
+    await exec('git', ['checkout', '-b', 'the-framework/demo'], { cwd: dir })
+    await mkdir(join(dir, 'src'), { recursive: true })
+    await writeFile(join(dir, 'src', 'app.ts'), 'export const a = 1\n')
+    await exec('git', ['add', '-A'], { cwd: dir })
+    await exec('git', ['commit', '-m', 'add the app'], { cwd: dir })
+    await exec('git', ['checkout', 'main'], { cwd: dir })
+
+    // Read from the project checkout, which is on main, about the session's branch.
+    const handoff = await readRunHandoff(dir, 'the-framework/demo', { git, pr: async () => undefined })
+    assert.equal(handoff?.exists, true)
+    assert.equal(handoff?.empty, false)
+    assert.equal(handoff?.base, 'main')
+    assert.deepEqual(handoff?.commits.map(c => c.subject), ['add the app'])
+    assert.deepEqual(handoff?.files.map(f => f.path), ['src/app.ts'])
+    assert.equal(handoff?.insertions, 1)
+    assert.equal(handoff?.hasRemote, false)
+    assert.equal(handoff?.merged, false)
+
+    // And a branch already merged into the base says so.
+    await exec('git', ['merge', '--no-ff', '-m', 'merge', 'the-framework/demo'], { cwd: dir })
+    const merged = await readRunHandoff(dir, 'the-framework/demo', { git, pr: async () => undefined })
+    assert.equal(merged?.merged, true)
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})
