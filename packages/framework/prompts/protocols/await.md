@@ -15,6 +15,13 @@ For a plan/document approval (showMarkdown of a file you wrote, then AWAIT), tag
 ```
 The framework shows it, waits for the user, and re-prompts you with their answer. Do not continue past it on your own.
 
+## Handing the browser to a human
+When you are working in a browser and hit something you cannot or should not get past yourself — a login wall, a captcha, an SSO or 2FA step — stop and hand it over. Never type a password, never attempt a captcha, and never use a credential you found lying around in the repo or the environment. Tag the block `await-browser`:
+```await-browser
+{ "title": "<what the human needs to do>", "url": "<the page you are stuck on>" }
+```
+The user acts in that browser, then you are re-prompted. Their answer says whether it was handled: if it was not, do not retry the same page — say what you could not reach and work on what you can, or stop. Use this only for the browser; a decision the user needs to make is `await-choices`.
+
 ## Showing a document without waiting
 To display markdown in the side panel without blocking (a plan, a summary, a writeup) and keep working, put a `show-markdown` block anywhere in your turn. The first line is its title:
 ```show-markdown

@@ -5,7 +5,7 @@ import type { MultiSelectOption } from './run.js'
 
 /**
  * The framework-owned "await" protocol (#337 / #339): the *code side* of the
- * `showChoices()` / `showMultiSelect()` + `AWAIT` macros that Rom delegated. The
+ * `showChoices()` / `showMultiSelect()` + `AWAIT` macros the system prompt delegates. The
  * driver runs each agent turn as a black box to completion (#165), so the only way
  * the framework can learn the agent stopped to ask (rather than deciding for itself)
  * is a signal in the turn's final message. This appends one to the system prompt: it
@@ -17,7 +17,7 @@ export const AWAIT_PROTOCOL = PROTOCOLS_AWAIT
 
 /**
  * The session-lifecycle protocol (#326): the code side of the `setSessionName()` and
- * `setReadyForMerge()` actions Rom's system prompt calls out. Like {@link AWAIT_PROTOCOL},
+ * `setReadyForMerge()` actions the system prompt calls out. Like {@link AWAIT_PROTOCOL},
  * it does not restate *when* to act — the system prompt owns that — it only pins *how* to
  * emit the signal so the turn-boundary can detect it. Both are non-blocking: the agent
  * emits the block and keeps going (the framework records it and reflects it in the
@@ -52,15 +52,35 @@ export interface ParsedConfirmationGate {
   file?: string
 }
 
+/**
+ * A browser the agent is stuck in, parsed from an `await-browser` block (#796).
+ *
+ * The other gates ask the user to decide something; this one asks them to *do* something.
+ * A login wall, a captcha, an SSO redirect: work the agent must not do on its own, either
+ * because it cannot or because it means handling a credential we deliberately never touch.
+ * The run parks, the human acts on the page, and the agent picks up from there.
+ */
+export interface ParsedBrowserGate {
+  /** What the human needs to do, shown above the buttons. */
+  title: string
+  /** The page the agent is stuck on, so the user knows where to look. */
+  url?: string
+}
+
 /** A parsed await gate: any kind, discriminated by `kind`. */
 export type ParsedAwaitGate =
   | ({ kind: 'choices' } & ParsedChoicesGate)
   | ({ kind: 'multi' } & ParsedMultiSelectGate)
   | ({ kind: 'confirm' } & ParsedConfirmationGate)
+  | ({ kind: 'browser' } & ParsedBrowserGate)
 
 /** The answer a resolved confirmation gate (#358) yields: the picked button's label. */
 export const CONFIRM_APPROVED = 'Approve'
 export const CONFIRM_DECLINED = 'Decline'
+
+/** The answers a resolved browser gate (#796) yields. */
+export const BROWSER_HANDLED = 'Handled it'
+export const BROWSER_NOT_HANDLED = 'Could not handle it'
 
 /**
  * How many times the agent may stop to ask, and be resumed, before a run stops honoring
@@ -269,7 +289,27 @@ export function parseConfirmationGate(text: string): ParsedConfirmationGate | un
 }
 
 /**
- * Parse whichever await gate a build turn ended on (#337 / #339 / #358). When more
+ * Parse a trailing `await-browser` block (#796): the agent is stuck on a page and needs a
+ * human to act on it. Same tolerance as the other parsers — blank-title fallback, malformed
+ * block ignored. A `url` that is not a string is dropped rather than shown as "undefined".
+ */
+export function parseBrowserGate(text: string): ParsedBrowserGate | undefined {
+  const block = lastBlock(text, 'await-browser')
+  if (!block) return undefined
+  let raw: unknown
+  try {
+    raw = JSON.parse(block.body)
+  } catch {
+    return undefined
+  }
+  if (typeof raw !== 'object' || raw === null) return undefined
+  const record = raw as Record<string, unknown>
+  const url = str(record.url)
+  return { title: str(record.title) || 'Take over in the browser', ...(url ? { url } : {}) }
+}
+
+/**
+ * Parse whichever await gate a build turn ended on (#337 / #339 / #358 / #796). When more
  * than one block kind is present (an agent shouldn't emit several), the one that
  * appears latest in the text wins; a malformed later block falls back to an earlier
  * one. Returns `undefined` when the agent just finished — the common case, so a
@@ -296,6 +336,13 @@ export function parseAwaitGate(text: string): ParsedAwaitGate | undefined {
       parse: () => {
         const g = parseConfirmationGate(text)
         return g ? { kind: 'confirm', ...g } : undefined
+      },
+    },
+    {
+      at: lastBlock(text, 'await-browser')?.index ?? -1,
+      parse: () => {
+        const g = parseBrowserGate(text)
+        return g ? { kind: 'browser', ...g } : undefined
       },
     },
   ]

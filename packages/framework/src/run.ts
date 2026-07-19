@@ -26,7 +26,7 @@ import { type ConsumptionWindow } from './consumption.js'
 import type { Driver, DriverSession, DriverTurn } from './driver/index.js'
 import { composeRunSystem, type EcoOptions, type TfContext } from './system-prompt.js'
 import { createRunControls, emitSessionStart, endStopDetail } from './run-telemetry.js'
-import { AWAIT_PROTOCOL, CONFIRM_APPROVED, CONFIRM_DECLINED, MAX_AWAIT_ROUNDS, PLAN_DECLINED_MESSAGE, continuationPrompt, createTurnSignalEmitter, isDeclinedConfirmation, parseAwaitGate, type ParsedAwaitGate } from './turn-gate.js'
+import { AWAIT_PROTOCOL, BROWSER_HANDLED, BROWSER_NOT_HANDLED, CONFIRM_APPROVED, CONFIRM_DECLINED, MAX_AWAIT_ROUNDS, PLAN_DECLINED_MESSAGE, continuationPrompt, createTurnSignalEmitter, isDeclinedConfirmation, parseAwaitGate, type ParsedAwaitGate } from './turn-gate.js'
 // Value import from todo-loop.js is a benign cycle: todo-loop.js only calls
 // run.js's hoisted function declarations (requestChoices / resolveAwaitGate).
 import { leaveResumeNote, runTodoLoop, type TodoLoopResult } from './todo-loop.js'
@@ -584,8 +584,37 @@ export async function resolveAwaitGate(
 ): Promise<string> {
   const signalOpt = deps.signal ? { signal: deps.signal } : {}
   const choiceOpt = deps.requestChoice ? { requestChoice: deps.requestChoice } : {}
-  const baseId = gate.kind === 'multi' ? 'await-multiselect' : gate.kind === 'confirm' ? 'await-confirmation' : 'await-choices'
+  const baseId =
+    gate.kind === 'multi'
+      ? 'await-multiselect'
+      : gate.kind === 'confirm'
+        ? 'await-confirmation'
+        : gate.kind === 'browser'
+          ? 'await-browser'
+          : 'await-choices'
   const id = round === 0 ? baseId : `${baseId}-${round}`
+  if (gate.kind === 'browser') {
+    // The agent is stuck on a page and needs a human to act on it (#796). Rides the same
+    // choice plumbing as every other gate, so the CLI and the dashboard render it today.
+    //
+    // Recommended is "could not handle it" — the opposite of the confirmation gate's default.
+    // A headless run has nobody at the browser, and telling the agent a human cleared the
+    // login wall when none did sends it back to a page that is still blocked.
+    const picked = await requestChoices({
+      id,
+      title: gate.url ? `${gate.title} (${gate.url})` : gate.title,
+      options: [
+        { id: 'handled', label: BROWSER_HANDLED },
+        { id: 'not-handled', label: BROWSER_NOT_HANDLED },
+      ],
+      recommended: 'not-handled',
+      confirm: true,
+      emit: deps.emit,
+      ...choiceOpt,
+      ...signalOpt,
+    })
+    return picked === 'handled' ? BROWSER_HANDLED : BROWSER_NOT_HANDLED
+  }
   if (gate.kind === 'confirm') {
     // The plan-approval confirmation (#358): a fixed Approve / Decline pair, recommended
     // Approve so a headless (or aborted) run proceeds — the same semantics as the other gates.
