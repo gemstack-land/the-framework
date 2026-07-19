@@ -15,6 +15,7 @@ import {
   attachWorktree,
   worktreePath,
   listRuns,
+  commitPendingWork,
   removeWorktree,
   pruneWorktrees,
 } from './store/index.js'
@@ -538,10 +539,10 @@ function createProjectRuntime({ cwd, env, binPath }: ProjectRuntimeOptions): Pro
    * copied into the repo first — otherwise removing the checkout would delete the run from the
    * dashboard's history.
    *
-   * Then the retention rule: a run that finished cleanly has nothing left to look at, so its
-   * worktree goes. A run that failed or was stopped keeps its checkout, because that is exactly
-   * when you want to see the half-finished working tree and the diff it died holding. Those are
-   * removed explicitly (the dashboard's Remove), never silently on a timer.
+   * Then the retention rule: a run that finished cleanly has nothing left to look at once its
+   * work is committed, so its worktree goes. A run that failed or was stopped keeps its checkout,
+   * because that is exactly when you want to see the half-finished working tree and the diff it
+   * died holding. Those are removed explicitly (the dashboard's Remove), never silently on a timer.
    *
    * Best-effort from end to end: this runs off a process-exit event with nothing to return to,
    * so a failure here must not take the daemon down.
@@ -550,6 +551,13 @@ function createProjectRuntime({ cwd, env, binPath }: ProjectRuntimeOptions): Pro
     try {
       const meta = await archiveWorktreeRun(worktree, projectCwd)
       if (meta?.status !== 'done') return // failed / stopped / unreadable: keep it for inspection
+      // A finished run can still be holding an uncommitted edit (#786), and removing the
+      // checkout would destroy it. Commit it to the run's branch, which outlives the
+      // worktree; if that cannot be done, keep the checkout rather than take the diff with it.
+      if (!(await commitPendingWork(worktree))) {
+        console.log(`[framework] keeping worktree ${worktree}: its uncommitted work could not be committed`)
+        return
+      }
       await removeWorktree(projectCwd, worktree)
       await pruneWorktrees(projectCwd)
     } catch {

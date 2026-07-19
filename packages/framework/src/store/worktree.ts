@@ -120,14 +120,51 @@ export function parseWorktreeList(porcelain: string): WorktreeInfo[] {
 }
 
 /**
- * Remove a run's worktree: `git worktree remove --force <path>` (force so an
- * in-progress checkout with untracked build output still tears down). Tolerant of
- * an already-gone / never-registered path so teardown stays idempotent (the run
- * child is detached; the daemon only holds its pid).
+ * Commit whatever the run left behind, on the run's own branch (#786).
+ *
+ * An agent that edits and stops without committing is behaving as instructed: the
+ * system prompt has it commit *pre-existing* changes before it starts, never its own
+ * work at the end. Removing that checkout would destroy the diff (the work was never
+ * staged, so it is not recoverable from git afterwards), so teardown commits it first
+ * and the branch outlives the worktree.
+ *
+ * Returns whether the checkout is safe to remove: true when it was already clean or
+ * the work is now committed, false when the commit failed (no git identity, a hook
+ * refusing it). False means keep the checkout, which is the safe direction.
+ */
+export async function commitPendingWork(path: string, run: GitRunner = nodeGitRunner()): Promise<boolean> {
+  try {
+    const status = await run(['status', '--porcelain'], path)
+    if (!status.trim()) return true
+    await run(['add', '-A'], path)
+    // Same wording as the install-time safety commit (install.ts), for one vocabulary.
+    await run(['commit', '-m', '[The Framework] uncommitted changes'], path)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Remove a run's worktree. Tolerant of an already-gone / never-registered path so
+ * teardown stays idempotent (the run child is detached; the daemon only holds its pid).
+ *
+ * Plain removal first: it refuses a checkout git considers unclean, which after
+ * {@link commitPendingWork} means a state we did not anticipate. Falling back to
+ * `--force` keeps teardown working (an ignored build artifact must not strand a
+ * worktree forever), but it says so, because forcing past unknown state is exactly
+ * how uncommitted work got deleted in the first place.
  */
 export async function removeWorktree(repo: string, path: string, run: GitRunner = nodeGitRunner()): Promise<void> {
   try {
+    await run(['worktree', 'remove', path], repo)
+    return
+  } catch {
+    // Unclean by git's reckoning, already removed, or never registered: try forcing.
+  }
+  try {
     await run(['worktree', 'remove', '--force', path], repo)
+    console.log(`[framework] forced removal of worktree ${path} (git called it unclean)`)
   } catch {
     // Already removed, or never registered: nothing to do.
   }

@@ -7,6 +7,7 @@ import type { GitRunner } from '../project.js'
 import { nodeGitRunner } from '../project.js'
 import {
   addWorktree,
+  commitPendingWork,
   listWorktrees,
   parseWorktreeList,
   removeWorktree,
@@ -92,10 +93,8 @@ test('listWorktrees passes --porcelain and is forgiving of a git failure', async
   assert.deepEqual(await listWorktrees(REPO, failingGit), [])
 })
 
-test('removeWorktree forces the removal and tolerates an already-gone path', async () => {
-  const git = recordingGit()
-  await removeWorktree(REPO, '/repo/wt', git)
-  assert.deepEqual(git.calls[0]?.args, ['worktree', 'remove', '--force', '/repo/wt'])
+test('removeWorktree tolerates an already-gone path', async () => {
+  // Both attempts fail for a path git never registered; teardown stays idempotent.
   await assert.doesNotReject(() => removeWorktree(REPO, '/repo/gone', failingGit))
 })
 
@@ -134,6 +133,76 @@ test('add/list/remove round-trips against a real git repo', async () => {
     assert.equal((await listWorktrees(repo, git)).some(w => w.path === path), false, 'removed worktree is no longer listed')
 
     await assert.doesNotReject(() => pruneWorktrees(repo, git))
+  } finally {
+    await rm(repo, { recursive: true, force: true })
+  }
+})
+
+test('commitPendingWork stages and commits a dirty checkout (#786)', async () => {
+  const git = recordingGit(' M index.html\n')
+  assert.equal(await commitPendingWork('/wt', git), true)
+  assert.deepEqual(
+    git.calls.map(c => c.args),
+    [['status', '--porcelain'], ['add', '-A'], ['commit', '-m', '[The Framework] uncommitted changes']],
+  )
+  assert.equal(git.calls[1]?.cwd, '/wt', 'commits in the worktree, not the repo')
+})
+
+test('commitPendingWork leaves a clean checkout alone (#786)', async () => {
+  const git = recordingGit('')
+  assert.equal(await commitPendingWork('/wt', git), true)
+  assert.deepEqual(git.calls.map(c => c.args), [['status', '--porcelain']]) // nothing to commit
+})
+
+test('commitPendingWork reports failure so the caller keeps the checkout (#786)', async () => {
+  // No git identity, a refusing hook: the work is still only in the working tree, so the
+  // caller must not go on to remove it.
+  assert.equal(await commitPendingWork('/wt', failingGit), false)
+})
+
+test('removeWorktree tries a plain removal before forcing (#786)', async () => {
+  const git = recordingGit()
+  await removeWorktree(REPO, '/wt', git)
+  assert.deepEqual(git.calls.map(c => c.args), [['worktree', 'remove', '/wt']]) // no --force needed
+})
+
+test('removeWorktree falls back to --force when git calls the checkout unclean (#786)', async () => {
+  const calls: string[][] = []
+  const git: GitRunner = async args => {
+    calls.push(args)
+    if (!args.includes('--force')) throw new Error('contains modified or untracked files')
+    return ''
+  }
+  await removeWorktree(REPO, '/wt', git)
+  assert.deepEqual(calls, [
+    ['worktree', 'remove', '/wt'],
+    ['worktree', 'remove', '--force', '/wt'],
+  ])
+})
+
+// The whole point of #786: a finished run's uncommitted edit must survive teardown.
+test('a dirty run worktree keeps its work on the branch after removal (#786)', async () => {
+  const git = nodeGitRunner()
+  const repo = await realpath(await mkdtemp(join(tmpdir(), 'framework-worktree-')))
+  try {
+    await git(['init'], repo)
+    await git(['config', 'user.email', 't@t'], repo)
+    await git(['config', 'user.name', 't'], repo)
+    await writeFile(join(repo, 'index.html'), '<h1>Hello, world!</h1>\n')
+    await git(['add', '-A'], repo)
+    await git(['commit', '-m', 'init'], repo)
+
+    const { path, branch } = await addWorktree(repo, { runId: 'run1', branch: 'the-framework/run-run1' }, git)
+    // The agent edits and stops without committing, exactly as the system prompt leaves it.
+    await writeFile(join(path, 'index.html'), '<h1>Welcome!</h1>\n')
+
+    assert.equal(await commitPendingWork(path, git), true)
+    await removeWorktree(repo, path, git)
+    await assert.rejects(() => stat(path), 'checkout dir is gone')
+
+    // The branch outlived the worktree and carries the edit.
+    const shown = await git(['show', `${branch}:index.html`], repo)
+    assert.match(shown, /Welcome!/, 'the edit survives on the run branch')
   } finally {
     await rm(repo, { recursive: true, force: true })
   }

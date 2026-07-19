@@ -30,6 +30,7 @@ export {
   attachWorktree,
   listWorktrees,
   parseWorktreeList,
+  commitPendingWork,
   removeWorktree,
   pruneWorktrees,
   worktreePath,
