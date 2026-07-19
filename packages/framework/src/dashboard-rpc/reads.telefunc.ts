@@ -1,4 +1,4 @@
-import { listRuns, readLiveMetas, loadRunEvents, listWorktreeDirs, type RunMeta } from '../store/index.js'
+import { listRuns, readLiveMetas, loadRunEvents, listWorktreeDirs, worktreeSize, isSafeRunId, type RunMeta } from '../store/index.js'
 import { readLogs, type LogEntry } from '../logs.js'
 import { readDocs, type WorkspaceDoc } from '../dashboard/docs.js'
 import { collectQueue, type ProjectQueue } from '../dashboard/queue.js'
@@ -8,6 +8,7 @@ import { buildActivity, type Activity } from '../dashboard/activity.js'
 import { buildDashboard, type DashboardData } from '../dashboard/dashboard.js'
 import { githubUrlFor } from '../dashboard/github.js'
 import { readGitStatus, type GitStatus } from '../dashboard/git-status.js'
+import type { RunWorktree } from '../dashboard/types.js'
 import { crawlRepoFiles } from '../project.js'
 import { readFileStatuses, type FileGitStatus } from '../dashboard/file-status.js'
 import { contextProjects, resolveProjectPath, resolveRunPath } from './context.js'
@@ -73,6 +74,41 @@ export async function onRetainedWorktrees(projectId: string): Promise<string[]> 
   ])
   const running = new Set(live.filter(run => run.status === 'running').map(run => run.id))
   return names.filter(id => !running.has(id)).sort((a, b) => (a < b ? 1 : a > b ? -1 : 0))
+}
+
+/**
+ * Where a session is working (#798): the checkout it has, its branch, whether it is holding
+ * uncommitted changes, and — once it is no longer live — what that checkout costs on disk.
+ *
+ * The dashboard could not answer "where is this session working". The git status bar reads the
+ * *project*, so a session's own branch was visible nowhere, and a worktree a run kept (#737) was
+ * a name in a list with no size and no way in.
+ *
+ * `own` separates a run with its own worktree from one that fell back to the main checkout (a
+ * project with no git repo): "uncommitted changes" means something different there, since that
+ * working tree is the user's, not the agent's.
+ */
+export async function onRunWorktree(projectId: string, runId: string): Promise<RunWorktree | null> {
+  const root = await resolveProjectPath(projectId)
+  if (!root || !isSafeRunId(runId)) return null
+  const path = await resolveRunPath(projectId, runId)
+  if (!path) return null
+  const own = path !== root
+  const [status, live] = await Promise.all([
+    readGitStatus(path).catch(() => undefined),
+    readLiveMetas(root).catch(() => []),
+  ])
+  // Size is only read for a checkout nothing is writing to: a live run's tree changes under the
+  // poll, and `du` over a build directory mid-build is a cost with no answer worth having.
+  const running = live.some(run => run.id === runId && run.status === 'running')
+  const size = own && !running ? await worktreeSize(path) : undefined
+  return {
+    path,
+    own,
+    dirty: status?.dirty ?? false,
+    ...(status?.branch ? { branch: status.branch } : {}),
+    ...(size !== undefined ? { sizeBytes: size } : {}),
+  }
 }
 
 /** One archived run's event log for replay (or `[]` when the run or project is gone). */

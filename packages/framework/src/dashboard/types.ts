@@ -80,3 +80,21 @@ export interface PreviewStatus {
   url?: string
   command?: string
 }
+
+/**
+ * Where a session is working (#798): the checkout, its branch, and what it is holding. Read by
+ * the dashboard so a session's action bar can say which worktree it has, rather than leaving the
+ * user to infer it from a run id.
+ */
+export interface RunWorktree {
+  /** Absolute path of the checkout this run works in. */
+  path: string
+  /** True when it is the run's own worktree; false when it fell back to the project's checkout. */
+  own: boolean
+  /** Uncommitted changes present in that checkout. */
+  dirty: boolean
+  /** The branch it is on, absent when the path is not a git repo. */
+  branch?: string
+  /** Size on disk, bytes. Only read once nothing is writing to it, and best-effort even then. */
+  sizeBytes?: number
+}

@@ -7,6 +7,7 @@ import { isRunActive } from '../lib/live-state.js'
 import { describeSessionLink } from '../lib/session-link.js'
 import { PreviewBar } from './PreviewBar.js'
 import { RemoveWorktreeButton } from './RemoveWorktreeButton.js'
+import { WorktreeChip } from './WorktreeChip.js'
 import { Button, buttonVariants } from './ui/button.js'
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from './ui/tooltip.js'
 
@@ -45,6 +46,9 @@ export function RunActionBar({
       <TooltipProvider delay={300} closeDelay={0}>
         {/* Serve the project's built result (its own icon button + tooltip). */}
         <PreviewBar projectId={projectId} inline />
+        {/* Where this session is working (#798): its branch, whether it is holding uncommitted
+            work, and a way into the checkout. Only a run has one, so the project home has none. */}
+        {runId && <WorktreeChip projectId={projectId} runId={runId} />}
         {active && (
           <Tooltip>
             <TooltipTrigger

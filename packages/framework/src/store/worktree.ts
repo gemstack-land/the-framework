@@ -222,3 +222,33 @@ export async function pruneWorktrees(repo: string, run: GitRunner = nodeGitRunne
     // Not a repo / nothing to prune: no-op.
   }
 }
+
+/** Runs `du`, resolving its stdout. Injectable so the size read can be tested without a real tree. */
+export type SizeRunner = (path: string) => Promise<string>
+
+/** A {@link SizeRunner} over `du -sk`: one process, and it does not follow the symlinked deps (#736). */
+export function nodeSizeRunner(): SizeRunner {
+  return path =>
+    new Promise((resolvePromise, rejectPromise) => {
+      void import('node:child_process').then(({ execFile }) => {
+        execFile('du', ['-sk', path], { timeout: 5_000 }, (err, stdout) =>
+          err ? rejectPromise(err) : resolvePromise(stdout),
+        )
+      })
+    })
+}
+
+/**
+ * A worktree's size on disk in bytes, or undefined when it cannot be read (#798). Best-effort by
+ * design: this only ever labels a "remove this" button, so a missing number costs nothing while a
+ * throw or a hang would cost the panel it sits in. `du` is absent on Windows, which reads as
+ * unknown like any other failure.
+ */
+export async function worktreeSize(path: string, run: SizeRunner = nodeSizeRunner()): Promise<number | undefined> {
+  try {
+    const kb = Number.parseInt((await run(path)).trim().split(/\s+/)[0] ?? '', 10)
+    return Number.isFinite(kb) ? kb * 1024 : undefined
+  } catch {
+    return undefined
+  }
+}
