@@ -25,6 +25,9 @@ export type OptionRow = {
   checked: boolean
   /** Disabled beyond the form-wide busy flag (e.g. Eco has nothing to trim under Vanilla). */
   disabled?: boolean
+  /** Why it's disabled, shown in the description so a greyed row isn't a mystery (the `title`
+   * tooltip is suppressed on disabled dropdown items). Only rendered while {@link disabled}. */
+  disabledReason?: string
 }
 
 function setOption(key: keyof Preferences, checked: boolean) {
@@ -80,7 +83,10 @@ export function OptionsMenu({
             title={o.title}
             className="items-start"
           >
-            <OptionLabel label={o.label} description={o.description} />
+            <OptionLabel
+              label={o.label}
+              description={o.disabled && o.disabledReason ? [o.description, `— ${o.disabledReason}`].filter(Boolean).join(' ') : o.description}
+            />
           </DropdownMenuCheckboxItem>
         ))}
         {showEco && (
@@ -95,7 +101,10 @@ export function OptionsMenu({
                 title={o.title}
                 className="items-start pl-8"
               >
-                <OptionLabel label={o.label} description={o.description} />
+                <OptionLabel
+              label={o.label}
+              description={o.disabled && o.disabledReason ? [o.description, `— ${o.disabledReason}`].filter(Boolean).join(' ') : o.description}
+            />
               </DropdownMenuCheckboxItem>
             ))}
           </>

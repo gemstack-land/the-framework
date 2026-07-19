@@ -191,6 +191,13 @@ test('writePreferences round-trips the notifyNewActivity toggle (#627)', async (
   assert.deepEqual(await readPreferences(fs, ENV), { notifyNewActivity: true })
 })
 
+test('writePreferences round-trips the notifyHumanIntervention toggle (#627)', async () => {
+  const fs = memFs({ [FILE]: JSON.stringify([APP_A]) })
+  // Default is on, so the persisted value that matters is the explicit opt-out.
+  await writePreferences({ notifyHumanIntervention: false }, fs, ENV)
+  assert.deepEqual(await readPreferences(fs, ENV), { notifyHumanIntervention: false })
+})
+
 test('writePreferences round-trips the transparent toggle (#625)', async () => {
   const fs = memFs({ [FILE]: JSON.stringify([APP_A]) })
   await writePreferences({ transparent: true }, fs, ENV)

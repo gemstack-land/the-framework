@@ -10,6 +10,7 @@ vi.mock('../lib/preferences.js', () => ({
   notificationsEnabled: (p: Preferences) => p.notifyBrowser ?? true,
   discordEnabled: (p: Preferences) => p.notifyDiscord ?? false,
   newActivityEnabled: (p: Preferences) => p.notifyNewActivity ?? false,
+  humanInterventionEnabled: (p: Preferences) => p.notifyHumanIntervention ?? true,
 }))
 
 const { NotificationsMenu } = await import('./NotificationsMenu.js')
@@ -27,7 +28,7 @@ afterEach(() => {
 const open = () => fireEvent.click(screen.getByRole('button', { name: /notifications/i }))
 
 describe('NotificationsMenu (#676)', () => {
-  test('the popover groups methods and categories, with "Needs you" always on', () => {
+  test('the popover groups methods and categories, both "Needs you" and "New activity" toggleable', () => {
     render(<NotificationsMenu />)
     open()
     expect(screen.getByText('Deliver to')).toBeTruthy()
@@ -35,17 +36,20 @@ describe('NotificationsMenu (#676)', () => {
     expect(screen.getByText('Discord')).toBeTruthy()
     expect(screen.getByText('Notify me about')).toBeTruthy()
     expect(screen.getByText('Needs you')).toBeTruthy()
-    expect(screen.getByText('Always on')).toBeTruthy() // baseline shown as static, not a toggle
+    expect(screen.queryByText('Always on')).toBeNull() // #627: now a real toggle, no static row
     expect(screen.getByText('New activity')).toBeTruthy()
   })
 
-  test('toggling Discord and New activity writes each preference through', () => {
+  test('toggling Discord, New activity, and Needs you writes each preference through', () => {
     render(<NotificationsMenu />)
     open()
     fireEvent.click(screen.getByText('Discord'))
     expect(updatePreferences).toHaveBeenCalledWith({ notifyDiscord: true })
     fireEvent.click(screen.getByText('New activity'))
     expect(updatePreferences).toHaveBeenCalledWith({ notifyNewActivity: true })
+    // Defaults on, so the click turns it OFF (#627).
+    fireEvent.click(screen.getByText('Needs you'))
+    expect(updatePreferences).toHaveBeenCalledWith({ notifyHumanIntervention: false })
   })
 
   test('enabling Browser asks for permission when it has not been granted yet', () => {

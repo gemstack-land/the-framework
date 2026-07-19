@@ -28,7 +28,8 @@
     "node": ">=22.12.0"
   },
   "files": [
-    "dist"
+    "dist",
+    "prompts/ticketing_format.md"
   ],
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -53,7 +54,7 @@
     "build": "node scripts/gen-prompts.mjs && tsc -p tsconfig.build.json",
     "dev": "node scripts/gen-prompts.mjs && tsc -p tsconfig.build.json --watch",
     "typecheck": "node scripts/gen-prompts.mjs && tsc --noEmit",
-    "test": "node scripts/gen-prompts.mjs && tsc -p tsconfig.test.json && cd dist-test && node --test",
+    "test": "node scripts/gen-prompts.mjs && tsc -p tsconfig.test.json && cd dist-test && node --test --test-timeout=60000",
     "bundle:dashboard": "node scripts/bundle-dashboard.mjs",
     "clean": "rm -rf dist dist-test src/prompts.generated.ts",
     "gen:prompts": "node scripts/gen-prompts.mjs",

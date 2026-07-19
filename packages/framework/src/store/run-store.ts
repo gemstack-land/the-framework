@@ -1,4 +1,5 @@
 import { join } from 'node:path'
+import { hostname } from 'node:os'
 import type { FrameworkEvent } from '../events.js'
 import { nodeFs } from '../node-fs.js'
 
@@ -67,6 +68,14 @@ export interface RunMeta {
   updatedAt: string
   /** Full-fledged loop passes performed so far. */
   passes: number
+  /**
+   * The OS pid of the process that owns this run (the one tailing `control.jsonl`), on {@link host}.
+   * Persisted so a reader can tell a live run from one whose process died without writing `end`
+   * (#716): a `running` meta whose owning pid is gone is stale and gets flipped to `stopped`.
+   */
+  pid?: number
+  /** The host the owning {@link pid} lives on, so a pid probe only trusts a match (#716). */
+  host?: string
   /** What the user asked to build (from the `scope` event). */
   intent?: string
   scope?: string
@@ -117,6 +126,17 @@ export interface OpenStoreOptions {
   fresh?: boolean
   /** The wall-clock start, ISO. Injectable so tests are deterministic. */
   now?: string
+  /**
+   * The run's intent (its prompt / request) shown in the dashboard's Runs list. A build run
+   * later refines this via its `bootstrap` scope event; a `prompt`/`research` run has no scope
+   * step, so seeding it here is the only way its row shows the prompt instead of "(no prompt)".
+   */
+  intent?: string
+  /**
+   * Who owns this run (#716). Defaults to the current process on this host — the process opening a
+   * fresh store *is* the run's owner. Injectable so tests can seed a specific (dead) pid.
+   */
+  owner?: RunOwner
 }
 
 /**
@@ -169,8 +189,14 @@ export function applyEventToMeta(meta: RunMeta, event: FrameworkEvent, at: strin
   return next
 }
 
+/** Who owns a live run: its OS pid and the host that pid lives on (#716). */
+export interface RunOwner {
+  pid: number
+  host: string
+}
+
 /** The seed meta a run starts from, before any event is folded in. */
-function freshMeta(startedAt: string): RunMeta {
+function freshMeta(startedAt: string, intent?: string, owner?: RunOwner): RunMeta {
   return {
     version: RUN_META_VERSION,
     status: 'running',
@@ -178,6 +204,8 @@ function freshMeta(startedAt: string): RunMeta {
     startedAt,
     updatedAt: startedAt,
     passes: 0,
+    ...(owner ? { pid: owner.pid, host: owner.host } : {}),
+    ...(intent ? { intent } : {}),
   }
 }
 
@@ -256,7 +284,8 @@ export class RunStore {
     const dir = join(cwd, FRAMEWORK_DIR)
     const now = opts.now ?? new Date().toISOString()
     await fs.mkdir(dir)
-    const store = new RunStore(fs, dir, now, freshMeta(now))
+    const owner = opts.owner ?? { pid: process.pid, host: hostname() }
+    const store = new RunStore(fs, dir, now, freshMeta(now, opts.intent, owner))
     if (opts.fresh) {
       // A new run truncates the live log. First rescue the prior run if it never
       // got archived (e.g. a crash exited before close), so no history is lost.
@@ -414,14 +443,55 @@ export async function reconcileOrphanedRuns(cwd: string, fs: StoreFs = nodeStore
 }
 
 /**
+ * Whether `pid` is a live process on this host. `process.kill(pid, 0)` sends no signal but
+ * throws `ESRCH` once the process is gone; `EPERM` means it exists under another user (still
+ * alive). A pid on a *different* host is unknowable here, so callers guard on {@link RunMeta.host}
+ * before trusting a result. A recycled pid (another process reusing a dead run's number) reads as
+ * alive — an accepted, vanishingly rare miss on a single dev box.
+ */
+export function isPidAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0)
+    return true
+  } catch (err) {
+    return (err as NodeJS.ErrnoException).code === 'EPERM'
+  }
+}
+
+/** A `running` meta whose owning process is gone (same host, dead pid) — its state is stale (#716). */
+function isDeadRun(meta: RunMeta, isAlive: (pid: number) => boolean): boolean {
+  return meta.status === 'running' && meta.pid !== undefined && meta.host === hostname() && !isAlive(meta.pid)
+}
+
+/**
  * The live (in-progress) run's meta snapshot from `.the-framework/run.json`, or
  * `undefined` when none/unreadable. Unlike {@link listRuns} (which reads the
  * archived `runs/` copies written on close), this is the run the daemon is
  * tailing right now — so the dashboard can list it with a `running` status
  * before it finishes. Missing or torn file yields `undefined`, never throws.
+ *
+ * Self-heals a stale run on read (#716): if the meta says `running` but its owning process died
+ * without writing `end` (a crash, `kill -9`, or the machine sleeping), nothing is left to consume
+ * `control.jsonl` — so Stop is a no-op and the row is stuck. When the owning pid is gone on this
+ * host, flip it to `stopped` and archive it, so the dashboard clears the row on the next poll
+ * instead of only after a daemon restart's boot-time {@link reconcileOrphanedRuns}. A run whose
+ * meta predates this field (no `pid`) is left untouched — the boot reconcile still catches it.
  */
-export function readLiveMeta(cwd: string, fs: StoreFs = nodeStoreFs()): Promise<RunMeta | undefined> {
-  return readMetaFile(fs, join(cwd, FRAMEWORK_DIR, META_FILE))
+export async function readLiveMeta(
+  cwd: string,
+  fs: StoreFs = nodeStoreFs(),
+  isAlive: (pid: number) => boolean = isPidAlive,
+): Promise<RunMeta | undefined> {
+  const dir = join(cwd, FRAMEWORK_DIR)
+  const meta = await readMetaFile(fs, join(dir, META_FILE))
+  if (!meta) return undefined
+  if (isDeadRun(meta, isAlive)) {
+    const stopped: RunMeta = { ...meta, status: 'stopped' }
+    await fs.write(join(dir, META_FILE), JSON.stringify(stopped, null, 2) + '\n').catch(() => {})
+    await archivePriorRun(fs, dir).catch(() => {})
+    return stopped
+  }
+  return meta
 }
 
 /**

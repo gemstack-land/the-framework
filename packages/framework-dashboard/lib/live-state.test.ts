@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest'
 import type { FrameworkEvent } from '@gemstack/framework'
-import { agentViews, pendingChoices, pendingChoice, isRunActive } from './live-state.js'
+import { agentViews, pendingChoices, pendingChoice, isRunActive, currentRunEvents } from './live-state.js'
 
 const view = (id: string, title: string, markdown: string): FrameworkEvent => ({ kind: 'view', id, title, markdown })
 const choice = (id: string, title: string): FrameworkEvent => ({
@@ -62,5 +62,46 @@ describe('isRunActive', () => {
     expect(isRunActive([])).toBe(false)
     expect(isRunActive([{ kind: 'log', message: 'go' }])).toBe(true)
     expect(isRunActive([{ kind: 'log', message: 'go' }, { kind: 'end', ok: true }])).toBe(false)
+  })
+})
+
+describe('currentRunEvents', () => {
+  const session = (workspace: string): FrameworkEvent => ({ kind: 'session', driver: 'claude', workspace, fake: false })
+
+  test('returns the feed whole when no run has opened yet', () => {
+    const events: FrameworkEvent[] = [{ kind: 'log', message: 'warming up' }]
+    expect(currentRunEvents(events)).toEqual(events)
+  })
+
+  test('keeps a single run intact, session-first', () => {
+    const events: FrameworkEvent[] = [session('/repo'), { kind: 'log', message: 'go' }, { kind: 'end', ok: true }]
+    expect(currentRunEvents(events)).toEqual(events)
+  })
+
+  test('drops a previous run once a new run opens (the bug)', () => {
+    const events: FrameworkEvent[] = [
+      session('/repo'),
+      { kind: 'log', message: 'run 1' },
+      { kind: 'end', ok: true },
+      session('/repo'),
+      { kind: 'log', message: 'run 2' },
+    ]
+    expect(currentRunEvents(events)).toEqual([session('/repo'), { kind: 'log', message: 'run 2' }])
+  })
+
+  test('a just-finished second run keeps its own end, not the first run', () => {
+    const events: FrameworkEvent[] = [
+      session('/repo'),
+      { kind: 'log', message: 'run 1' },
+      { kind: 'end', ok: true },
+      session('/repo'),
+      { kind: 'log', message: 'run 2' },
+      { kind: 'end', ok: false, stopped: true },
+    ]
+    expect(currentRunEvents(events)).toEqual([
+      session('/repo'),
+      { kind: 'log', message: 'run 2' },
+      { kind: 'end', ok: false, stopped: true },
+    ])
   })
 })

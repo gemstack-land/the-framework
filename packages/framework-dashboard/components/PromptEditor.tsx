@@ -39,6 +39,8 @@ interface PromptEditorProps {
   presets: { id: string; label: string; render: () => string }[]
   disabled?: boolean
   placeholder?: string
+  /** A shorter surface for the navbar quick-launch (#723): starts one line tall instead of ~three. */
+  compact?: boolean
 }
 
 /** Insert a token chip at the suggestion range, followed by a space. */
@@ -63,7 +65,7 @@ function applyTemplate(editor: Editor, text: string): void {
 }
 
 export const PromptEditor = forwardRef<PromptEditorHandle, PromptEditorProps>(function PromptEditor(
-  { onChange, onSubmit, onPreset, onMentionProject, onMentionFile, projects, files = [], presets, disabled = false, placeholder = 'Describe what to build…  ( / commands · < tags · @ projects · # files )' },
+  { onChange, onSubmit, onPreset, onMentionProject, onMentionFile, projects, files = [], presets, disabled = false, placeholder = 'Describe what to build…  ( / commands · < tags · @ projects · # files )', compact = false },
   ref,
 ) {
   const [isEmpty, setIsEmpty] = useState(true)
@@ -92,6 +94,9 @@ export const PromptEditor = forwardRef<PromptEditorHandle, PromptEditorProps>(fu
   // markdown out). Takes the editor as an argument so the `/` menu — whose closures are built
   // once, before useEditor resolves — can call it too, not only the imperative handle.
   const loadTemplateInto = (ed: Editor, text: string): void => {
+    // Loading a preset replaces the whole editor, so guard typed work (#695/U11): a non-empty
+    // editor gets one confirm before its content is discarded. An empty editor loads silently.
+    if (!ed.isEmpty && typeof window !== 'undefined' && !window.confirm('Replace your current prompt with this preset?')) return
     applyTemplate(ed, text)
     setIsEmpty(ed.isEmpty)
     onChangeRef.current(ed.storage.markdown.getMarkdown())
@@ -224,7 +229,9 @@ export const PromptEditor = forwardRef<PromptEditorHandle, PromptEditorProps>(fu
     <div className="relative">
       <EditorContent
         editor={editor}
-        className="max-h-64 min-h-[4.5rem] w-full overflow-y-auto rounded-md border border-border bg-transparent p-2 text-sm focus-within:ring-2 focus-within:ring-[var(--color-primary)]"
+        className={`w-full overflow-y-auto rounded-md border border-border bg-transparent p-2 text-sm focus-within:ring-2 focus-within:ring-[var(--color-primary)] ${
+          compact ? 'max-h-32 min-h-9' : 'max-h-64 min-h-[4.5rem]'
+        }`}
       />
       {isEmpty && (
         <span className="pointer-events-none absolute left-2 top-2 text-sm text-muted-foreground">{placeholder}</span>

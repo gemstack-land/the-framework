@@ -7,6 +7,9 @@
 }
 
 :root {
+  /* Let the browser paint native theme-matched scrollbars + form controls (the shadcn way),
+     instead of a light OS scrollbar on the dark UI. `.dark` flips it below. */
+  color-scheme: light;
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
   --card: oklch(1 0 0);
@@ -21,6 +24,7 @@
 }
 
 .dark {
+  color-scheme: dark;
   --background: oklch(0.16 0.01 264);
   --foreground: oklch(0.95 0 0);
   --card: oklch(0.2 0.01 264);

@@ -82,6 +82,12 @@ export class ClaudeCodeSession implements DriverSession {
   readonly cwd: string
   /** Path to the written `--mcp-config` file, lazily created on first use. */
   private mcpConfigPath: string | undefined
+  /**
+   * The agent's own session id from the last turn (#714). Retained so a
+   * {@link DriverPromptOptions.resume} prompt can `--resume` the same
+   * conversation; resume keeps the id stable, so consecutive chat messages chain.
+   */
+  private lastSessionId: string | undefined
 
   constructor(
     private readonly config: ClaudeCodeDriverOptions,
@@ -89,13 +95,17 @@ export class ClaudeCodeSession implements DriverSession {
   ) {
     this.cwd = startOpts.cwd
     this.id = `claude-code-${++sessionCounter}`
+    // Resume a finished run (#720): seeding lastSessionId makes the very first `resume` prompt
+    // `--resume` this conversation, exactly as a mid-run chat turn continues its own session.
+    this.lastSessionId = startOpts.resumeSessionId
   }
 
-  prompt(text: string, opts: DriverPromptOptions = {}): Promise<DriverTurn> {
+  async prompt(text: string, opts: DriverPromptOptions = {}): Promise<DriverTurn> {
     const system = combineFraming(this.startOpts.system, opts.system)
-    return runClaude({
+    const resumeId = opts.resume ? this.lastSessionId : undefined
+    const turn = await runClaude({
       bin: this.config.bin ?? 'claude',
-      args: this.buildArgs(system),
+      args: this.buildArgs(system, resumeId),
       cwd: this.cwd,
       env: this.config.env ?? process.env,
       prompt: text,
@@ -103,6 +113,9 @@ export class ClaudeCodeSession implements DriverSession {
       emit: makeEmit(this.startOpts.onEvent, 'claude-code'),
       signals: combineSignals(this.startOpts.signal, opts.signal),
     })
+    // Track the agent's session so a later resume continues this exact conversation.
+    if (turn.sessionId) this.lastSessionId = turn.sessionId
+    return turn
   }
 
   readCode(path: string): Promise<string> {
@@ -124,11 +137,14 @@ export class ClaudeCodeSession implements DriverSession {
     return Promise.resolve()
   }
 
-  private buildArgs(system: string): string[] {
+  private buildArgs(system: string, resumeId?: string): string[] {
     const args = ['-p', '--output-format', 'stream-json', '--verbose']
     if (this.config.dangerouslySkipPermissions) args.push('--dangerously-skip-permissions')
     else args.push('--permission-mode', this.config.permissionMode ?? 'acceptEdits')
-    if (system) args.push('--append-system-prompt', system)
+    // Resume the same conversation for a chat turn (#714). Skip the system append then:
+    // the resumed transcript already carries its framing, so re-appending only duplicates it.
+    if (resumeId) args.push('--resume', resumeId)
+    else if (system) args.push('--append-system-prompt', system)
     if (this.startOpts.model) args.push('--model', this.startOpts.model)
     const mcpConfig = this.mcpConfigFile()
     if (mcpConfig) args.push('--mcp-config', mcpConfig)

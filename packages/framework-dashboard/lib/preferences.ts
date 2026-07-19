@@ -85,3 +85,10 @@ export function discordEnabled(preferences: Preferences): boolean {
 export function newActivityEnabled(preferences: Preferences): boolean {
   return preferences.notifyNewActivity ?? false
 }
+
+/** The "needs you" category (#627): a run awaiting your answer, or a PR to review. Composes with
+ * the method toggles like {@link newActivityEnabled}, but **defaults on** — these are the baseline
+ * notifications, so an unset preference keeps them firing. */
+export function humanInterventionEnabled(preferences: Preferences): boolean {
+  return preferences.notifyHumanIntervention ?? true
+}

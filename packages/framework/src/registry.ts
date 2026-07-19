@@ -70,6 +70,14 @@ export interface Preferences {
    * toggles ({@link notifyBrowser} / {@link notifyDiscord}), so activity reaches whichever are on.
    */
   notifyNewActivity?: boolean
+  /**
+   * The "needs you" category (#627): notify when a run is awaiting your answer or a PR is ready
+   * to review. A *category* toggle, like {@link notifyNewActivity}, composing with the method
+   * toggles ({@link notifyBrowser} / {@link notifyDiscord}). **Absent = on**: unlike the other
+   * flat opt-in booleans, human-intervention pings are the baseline The Framework leans on, so an
+   * unset preference keeps them firing; a user turns them off explicitly.
+   */
+  notifyHumanIntervention?: boolean
   /** The model to run on (#628), e.g. `opus` / `sonnet`; maps to a run's `--model`. Absent = the driver's default. */
   model?: string
   /** Which coding agent drives the run (#650): `claude` or `codex`; maps to `--agent`. Absent = the default (`claude`). */
@@ -192,6 +200,7 @@ const PREFERENCE_KEYS = [
   'notifyBrowser',
   'notifyDiscord',
   'notifyNewActivity',
+  'notifyHumanIntervention',
 ] as const
 
 /** Keep only the known preference fields, so a hand-edited or browser-supplied

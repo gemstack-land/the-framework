@@ -264,6 +264,7 @@ export {
   type ControlEntry,
   type ControlWatcher,
 } from './control.js'
+export { RunMessageQueue, type RunMessages } from './run-messages.js'
 export { runPrompt, type RunPromptOptions, type RunPromptResult } from './prompt-run.js'
 export {
   runTodoLoop,
@@ -271,10 +272,11 @@ export {
   parseTodoEntries,
   TODO_FILE_PATTERN,
   FLAT_TODO_FILE,
+  LEGACY_HYPHEN_TODO_FILE,
+  LEGACY_TICKETS_TODO_FILE,
   LEGACY_TODO_FILE,
   TICKETS_DIR,
   TICKETING_FORMAT_FILE,
-  materializeTicketingFormat,
   DEFAULT_MAX_TODO_ITEMS,
   type TodoBacklog,
   type TodoLoopOptions,

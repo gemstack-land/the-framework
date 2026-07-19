@@ -1,54 +1,59 @@
 import { strict as assert } from 'node:assert'
 import { test } from 'node:test'
-import { mkdtemp, mkdir, writeFile, readFile, rm } from 'node:fs/promises'
+import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
   FLAT_TODO_FILE,
+  LEGACY_HYPHEN_TODO_FILE,
+  LEGACY_TICKETS_TODO_FILE,
   LEGACY_TODO_FILE,
   TICKETS_DIR,
   TICKETING_FORMAT_FILE,
   findFlatTodo,
-  materializeTicketingFormat,
 } from './tickets.js'
 import { TICKETING_FORMAT } from './prompts.generated.js'
 
-test('the flat backlog lives at tickets/TODO.md, with the legacy root file named', () => {
+test('the flat backlog lives at the root TODO_AGENTS.md, with the legacy locations named (#674/#682)', () => {
   assert.equal(TICKETS_DIR, 'tickets')
-  assert.equal(FLAT_TODO_FILE, 'tickets/TODO.md')
+  assert.equal(FLAT_TODO_FILE, 'TODO_AGENTS.md')
+  assert.equal(LEGACY_HYPHEN_TODO_FILE, 'TODO-AGENTS.md')
+  assert.equal(LEGACY_TICKETS_TODO_FILE, 'tickets/TODO.md')
   assert.equal(LEGACY_TODO_FILE, 'TODO.md')
 })
 
-test('the ticket-format spec materializes under .the-framework, not tickets/ (#684)', async () => {
-  // It is framework-authored, so it lives beside the presets and never masquerades as a ticket.
-  assert.equal(TICKETING_FORMAT_FILE, '.the-framework/ticketing-format.md')
-
-  const cwd = await mkdtemp(join(tmpdir(), 'framework-ticket-format-'))
-  try {
-    await materializeTicketingFormat(cwd)
-    const written = await readFile(join(cwd, TICKETING_FORMAT_FILE), 'utf8')
-    assert.equal(written, TICKETING_FORMAT)
-    // The spec teaches both the ticket and spike file shapes.
-    assert.ok(written.includes('tickets/<DATE>_<SLUG>.md'))
-    assert.ok(written.includes('tickets/<DATE>_<SLUG>.spike.md'))
-  } finally {
-    await rm(cwd, { recursive: true, force: true })
-  }
+test('the ticket-format spec ships in the package (not materialized), with priority/topics (#684/#674)', () => {
+  // Per Rom's #674 call it is not written into the repo; it ships inside the package and the
+  // context fragment reads it by its node_modules path, so the format versions with the package.
+  assert.equal(TICKETING_FORMAT_FILE, 'node_modules/@gemstack/framework/prompts/ticketing_format.md')
+  // The spec teaches both file shapes and the revised #684 optional priority/topics fields.
+  assert.ok(TICKETING_FORMAT.includes('tickets/<DATE>_<SLUG>.md'))
+  assert.ok(TICKETING_FORMAT.includes('tickets/<DATE>_<SLUG>.spike.md'))
+  assert.ok(TICKETING_FORMAT.includes('priority: low/medium/high/urgent'))
+  assert.ok(TICKETING_FORMAT.includes('topics:'))
 })
 
-test('findFlatTodo prefers tickets/TODO.md, falls back to legacy root TODO.md, else undefined (#629)', async () => {
+test('findFlatTodo prefers TODO_AGENTS.md, then legacy tickets/TODO.md, then root TODO.md, else undefined (#682)', async () => {
   const cwd = await mkdtemp(join(tmpdir(), 'framework-tickets-'))
   try {
     assert.equal(await findFlatTodo(cwd), undefined)
 
-    // Only a legacy root TODO.md -> that is returned (existing repos keep their backlog).
-    await writeFile(join(cwd, 'TODO.md'), '- [ ] legacy\n')
+    // Only a pre-#629 root TODO.md -> that is returned (oldest repos keep their backlog).
+    await writeFile(join(cwd, 'TODO.md'), '- [ ] oldest\n')
     assert.equal(await findFlatTodo(cwd), 'TODO.md')
 
-    // tickets/TODO.md present -> it wins over the legacy root file.
+    // A #629 tickets/TODO.md wins over the pre-#629 root file.
     await mkdir(join(cwd, TICKETS_DIR))
-    await writeFile(join(cwd, FLAT_TODO_FILE), '- [ ] new\n')
+    await writeFile(join(cwd, LEGACY_TICKETS_TODO_FILE), '- [ ] newer\n')
     assert.equal(await findFlatTodo(cwd), 'tickets/TODO.md')
+
+    // The brief #682 hyphen spelling wins over the older locations.
+    await writeFile(join(cwd, LEGACY_HYPHEN_TODO_FILE), '- [ ] hyphen\n')
+    assert.equal(await findFlatTodo(cwd), 'TODO-AGENTS.md')
+
+    // The #674 root TODO_AGENTS.md (underscore) wins over every legacy location.
+    await writeFile(join(cwd, FLAT_TODO_FILE), '- [ ] current\n')
+    assert.equal(await findFlatTodo(cwd), 'TODO_AGENTS.md')
   } finally {
     await rm(cwd, { recursive: true, force: true })
   }

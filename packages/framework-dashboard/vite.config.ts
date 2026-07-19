@@ -3,7 +3,7 @@ import react from '@vitejs/plugin-react'
 import vike from 'vike/plugin'
 import { telefunc } from 'telefunc/vite'
 import tailwindcss from '@tailwindcss/vite'
-import { defineConfig } from 'vite'
+import { defineConfig, type UserConfig } from 'vite'
 
 // Dashboard (#405): Vike (SPA / client-only, see pages/+config.ts) + React + Tailwind
 // v4 + shadcn, with Telefunc for everything over the wire — the read-model RPCs plus
@@ -19,4 +19,8 @@ export default defineConfig({
   server: {
     port: 4300,
   },
-})
+  // TO-DO/eventually: remove this workaround once upstream fixed the issue
+  // Temporary workaround for Vike error
+  // https://github.com/gemstack-land/gemstack/issues/460
+  vitePluginServerEntry: { disableAutoImport: true },
+} as UserConfig)

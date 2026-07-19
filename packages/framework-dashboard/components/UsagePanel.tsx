@@ -119,6 +119,8 @@ export function UsagePanel() {
         <CardTitle>Usage</CardTitle>
       </CardHeader>
       <CardContent className="space-y-5">
+        {!view && <p className="text-sm text-muted-foreground">Reading your usage…</p>}
+
         {view?.windows.length ? (
           <div className="space-y-3">{view.windows.map(w => <AccountWindow key={w.label} window={w} />)}</div>
         ) : null}

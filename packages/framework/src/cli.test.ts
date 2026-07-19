@@ -84,6 +84,11 @@ test('parseArgs reads --browser (#452)', () => {
   assert.equal(parseArgs(['--browser', 'x']).browser, true)
 })
 
+test('parseArgs reads --resume-session to continue a finished run (#720)', () => {
+  assert.equal(parseArgs(['x']).resumeSession, undefined)
+  assert.equal(parseArgs(['prompt', 'keep going', '--resume-session', 'sess-42']).resumeSession, 'sess-42')
+})
+
 test('withBrowser folds chrome-devtools-mcp into driver options only when enabled (#452)', () => {
   const base = claudeDriverOptions({ skipPermissions: false })
   assert.equal(withBrowser(base, false).mcpServers, undefined)
@@ -690,6 +695,13 @@ test('a live daemon steers a dashboard-less run through its gates via control.js
         if (e.kind !== 'choice' || !e.id || answered.has(e.id)) continue
         answered.add(e.id)
         await appendControl(cwd, { kind: 'choice', id: e.id, pick: e.recommended ?? e.options?.[0]?.id ?? '', by: 'user' })
+      }
+      // The steered build now stays open waiting for a chat message or Stop (#714). Once it has
+      // been steered through its gate and produced its output, end it with a Stop, exactly as the
+      // dashboard's Stop button would; otherwise `done` never resolves and the run hangs.
+      if (answered.has('await-choices') && /production-grade/.test(out.join('\n'))) {
+        await appendControl(cwd, { kind: 'stop' })
+        break
       }
       await new Promise(r => setTimeout(r, 20))
     }

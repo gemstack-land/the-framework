@@ -68,3 +68,23 @@ export function agentViews(events: readonly FrameworkEvent[]): AgentView[] {
 export function isRunActive(events: readonly FrameworkEvent[]): boolean {
   return events.length > 0 && !events.some(event => event.kind === 'end')
 }
+
+/**
+ * The current run's slice of an accumulated live feed. The dashboard's live channel keeps
+ * one long-lived subscription per project and appends every streamed event, but each run
+ * truncates `events.jsonl` on disk and opens with exactly one `session` event
+ * (`emitSessionStart`). So a subscription that spans a run boundary ends up holding the
+ * previous run's log followed by the new one. Keep only the tail from the last `session`
+ * event — that is the run in progress; a feed with no `session` yet is returned whole. This
+ * stops a fresh run's live view (and the right-rail choices/views) from showing the prior run.
+ */
+export function currentRunEvents(events: readonly FrameworkEvent[]): FrameworkEvent[] {
+  let start = 0
+  for (let i = events.length - 1; i >= 0; i--) {
+    if (events[i]?.kind === 'session') {
+      start = i
+      break
+    }
+  }
+  return events.slice(start)
+}

@@ -6,6 +6,9 @@ DATE: yyyy-mm-dd
 SLUG: succinct kebab-case slug of the ticket title
 Body:
 ```md
+priority: low/medium/high/urgent [optional]
+topics: [list-of-topics] [optional]
+
 # Ticket title
 
 ## TLDR
@@ -16,7 +19,7 @@ Body:
 
 ...
 
-[Optional: more info (any heading and format you want)]
+[optional: more info (any heading and format you want)]
 ```
 
 ## tickets/<DATE>_<SLUG>.spike.md
@@ -35,7 +38,7 @@ Body:
 
 ...
 
-[Optional: more info (any heading and format you want)]
+[optional: more info (any heading and format you want)]
 ```
 
 Typical spike content:

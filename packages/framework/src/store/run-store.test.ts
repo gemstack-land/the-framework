@@ -1,6 +1,7 @@
 import { strict as assert } from 'node:assert'
 import { test } from 'node:test'
 import { join } from 'node:path'
+import { hostname } from 'node:os'
 import {
   RunStore,
   applyEventToMeta,
@@ -73,6 +74,19 @@ test('fresh open truncates the log and writes an initial meta snapshot', async (
   assert.equal(meta?.version, RUN_META_VERSION)
   assert.equal(meta?.status, 'running')
   assert.equal(meta?.startedAt, AT)
+})
+
+test('fresh open seeds the run intent into the snapshot (so prompt runs are not "(no prompt)")', async () => {
+  const fs = memFs()
+  const store = await RunStore.open(CWD, { fs, fresh: true, now: AT, intent: 'what is your name' })
+  assert.equal((await store.readMeta())?.intent, 'what is your name')
+})
+
+test('a scope event still refines a seeded intent (build path)', async () => {
+  const fs = memFs()
+  const store = await RunStore.open(CWD, { fs, fresh: true, now: AT, intent: 'build a blog' })
+  await store.append({ kind: 'bootstrap', event: { type: 'scope', scope: 'full', intent: 'a blog with comments' } })
+  assert.equal(store.snapshot().intent, 'a blog with comments')
 })
 
 test('append writes one JSONL line per event and derives meta', async () => {
@@ -278,4 +292,47 @@ test('reconcileOrphanedRuns is a no-op on a clean or empty workspace (#642)', as
   assert.equal(await reconcileOrphanedRuns(CWD, memFs()), 0)
   const done = memFs({ [META]: JSON.stringify({ version: RUN_META_VERSION, status: 'done', id: 'd', startedAt: AT, updatedAt: AT, passes: 0 }) })
   assert.equal(await reconcileOrphanedRuns(CWD, done), 0)
+})
+
+// #716: a run whose process dies without writing `end`. The owning pid+host are persisted so a
+// reader can flip it to `stopped` (and archive it) without waiting for a daemon-restart reconcile.
+const HERE = hostname()
+const ownedMeta = (id: string, pid: number, host: string): string =>
+  JSON.stringify({ version: RUN_META_VERSION, status: 'running', id, startedAt: AT, updatedAt: AT, passes: 0, pid, host })
+
+test('a fresh open records the owning pid + host so a dead run can be detected (#716)', async () => {
+  const fs = memFs()
+  await RunStore.open(CWD, { fs, fresh: true, now: AT, owner: { pid: 4242, host: 'box-a' } })
+  const meta = JSON.parse(fs.files.get(META)!) as RunMeta
+  assert.equal(meta.pid, 4242)
+  assert.equal(meta.host, 'box-a')
+})
+
+test('readLiveMeta self-heals a running run whose owning process is gone: stopped + archived (#716)', async () => {
+  const fs = memFs({ [META]: ownedMeta('2026-dead', 999999, HERE) })
+  const live = await readLiveMeta(CWD, fs, () => false) // pid probe says the owner is gone
+  assert.equal(live!.status, 'stopped')
+  // The on-disk run.json is flipped, and the run is archived (as stopped) so it stays in history.
+  assert.equal((JSON.parse(fs.files.get(META)!) as RunMeta).status, 'stopped')
+  const runs = await listRuns(CWD, fs)
+  assert.deepEqual(runs.map(r => [r.id, r.status]), [['2026-dead', 'stopped']])
+})
+
+test('readLiveMeta leaves a running run alone while its owning process is alive (#716)', async () => {
+  const fs = memFs({ [META]: ownedMeta('2026-live', process.pid, HERE) })
+  const live = await readLiveMeta(CWD, fs, () => true)
+  assert.equal(live!.status, 'running')
+  assert.equal((JSON.parse(fs.files.get(META)!) as RunMeta).status, 'running')
+})
+
+test('readLiveMeta leaves a pre-pid run untouched — the boot reconcile still catches it (#716)', async () => {
+  const fs = memFs({ [META]: runningMeta('2026-old') }) // no pid recorded
+  const live = await readLiveMeta(CWD, fs, () => false)
+  assert.equal(live!.status, 'running')
+})
+
+test('readLiveMeta does not trust a pid from a different host (#716)', async () => {
+  const fs = memFs({ [META]: ownedMeta('2026-remote', 4242, 'other-box') })
+  const live = await readLiveMeta(CWD, fs, () => false)
+  assert.equal(live!.status, 'running') // a dead-looking pid on another host is unknowable here
 })

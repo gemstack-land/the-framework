@@ -50,6 +50,14 @@ export interface DriverStartOptions {
   /** Abort the whole session; disposing kills the underlying process. */
   signal?: AbortSignal
   /**
+   * Resume a prior agent session id (#720): seed the session so its very first
+   * prompt (with `resume`) continues that conversation instead of starting fresh.
+   * This is how a finished run is revived from the dashboard — its captured session
+   * id is threaded here so the opening message lands with the full prior context.
+   * A driver that can't resume ignores it and runs fresh (the best-effort contract).
+   */
+  resumeSessionId?: string
+  /**
    * Observe the agent's *own* progress as it works. Black-box granularity: we
    * forward these for visibility (the dashboard) but never branch control flow
    * on them. Isolated: a throwing callback must not break the run.
@@ -84,6 +92,14 @@ export interface DriverPromptOptions {
   system?: string
   /** Abort just this prompt (the in-flight invocation). */
   signal?: AbortSignal
+  /**
+   * Continue the agent's *previous* turn instead of starting fresh (#714): the
+   * live-chat path resumes the same session so the message lands in the ongoing
+   * conversation with full context. Best-effort — a driver that can't resume
+   * (or has no prior turn yet) runs a fresh invocation, the normal case. Honored
+   * by the Claude Code driver via `--resume <sessionId>`.
+   */
+  resume?: boolean
 }
 
 /** The outcome of one {@link DriverSession.prompt} turn. */

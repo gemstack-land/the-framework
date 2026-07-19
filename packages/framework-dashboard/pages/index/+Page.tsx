@@ -1,8 +1,10 @@
-import { useState } from 'react'
-import type { Intervention, Activity } from '@gemstack/framework'
+import { useEffect, useState } from 'react'
+import type { Intervention, Activity, ProjectSummary } from '@gemstack/framework'
 import { onProjectFiles, onInterventions, onActivity } from '../../server/reads.telefunc.js'
+import { onProjects } from '../../server/projects.telefunc.js'
 import { ProjectsSidebar } from '../../components/ProjectsSidebar.js'
 import { NotificationsMenu } from '../../components/NotificationsMenu.js'
+import { NavbarQuickLaunch } from '../../components/NavbarQuickLaunch.js'
 import { RunHistory } from '../../components/RunHistory.js'
 import { ProjectHome } from '../../components/ProjectHome.js'
 import { DashboardPage } from '../../components/DashboardPage.js'
@@ -18,11 +20,15 @@ import { usePersistentState } from '../../lib/use-persistent-state.js'
 import { useContextSet } from '../../lib/use-context-set.js'
 import { useInterventionNotifications } from '../../lib/use-intervention-notifications.js'
 import { useActivityNotifications } from '../../lib/use-activity-notifications.js'
-import { usePreferences, notificationsEnabled, newActivityEnabled } from '../../lib/preferences.js'
+import { usePreferences, notificationsEnabled, newActivityEnabled, humanInterventionEnabled } from '../../lib/preferences.js'
 import { pendingChoices, agentViews } from '../../lib/live-state.js'
+import { useDocumentTitle } from '../../lib/document-title.js'
 
 /** Stable, so `files` keeps one identity while no project is selected. */
 const EMPTY_FILES: string[] = []
+
+/** Stable initial for the projects load, so it does not churn on every render. */
+const EMPTY_PROJECTS: ProjectSummary[] = []
 
 /** Stable initial for the interventions poll, so it does not churn on every render. */
 const EMPTY_INTERVENTIONS: Intervention[] = []
@@ -48,6 +54,10 @@ export default function Page() {
   // A just-started run: bump the tick so the Runs rail shows an optimistic "starting…" row
   // with the typed prompt at once, before the spawned process writes its run.json.
   const [runStart, setRunStart] = useState<{ tick: number; intent: string }>({ tick: 0, intent: '' })
+  // Just pressed Start: jump straight to the run's live output. sendStart returns no id (the
+  // run is a detached process that writes its run.json a beat later), so follow the shared live
+  // feed until the poll surfaces the real run row, which the effect below adopts as the selection.
+  const [followLive, setFollowLive] = useState(false)
 
   const { runs, reload } = useRuns(projectId)
 
@@ -65,10 +75,19 @@ export default function Page() {
   // each poll spawns `gh` per project.
   const { value: interventions } = usePolled<Intervention[]>(onInterventions, EMPTY_INTERVENTIONS, 15000, [])
 
+  // The registered projects, loaded once for the browser-tab title (#695/U3): the selected
+  // project's name plus the needs-you count drive `document.title` so a backgrounded tab tells
+  // you which project needs attention. The sidebar keeps its own poll; this is a cheap one-shot.
+  const projects = useLoaded<ProjectSummary[]>(onProjects, EMPTY_PROJECTS, [])
+  const projectName = projectId ? projects.find(p => p.id === projectId)?.name : null
+  useDocumentTitle(interventions.length, projectName)
+
   // Fire a browser notification when a new item lands on the "needs you" queue (#627). Rides the
-  // one interventions poll above; the browser permission is the real gate (see the header bell).
+  // one interventions poll above (the poll stays unconditional — it also feeds the sidebar badge
+  // and Overview card); only the notification is gated, on both the category (`notifyHumanIntervention`,
+  // default on) and the browser method (`notifyBrowser`).
   const preferences = usePreferences()
-  useInterventionNotifications(interventions, notificationsEnabled(preferences))
+  useInterventionNotifications(interventions, humanInterventionEnabled(preferences) && notificationsEnabled(preferences))
 
   // The "New activity" category (#627): the default-off feed of runs starting/finishing. Its only
   // client consumer is the browser notification below, so it is polled exactly when that will fire —
@@ -79,15 +98,40 @@ export default function Page() {
   useActivityNotifications(activity, browserActivity)
 
   const onRunStarted = (intent: string) => {
-    // Stay on the home launcher (it must stay visible so you can launch again); the new run
-    // just appends to the rail. Reload so its real row replaces the optimistic one quickly.
+    // Jump to the new run's live output. Reset to the home/Live row first (a no-op from the launcher,
+    // where it already is) so a navbar quick-launch (#723) or resuming a finished run (#720) jumps to
+    // live even from a finished run's replay; `followLive` streams the shared feed until the poll
+    // adopts the new run's real id below. The new run just appends to the rail; reload so its real
+    // row shows up quickly.
+    setRunId(null)
     setRunStart(prev => ({ tick: prev.tick + 1, intent }))
+    setFollowLive(true)
     reload()
+  }
+
+  // Adopt the started run's real id as the selection the moment the poll surfaces it as running,
+  // so the view follows its normal running -> done -> replay lifecycle and the rail highlights the
+  // run's own row. Until then `followLive` shows the shared live output.
+  useEffect(() => {
+    if (!followLive) return
+    const running = runs.find(run => run.status === 'running')
+    if (running) {
+      setRunId(running.id)
+      setFollowLive(false)
+    }
+  }, [followLive, runs])
+
+  // Selecting a run (or the Live/Home row) from the rail is always an explicit choice, so it
+  // ends the just-started follow.
+  const selectRun = (id: string | null) => {
+    setFollowLive(false)
+    setRunId(id)
   }
 
   const selectProject = (id: string) => {
     setProjectId(id) // persisted, so a refresh returns here
     setRunId(null) // switching projects always returns to the home launcher
+    setFollowLive(false)
     resetContext() // the picked context is the old project's — start fresh
   }
 
@@ -96,11 +140,12 @@ export default function Page() {
   const showDashboard = () => {
     setProjectId(null)
     setRunId(null)
+    setFollowLive(false)
   }
 
   // The live run feed is owned here so both the main view and the right rail's choice gates
   // (#440) read one shared Telefunc Channel. Hooks run before the relay early return below.
-  const events = useLiveEvents(projectId)
+  const events = useLiveEvents(projectId, runStart.tick)
   const choices = projectId ? pendingChoices(events) : []
   const views = projectId ? agentViews(events) : []
 
@@ -117,7 +162,9 @@ export default function Page() {
   const selectedRun = runId ? runs.find(run => run.id === runId) : undefined
   const renderMain = () => {
     if (!projectId) return <DashboardPage onSelectProject={selectProject} interventions={interventions} />
-    if (runId === null)
+    if (runId === null) {
+      // Just pressed Start: follow the run's live output until the poll adopts its real id above.
+      if (followLive) return <RunLive projectId={projectId} events={events} files={files} addContext={addContext} />
       return (
         <ProjectHome
           projectId={projectId}
@@ -129,20 +176,34 @@ export default function Page() {
           toggleContext={toggleContext}
         />
       )
-    if (selectedRun?.status === 'running') return <RunLive projectId={projectId} events={events} />
-    return <RunReplay projectId={projectId} runId={runId} />
+    }
+    if (selectedRun?.status === 'running') return <RunLive projectId={projectId} events={events} files={files} addContext={addContext} />
+    return <RunReplay projectId={projectId} runId={runId} files={files} addContext={addContext} onRunStarted={onRunStarted} />
   }
 
   return (
     <div className="flex h-screen flex-col">
       <header className="flex items-center gap-3 border-b border-border px-4 py-3">
-        <span className="font-semibold">The Framework</span>
-        <Badge className="text-muted-foreground">dashboard</Badge>
-        <div className="ml-auto flex items-center gap-1">
+        <span className="shrink-0 font-semibold">The Framework</span>
+        <Badge className="shrink-0 text-muted-foreground">dashboard</Badge>
+        {/* Global quick-launch (#723): start a run in the selected project from anywhere. */}
+        <NavbarQuickLaunch
+          className="mx-2 min-w-0 flex-1"
+          projectId={projectId}
+          projectName={projectName}
+          projects={projects}
+          files={files}
+          context={context}
+          addContext={addContext}
+          onRunStarted={onRunStarted}
+        />
+        <div className="flex shrink-0 items-center gap-1">
           <NotificationsMenu />
         </div>
       </header>
-      <div className="flex min-h-0 flex-1">
+      {/* The workspace row is fixed-height: each column scrolls internally, so the row itself
+          must never scroll. overflow-hidden clips any stray horizontal bleed (no page X-scroll). */}
+      <div className="flex min-h-0 flex-1 overflow-hidden">
         <ProjectsSidebar
           selectedId={projectId}
           onSelect={selectProject}
@@ -153,9 +214,10 @@ export default function Page() {
           projectId={projectId}
           runs={runs}
           selectedRunId={runId}
-          onSelect={setRunId}
+          onSelect={selectRun}
           startTick={runStart.tick}
           startIntent={runStart.intent}
+          followLive={followLive}
         />
         <main className="flex min-w-0 flex-1 flex-col">{renderMain()}</main>
         <RightRail

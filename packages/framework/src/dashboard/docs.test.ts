@@ -35,14 +35,13 @@ test('readDocs surfaces session-scoped PLAN_/TODO_ .agent.md files (#323/#326)',
   }
 })
 
-test('readDocs surfaces the flat backlog from tickets/TODO.md, after PLAN (#629)', async () => {
+test('readDocs surfaces the flat backlog from the root TODO_AGENTS.md, after PLAN (#682)', async () => {
   const cwd = await mkdtemp(join(tmpdir(), 'framework-docs-'))
   try {
-    await mkdir(join(cwd, 'tickets'))
-    await writeFile(join(cwd, 'tickets/TODO.md'), '- [ ] roadmap\n')
+    await writeFile(join(cwd, 'TODO_AGENTS.md'), '- [ ] roadmap\n')
     await writeFile(join(cwd, 'PLAN.md'), '# Plan\n')
     const docs = await readDocs(cwd)
-    assert.deepEqual(docs.map(d => d.name), ['PLAN.md', 'tickets/TODO.md'])
+    assert.deepEqual(docs.map(d => d.name), ['PLAN.md', 'TODO_AGENTS.md'])
     assert.equal(docs[1]!.content, '- [ ] roadmap\n')
   } finally {
     await rm(cwd, { recursive: true, force: true })
@@ -64,9 +63,8 @@ test('readDocs skips missing and blank docs, and never throws', async () => {
 
 test('DOC_CATEGORIES match fixed roots + slug-only scoped names (no traversal)', () => {
   for (const cat of DOC_CATEGORIES) {
+    // Flat roots are bare filenames (the backlog defers to findFlatTodo, #682), never paths.
     assert.doesNotMatch(cat.flat, /[\\/]|\.\./)
-    // The optional `dir` (e.g. tickets/) is a fixed slug, not user input, so no traversal.
-    if ('dir' in cat) assert.match(cat.dir, /^[a-z0-9-]+$/)
     // The scoped pattern only admits a-z0-9- slugs, so no path separators slip in.
     assert.ok(!cat.scoped.test('PLAN_../evil.agent.md'))
     assert.ok(!cat.scoped.test('PLAN_a/b.agent.md'))

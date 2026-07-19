@@ -23,6 +23,7 @@ export function ChoicePanel({
   active?: boolean
 }) {
   const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const [checked, setChecked] = useState<Set<string>>(
     () => new Set(choice.multi ? choice.options.filter(o => o.default).map(o => o.id) : []),
   )
@@ -32,7 +33,11 @@ export function ChoicePanel({
 
   const post = (pick: string | string[], by: 'user' | 'autopilot' = 'user') => {
     setBusy(true)
-    void sendChoice(projectId, choice.id, pick, by).catch(() => setBusy(false))
+    setError(null)
+    void sendChoice(projectId, choice.id, pick, by).catch(() => {
+      setBusy(false)
+      setError('Could not send your choice — try again.')
+    })
   }
 
   const toggle = (id: string) =>
@@ -155,6 +160,8 @@ export function ChoicePanel({
           ))}
         </div>
       )}
+
+      {error && <p className="mt-2 text-xs text-red-500">{error}</p>}
 
       <div className="mt-3 flex items-center gap-3 text-xs text-muted-foreground">
         <label className="flex cursor-pointer items-center gap-1.5">

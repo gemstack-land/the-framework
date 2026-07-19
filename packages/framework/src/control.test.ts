@@ -86,3 +86,23 @@ test('watchControl skips malformed and unknown lines', async () => {
     await rm(cwd, { recursive: true, force: true })
   }
 })
+
+test('watchControl delivers live-chat messages and drops empty ones (#714)', async () => {
+  const cwd = await tmpWorkspace()
+  const seen: ControlEntry[] = []
+  const watcher = watchControl(cwd, e => seen.push(e), 20)
+  try {
+    await resetControl(cwd)
+    await appendFile(
+      controlPath(cwd),
+      JSON.stringify({ kind: 'message', text: 'also add dark mode' }) + '\n' +
+        JSON.stringify({ kind: 'message', text: '' }) + '\n' + // empty -> dropped
+        JSON.stringify({ kind: 'message' }) + '\n', // missing text -> dropped
+    )
+    assert.ok(await until(() => seen.length === 1), `saw ${seen.length}`)
+    assert.deepEqual(seen, [{ kind: 'message', text: 'also add dark mode' }])
+  } finally {
+    watcher.close()
+    await rm(cwd, { recursive: true, force: true })
+  }
+})

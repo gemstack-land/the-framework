@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from 'react'
 import { Bell, BellOff } from 'lucide-react'
-import { usePreferences, updatePreferences, notificationsEnabled, discordEnabled, newActivityEnabled } from '../lib/preferences.js'
+import { usePreferences, updatePreferences, notificationsEnabled, discordEnabled, newActivityEnabled, humanInterventionEnabled } from '../lib/preferences.js'
 import { cn } from '../lib/utils.js'
 import {
   DropdownMenu,
@@ -50,6 +50,7 @@ export function NotificationsMenu() {
   const browser = notificationsEnabled(preferences)
   const discord = discordEnabled(preferences)
   const activity = newActivityEnabled(preferences)
+  const needsYou = humanInterventionEnabled(preferences)
   const permission = usePermission()
   const browserSupported = permission !== 'unsupported'
   const blocked = permission === 'denied'
@@ -112,15 +113,16 @@ export function NotificationsMenu() {
         <DropdownMenuSeparator />
         <DropdownMenuGroup>
           <DropdownMenuLabel>Notify me about</DropdownMenuLabel>
-          {/* "Needs you" is always on — a run awaiting an answer or a PR ready to review. Shown as
-              a static row so the baseline is visible, not a toggle. */}
-          <div className="flex items-start justify-between gap-2 px-2 py-1.5 pl-8 text-sm">
-            <span className="flex flex-col gap-0.5">
-              <span className="leading-tight">Needs you</span>
-              <span className="text-xs text-[var(--color-muted-foreground)]">A run awaiting you, or a PR to review</span>
-            </span>
-            <span className="shrink-0 text-xs text-[var(--color-muted-foreground)]">Always on</span>
-          </div>
+          {/* "Needs you" (#627): a run awaiting an answer or a PR ready to review. Defaults on — the
+              baseline category — but now a real toggle, so it can be turned off like any other. */}
+          <DropdownMenuCheckboxItem
+            checked={needsYou}
+            onCheckedChange={next => updatePreferences({ notifyHumanIntervention: next })}
+            title="A run awaiting your answer, or a PR ready to review"
+            className="items-start"
+          >
+            <NotifLabel label="Needs you" hint="A run awaiting you, or a PR to review" />
+          </DropdownMenuCheckboxItem>
           <DropdownMenuCheckboxItem
             checked={activity}
             onCheckedChange={next => updatePreferences({ notifyNewActivity: next })}

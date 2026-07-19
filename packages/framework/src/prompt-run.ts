@@ -6,6 +6,7 @@ import { createRunControls, emitSessionStart, endStopDetail } from './run-teleme
 import { createTurnSignalEmitter } from './turn-gate.js'
 import { type ConsumptionWindow } from './consumption.js'
 import { leaveResumeNote } from './todo-loop.js'
+import type { RunMessages } from './run-messages.js'
 
 /**
  * The direct prompt path (#331): run *one prompt* through the driver and honor
@@ -58,6 +59,20 @@ export interface RunPromptOptions {
   consumptionGate?: () => ConsumptionWindow | null
   /** Session link template for the dashboard, `{sessionId}` resolved when known. */
   sessionLink?: string
+  /**
+   * Live chat (#714): stay open after the prompt settles and take the user's own
+   * messages, each resuming the same session. Unset for a headless run, which ends
+   * when the agent stops asking — exactly as before.
+   */
+  messages?: RunMessages
+  /**
+   * Resume a finished run's conversation (#720): the captured agent session id to
+   * continue. When set, the prompt is sent as a plain continuation message that
+   * `--resume`s that session (full prior context), and the built-in system framing
+   * is skipped (the resumed transcript already carries it). This is what the
+   * dashboard sends when you message a run that has already ended.
+   */
+  resumeSessionId?: string
 }
 
 /** What {@link runPrompt} resolves with. */
@@ -93,7 +108,10 @@ export async function runPrompt(opts: RunPromptOptions): Promise<RunPromptResult
   // The template's `# User prompt` half carries the prompt (today it renders to
   // exactly `opts.prompt`; any framing Rom adds around the slot rides along). With
   // the built-in prompt off (or transparent, #625), the raw prompt is sent as-is.
-  const firstPrompt = opts.transparent || opts.antiLazyPill === false ? opts.prompt : renderSystemPrompt(tf).user
+  // Resuming a finished run (#720) also sends it raw: the `--resume`d transcript already
+  // carries the framing, so re-wrapping it would only duplicate the system template.
+  const resuming = typeof opts.resumeSessionId === 'string' && opts.resumeSessionId.length > 0
+  const firstPrompt = resuming || opts.transparent || opts.antiLazyPill === false ? opts.prompt : renderSystemPrompt(tf).user
 
   emitSessionStart({ emit, driver: opts.driver, cwd: opts.cwd, sessionLink: opts.sessionLink })
   // Surface the exact system prompt the agent runs under (#343). The user prompts
@@ -116,6 +134,7 @@ export async function runPrompt(opts: RunPromptOptions): Promise<RunPromptResult
     cwd: opts.cwd,
     system,
     ...(opts.model ? { model: opts.model } : {}),
+    ...(resuming ? { resumeSessionId: opts.resumeSessionId } : {}),
     signal: runSignal,
     onEvent: onDriverEvent,
   })
@@ -133,6 +152,8 @@ export async function runPrompt(opts: RunPromptOptions): Promise<RunPromptResult
       requestChoice: opts.requestChoice,
       emit,
       signal: runSignal,
+      ...(resuming ? { resume: true } : {}),
+      ...(opts.messages ? { messages: opts.messages } : {}),
     })
     // The agent kept asking past the limit: finish with the latest turn rather than loop.
     if (rounds.exhausted) emit({ kind: 'log', message: 'Finishing the run (await limit reached).' })

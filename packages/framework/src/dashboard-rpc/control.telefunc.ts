@@ -37,6 +37,19 @@ export async function sendChoice(
 }
 
 /**
+ * Send a live-chat message to the project's running run (#714): append a `message` entry
+ * that the run drains between turns, continuing the same session via `--resume`. Empty
+ * messages are dropped. A no-op when the project has no local path (the read-only relay),
+ * so the run channel is only ever written by a host that owns the workspace.
+ */
+export async function sendMessage(projectId: string, text: string): Promise<void> {
+  const message = text.trim()
+  if (!message) return
+  const cwd = await resolveProjectPath(projectId)
+  if (cwd) await appendControl(cwd, { kind: 'message', text: message })
+}
+
+/**
  * Start a run in the project (#405, #345): the one write that needs the daemon, since
  * spawning goes through the daemon's own `startRun` closure (with its one-run-per-
  * project busy guard). The daemon provides `startRun` on the Telefunc request context,
