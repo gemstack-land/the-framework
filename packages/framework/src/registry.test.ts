@@ -7,12 +7,15 @@ import {
   listProjects,
   projectId,
   readPreferences,
+  readProjectPreferences,
   readRegistry,
   resolveConsumptionLimits,
+  resolvePreferences,
   registryPreferencesStore,
   registryPath,
   removeProject,
   writePreferences,
+  writeProjectPreferences,
   REGISTRY_FILE,
   type ProjectRecord,
   type RegistryFs,
@@ -149,6 +152,7 @@ test('readRegistry reads a legacy bare-array file as { projects, preferences: {}
   assert.deepEqual(await readRegistry(memFs({ [FILE]: raw }), ENV), {
     projects: [APP_A, APP_B],
     preferences: {},
+    projectPreferences: {},
   })
 })
 
@@ -160,7 +164,91 @@ test('readRegistry reads the object form with preferences and drops unknown/non-
   assert.deepEqual(await readRegistry(memFs({ [FILE]: raw }), ENV), {
     projects: [APP_A],
     preferences: { autopilot: false, eco: true, onBeforeMergeableQuality: true, browser: true }, // ecoPlanning (non-boolean) + bogus dropped
+    projectPreferences: {},
   })
+})
+
+// Per-project run options (#840): a project overrides only what it sets, the rest falls through.
+
+test('resolvePreferences lets a project override only the keys it stores', async () => {
+  const global = { autopilot: true, technical: false, model: 'sonnet', theme: 'dark' as const }
+  assert.deepEqual(resolvePreferences(global, { technical: true, model: 'opus' }), {
+    autopilot: true, // untouched by the project
+    technical: true, // overridden
+    model: 'opus', // overridden
+    theme: 'dark', // global-only key, never project-scoped
+  })
+  // A project that stores nothing behaves exactly as the global object does today.
+  assert.deepEqual(resolvePreferences(global, {}), global)
+  assert.deepEqual(resolvePreferences(global, undefined), global)
+})
+
+test('a project can override a global option to false, not just switch it on', async () => {
+  // The point of #800: the old OR merge could only ever add. Storing `false` has to win.
+  assert.equal(resolvePreferences({ autopilot: true }, { autopilot: false }).autopilot, false)
+})
+
+test('writeProjectPreferences stores one project without touching the globals or its siblings', async () => {
+  const fs = memFs({ [FILE]: JSON.stringify({ projects: [APP_A, APP_B], preferences: { autopilot: false } }) })
+  await writeProjectPreferences(APP_A.id, { technical: true, model: 'opus' }, fs, ENV)
+  await writeProjectPreferences(APP_B.id, { eco: true }, fs, ENV)
+
+  assert.deepEqual(JSON.parse(fs.files.get(FILE)!), {
+    projects: [APP_A, APP_B],
+    preferences: { autopilot: false },
+    projectPreferences: {
+      [APP_A.id]: { technical: true, model: 'opus' },
+      [APP_B.id]: { eco: true },
+    },
+  })
+  assert.deepEqual(await readProjectPreferences(APP_A.id, fs, ENV), { technical: true, model: 'opus' })
+  assert.deepEqual(await readPreferences(fs, ENV), { autopilot: false })
+})
+
+test('a project storing nothing drops its entry rather than leaving an empty object', async () => {
+  const fs = memFs()
+  await writeProjectPreferences(APP_A.id, { technical: true }, fs, ENV)
+  await writeProjectPreferences(APP_A.id, {}, fs, ENV)
+  // "Overrides nothing" has one representation, and the block disappears with the last entry.
+  assert.deepEqual(JSON.parse(fs.files.get(FILE)!), { projects: [], preferences: {} })
+  assert.deepEqual(await readProjectPreferences(APP_A.id, fs, ENV), {})
+})
+
+test('a project cannot store a global-only key', async () => {
+  const fs = memFs()
+  // theme/editor/consumptionLimits are about the user, not the repo (#800), so they never
+  // reach the per-project block even when handed straight to the writer.
+  await writeProjectPreferences(APP_A.id, { technical: true, theme: 'dark', consumptionLimits: {} } as never, fs, ENV)
+  assert.deepEqual(await readProjectPreferences(APP_A.id, fs, ENV), { technical: true })
+})
+
+test('a hand-edited projectPreferences block is read forgivingly', async () => {
+  const raw = JSON.stringify({
+    projects: [APP_A],
+    preferences: {},
+    projectPreferences: { [APP_A.id]: { technical: true, bogus: 1 }, 'gone-1a2b': 'nonsense', '': { eco: true } },
+  })
+  const registry = await readRegistry(memFs({ [FILE]: raw }), ENV)
+  assert.deepEqual(registry.projectPreferences, { [APP_A.id]: { technical: true } })
+})
+
+test('removing a project takes its overrides with it', async () => {
+  const fs = memFs({ [FILE]: JSON.stringify({ projects: [APP_A, APP_B], preferences: {} }) })
+  await writeProjectPreferences(APP_A.id, { technical: true }, fs, ENV)
+  await writeProjectPreferences(APP_B.id, { eco: true }, fs, ENV)
+  assert.equal(await removeProject(APP_A.id, fs, ENV), true)
+
+  // Re-adding the same path starts clean rather than inheriting the old project's settings.
+  assert.deepEqual(await readProjectPreferences(APP_A.id, fs, ENV), {})
+  assert.deepEqual(await readProjectPreferences(APP_B.id, fs, ENV), { eco: true })
+})
+
+test('writePreferences leaves the per-project block alone', async () => {
+  const fs = memFs()
+  await writeProjectPreferences(APP_A.id, { technical: true }, fs, ENV)
+  await writePreferences({ autopilot: false }, fs, ENV)
+  assert.deepEqual(await readProjectPreferences(APP_A.id, fs, ENV), { technical: true })
+  assert.deepEqual(await readPreferences(fs, ENV), { autopilot: false })
 })
 
 test('readPreferences on a missing / legacy file is {}', async () => {

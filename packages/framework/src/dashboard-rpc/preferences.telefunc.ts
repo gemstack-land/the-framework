@@ -1,6 +1,6 @@
 import { contextPreferences } from './context.js'
 import { detectEditors, type EditorInfo } from '../dashboard/open-in-app.js'
-import type { Preferences } from '../registry.js'
+import type { Preferences, ProjectPreferences } from '../registry.js'
 
 // The user-preferences surface behind the new dashboard (#410): the Global options (Autopilot,
 // Technical, Vanilla, Eco + its section drops) the Start form and choice gate share. Persisted
@@ -27,6 +27,32 @@ export async function savePreferences(preferences: Preferences): Promise<SavePre
   // so the client handles it the same as the not-enabled case (both `{ ok: false }`).
   try {
     await store.save(preferences)
+    return { ok: true }
+  } catch {
+    return { ok: false, error: 'failed to save preferences' }
+  }
+}
+
+/**
+ * One project's own run options (#840), or `{}` when it overrides nothing / the host stores
+ * none. Separate from {@link onPreferences} rather than folded into it: the client needs the
+ * two tiers apart to know which one a toggle should write to.
+ */
+export async function onProjectPreferences(projectId: string): Promise<ProjectPreferences> {
+  const store = contextPreferences()
+  if (!store?.readProject) return {}
+  return store.readProject(projectId).catch(() => ({}))
+}
+
+/** Persist one project's run options (#840), sanitized in the store. No-op-safe on a public host. */
+export async function saveProjectPreferences(
+  projectId: string,
+  preferences: ProjectPreferences,
+): Promise<SavePreferencesResult> {
+  const store = contextPreferences()
+  if (!store?.saveProject) return { ok: false, error: 'preferences are not enabled on this server' }
+  try {
+    await store.saveProject(projectId, preferences)
     return { ok: true }
   } catch {
     return { ok: false, error: 'failed to save preferences' }

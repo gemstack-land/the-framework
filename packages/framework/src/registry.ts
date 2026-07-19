@@ -116,6 +116,33 @@ export interface Preferences {
 }
 
 /**
+ * The run options a project may override (#840). The rest of {@link Preferences} stays global
+ * on purpose: `theme`, `editor`, the notification toggles and `customPresets` are about the
+ * user, not the repo, and `consumptionLimits` is deliberately not a per-run choice (#800).
+ *
+ * These are the *user's* per-project choices, not the repo's: they live in the user's home
+ * file rather than the committed `the-framework.yml` because `model` and `agent` name what
+ * this machine runs, which is not something to impose on everyone who clones the repo.
+ */
+export const PROJECT_PREFERENCE_KEYS = [
+  'autopilot',
+  'technical',
+  'vanilla',
+  'eco',
+  'ecoPlanning',
+  'ecoResearch',
+  'ecoMaintenance',
+  'onBeforeMergeableQuality',
+  'browser',
+  'transparent',
+  'model',
+  'agent',
+] as const
+
+/** What one project overrides: a subset of {@link Preferences}, storing only the keys it sets. */
+export type ProjectPreferences = Pick<Preferences, (typeof PROJECT_PREFERENCE_KEYS)[number]>
+
+/**
  * The persisted registry file shape (#410): the project list plus the user preferences.
  * Older installs wrote a bare `ProjectRecord[]`; {@link readRegistry} still reads those and
  * the next write migrates the file to this object form.
@@ -123,6 +150,8 @@ export interface Preferences {
 export interface Registry {
   projects: ProjectRecord[]
   preferences: Preferences
+  /** Per-project overrides (#840), keyed by {@link ProjectRecord.id}. Absent keys fall through. */
+  projectPreferences: Record<string, ProjectPreferences>
 }
 
 /** A read/write handle for the user preferences, threaded through the dashboard's Telefunc
@@ -130,6 +159,9 @@ export interface Registry {
 export interface PreferencesStore {
   read(): Promise<Preferences>
   save(preferences: Preferences): Promise<void>
+  /** One project's overrides (#840). Optional so a host that only stores globals still compiles. */
+  readProject?(projectId: string): Promise<ProjectPreferences>
+  saveProject?(projectId: string, preferences: ProjectPreferences): Promise<void>
 }
 
 /** The registry file name: a single file under `$XDG_CONFIG_HOME` (dotted under `$HOME`). */
@@ -253,6 +285,40 @@ function sanitizePreferences(value: unknown): Preferences {
 }
 
 /**
+ * Keep only the keys a project may override (#840), each sanitized by the same rules as the
+ * global object, so a hand-edited registry cannot smuggle a global-only key onto a project.
+ */
+function sanitizeProjectPreferences(value: unknown): ProjectPreferences {
+  const sanitized = sanitizePreferences(value) as Record<string, unknown>
+  const preferences: Record<string, unknown> = {}
+  for (const key of PROJECT_PREFERENCE_KEYS) {
+    if (sanitized[key] !== undefined) preferences[key] = sanitized[key]
+  }
+  return preferences as ProjectPreferences
+}
+
+/** The whole per-project block, dropping malformed entries and projects that override nothing. */
+function sanitizeProjectPreferenceMap(value: unknown): Record<string, ProjectPreferences> {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return {}
+  const map: Record<string, ProjectPreferences> = {}
+  for (const [id, stored] of Object.entries(value as Record<string, unknown>)) {
+    if (!id) continue
+    const preferences = sanitizeProjectPreferences(stored)
+    if (Object.keys(preferences).length) map[id] = preferences
+  }
+  return map
+}
+
+/**
+ * The preferences in force for a project (#840): the global object with the project's
+ * overrides on top, so a project that sets nothing behaves exactly as it does today.
+ * Only the keys the project actually stored win; the rest fall through.
+ */
+export function resolvePreferences(global: Preferences, project: ProjectPreferences | undefined): Preferences {
+  return { ...global, ...project }
+}
+
+/**
  * Keep only well-formed custom presets (#626): each needs a non-empty id, label, and prompt;
  * label/prompt are trimmed and length-capped, the list capped at {@link CUSTOM_PRESET_LIMITS.count},
  * and duplicate ids dropped. A malformed entry is skipped, not thrown — a bad registry never breaks the read.
@@ -299,25 +365,38 @@ export async function readRegistry(
   fs: RegistryFs = nodeRegistryFs(),
   env: NodeJS.ProcessEnv = process.env,
 ): Promise<Registry> {
+  const empty: Registry = { projects: [], preferences: {}, projectPreferences: {} }
   let parsed: unknown
   try {
     parsed = JSON.parse(await fs.read(registryPath(env)))
   } catch {
-    return { projects: [], preferences: {} }
+    return empty
   }
   // Legacy format: a bare array of project records. Migrated to the object form on next write.
-  if (Array.isArray(parsed)) return { projects: dedupeProjects(parsed), preferences: {} }
-  if (typeof parsed !== 'object' || parsed === null) return { projects: [], preferences: {} }
+  if (Array.isArray(parsed)) return { ...empty, projects: dedupeProjects(parsed) }
+  if (typeof parsed !== 'object' || parsed === null) return empty
   const obj = parsed as Record<string, unknown>
   const projects = Array.isArray(obj.projects) ? dedupeProjects(obj.projects) : []
-  return { projects, preferences: sanitizePreferences(obj.preferences) }
+  return {
+    projects,
+    preferences: sanitizePreferences(obj.preferences),
+    projectPreferences: sanitizeProjectPreferenceMap(obj.projectPreferences),
+  }
 }
 
-/** Write the registry back as pretty object-form JSON, creating the parent dir. */
+/**
+ * Write the registry back as pretty object-form JSON, creating the parent dir. The per-project
+ * block is omitted while empty, so a user who never sets a per-project option keeps the file
+ * they have today.
+ */
 async function writeRegistry(registry: Registry, fs: RegistryFs, env: NodeJS.ProcessEnv): Promise<void> {
   const file = registryPath(env)
+  const { projects, preferences, projectPreferences } = registry
+  const contents = Object.keys(projectPreferences).length
+    ? { projects, preferences, projectPreferences }
+    : { projects, preferences }
   await fs.mkdir(dirname(file))
-  await fs.write(file, JSON.stringify(registry, null, 2))
+  await fs.write(file, JSON.stringify(contents, null, 2))
 }
 
 /**
@@ -356,6 +435,7 @@ export async function addProject(
 /**
  * Drop the project whose id matches and write the list back (preferences preserved).
  * Returns whether a record was removed; an empty/missing registry is a no-write `false`.
+ * The project's own overrides (#840) go with it, so re-adding the path starts clean.
  */
 export async function removeProject(
   id: string,
@@ -365,7 +445,8 @@ export async function removeProject(
   const registry = await readRegistry(fs, env)
   const remaining = registry.projects.filter(project => project.id !== id)
   if (remaining.length === registry.projects.length) return false
-  await writeRegistry({ projects: remaining, preferences: registry.preferences }, fs, env)
+  const { [id]: _dropped, ...projectPreferences } = registry.projectPreferences
+  await writeRegistry({ projects: remaining, preferences: registry.preferences, projectPreferences }, fs, env)
   return true
 }
 
@@ -384,7 +465,34 @@ export async function writePreferences(
   env: NodeJS.ProcessEnv = process.env,
 ): Promise<void> {
   const registry = await readRegistry(fs, env)
-  await writeRegistry({ projects: registry.projects, preferences: sanitizePreferences(preferences) }, fs, env)
+  await writeRegistry({ ...registry, preferences: sanitizePreferences(preferences) }, fs, env)
+}
+
+/** One project's overrides (#840), or `{}` when it has none. */
+export async function readProjectPreferences(
+  projectId: string,
+  fs: RegistryFs = nodeRegistryFs(),
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<ProjectPreferences> {
+  return (await readRegistry(fs, env)).projectPreferences[projectId] ?? {}
+}
+
+/**
+ * Persist one project's overrides (#840), sanitized, leaving the globals and every other
+ * project untouched. Storing nothing drops the entry rather than leaving an empty object,
+ * so the file stays readable and "overrides nothing" has one representation.
+ */
+export async function writeProjectPreferences(
+  projectId: string,
+  preferences: ProjectPreferences,
+  fs: RegistryFs = nodeRegistryFs(),
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<void> {
+  const registry = await readRegistry(fs, env)
+  const sanitized = sanitizeProjectPreferences(preferences)
+  const { [projectId]: _previous, ...rest } = registry.projectPreferences
+  const projectPreferences = Object.keys(sanitized).length ? { ...rest, [projectId]: sanitized } : rest
+  await writeRegistry({ ...registry, projectPreferences }, fs, env)
 }
 
 /** A {@link PreferencesStore} bound to the real registry file, wired by the daemon so the
@@ -396,5 +504,7 @@ export function registryPreferencesStore(
   return {
     read: () => readPreferences(fs, env),
     save: preferences => writePreferences(preferences, fs, env),
+    readProject: projectId => readProjectPreferences(projectId, fs, env),
+    saveProject: (projectId, preferences) => writeProjectPreferences(projectId, preferences, fs, env),
   }
 }

@@ -6,7 +6,14 @@ export { onRuns, onRun, onDocs, onProjectLog, onQueue, onOverview, onInterventio
 export { sendStop, sendChoice, sendMessage, sendStart, sendPreview, onServeTargets, sendStopPreview, onPreviewStatus, sendOpenInApp, sendRemoveWorktree, sendPushBranch, sendOpenPullRequest } from './control.telefunc.js'
 export { onEvents } from './events.telefunc.js'
 export { onProjects, sendAddProject } from './projects.telefunc.js'
-export { onPreferences, savePreferences, onEditors, type SavePreferencesResult } from './preferences.telefunc.js'
+export {
+  onPreferences,
+  savePreferences,
+  onProjectPreferences,
+  saveProjectPreferences,
+  onEditors,
+  type SavePreferencesResult,
+} from './preferences.telefunc.js'
 export { type EditorInfo } from '../dashboard/open-in-app.js'
 export { onQuota } from './quota.telefunc.js'
 export { registerDashboardTelefunctions, DASHBOARD_TELEFUNC_KEYS } from './register.js'
