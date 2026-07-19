@@ -17,7 +17,7 @@ export { collectQueue, parseTodoItems, type ProjectQueue, type QueueItem } from 
 export { buildOverview, type Overview, type ActiveRun, type RecentProject, type OverviewDeps } from './overview.js'
 export { buildDashboard, type DashboardData, type ProjectStat, type ActivityDay, type DashboardDeps } from './dashboard.js'
 export { readGitStatus, type GitStatus, type LinkedPr } from './git-status.js'
-export { readFileDiff, safeRepoPath, type FileDiff } from './file-diff.js'
+export { readFileDiff, readFileChanges, safeRepoPath, type FileDiff, type FileChange } from './file-diff.js'
 export {
   readRunHandoff,
   runBranchFor,

@@ -33,6 +33,7 @@ export function RunReplay({
   // the button goes without waiting for a refetch.
   const retained = useLoaded<string[]>(() => onRetainedWorktrees(projectId), [], [projectId, runId])
   const [removed, setRemoved] = useState(false)
+  const hasWorktree = !removed && retained.includes(runId)
   const onWorktreeRemoved = useCallback(() => setRemoved(true), [])
 
   if (events === null) return <div className="grid flex-1 place-items-center text-sm text-muted-foreground">Loading session…</div>
@@ -45,7 +46,7 @@ export function RunReplay({
         projectId={projectId}
         runId={runId}
         events={events}
-        retainedWorktree={!removed && retained.includes(runId)}
+        retainedWorktree={hasWorktree}
         onWorktreeRemoved={onWorktreeRemoved}
       />
       {/* What this session produced and what to do with it (#799). Directly under the action bar,

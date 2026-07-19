@@ -10,9 +10,9 @@ import { cn } from '../lib/utils.js'
 export function DiffStat({ added, removed, className }: { added: number; removed: number; className?: string }) {
   return (
     <span className={cn('shrink-0 font-mono text-[10px] tabular-nums', className)}>
-      {added > 0 && <span className="text-green-400">+{added}</span>}
+      {added > 0 && <span className="text-green-600 dark:text-green-400">+{added}</span>}
       {added > 0 && removed > 0 && ' '}
-      {removed > 0 && <span className="text-red-400">−{removed}</span>}
+      {removed > 0 && <span className="text-red-600 dark:text-red-400">−{removed}</span>}
     </span>
   )
 }
@@ -20,8 +20,9 @@ export function DiffStat({ added, removed, className }: { added: number; removed
 function lineClass(line: string): string {
   if (line.startsWith('+++') || line.startsWith('---')) return 'text-muted-foreground'
   if (line.startsWith('@@')) return 'text-primary'
-  if (line.startsWith('+')) return 'bg-green-400/10 text-green-300'
-  if (line.startsWith('-')) return 'bg-red-400/10 text-red-300'
+  // Both themes: the 300s wash out on a light background, the 700s on a dark one.
+  if (line.startsWith('+')) return 'bg-green-400/10 text-green-700 dark:text-green-300'
+  if (line.startsWith('-')) return 'bg-red-400/10 text-red-700 dark:text-red-300'
   return 'text-muted-foreground'
 }
 

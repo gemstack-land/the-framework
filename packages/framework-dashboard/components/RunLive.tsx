@@ -2,6 +2,7 @@ import type { FrameworkEvent } from '@gemstack/framework'
 import { RunActionBar } from './RunActionBar.js'
 import { RunChat } from './RunChat.js'
 import { RunFeed } from './RunFeed.js'
+import { RunChanges } from './RunChanges.js'
 
 // One running run's own view (its output): the action bar (Serve · Stop · Open session), the run
 // overview + live event feed from the shared Telefunc Channel, and the chat composer to send it
@@ -27,6 +28,9 @@ export function RunLive({
   return (
     <>
       <RunActionBar projectId={projectId} runId={runId} events={events} />
+      {/* What it has changed so far (#817). Only once the run's id is known: without one the read
+          falls back to the project root and would report the user's own dirty files as the run's. */}
+      {runId && <RunChanges projectId={projectId} runId={runId} />}
       <RunFeed events={events} showSessionLink={false} />
       <RunChat projectId={projectId} runId={runId} files={files} addContext={addContext} />
     </>

@@ -3,7 +3,7 @@ import { test } from 'node:test'
 import { mkdtemp, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { readFileDiff, safeRepoPath } from './file-diff.js'
+import { readFileChanges, readFileDiff, safeRepoPath } from './file-diff.js'
 
 const PATCH = [
   'diff --git a/src/a.ts b/src/a.ts',
@@ -100,4 +100,55 @@ test('an unsafe path is refused before any read', async () => {
     throw new Error('git should not run for an unsafe path')
   }
   assert.equal(await readFileDiff('/repo', '../../etc/passwd', 'modified', git), null)
+})
+
+const NUMSTAT = ['3\t1\tsrc/a.ts', '0\t7\tsrc/gone.ts', '-\t-\tlogo.png'].join('\n')
+
+test('readFileChanges counts every changed file from one numstat, not a diff each', async () => {
+  let calls = 0
+  const git = async () => {
+    calls++
+    return NUMSTAT
+  }
+  const changes = await readFileChanges(
+    '/repo',
+    { 'src/a.ts': 'modified', 'src/gone.ts': 'deleted', 'logo.png': 'modified' },
+    git,
+  )
+  assert.equal(calls, 1)
+  assert.deepEqual(changes, [
+    { path: 'logo.png', status: 'modified', added: 0, removed: 0, binary: true },
+    { path: 'src/a.ts', status: 'modified', added: 3, removed: 1, binary: false },
+    { path: 'src/gone.ts', status: 'deleted', added: 0, removed: 7, binary: false },
+  ])
+})
+
+test('readFileChanges counts an untracked file, which no diff lists', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'file-changes-'))
+  await writeFile(join(dir, 'new.ts'), 'a\nb\nc\n')
+  const changes = await readFileChanges(dir, { 'new.ts': 'untracked' }, async () => '')
+  assert.deepEqual(changes, [{ path: 'new.ts', status: 'untracked', added: 3, removed: 0, binary: false }])
+})
+
+test('readFileChanges is sorted by path, so a live session does not reshuffle the list', async () => {
+  const git = async () => ['1\t0\tz.ts', '1\t0\ta.ts', '1\t0\tm.ts'].join('\n')
+  const changes = await readFileChanges('/repo', { 'z.ts': 'modified', 'a.ts': 'modified', 'm.ts': 'modified' }, git)
+  assert.deepEqual(
+    changes.map(c => c.path),
+    ['a.ts', 'm.ts', 'z.ts'],
+  )
+})
+
+test('readFileChanges drops an unsafe path rather than passing it to git', async () => {
+  const changes = await readFileChanges('/repo', { '../outside.ts': 'modified' }, async () => {
+    throw new Error('git should not run')
+  })
+  assert.deepEqual(changes, [])
+})
+
+test('readFileChanges on a clean checkout is empty and asks git nothing', async () => {
+  const changes = await readFileChanges('/repo', {}, async () => {
+    throw new Error('git should not run')
+  })
+  assert.deepEqual(changes, [])
 })

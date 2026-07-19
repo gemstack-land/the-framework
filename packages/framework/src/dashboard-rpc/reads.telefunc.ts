@@ -12,7 +12,7 @@ import { readRunHandoff, runBranchFor, type RunHandoff } from '../dashboard/run-
 import type { RunWorktree } from '../dashboard/types.js'
 import { crawlRepoFiles } from '../project.js'
 import { readFileStatuses, type FileGitStatus } from '../dashboard/file-status.js'
-import { readFileDiff, type FileDiff } from '../dashboard/file-diff.js'
+import { readFileDiff, readFileChanges, type FileDiff, type FileChange } from '../dashboard/file-diff.js'
 import { contextProjects, resolveProjectPath, resolveRunPath } from './context.js'
 import type { FrameworkEvent } from '../events.js'
 
@@ -199,6 +199,22 @@ export async function onFileDiff(projectId: string, path: string, runId?: string
   const status = statuses[path]
   if (!status) return null
   return readFileDiff(cwd, path, status).catch(() => null)
+}
+
+/**
+ * What the session changed (#817): every changed file in its worktree with line counts, newest
+ * state each poll. `[]` when nothing changed or there is no checkout.
+ *
+ * Derived from the worktree rather than from the agent's tool calls on purpose. The driver
+ * surfaces a tool's name and not its arguments (#165) — we verify by outcome, not by watching
+ * which tool the agent reached for — so reading git is both the honest source and the one that
+ * works for every agent, not just the ones whose stream carries an edit payload.
+ */
+export async function onRunChanges(projectId: string, runId?: string): Promise<FileChange[]> {
+  const cwd = await resolveRunPath(projectId, runId)
+  if (!cwd) return []
+  const statuses = await readFileStatuses(cwd).catch((): Record<string, FileGitStatus> => ({}))
+  return readFileChanges(cwd, statuses).catch(() => [])
 }
 
 /** The project's GitHub URL from its `origin` remote (#489), or null (no remote / not GitHub / relay). */
