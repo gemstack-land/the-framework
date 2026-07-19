@@ -3,6 +3,7 @@ import type { Intervention, Activity, ProjectSummary } from '@gemstack/framework
 import { onProjectFiles, onInterventions, onActivity } from '../../server/reads.telefunc.js'
 import { onProjects } from '../../server/projects.telefunc.js'
 import { ProjectsSidebar } from '../../components/ProjectsSidebar.js'
+import { Logo } from '../../components/Logo.js'
 import { ThemeToggle } from '../../components/ThemeToggle.js'
 import { NotificationsMenu } from '../../components/NotificationsMenu.js'
 import { NavbarQuickLaunch } from '../../components/NavbarQuickLaunch.js'
@@ -185,6 +186,7 @@ export default function Page() {
   return (
     <div className="flex h-screen flex-col">
       <header className="flex items-center gap-3 border-b border-border px-4 py-3">
+        <Logo className="h-5 w-auto shrink-0" />
         <span className="shrink-0 font-semibold">The Framework</span>
         {/* Global quick-launch (#723): start a run in the selected project from anywhere. */}
         <NavbarQuickLaunch

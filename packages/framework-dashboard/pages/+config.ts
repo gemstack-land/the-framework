@@ -13,4 +13,7 @@ export default {
   ssr: false,
   prerender: true,
   title: 'The Framework',
+  // The brand mark as the tab icon (#757). It carries its own dark-mode ramp inside the file:
+  // a favicon sits on browser chrome, which follows the OS theme, not our in-app theme choice.
+  favicon: '/logo.svg',
 } satisfies Config

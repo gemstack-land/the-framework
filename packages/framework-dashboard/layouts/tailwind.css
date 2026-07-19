@@ -21,6 +21,15 @@
   --primary-foreground: oklch(0.985 0 0);
   --accent: oklch(0.97 0 0);
   --accent-foreground: oklch(0.205 0 0);
+
+  /* The brand mark's six strands (#757), darkest first, exactly as the brand ships them.
+     Kept as variables so the mark can be re-ramped for a dark canvas without touching the SVG. */
+  --logo-1: #0a0a0a;
+  --logo-2: #171717;
+  --logo-3: #262626;
+  --logo-4: #404040;
+  --logo-5: #525252;
+  --logo-6: #737373;
 }
 
 .dark {
@@ -36,6 +45,16 @@
   --primary-foreground: oklch(0.985 0 0);
   --accent: oklch(0.27 0.01 264);
   --accent-foreground: oklch(0.95 0 0);
+
+  /* The ramp inverted for a dark canvas: the shipped one starts at near-black, which would sink
+     the leading strands into the background. Same order (leading strand lightest against dark),
+     so the knot's depth reads the same way round. */
+  --logo-1: #fafafa;
+  --logo-2: #ededed;
+  --logo-3: #d4d4d4;
+  --logo-4: #a3a3a3;
+  --logo-5: #8a8a8a;
+  --logo-6: #737373;
 }
 
 @theme inline {
