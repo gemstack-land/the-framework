@@ -19,3 +19,15 @@ export {
   type RunStatus,
   type OpenStoreOptions,
 } from './run-store.js'
+export {
+  addWorktree,
+  listWorktrees,
+  parseWorktreeList,
+  removeWorktree,
+  pruneWorktrees,
+  worktreePath,
+  WORKTREES_DIR,
+  type WorktreeInfo,
+  type AddWorktreeOptions,
+  type AddedWorktree,
+} from './worktree.js'
