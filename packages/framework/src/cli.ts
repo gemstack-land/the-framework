@@ -15,6 +15,7 @@ import {
 import { type ClaudeCodeDriverOptions, type Driver, type DriverSession, type McpServerSpec, type PermissionMode } from './driver/index.js'
 import { AGENTS, AGENT_SPECS, createDriver, isAgentName, type AgentName } from './agent.js'
 import { launchSharedBrowser, type SharedBrowser } from './browser.js'
+import { connectCdp, startBrowserStream, type BrowserStream } from './browser-stream.js'
 import { hostExecutor } from './host-exec.js'
 import { startDashboard, singleProjectProvider, resolveDashboardBundle, type Dashboard } from './dashboard/index.js'
 import { startRelay, relayPublisher, type RelayPublisher } from './relay.js'
@@ -746,6 +747,8 @@ interface RunEpilogue {
   publisher: RelayPublisher | undefined
   /** The run's Chrome (#793), stopped with the run so no headless browser outlives it. */
   sharedBrowser: SharedBrowser | undefined
+  /** The preview of that browser (#802), stopped with the run. */
+  browserStream: BrowserStream | undefined
   clearInterrupt: () => void
   maybeFireOnBeforeMergeable: () => Promise<void>
   /** True once the run stopped cleanly (interrupt / budget cap) rather than failed. */
@@ -801,6 +804,7 @@ async function settleRun(
     ctx.clearInterrupt()
     ctx.control?.close()
     ctx.guard?.stop()
+    await ctx.browserStream?.close()
     await ctx.sharedBrowser?.close()
     // Make sure every event (including the final `end`) reached the relay before exit.
     if (ctx.publisher) await ctx.publisher.flush()
@@ -1229,6 +1233,14 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
     ? fakeDriver()
     : createDriver({ agent: opts.agent, claudeOpts: withBrowser(claudeOpts, opts.browser, sharedBrowser?.browserUrl) })
 
+  // The preview of that browser (#802): the agent's Chrome is headless, so when it parks on an
+  // `await-browser` gate (#796) there is nothing for a human to click. This serves it. Opening
+  // the stream costs nothing while the page is still — Chrome only emits a frame on a change.
+  const browserStream = sharedBrowser
+    ? await startBrowserStream({ browserUrl: sharedBrowser.browserUrl, connect: connectCdp }).catch(() => undefined)
+    : undefined
+  if (browserStream) io.out(`◆ browser preview: ${browserStream.url}/stream`)
+
   // The consumption limits (#519/#531). Read from the user's own file rather than
   // taken as a flag: unlike autopilot or eco, a limit is not a per-run choice, so
   // a run started from a terminal is guarded exactly like one started from the
@@ -1257,6 +1269,7 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
     guard,
     publisher,
     sharedBrowser,
+    browserStream,
     clearInterrupt,
     maybeFireOnBeforeMergeable,
     isStopped: () => controller.signal.aborted || stoppedCleanly,
