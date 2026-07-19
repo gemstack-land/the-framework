@@ -239,11 +239,23 @@ test('a still page keeps re-sending its frame so the pane paints (#818)', async 
     const res = await fetch(`${stream.url}/stream`)
     const reader = res.body?.getReader()
 
-    // Two parts out of one screencast frame: nothing else changed the page.
-    const first = await reader?.read()
-    const second = await reader?.read()
-    const seen = Buffer.concat([Buffer.from(first?.value ?? []), Buffer.from(second?.value ?? [])]).toString('latin1')
-    assert.equal(seen.split('--frame').length - 1, 2, 'the frame repeats, terminating the part before it')
+    // More than one part out of a single screencast frame: nothing else changed the page, so
+    // every part after the first is the repeat. Counted as "at least two" rather than exactly
+    // two — how many repeats land in a given read is a matter of timing, and pinning the number
+    // made this fail on a busier machine.
+    // Bounded: without the repeat there is simply no second part, and waiting forever for one
+    // would report as a timeout rather than as this assertion.
+    let boundaries = 0
+    const deadline = Date.now() + 5000
+    while (boundaries < 2 && Date.now() < deadline) {
+      const chunk = await Promise.race([
+        reader?.read(),
+        new Promise<undefined>(r => setTimeout(() => r(undefined), 1000)),
+      ])
+      if (!chunk || chunk.done) break
+      boundaries += Buffer.from(chunk.value).toString('latin1').split('--frame').length - 1
+    }
+    assert.ok(boundaries >= 2, `the frame repeats, terminating the part before it (saw ${boundaries})`)
 
     await reader?.cancel()
   } finally {
