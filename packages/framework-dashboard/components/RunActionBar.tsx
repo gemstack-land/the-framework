@@ -44,11 +44,16 @@ export function RunActionBar({
   return (
     <div className="flex flex-wrap items-center gap-2 border-b border-border px-4 py-2">
       <TooltipProvider delay={300} closeDelay={0}>
-        {/* Serve what THIS session built (#797): its own worktree, not the project's checkout. */}
-        <PreviewBar projectId={projectId} runId={runId} inline />
         {/* Where this session is working (#798): its branch, whether it is holding uncommitted
             work, and a way into the checkout. Only a run has one, so the project home has none. */}
         {runId && <WorktreeChip projectId={projectId} runId={runId} />}
+        {error && <span className="text-xs text-red-500">{error}</span>}
+        {/* What the session IS sits at the start of the bar; what you can DO to it sits at the end,
+            so the buttons keep one home as the row's contents come and go (Stop only while it runs,
+            Remove only on a retained worktree, Open session only once one is reported). */}
+        <div className="min-w-0 flex-1" />
+        {/* Serve what THIS session built (#797): its own worktree, not the project's checkout. */}
+        <PreviewBar projectId={projectId} runId={runId} inline />
         {active && (
           <Tooltip>
             <TooltipTrigger
@@ -88,7 +93,6 @@ export function RunActionBar({
           </Tooltip>
         )}
       </TooltipProvider>
-      {error && <span className="text-xs text-red-500">{error}</span>}
     </div>
   )
 }
