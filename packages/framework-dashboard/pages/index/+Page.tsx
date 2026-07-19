@@ -6,7 +6,6 @@ import { ProjectsSidebar } from '../../components/ProjectsSidebar.js'
 import { Logo } from '../../components/Logo.js'
 import { ThemeToggle } from '../../components/ThemeToggle.js'
 import { NotificationsMenu } from '../../components/NotificationsMenu.js'
-import { Button } from '../../components/ui/button.js'
 import { RunHistory } from '../../components/RunHistory.js'
 import { ProjectHome } from '../../components/ProjectHome.js'
 import { DashboardPage } from '../../components/DashboardPage.js'
@@ -142,13 +141,6 @@ export default function Page() {
     setRunId(id)
   }
 
-  // "New session" (#772): back to the selected project's launcher — the Live home row — with a
-  // fresh Context, so the navbar button starts a run the same way the rail's Live row does.
-  const newSession = () => {
-    selectRun(null)
-    resetContext()
-  }
-
   const selectProject = (id: string) => {
     setProjectId(id) // persisted, so a refresh returns here
     setRunId(null) // switching projects always returns to the home launcher
@@ -218,17 +210,6 @@ export default function Page() {
         <span className="shrink-0 font-semibold">The Framework</span>
         <div className="min-w-0 flex-1" />
         <div className="flex shrink-0 items-center gap-1">
-          {/* New session (#772): the de-facto standard button instead of a navbar textarea —
-              it lands on the selected project's launcher, where the one textarea lives. */}
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={newSession}
-            disabled={!projectId}
-            title={projectId ? undefined : 'Select a project first'}
-          >
-            New session
-          </Button>
           <ThemeToggle />
           <NotificationsMenu />
         </div>
