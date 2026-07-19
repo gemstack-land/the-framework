@@ -3,6 +3,7 @@ import type { RunMeta, RunStatus } from '@gemstack/framework'
 import { Button } from './ui/button.js'
 import { Badge } from './ui/badge.js'
 import { cn } from '../lib/utils.js'
+import { formatDateTime } from '../lib/format-date.js'
 
 const STATUS_TONE: Record<string, string> = {
   running: 'text-primary',
@@ -83,7 +84,7 @@ export function RunHistory({
             key={run.id}
             status={run.status}
             intent={run.intent}
-            subtitle={new Date(run.startedAt).toLocaleString()}
+            subtitle={formatDateTime(run.startedAt)}
             // Following live highlights the newest running run, not every one of them (#738):
             // `runs` is newest-first, so that is the first with a running status.
             active={run.id === selectedRunId || (followLive && run.id === newestRunningId)}
