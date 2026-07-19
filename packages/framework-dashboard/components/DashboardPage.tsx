@@ -42,18 +42,18 @@ export function DashboardPage({
               <StatTile icon={<FolderGit2 className="h-4 w-4" />} label="Projects" value={data.totals.projects} />
               <StatTile
                 icon={<Zap className="h-4 w-4" />}
-                label="Active runs"
+                label="Active sessions"
                 value={data.totals.activeRuns}
                 accent={data.totals.activeRuns > 0}
               />
               <StatTile icon={<ListChecks className="h-4 w-4" />} label="Open TODOs" value={data.totals.openTodos} />
-              <StatTile icon={<History className="h-4 w-4" />} label="Total runs" value={data.totals.totalRuns} />
+              <StatTile icon={<History className="h-4 w-4" />} label="Total sessions" value={data.totals.totalRuns} />
             </div>
 
             <div className="grid gap-4 lg:grid-cols-2">
               <Card>
                 <CardHeader>
-                  <CardTitle>Run activity</CardTitle>
+                  <CardTitle>Session activity</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <ActivityChart data={data.activity} />
@@ -61,7 +61,7 @@ export function DashboardPage({
               </Card>
               <Card>
                 <CardHeader>
-                  <CardTitle>Run outcomes</CardTitle>
+                  <CardTitle>Session outcomes</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <RunOutcomes counts={data.runsByStatus} />
@@ -136,7 +136,7 @@ function NeedsYou({ items, onSelectProject }: { items: Intervention[]; onSelectP
                     type="button"
                     onClick={() => onSelectProject(item.projectId)}
                     className="flex w-full items-center gap-2 py-2 text-left hover:opacity-80"
-                    title="Open the run to answer"
+                    title="Open the session to answer"
                   >
                     <MessageCircleQuestion className="h-4 w-4 shrink-0 text-amber-500" />
                     <span className="shrink-0 text-xs font-medium text-amber-500">Awaiting</span>
@@ -270,7 +270,7 @@ function ProjectsTable({ projects, onSelectProject }: { projects: ProjectStat[];
         <thead>
           <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-muted-foreground">
             <th className="py-2 pr-4 font-medium">Project</th>
-            <th className="py-2 pr-4 text-right font-medium">Runs</th>
+            <th className="py-2 pr-4 text-right font-medium">Sessions</th>
             <th className="py-2 pr-4 text-right font-medium">TODOs</th>
             <th className="py-2 text-right font-medium">Last activity</th>
           </tr>

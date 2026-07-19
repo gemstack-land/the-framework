@@ -118,18 +118,18 @@ export function NotificationsMenu() {
           <DropdownMenuCheckboxItem
             checked={needsYou}
             onCheckedChange={next => updatePreferences({ notifyHumanIntervention: next })}
-            title="A run awaiting your answer, or a PR ready to review"
+            title="A session awaiting your answer, or a PR ready to review"
             className="items-start"
           >
-            <NotifLabel label="Needs you" hint="A run awaiting you, or a PR to review" />
+            <NotifLabel label="Needs you" hint="A session awaiting you, or a PR to review" />
           </DropdownMenuCheckboxItem>
           <DropdownMenuCheckboxItem
             checked={activity}
             onCheckedChange={next => updatePreferences({ notifyNewActivity: next })}
-            title="Also ping when a run starts or finishes, not just when something needs you"
+            title="Also ping when a session starts or finishes, not just when something needs you"
             className="items-start"
           >
-            <NotifLabel label="New activity" hint="A run started or finished" />
+            <NotifLabel label="New activity" hint="A session started or finished" />
           </DropdownMenuCheckboxItem>
         </DropdownMenuGroup>
       </DropdownMenuContent>

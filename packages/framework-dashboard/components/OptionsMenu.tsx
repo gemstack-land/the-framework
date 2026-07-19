@@ -85,8 +85,8 @@ export function OptionsMenu({
       <DropdownMenuTrigger
         type="button"
         disabled={busy}
-        title={activeCount > 0 ? `Run options — ${activeCount} on` : 'Run options'}
-        aria-label="Run options"
+        title={activeCount > 0 ? `Session options — ${activeCount} on` : 'Session options'}
+        aria-label="Session options"
         className={cn(buttonVariants({ variant: 'outline', size: 'icon-sm' }), 'relative')}
       >
         <Settings className="h-4 w-4" />

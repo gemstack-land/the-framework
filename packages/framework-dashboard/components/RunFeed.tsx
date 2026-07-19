@@ -8,7 +8,7 @@ import { RunOverview } from './RunOverview.js'
 // (RelayView, which keeps it since it has no action bar).
 export function RunFeed({ events, showSessionLink = true }: { events: FrameworkEvent[]; showSessionLink?: boolean }) {
   if (events.length === 0) {
-    return <div className="grid flex-1 place-items-center text-sm text-muted-foreground">Waiting for the run to start…</div>
+    return <div className="grid flex-1 place-items-center text-sm text-muted-foreground">Waiting for the session to start…</div>
   }
   return (
     <>

@@ -15,7 +15,7 @@ export function RelayView({ runId }: { runId: string }) {
         <Logo className="h-5 w-auto shrink-0" />
         <span className="font-semibold">The Framework</span>
         <Badge className="text-muted-foreground">watching</Badge>
-        <span className="ml-auto text-xs text-muted-foreground">read-only shared run</span>
+        <span className="ml-auto text-xs text-muted-foreground">read-only shared session</span>
       </header>
       <main className="flex min-w-0 flex-1 flex-col">
         <RunFeed events={events} />

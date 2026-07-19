@@ -25,7 +25,7 @@ export function RunReplay({
   addContext: (path: string) => void
   onRunStarted: (intent: string) => void
 }) {
-  // null until the first answer: "Loading run…" and "no events" are different things.
+  // null until the first answer: "Loading session…" and "no events" are different things.
   const events = useLoaded<FrameworkEvent[] | null>(() => onRun(projectId, runId), null, [projectId, runId])
   // Whether this run kept its worktree (#737): a failed/stopped run does, a clean one had it
   // removed when it finished. Drives the Remove button, and is cleared locally once removed so
@@ -34,7 +34,7 @@ export function RunReplay({
   const [removed, setRemoved] = useState(false)
   const onWorktreeRemoved = useCallback(() => setRemoved(true), [])
 
-  if (events === null) return <div className="grid flex-1 place-items-center text-sm text-muted-foreground">Loading run…</div>
+  if (events === null) return <div className="grid flex-1 place-items-center text-sm text-muted-foreground">Loading session…</div>
   // The agent session this run ran under (from its `session-update` events): present once the
   // agent reported it, so a run that never got that far simply can't be resumed.
   const sessionId = sessionInfo(events)?.sessionId
@@ -48,7 +48,7 @@ export function RunReplay({
         onWorktreeRemoved={onWorktreeRemoved}
       />
       {events.length === 0 ? (
-        <div className="grid flex-1 place-items-center text-sm text-muted-foreground">This run has no events.</div>
+        <div className="grid flex-1 place-items-center text-sm text-muted-foreground">This session has no events.</div>
       ) : (
         <EventList events={events} stick={false} />
       )}

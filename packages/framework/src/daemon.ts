@@ -347,7 +347,7 @@ export async function runDaemon(cwd: string, opts: RunDaemonOptions = {}): Promi
   // no-op Stop. Reconcile them to `stopped` across every registered project at boot.
   for (const record of await listProjects(undefined, env).catch(() => [])) {
     const fixed = await reconcileOrphanedRuns(record.path).catch(() => 0)
-    if (fixed > 0) console.log(`[framework] reconciled ${fixed} orphaned run(s) in ${basename(record.path)}`)
+    if (fixed > 0) console.log(`[framework] reconciled ${fixed} orphaned session(s) in ${basename(record.path)}`)
   }
 
   // Everything the dashboard drives per project — run spawning, project install, and app
@@ -514,7 +514,7 @@ function createProjectRuntime({ cwd, env, binPath }: ProjectRuntimeOptions): Pro
       await restoreArchivedRun(projectCwd, path, runId).catch(() => false)
       return { cwd: path, runId }
     } catch (err) {
-      console.log(`[framework] could not continue run ${runId} (${err instanceof Error ? err.message : String(err)}); starting a new one`)
+      console.log(`[framework] could not continue session ${runId} (${err instanceof Error ? err.message : String(err)}); starting a new one`)
       return undefined
     }
   }
@@ -591,7 +591,7 @@ function createProjectRuntime({ cwd, env, binPath }: ProjectRuntimeOptions): Pro
     const key = workspace.runId ? `${projectKey}::${workspace.runId}` : projectKey
     const active = activeRuns.get(key)
     if (starting.has(key) || (active !== undefined && isProcessAlive(active))) {
-      return { ok: false, busy: true, error: 'a run is already active for this project; stop it or wait for it to finish' }
+      return { ok: false, busy: true, error: 'a session is already active for this project; stop it or wait for it to finish' }
     }
     activeRuns.delete(key)
     starting.add(key)

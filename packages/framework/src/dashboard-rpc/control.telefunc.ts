@@ -80,10 +80,10 @@ export async function sendMessage(projectId: string, text: string, runId?: strin
 export async function sendRemoveWorktree(projectId: string, runId: string): Promise<RemoveWorktreeResult> {
   const cwd = await resolveProjectPath(projectId)
   if (!cwd) return { ok: false, error: 'this project has no local path on this server' }
-  if (!isSafeRunId(runId)) return { ok: false, error: `invalid run id: ${runId}` }
+  if (!isSafeRunId(runId)) return { ok: false, error: `invalid session id: ${runId}` }
   const live = await readLiveMetas(cwd).catch(() => [])
   if (live.some(run => run.id === runId && run.status === 'running')) {
-    return { ok: false, error: 'that run is still going; stop it before removing its worktree' }
+    return { ok: false, error: 'that session is still going; stop it before removing its worktree' }
   }
   try {
     await removeWorktree(cwd, worktreePath(cwd, runId))
@@ -109,7 +109,7 @@ export async function sendStart(
   options: StartRunOptions = {},
 ): Promise<StartRunResult> {
   const { startRun } = getContext<DashboardContext>()
-  if (!startRun) return { ok: false, error: 'starting a run is not enabled on this server' }
+  if (!startRun) return { ok: false, error: 'starting a session is not enabled on this server' }
   const text = prompt.trim()
   if (!text && kind !== 'research') return { ok: false, error: 'a non-empty prompt is required' }
   return startRun(text, kind, options, projectId)

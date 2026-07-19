@@ -156,7 +156,7 @@ export async function runPrompt(opts: RunPromptOptions): Promise<RunPromptResult
       ...(opts.messages ? { messages: opts.messages } : {}),
     })
     // The agent kept asking past the limit: finish with the latest turn rather than loop.
-    if (rounds.exhausted) emit({ kind: 'log', message: 'Finishing the run (await limit reached).' })
+    if (rounds.exhausted) emit({ kind: 'log', message: 'Finishing the session (await limit reached).' })
     emit({ kind: 'end', ok: true })
     return { text: rounds.text, events }
   } catch (err) {

@@ -20,7 +20,7 @@ export const LOGS_FILE = 'LOGS.md'
  * ignores everything except LOGS.md and itself.
  */
 export const LOGS_GITIGNORE =
-  '# The Framework: only LOGS.md is the committed project DB; run state is transient.\n*\n!.gitignore\n!LOGS.md\n'
+  '# The Framework: only LOGS.md is the committed project DB; session state is transient.\n*\n!.gitignore\n!LOGS.md\n'
 
 /** One project-log entry: a loop, or a standalone prompt/build. */
 export interface LogEntry {

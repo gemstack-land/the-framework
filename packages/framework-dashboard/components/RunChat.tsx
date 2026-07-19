@@ -49,7 +49,7 @@ export function RunChat({
         busy={sending}
         submitLabel="Send"
         submitBusyLabel="Sending…"
-        placeholder="Message the run…  ( / commands · < tags · @ projects · # files )"
+        placeholder="Message the session…  ( / commands · < tags · @ projects · # files )"
       />
     </div>
   )

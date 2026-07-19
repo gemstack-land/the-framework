@@ -53,13 +53,13 @@ export function RunActionBar({
                   variant="outline"
                   size="icon-sm"
                   disabled={busy}
-                  onClick={() => void run(() => sendStop(projectId, runId ?? undefined), 'Could not stop the run.')}
+                  onClick={() => void run(() => sendStop(projectId, runId ?? undefined), 'Could not stop the session.')}
                 />
               }
             >
               <Square className="h-3 w-3 fill-current" />
             </TooltipTrigger>
-            <TooltipContent>{busy ? 'Stopping…' : 'Stop run'}</TooltipContent>
+            <TooltipContent>{busy ? 'Stopping…' : 'Stop session'}</TooltipContent>
           </Tooltip>
         )}
         {/* A retained worktree only exists for a finished run, so this never sits beside Stop. */}

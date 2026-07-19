@@ -138,7 +138,7 @@ export async function leaveResumeNote(
   const named = [...events]
     .reverse()
     .find((e): e is Extract<FrameworkEvent, { kind: 'session-name' }> => e.kind === 'session-name')
-  const entry = `Resume ${named?.name ?? 'the paused run'}`
+  const entry = `Resume ${named?.name ?? 'the paused session'}`
   const file = await appendTodoEntry(cwd, entry)
   if (file) emit({ kind: 'log', message: `Left "${entry}" on ${file} to pick up when the limit resets.` })
   return file

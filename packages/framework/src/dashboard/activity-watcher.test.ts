@@ -62,7 +62,7 @@ test('postActivityDiscord summarizes multiple items and skips the call when ther
     return new Response(null, { status: 204 })
   }) as typeof fetch
   await postActivityDiscord('https://discord/hook', [started('r1'), finished('r2')], fetchImpl)
-  assert.match(JSON.parse(calls[0]!).content, /2 run updates/)
+  assert.match(JSON.parse(calls[0]!).content, /2 session updates/)
   await postActivityDiscord('https://discord/hook', [], fetchImpl)
   assert.equal(calls.length, 1) // empty -> no second POST
 })

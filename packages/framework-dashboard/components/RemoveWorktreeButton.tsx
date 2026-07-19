@@ -43,7 +43,7 @@ export function RemoveWorktreeButton({
         <Trash2 className="h-3.5 w-3.5" />
       </TooltipTrigger>
       <TooltipContent>
-        {error ?? (busy ? 'Removing…' : "Remove this run's worktree (its history is already saved)")}
+        {error ?? (busy ? 'Removing…' : "Remove this session's worktree (its history is already saved)")}
       </TooltipContent>
     </Tooltip>
   )

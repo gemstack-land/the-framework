@@ -32,7 +32,7 @@ describe('useActivityNotifications (#627)', () => {
     expect(ctor).not.toHaveBeenCalled()
     rerender({ items: [startedRun('r2', 'add cart'), finishedRun('r1', 'seed')] }) // a run just started -> notify
     expect(ctor).toHaveBeenCalledTimes(1)
-    expect(ctor.mock.calls[0]![0]).toContain('Run started')
+    expect(ctor.mock.calls[0]![0]).toContain('Session started')
     expect(ctor.mock.calls[0]![1]?.body).toContain('add cart')
   })
 
@@ -42,7 +42,7 @@ describe('useActivityNotifications (#627)', () => {
     rerender({ items: [startedRun('r1', 'work')] }) // started
     rerender({ items: [finishedRun('r1', 'work')] }) // finished -> a new key
     expect(ctor).toHaveBeenCalledTimes(2)
-    expect(ctor.mock.calls[1]![0]).toContain('Run finished')
+    expect(ctor.mock.calls[1]![0]).toContain('Session finished')
   })
 
   test('never fires when disabled', () => {

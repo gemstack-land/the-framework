@@ -73,12 +73,12 @@ describe('NavbarQuickLaunch (#723)', () => {
     await waitFor(() => expect(onRunStarted).toHaveBeenCalledWith('add a test', undefined))
   })
 
-  test('surfaces the busy guard when a run is already active', async () => {
+  test('surfaces the busy guard when a session is already active', async () => {
     sendStart.mockResolvedValue({ ok: false, busy: true })
     const { onRunStarted } = renderQL()
     fireEvent.change(screen.getByLabelText('prompt'), { target: { value: 'go' } })
     fireEvent.click(screen.getByRole('button', { name: 'Start' }))
-    await waitFor(() => expect(screen.getByText(/run is already active/i)).toBeTruthy())
+    await waitFor(() => expect(screen.getByText(/session is already active/i)).toBeTruthy())
     expect(onRunStarted).not.toHaveBeenCalled()
   })
 

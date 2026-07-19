@@ -22,14 +22,14 @@ const ecoOptions = (): OptionRow[] => [{ key: 'ecoPlanning', label: 'Auto planni
 const editorProps = { editor: undefined as string | undefined, editors: [], onEditorChange: () => {} }
 
 function open() {
-  fireEvent.click(screen.getByRole('button', { name: /run options/i }))
+  fireEvent.click(screen.getByRole('button', { name: /session options/i }))
 }
 
 describe('OptionsMenu (#654)', () => {
   test('the trigger badges how many options are on', () => {
     render(<OptionsMenu options={mainOptions()} ecoOptions={ecoOptions()} showEco={false} busy={false} {...editorProps} />)
     // Only Eco is checked -> the gear trigger shows a corner badge "1".
-    expect(screen.getByRole('button', { name: /run options/i }).textContent).toContain('1')
+    expect(screen.getByRole('button', { name: /session options/i }).textContent).toContain('1')
   })
 
   test('toggling an item writes the new value through', () => {

@@ -94,11 +94,11 @@ export function StartRunForm({
         setNote(null)
       } else {
         setNote(null)
-        setError(result.busy ? 'A run is already active for this project.' : result.error)
+        setError(result.busy ? 'A session is already active for this project.' : result.error)
       }
     } catch (err) {
       setNote(null)
-      setError(err instanceof Error ? err.message : 'Failed to start the run.')
+      setError(err instanceof Error ? err.message : 'Failed to start the session.')
     } finally {
       setBusy(false)
     }
@@ -106,7 +106,7 @@ export function StartRunForm({
 
   return (
     <form onSubmit={e => e.preventDefault()} className="border-b border-border p-3">
-      <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Start a run</div>
+      <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Start a session</div>
       <Composer
         ref={composerRef}
         files={files}
@@ -121,7 +121,7 @@ export function StartRunForm({
           setNote(`${label} preset loaded — review or edit, then Start`)
         }}
         busy={busy}
-        submitLabel="Start run"
+        submitLabel="Start session"
         submitBusyLabel="Starting…"
         showShortcutHint
       />

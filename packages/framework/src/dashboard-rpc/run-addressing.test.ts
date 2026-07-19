@@ -123,7 +123,7 @@ test('sendRemoveWorktree rejects an unsafe run id before touching anything (#737
   try {
     const result = await sendRemoveWorktree(ctx.projectId, '../../etc')
     assert.equal(result.ok, false)
-    assert.match(result.ok === false ? result.error : '', /invalid run id/)
+    assert.match(result.ok === false ? result.error : '', /invalid session id/)
   } finally {
     ctx.restore()
     await rm(ctx.dir, { recursive: true, force: true })

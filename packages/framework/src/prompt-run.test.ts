@@ -360,7 +360,7 @@ test('runPrompt pauses at a consumption limit and reports a clean stop (#531)', 
   assert.equal(end.kind, 'end')
   assert.equal(end.stopped, true)
   assert.match(end.detail ?? '', /Daily consumption limit reached/)
-  assert.ok(events.some(e => e.kind === 'log' && e.message === 'Daily consumption limit reached — pausing the run.'))
+  assert.ok(events.some(e => e.kind === 'log' && e.message === 'Daily consumption limit reached — pausing the session.'))
 })
 
 test('runPrompt carries on when the consumption gate fails (#531)', async () => {

@@ -297,7 +297,7 @@ test('runCli prompt runs the text through the direct path (#353)', async () => {
   const { io, out } = capture()
   const code = await runCli(['prompt', 'say hi', '--fake', '--no-dashboard'], io)
   assert.equal(code, 0)
-  assert.ok(out.some(l => /prompt run done/.test(l)))
+  assert.ok(out.some(l => /prompt session done/.test(l)))
 })
 
 test('parseArgs reads the stop subcommand and the --daemon / internal --daemon-serve flags (#456)', () => {

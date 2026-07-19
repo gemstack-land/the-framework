@@ -52,9 +52,9 @@ beforeEach(() => {
 afterEach(cleanup)
 
 describe('RunResumeChat (#720)', () => {
-  test('shows the "run ended" hint so the finished run is not a dead end', () => {
+  test('shows the "session ended" hint so the finished session is not a dead end', () => {
     renderChat()
-    expect(screen.getByText(/run ended.*continues it/i)).toBeTruthy()
+    expect(screen.getByText(/session ended.*continues it/i)).toBeTruthy()
   })
 
   test('sending spins a resumed prompt run carrying the captured session id, then jumps to live', async () => {
@@ -76,7 +76,7 @@ describe('RunResumeChat (#720)', () => {
     const { onRunStarted } = renderChat()
     fireEvent.change(screen.getByLabelText('prompt'), { target: { value: 'go' } })
     fireEvent.click(screen.getByRole('button', { name: 'Send' }))
-    await waitFor(() => expect(screen.getByText(/run is already active/i)).toBeTruthy())
+    await waitFor(() => expect(screen.getByText(/session is already active/i)).toBeTruthy())
     expect(onRunStarted).not.toHaveBeenCalled()
   })
 })

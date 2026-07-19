@@ -27,7 +27,7 @@ export class ActivityTracker {
 
 /** How one activity item reads on Discord: a started run, or a finished one tagged by its outcome. */
 function line(item: Activity): string {
-  const what = item.title ?? 'a run'
+  const what = item.title ?? 'a session'
   if (item.kind === 'started') return `▶️ started: ${what}`
   const mark = item.status === 'failed' ? '❌' : item.status === 'stopped' ? '⏹️' : '✅'
   return `${mark} finished: ${what}`
@@ -43,7 +43,7 @@ export async function postActivityDiscord(
   const content =
     items.length === 1
       ? `📣 Activity (${items[0]!.projectName}): ${line(items[0]!)}`
-      : `📣 ${items.length} run updates:\n${items.map(i => `• ${i.projectName}: ${line(i)}`).join('\n')}`
+      : `📣 ${items.length} session updates:\n${items.map(i => `• ${i.projectName}: ${line(i)}`).join('\n')}`
   await fetchImpl(webhook, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

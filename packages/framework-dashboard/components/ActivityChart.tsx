@@ -11,7 +11,7 @@ export function ActivityChart({ data }: { data: ActivityDay[] }) {
   const total = data.reduce((sum, d) => sum + d.count, 0)
   const active = hover !== null ? data[hover] : null
 
-  const runs = (n: number) => `${n} run${n === 1 ? '' : 's'}`
+  const runs = (n: number) => `${n} session${n === 1 ? '' : 's'}`
 
   return (
     <div>

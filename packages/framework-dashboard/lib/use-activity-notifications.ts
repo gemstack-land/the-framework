@@ -14,13 +14,13 @@ const WARMUP = 2
 
 /** How one activity item reads in a notification body: a started run vs a finished one. */
 function label(item: Activity): string {
-  const what = item.title ?? 'a run'
+  const what = item.title ?? 'a session'
   return item.kind === 'started' ? `Started: ${what}` : `Finished: ${what}`
 }
 
 function title(item: Activity, count: number): string {
-  if (count > 1) return `${count} run updates`
-  const verb = item.kind === 'started' ? 'Run started' : 'Run finished'
+  if (count > 1) return `${count} session updates`
+  const verb = item.kind === 'started' ? 'Session started' : 'Session finished'
   return `${verb} · ${item.projectName}`
 }
 

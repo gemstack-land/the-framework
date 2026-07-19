@@ -53,10 +53,10 @@ export function RunResumeChat({
         composerRef.current?.clear()
         onRunStarted(text, result.runId) // select the run we just started (#761)
       } else {
-        setError(result.busy ? 'A run is already active for this project.' : result.error)
+        setError(result.busy ? 'A session is already active for this project.' : result.error)
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to continue the run.')
+      setError(err instanceof Error ? err.message : 'Failed to continue the session.')
     } finally {
       setBusy(false)
     }
@@ -64,7 +64,7 @@ export function RunResumeChat({
 
   return (
     <div className="border-t border-border p-2">
-      <p className="mb-2 text-xs text-muted-foreground">Run ended — your next message continues it.</p>
+      <p className="mb-2 text-xs text-muted-foreground">Session ended — your next message continues it.</p>
       <Composer
         ref={composerRef}
         files={files}
@@ -73,7 +73,7 @@ export function RunResumeChat({
         busy={busy}
         submitLabel="Send"
         submitBusyLabel="Resuming…"
-        placeholder="Message the run to continue it…  ( / commands · < tags · @ projects · # files )"
+        placeholder="Message the session to continue it…  ( / commands · < tags · @ projects · # files )"
       />
       {error && <p className="mt-1 text-xs text-red-500">{error}</p>}
     </div>

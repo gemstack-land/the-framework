@@ -92,7 +92,7 @@ export function createDriverEventHandler(opts: DriverEventHandlerOptions): Drive
     const totals = usage.totals()
     emit({ kind: 'usage', ...totals, ...(opts.budgetUsd != null ? { budgetUsd: opts.budgetUsd } : {}) })
     if (opts.budgetUsd != null && totals.costUsd !== undefined && totals.costUsd >= opts.budgetUsd && !budgetController.signal.aborted) {
-      emit({ kind: 'log', message: `Budget reached: $${totals.costUsd.toFixed(4)} of $${opts.budgetUsd} — stopping the run.` })
+      emit({ kind: 'log', message: `Budget reached: $${totals.costUsd.toFixed(4)} of $${opts.budgetUsd} — stopping the session.` })
       budgetController.abort(new Error('[framework] budget reached'))
     }
     if (opts.consumptionGate && !consumptionController.signal.aborted) {
@@ -104,7 +104,7 @@ export function createDriverEventHandler(opts: DriverEventHandlerOptions): Drive
       }
       if (reached) {
         consumptionTrip = reached
-        emit({ kind: 'log', message: `${CONSUMPTION_LIMIT_LABEL[reached]} consumption limit reached — pausing the run.` })
+        emit({ kind: 'log', message: `${CONSUMPTION_LIMIT_LABEL[reached]} consumption limit reached — pausing the session.` })
         consumptionController.abort(new Error('[framework] consumption limit reached'))
       }
     }

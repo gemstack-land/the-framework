@@ -727,7 +727,7 @@ test('runFramework pauses the run once a consumption limit is reached (#529)', a
       onEvent: e => events.push(e),
     }),
   )
-  assert.ok(events.some(e => e.kind === 'log' && e.message === 'Daily consumption limit reached — pausing the run.'))
+  assert.ok(events.some(e => e.kind === 'log' && e.message === 'Daily consumption limit reached — pausing the session.'))
   const end = events.at(-1)!
   assert.equal(end.kind, 'end')
   // A limit is a clean stop, like the budget cap — not a failure.

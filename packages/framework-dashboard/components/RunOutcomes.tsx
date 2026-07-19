@@ -13,7 +13,7 @@ export function RunOutcomes({ counts }: { counts: Record<RunStatus, number> }) {
   const total = OUTCOMES.reduce((sum, o) => sum + counts[o.key], 0)
 
   if (total === 0) {
-    return <p className="text-sm text-muted-foreground">No finished runs yet.</p>
+    return <p className="text-sm text-muted-foreground">No finished sessions yet.</p>
   }
 
   return (

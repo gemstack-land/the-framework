@@ -36,7 +36,7 @@ export function EventList({ events, stick = true }: { events: FrameworkEvent[]; 
   return (
     <MessageScrollerProvider autoScroll={stick} defaultScrollPosition={stick ? 'end' : 'start'}>
       <MessageScroller className="flex-1">
-        <MessageScrollerViewport aria-label="Run output">
+        <MessageScrollerViewport aria-label="Session output">
           <MessageScrollerContent className="gap-1 p-4 font-mono text-xs">
             {events.map((e, i) => {
               const disclosable = disclosableText(e)

@@ -20,7 +20,7 @@ afterEach(() => {
 
 const open = () => fireEvent.click(screen.getByRole('button', { name: /theme/i }))
 
-// #754: the theme was only reachable from inside the per-run options gear, which is both the wrong
+// #754: the theme was only reachable from inside the per-session options gear, which is both the wrong
 // home for an app-wide setting and absent on a navbar-only screen. These pin that it is reachable
 // from the header and writes the one preference the rest of the app reads.
 describe('ThemeToggle (#754)', () => {

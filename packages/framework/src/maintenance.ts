@@ -195,7 +195,7 @@ export async function maintainSweep(reviews: readonly RepoReview[], deps: SweepD
       deps.log(`✓ ${review.path} reviewed`)
     } else {
       summary.failed++
-      deps.log(`✗ ${review.path} maintenance run failed; will retry next sweep`)
+      deps.log(`✗ ${review.path} maintenance session failed; will retry next sweep`)
     }
   }
   return summary

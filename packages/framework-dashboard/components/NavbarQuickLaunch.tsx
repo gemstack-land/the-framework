@@ -37,7 +37,7 @@ export function NavbarQuickLaunch({
     return (
       <div className={className}>
         <div className="rounded-md border border-dashed border-border px-3 py-2 text-sm text-muted-foreground">
-          Select a project to quick-launch a run
+          Select a project to quick-launch a session
         </div>
       </div>
     )
@@ -53,10 +53,10 @@ export function NavbarQuickLaunch({
         composerRef.current?.clear()
         onRunStarted(text, result.runId) // select the run we just started (#761)
       } else {
-        setError(result.busy ? 'A run is already active for this project.' : result.error)
+        setError(result.busy ? 'A session is already active for this project.' : result.error)
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to start the run.')
+      setError(err instanceof Error ? err.message : 'Failed to start the session.')
     } finally {
       setBusy(false)
     }
@@ -74,7 +74,7 @@ export function NavbarQuickLaunch({
         busy={busy}
         submitLabel="Start"
         submitBusyLabel="…"
-        placeholder={`Quick-launch a run${projectName ? ` in ${projectName}` : ''}…  ( / commands · @ projects · # files )`}
+        placeholder={`Quick-launch a session${projectName ? ` in ${projectName}` : ''}…  ( / commands · @ projects · # files )`}
       />
       {error && <p className="mt-1 truncate text-xs text-red-500" title={error}>{error}</p>}
     </div>

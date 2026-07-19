@@ -129,14 +129,14 @@ Usage:
                                  --dry-run to preview; --max-repos / --max-cost to bound.
   framework --fake                Run the offline demo (no CLI, no model, deterministic).
   framework doctor                Check prerequisites (Claude Code installed, etc.).
-  framework relay                 Host a run relay so teammates can watch a run (#230).
+  framework relay                 Host a session relay so teammates can watch a session (#230).
 
 Options:
-  --fake                 Use the fake driver + scripted run (offline / CI).
-  --agent <claude|codex> Which agent CLI drives the run, on your own subscription
+  --fake                 Use the fake driver + scripted session (offline / CI).
+  --agent <claude|codex> Which agent CLI drives the session, on your own subscription
                          (default: claude). Codex reports no price and no quota,
                          so --max-cost and the consumption limits cannot gate it;
-                         the run says so at startup rather than imply a guard.
+                         the session says so at startup rather than imply a guard.
   --cwd <dir>            Workspace the agent builds in (default: current directory).
   --model <id>           Model to pass through to the wrapped agent.
   --scope <prototype|full>   How much app to build (default: full).
@@ -148,7 +148,7 @@ Options:
                           set per repo in the-framework.yml; these flags override it.)
   --vanilla              Remove the built-in system prompt entirely. The agent still
                          gets the AWAIT/SIGNAL emit contract, so it can drive the
-                         dashboard's gates; for a fully raw run use --transparent.
+                         dashboard's gates; for a fully raw session use --transparent.
                          Overrides the Eco flags below (no built-in prompt to trim).
   --transparent          Fully transparent (#625): run the wrapped agent raw, exactly
                          like plain "claude -p" — no framework system prompt, emit
@@ -172,13 +172,13 @@ Options:
   --kind <name>          Build event kind the preset's review loop fires for, e.g.
                          bug-fix or major-change (default: the-framework.yml's event,
                          else the preset's own, else major-change). Selects which
-                         review chain gates the run.
+                         review chain gates the session.
   --max-passes <n>       Full-fledged loop pass budget (default: 5).
-  --max-cost <usd>       Stop the run once it has spent this much (USD).
+  --max-cost <usd>       Stop the session once it has spent this much (USD).
   --no-todo-loop         Do not consume the agent's TODO backlog after the build
                          (the loop is on by default; it gates per item on the
                          dashboard and stops when the backlog is empty).
-  --max-todo-items <n>   Backlog entries worked per run (default: 25).
+  --max-todo-items <n>   Backlog entries worked per session (default: 25).
   --permission-mode <mode>   Claude Code permission mode: default | acceptEdits |
                              bypassPermissions | plan (default: bypassPermissions,
                              so the headless loop can run installs/builds/tests).
@@ -197,14 +197,14 @@ Options:
   --dokploy-app <id>     Dokploy application id (required for --deploy dokploy).
   --port <n>             Dashboard port (default: 4200); with the relay, the relay port (4488).
   --no-dashboard         Do not start the localhost dashboard.
-  --share <relay-url>    Publish this run to a relay (from "framework relay") so
+  --share <relay-url>    Publish this session to a relay (from "framework relay") so
                          teammates can watch it live; prints the shareable URL.
-  --resume               Reopen the last run's dashboard from .the-framework/ in --cwd
-                         (read-only replay; no new agent run). Survives a restart.
+  --resume               Reopen the last session's dashboard from .the-framework/ in --cwd
+                         (read-only replay; no new agent session). Survives a restart.
   --no-persist           Do not write the orchestration state to .the-framework/.
-  --skip-preflight       Skip the prerequisite checks before a live run.
+  --skip-preflight       Skip the prerequisite checks before a live session.
   --session-link <url>   A real per-session link to the live agent session, shown
-                         on the dashboard. Our runs are headless (not Remote-
+                         on the dashboard. Our sessions are headless (not Remote-
                          Controlled), so by default the dashboard only offers the
                          generic "Open Claude Code" entry point. Pass your own URL,
                          using {sessionId} to template in the real Claude session
@@ -982,7 +982,7 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
   let interrupts = 0
   const onInterrupt = () => {
     if (++interrupts === 1) {
-      io.err('\n■ Interrupt: stopping the run (Ctrl+C again to force-quit)…')
+      io.err('\n■ Interrupt: stopping the session (Ctrl+C again to force-quit)…')
       controller.abort()
     } else {
       process.exit(130)
@@ -1043,7 +1043,7 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
         ...(opts.continueRun ? { continueRun: true } : {}),
       })
     } catch (err) {
-      io.err(`could not persist run state (${err instanceof Error ? err.message : String(err)}); continuing without it`)
+      io.err(`could not persist session state (${err instanceof Error ? err.message : String(err)}); continuing without it`)
     }
   }
 
@@ -1084,7 +1084,7 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
     publisher = relayPublisher(opts.share, randomUUID(), err =>
       io.err(`relay publish failed (${err instanceof Error ? err.message : String(err)})`),
     )
-    io.out(`◆ shared run: ${publisher.url}`)
+    io.out(`◆ shared session: ${publisher.url}`)
   }
 
   // Pause the choice gates when someone can answer: this run's own dashboard, or the
@@ -1158,7 +1158,7 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
     // Every line of the prompt names the session, so there is nothing to queue without one.
     // An agent that made changes has one; this is the agent that ignored the instruction.
     if (!sessionName) {
-      io.out('  ! on-before-mergeable skipped: the run never called setSessionName().')
+      io.out('  ! on-before-mergeable skipped: the session never called setSessionName().')
       return
     }
     const binPath = process.argv[1]
@@ -1236,7 +1236,7 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
   const isResearch = opts.research && !transparent
   if (opts.research || opts.directPrompt || transparent) {
     const { userSystemPrompt, noBuiltinPrompt, eco } = promptConfig
-    return settleRun(epilogue(isResearch ? 'research' : 'prompt run'), async () => {
+    return settleRun(epilogue(isResearch ? 'research' : 'prompt session'), async () => {
       await runPrompt({
         prompt: isResearch ? renderResearchPrompt(intent) : intent,
         driver,
@@ -1260,7 +1260,7 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
       return {
         successLine: isResearch
           ? '\n✓ research done: see the REVIEW-PROBLEMS / TODO files it wrote.'
-          : '\n✓ prompt run done.',
+          : '\n✓ prompt session done.',
       }
     })
   }
@@ -1335,7 +1335,7 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
     ...(sessionLink ? { sessionLink } : {}),
   }
 
-  return settleRun(epilogue('run'), async () => {
+  return settleRun(epilogue('session'), async () => {
     const { result, preview } = await runFramework(runOpts)
     const successLine = result.productionGrade
       ? `\n✓ production-grade in ${result.passes} pass(es).`
@@ -1398,7 +1398,7 @@ async function ensureDaemonCmd(opts: CliOptions, io: CliIO): Promise<number> {
   const { state, alreadyRunning } = result
   io.out(`◆ dashboard ${alreadyRunning ? 'already running' : 'started'}: ${state.url}`)
   io.out('')
-  io.out('Type a prompt on the dashboard to start a run, or use:')
+  io.out('Type a prompt on the dashboard to start a session, or use:')
   io.out('  framework "<what to build>"   Build (streams to the dashboard)')
   io.out('  framework stop                Stop the background dashboard')
   io.out('  framework --help              All options')
@@ -1573,7 +1573,7 @@ export async function runOnBeforeMergeable(
 async function runRelayServer(opts: CliOptions, io: CliIO): Promise<number> {
   const relay = await startRelay(opts.port !== undefined ? { port: opts.port } : {})
   io.out(`◆ relay listening at ${relay.url}`)
-  io.out(`  Runs published with \`framework "..." --share ${relay.url}\` are watchable at ${relay.url}/?run=<id>`)
+  io.out(`  Sessions published with \`framework "..." --share ${relay.url}\` are watchable at ${relay.url}/?run=<id>`)
   io.out(`  Press Ctrl+C to stop.`)
   await waitForInterrupt()
   await relay.close()
@@ -1596,7 +1596,7 @@ async function resumeRun(opts: CliOptions, io: CliIO): Promise<number> {
   }
   const events = await store.loadEvents()
   if (events.length === 0) {
-    io.err(`Nothing to resume: no saved run found in ${store.dir}. Run \`framework "..."\` first.`)
+    io.err(`Nothing to resume: no saved session found in ${store.dir}. Run \`framework "..."\` first.`)
     return 1
   }
   const meta = (await store.readMeta()) ?? store.snapshot()
@@ -1613,7 +1613,7 @@ async function resumeRun(opts: CliOptions, io: CliIO): Promise<number> {
   for (const event of events) {
     io.out(formatFrameworkEvent(event))
   }
-  io.out(`\n• resumed ${meta.status} run of "${meta.intent ?? 'unknown intent'}" (${events.length} event(s), ${meta.passes} pass(es)).`)
+  io.out(`\n• resumed ${meta.status} session of "${meta.intent ?? 'unknown intent'}" (${events.length} event(s), ${meta.passes} pass(es)).`)
 
   if (dashboard) {
     io.out(`\nDashboard live at ${dashboard.url}. Press Ctrl+C to exit.`)

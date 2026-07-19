@@ -60,19 +60,19 @@ afterEach(cleanup)
 
 describe('Composer (#721)', () => {
   test('renders the full control row: agent/model, options gear, and the submit button', () => {
-    renderComposer({ submitLabel: 'Start run' })
+    renderComposer({ submitLabel: 'Start session' })
     // The standalone Presets dropdown is gone (#722): presets load from the editor's `/` menu.
     expect(screen.queryByText('Presets')).toBeNull()
-    expect(screen.getByRole('button', { name: 'Run options' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Session options' })).toBeTruthy()
     expect(screen.getByTitle(/Agent: Claude Code/)).toBeTruthy() // the agent/model trigger
-    expect(screen.getByRole('button', { name: /Start run/ })).toBeTruthy()
+    expect(screen.getByRole('button', { name: /Start session/ })).toBeTruthy()
   })
 
   test('compact (#723) keeps the agent/model + options controls (#755)', () => {
     const { onSubmit } = renderComposer({ compact: true, submitLabel: 'Start' })
     // They used to be dropped here, which meant a navbar run silently used the stored agent,
     // model and options with nothing on screen saying which.
-    expect(screen.queryByRole('button', { name: 'Run options' })).not.toBeNull()
+    expect(screen.queryByRole('button', { name: 'Session options' })).not.toBeNull()
     expect(screen.queryByTitle(/Agent: Claude Code/)).not.toBeNull()
     // The editor + submit still work (so `/` `<` `@` `#` triggers remain live in the editor).
     fireEvent.change(screen.getByLabelText('prompt'), { target: { value: 'quick run' } })

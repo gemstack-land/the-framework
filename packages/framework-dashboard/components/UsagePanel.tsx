@@ -13,7 +13,7 @@ import { cn } from '../lib/utils.js'
 const LIMITS: { key: keyof ConsumptionLimits; label: string; hint: string }[] = [
   { key: 'daily', label: 'Daily', hint: 'How much of your week a single day may consume' },
   { key: 'fiveHour', label: 'Last 5h', hint: "How much of the day's budget a rolling 5 hours may consume" },
-  { key: 'session', label: 'This session', hint: "How much of the day's budget one run may consume" },
+  { key: 'session', label: 'This session', hint: "How much of the day's budget one session may consume" },
 ]
 
 function limitsOf(preferences: Preferences): ConsumptionLimits {

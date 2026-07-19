@@ -71,7 +71,7 @@ export function SystemPromptDisclosure({
               </pre>
               <p>
                 {text.length.toLocaleString()} characters. This is the whole system prompt: nothing else is appended
-                when the run starts.
+                when the session starts.
               </p>
             </>
           ) : (
