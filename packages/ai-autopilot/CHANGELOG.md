@@ -1,5 +1,46 @@
 # @gemstack/ai-autopilot
 
+## 0.10.0
+
+### Minor Changes
+
+- 9442761: Remove the architect. A build no longer runs a turn to pick the app's stack, and no longer tells the agent what to build on: the agent reads the workspace and decides for itself, the same way it would outside The Framework. `buildPrompt` / `extendPrompt` / `scaffoldPrompt` now take just the intent and say nothing about a stack.
+
+  Being opinionated about the stack is a hard thing to do well, and a system prompt that nudges one is worse than none at all (#545). The stack guidance we had was not designed, it accumulated. It goes rather than half-ships.
+
+  Gone with it, because the architect was their only source:
+
+  - the plan-approval gate ("Approve this plan?" / "Use X instead") and re-architect. The agent-authored await gates a build turn raises are unaffected: a build that stops to ask still pauses the run with Approve / Decline.
+  - the decisions ledger in a run, and the `DECISIONS.md` a run wrote from it. `@gemstack/ai-autopilot`'s `decisions/` module is untouched and still exported; nothing in a run feeds it now.
+  - the dashboard's "Stack & rationale" and "Decisions ledger" panels. Loop status, deploy, and session cards are unchanged.
+  - `@gemstack/ai-autopilot`: `agentArchitect`, `STACK_TRADEOFFS`, `BootstrapSteps.architect`, `BootstrapOptions.ledger`, the `architect` bootstrap event, `ArchitectPlan` / `ArchitectContext` / `ArchitectDecision` / `ArchitectAlternative`, and the `plan` field on the build / loop / deploy contexts and on `BootstrapResult`. The flow is now scope -> build -> loop -> deploy.
+  - `@gemstack/framework`: `driverArchitect`, `reArchitect`, `architectPrompt`, `parseArchitectPlan`, `architectPlan`, `decisionLedger`, `RunFrameworkResult.ledger`, and the `bench:architect` benchmark.
+
+- 5e24797: Remove the persona, skill, and project-memory framing. A run's system prompt is now the built-in #326 prompt plus your own `SYSTEM.md`, and nothing else. Nothing is read off disk and appended when the run starts.
+
+  A build used to append the personas and skills for its detected stack plus the full contents of the repo's memory files. On one measured 8,852-character build prompt that framing was about 5,000 characters, more than the designed prompt it was wrapping. None of that text was designed; it accumulated. Prompt text nobody reviewed is a defect, not a feature (#547).
+
+  Two things fall out of this:
+
+  - **The prompt preview is now exact.** The dashboard's "See actual prompt sent" (#520) had to carry a caveat that a build run appends more at run time. It no longer does, so the caveat is gone and what you read before the run is what the agent gets, for every run kind.
+  - **A build stops being opinionated about the stack.** #545 removed the architect turn, but the personas still hard-instructed a stack ("Default to Prisma"). With both gone, nothing tells the agent what to build on.
+
+  Skills and project memory are worth having as designed features later. They are not worth keeping in this shape.
+
+  Removed from `@gemstack/framework`: the `memory` / `extensions` / `composeExtensions` options on `runFramework`, the `framing` option on `composeRunSystem` (`RunSystemOptions` is now `SystemPromptOptions`), `loadRepoMemory` / `memoryFraming` / `MEMORY_FILES`, `discoverExtensions`, and the `--compose-extensions` flag. `readProjectSignals` moved to `project.js` and is still exported from the root; preset detection still runs and still narrates `Detected <framework>`.
+
+  Removed from `@gemstack/ai-autopilot`: the `personas/` and `extensions/` modules (`definePersona`, `composePersonas`, `personaInstructions`, `personaTools`, `personaAgent`, `personaWorkers`, `personaRoster`, `stackPersonas`, `neutralPersonas`, `presetPersonas`, `defineSkill`, `SkillRegistry`, `composeSkills`, `skillInstructions`, `FrameworkExtension` and its registry). `Preset` is now `{name, framework, signals}`, a pure detector; `DomainPreset` loses `skills` and keeps its loops, prompts, and modes.
+
+  `@gemstack/ai-skills` is untouched. It is a different thing (an on-disk `SKILL.md` loader for ai-sdk agents) and is unaffected by any of this.
+
+### Patch Changes
+
+- 734da1a: fix(ai-autopilot): EventStream iterators are now cancellable
+
+  A consumer's async iterator gained a `return()` that drops its waiter from the stream and settles any pending `next()`. Previously a consumer that stopped iterating (e.g. a disconnected SSE client) left its waiter registered until the next `push`/`close`, so many short-lived consumers on an idle stream leaked. Live iteration and history replay are unchanged.
+
+- df15f71: FakeFs now enforces the same workspace-escape guard as the real runners. Its filesystem previously stored any path as a map key, so a `write('../evil.txt', ...)` that a real runner rejects was silently accepted. Code exercised only against `FakeRunner` never saw the escape path, then threw against Docker/Local/WebContainer. `FakeFs` now routes every path through the shared `safeSegments` guard, rejecting escapes and resolving `.`/`..` exactly as the real runners do.
+
 ## 0.9.0
 
 ### Minor Changes

@@ -1,9 +1,15 @@
-# @gemstack/example-framework-demo
+# @gemstack/framework-dashboard
 
-## 0.0.7
+## 0.1.0
+
+### Minor Changes
+
+- 3302b0f: Add the usage panel: what the account has left (the agent's own quota windows) and how much of it The Framework may spend before it pauses itself (the three consumption limits, each with a checkbox and a bar). Replaces the dashboard's "Usage & credits" placeholder.
 
 ### Patch Changes
 
+- c871fb2: Stop dropping failed dashboard reads. Every panel wrote its own async effect and only the usage panel caught, so a daemon restart made each of the others an unhandled rejection every tick. They now share two hooks (`useLoaded`/`usePolled`) that keep the last value through a failed read, reset on a project switch rather than showing the previous project's data, and retire an in-flight read on unmount — including the Runs rail's `reload`, which was unguarded and could write a stale project's runs.
+- dac7613: Rename the "post-merge" prompt to "on-before-mergeable" (#592). It fires on `setReadyForMerge()`, before the merge, so "post-merge" was a misnomer (Rom's call in #559). Renamed end to end: the `--post-merge` flag is now `--on-before-mergeable`; `runPostMerge` / `renderPostMergePrompt` / `PostMergeContext` / `POST_MERGE_PROMPT` become their `OnBeforeMergeable` equivalents; the prompt file is `on_before_mergeable_prompt.md`; and the dashboard preference key `postMergeQuality` is now `onBeforeMergeableQuality` (a saved toggle resets to its default once). No agent-facing prompt text changed: the string "post-merge" never appeared in any prompt. The dashboard's visible "Post-merge cleanup" label is left as-is pending a copy decision.
 - Updated dependencies [68555e4]
 - Updated dependencies [ca2b719]
 - Updated dependencies [0faa297]
@@ -64,8 +70,6 @@
 - Updated dependencies [131f349]
 - Updated dependencies [f1ff0d2]
 - Updated dependencies [4a741f6]
-- Updated dependencies [734da1a]
-- Updated dependencies [df15f71]
 - Updated dependencies [affa3d8]
 - Updated dependencies [c05a186]
 - Updated dependencies [1f588aa]
@@ -163,81 +167,3 @@
 - Updated dependencies [5417558]
 - Updated dependencies [8d396f7]
   - @gemstack/framework@0.9.0
-  - @gemstack/ai-autopilot@0.10.0
-
-## 0.0.6
-
-### Patch Changes
-
-- Updated dependencies [385c953]
-  - @gemstack/framework@0.8.0
-
-## 0.0.5
-
-### Patch Changes
-
-- Updated dependencies [cc6a8db]
-- Updated dependencies [5f319ff]
-- Updated dependencies [9f62be7]
-- Updated dependencies [08f5710]
-  - @gemstack/framework@0.7.0
-  - @gemstack/ai-autopilot@0.9.0
-
-## 0.0.4
-
-### Patch Changes
-
-- Updated dependencies [4a6311e]
-- Updated dependencies [b81e563]
-- Updated dependencies [c28c373]
-- Updated dependencies [74a9907]
-- Updated dependencies [8c3e7d0]
-- Updated dependencies [03e06aa]
-- Updated dependencies [c24ae22]
-- Updated dependencies [3c72f14]
-- Updated dependencies [e45e4d0]
-- Updated dependencies [396dc7f]
-- Updated dependencies [edd242b]
-- Updated dependencies [24944b9]
-- Updated dependencies [d2acba4]
-  - @gemstack/ai-autopilot@0.8.0
-  - @gemstack/framework@0.6.0
-
-## 0.0.3
-
-### Patch Changes
-
-- Updated dependencies [6f7e7e3]
-  - @gemstack/ai-autopilot@0.7.0
-  - @gemstack/framework@0.5.1
-
-## 0.0.2
-
-### Patch Changes
-
-- Updated dependencies [16f6bb8]
-- Updated dependencies [c7eae83]
-  - @gemstack/framework@0.5.0
-
-## 0.0.1
-
-### Patch Changes
-
-- Updated dependencies [1db19e2]
-- Updated dependencies [c3e7e9e]
-- Updated dependencies [5288ca6]
-- Updated dependencies [6625ca7]
-- Updated dependencies [bd13fcf]
-- Updated dependencies [11f76da]
-- Updated dependencies [c79f567]
-- Updated dependencies [f156cf8]
-- Updated dependencies [97b2943]
-- Updated dependencies [93892d7]
-- Updated dependencies [de37e7e]
-- Updated dependencies [c9cf96b]
-- Updated dependencies [d98d4ad]
-- Updated dependencies [a06e845]
-- Updated dependencies [c79f567]
-- Updated dependencies [f1d11d9]
-  - @gemstack/ai-autopilot@0.6.0
-  - @gemstack/framework@0.4.0

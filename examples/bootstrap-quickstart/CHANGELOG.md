@@ -1,5 +1,15 @@
 # @gemstack/example-bootstrap-quickstart
 
+## 0.0.9
+
+### Patch Changes
+
+- Updated dependencies [734da1a]
+- Updated dependencies [df15f71]
+- Updated dependencies [9442761]
+- Updated dependencies [5e24797]
+  - @gemstack/ai-autopilot@0.10.0
+
 ## 0.0.8
 
 ### Patch Changes
