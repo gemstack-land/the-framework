@@ -4,6 +4,7 @@ import { useCallback, useState } from 'react'
 import { onRun, onRetainedWorktrees } from '../server/reads.telefunc.js'
 import { EventList } from './EventList.js'
 import { RunActionBar } from './RunActionBar.js'
+import { RunHandoffPanel } from './RunHandoffPanel.js'
 import { RunResumeChat } from './RunResumeChat.js'
 import { useLoaded } from '../lib/use-async.js'
 
@@ -47,6 +48,10 @@ export function RunReplay({
         retainedWorktree={!removed && retained.includes(runId)}
         onWorktreeRemoved={onWorktreeRemoved}
       />
+      {/* What this session produced and what to do with it (#799). Directly under the action bar,
+          because it is the first thing you want from a finished session and the last thing the
+          dashboard could answer. */}
+      <RunHandoffPanel projectId={projectId} runId={runId} />
       {events.length === 0 ? (
         <div className="grid flex-1 place-items-center text-sm text-muted-foreground">This session has no events.</div>
       ) : (

@@ -16,6 +16,7 @@ import {
   worktreePath,
   listRuns,
   commitPendingWork,
+  currentBranch,
   removeWorktree,
   pruneWorktrees,
   readLiveMetas,
@@ -569,7 +570,10 @@ function createProjectRuntime({ cwd, env, binPath }: ProjectRuntimeOptions): Pro
       // it is about to lose. Stop it first, whether or not the worktree ends up removed: the run
       // is over, so the preview is serving a tree nothing is working on.
       await onStopPreview(projectKeyFor(projectCwd), runId)
-      const meta = await archiveWorktreeRun(worktree, projectCwd)
+      // Where the work ended up, recorded before the checkout can go (#799). The branch outlives
+      // the worktree and is the only handle the dashboard has left on a finished session.
+      const branch = await currentBranch(worktree)
+      const meta = await archiveWorktreeRun(worktree, projectCwd, undefined, branch)
       if (meta?.status !== 'done') return // failed / stopped / unreadable: keep it for inspection
       // A finished run can still be holding an uncommitted edit (#786), and removing the
       // checkout would destroy it. Commit it to the run's branch, which outlives the

@@ -2,7 +2,14 @@ import { getContext } from 'telefunc'
 import { appendControl, type ControlEntry } from '../control.js'
 import { openInApp, type OpenTarget, type OpenResult } from '../dashboard/open-in-app.js'
 import { resolveProjectPath, resolveRunPath, contextPreferences, contextPreview } from './context.js'
-import { isSafeRunId, readLiveMetas, removeWorktree, pruneWorktrees, worktreePath } from '../store/index.js'
+import { isSafeRunId, listRuns, readLiveMetas, removeWorktree, pruneWorktrees, worktreePath, type RunMeta } from '../store/index.js'
+import {
+  openRunPullRequest,
+  pushRunBranch,
+  readRunHandoff,
+  runBranchFor,
+  type HandoffResult,
+} from '../dashboard/run-handoff.js'
 import type { ChoiceBy } from '../events.js'
 import type {
   PreviewResult,
@@ -174,4 +181,60 @@ export async function sendOpenInApp(projectId: string, target: OpenTarget, runId
   const editor =
     target === 'editor' ? (await contextPreferences()?.read().catch((): Preferences => ({})))?.editor : undefined
   return openInApp(cwd, target, undefined, editor)
+}
+
+/**
+ * The session's own branch, or undefined when the run/project is unknown. Shared by the two
+ * handoff actions so they address exactly what {@link onRunHandoff} reports on.
+ */
+async function handoffTargetFor(projectId: string, runId: string): Promise<{ cwd: string; run: RunMeta } | undefined> {
+  const cwd = await resolveProjectPath(projectId)
+  if (!cwd || !isSafeRunId(runId)) return undefined
+  const live = (await readLiveMetas(cwd).catch(() => [])).find(run => run.id === runId)
+  const run = live ?? (await listRuns(cwd).catch(() => [])).find(run => run.id === runId)
+  return run ? { cwd, run } : undefined
+}
+
+/**
+ * Push a finished session's branch to `origin` (#799).
+ *
+ * A click rather than something the run does on its way out: pushing publishes the agent's work
+ * to a shared remote under the user's name, which is the user's call.
+ */
+export async function sendPushBranch(projectId: string, runId: string): Promise<HandoffResult> {
+  const target = await handoffTargetFor(projectId, runId)
+  if (!target) return { ok: false, error: 'unknown session' }
+  return pushRunBranch(target.cwd, runBranchFor(target.run))
+}
+
+/**
+ * Open a PR for a finished session's branch (#799), pushing it first if the remote lacks it.
+ *
+ * The title and body come from what the run already recorded: the session name the agent chose
+ * and the intent the user asked for. Nothing new is invented and nothing extra is asked of the
+ * user, which is the point of "offer the next step rather than describe it".
+ */
+export async function sendOpenPullRequest(projectId: string, runId: string): Promise<HandoffResult> {
+  const target = await handoffTargetFor(projectId, runId)
+  if (!target) return { ok: false, error: 'unknown session' }
+  const { cwd, run } = target
+  const branch = runBranchFor(run)
+  const handoff = await readRunHandoff(cwd, branch).catch(() => undefined)
+  if (handoff && !handoff.exists) return { ok: false, error: `branch ${branch} no longer exists` }
+  // Refuse rather than open an empty PR: a session that changed nothing has nothing to hand off.
+  if (handoff?.empty) return { ok: false, error: 'this session produced no commits to open a PR for' }
+  if (handoff?.pr) return { ok: true, url: handoff.pr.url }
+  return openRunPullRequest(cwd, branch, {
+    title: run.sessionName ?? run.intent?.split('\n')[0]?.slice(0, 72) ?? `Session ${run.id}`,
+    body: prBodyFor(run),
+    ...(handoff?.base ? { base: handoff.base } : {}),
+  })
+}
+
+/** The PR body: what was asked for, and which session did it. */
+function prBodyFor(run: RunMeta): string {
+  const lines: string[] = []
+  if (run.intent) lines.push(run.intent.trim(), '')
+  lines.push(`Opened from The Framework session \`${run.sessionName ?? run.id}\`.`)
+  return lines.join('\n')
 }

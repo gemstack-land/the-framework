@@ -1,6 +1,6 @@
 import { __decorateTelefunction } from 'telefunc'
-import { onRuns, onRun, onDocs, onProjectLog, onQueue, onOverview, onInterventions, onActivity, onDashboard, onGithubUrl, onGitStatus, onProjectFiles, onProjectFileStatus, onRetainedWorktrees, onRunWorktree } from './reads.telefunc.js'
-import { sendStop, sendChoice, sendMessage, sendStart, sendPreview, onServeTargets, sendStopPreview, onPreviewStatus, sendOpenInApp, sendRemoveWorktree } from './control.telefunc.js'
+import { onRuns, onRun, onDocs, onProjectLog, onQueue, onOverview, onInterventions, onActivity, onDashboard, onGithubUrl, onGitStatus, onProjectFiles, onProjectFileStatus, onRetainedWorktrees, onRunWorktree, onRunHandoff } from './reads.telefunc.js'
+import { sendStop, sendChoice, sendMessage, sendStart, sendPreview, onServeTargets, sendStopPreview, onPreviewStatus, sendOpenInApp, sendRemoveWorktree, sendPushBranch, sendOpenPullRequest } from './control.telefunc.js'
 import { onEvents } from './events.telefunc.js'
 import { onProjects, sendAddProject } from './projects.telefunc.js'
 import { onPreferences, savePreferences, onEditors } from './preferences.telefunc.js'
@@ -46,6 +46,7 @@ export function registerDashboardTelefunctions(appRootDir: string = process.cwd(
   reg(onGitStatus, 'onGitStatus', reads)
   reg(onRetainedWorktrees, 'onRetainedWorktrees', reads)
   reg(onRunWorktree, 'onRunWorktree', reads)
+  reg(onRunHandoff, 'onRunHandoff', reads)
   reg(onProjectFiles, 'onProjectFiles', reads)
   reg(onProjectFileStatus, 'onProjectFileStatus', reads)
   reg(sendStop, 'sendStop', control)
@@ -58,6 +59,8 @@ export function registerDashboardTelefunctions(appRootDir: string = process.cwd(
   reg(onPreviewStatus, 'onPreviewStatus', control)
   reg(sendOpenInApp, 'sendOpenInApp', control)
   reg(sendRemoveWorktree, 'sendRemoveWorktree', control)
+  reg(sendPushBranch, 'sendPushBranch', control)
+  reg(sendOpenPullRequest, 'sendOpenPullRequest', control)
   reg(onEvents, 'onEvents', events)
   reg(onProjects, 'onProjects', projects)
   reg(sendAddProject, 'sendAddProject', projects)

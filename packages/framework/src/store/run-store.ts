@@ -98,6 +98,14 @@ export interface RunMeta {
   sessionLink?: string
   /** The session name the agent chose (#326), also its `the-framework/<name>` branch. */
   sessionName?: string
+  /**
+   * The branch the run's work landed on, recorded while its worktree still exists (#799).
+   *
+   * Not reliably derivable afterwards: a clean run loses its checkout, and the #326 prompt lets
+   * the agent create its own branch, so neither `the-framework/<sessionName>` nor the run-id
+   * branch is guaranteed to be the one holding the commits.
+   */
+  branch?: string
   /** Whether the agent signalled `setReadyForMerge()` (#326): building (false/absent) vs ready (true). */
   readyForMerge?: boolean
   /**
@@ -490,12 +498,16 @@ export async function archiveWorktreeRun(
   worktree: string,
   repo: string,
   fs: StoreFs = nodeStoreFs(),
+  branch?: string,
 ): Promise<RunMeta | undefined> {
   try {
     const worktreeDir = join(worktree, FRAMEWORK_DIR)
     const live = await readMetaFile(fs, join(worktreeDir, META_FILE))
     if (!live?.id || !isSafeRunId(live.id)) return undefined
-    const meta: RunMeta = live.status === 'running' ? { ...live, status: 'stopped' } : live
+    const stopped: RunMeta = live.status === 'running' ? { ...live, status: 'stopped' } : live
+    // The branch is read from the checkout by the caller and stamped here, because this is the
+    // last moment it can be observed: the worktree is about to go (#799).
+    const meta: RunMeta = branch ? { ...stopped, branch } : stopped
     await archiveRun(fs, join(repo, FRAMEWORK_DIR), meta, join(worktreeDir, EVENTS_FILE))
     return meta
   } catch {
