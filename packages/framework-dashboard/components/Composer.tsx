@@ -249,10 +249,11 @@ export const Composer = forwardRef<ComposerHandle, {
 
       {/* Run controls, directly under the editor (#649/#650/#654/#668): agent+model at the start,
           then presets and the options gear, then submit at the end. */}
-      <div className="mt-2 flex flex-wrap items-center gap-1.5">
+      <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
         {controls}
         <Button
           type="submit"
+          size="sm"
           onClick={submit}
           className="ml-auto"
           disabled={busy || !prompt.trim()}

@@ -57,7 +57,7 @@ export function RunResumeChat({
   }
 
   return (
-    <div className="border-t border-border p-3">
+    <div className="border-t border-border p-2">
       <p className="mb-2 text-xs text-muted-foreground">Run ended — your next message continues it.</p>
       <Composer
         ref={composerRef}

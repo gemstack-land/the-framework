@@ -40,7 +40,7 @@ export function RunChat({
   }
 
   return (
-    <div className="border-t border-border p-3">
+    <div className="border-t border-border p-2">
       <Composer
         ref={composerRef}
         files={files}

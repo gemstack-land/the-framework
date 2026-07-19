@@ -264,12 +264,14 @@ export const PromptEditor = forwardRef<PromptEditorHandle, PromptEditorProps>(fu
     <div className="relative">
       <EditorContent
         editor={editor}
-        className={`w-full overflow-y-auto rounded-md border border-border bg-transparent p-2 text-sm focus-within:ring-2 focus-within:ring-[var(--color-primary)] ${
-          compact ? 'max-h-32 min-h-9' : 'max-h-64 min-h-[4.5rem]'
+        className={`w-full overflow-y-auto rounded-md border border-border bg-transparent px-2 py-1.5 text-sm focus-within:ring-2 focus-within:ring-[var(--color-primary)] ${
+          // The resting height is deliberately short (#756): the editor grows with its content up
+          // to max-h, so the tall empty box was reserving room for text nobody had typed yet.
+          compact ? 'max-h-32 min-h-8' : 'max-h-64 min-h-[2.75rem]'
         }`}
       />
       {isEmpty && (
-        <span className="pointer-events-none absolute left-2 top-2 text-sm text-muted-foreground">{placeholder}</span>
+        <span className="pointer-events-none absolute left-2 top-1.5 text-sm text-muted-foreground">{placeholder}</span>
       )}
     </div>
   )

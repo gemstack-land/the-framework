@@ -105,7 +105,7 @@ export function StartRunForm({
   }
 
   return (
-    <form onSubmit={e => e.preventDefault()} className="border-b border-border p-4">
+    <form onSubmit={e => e.preventDefault()} className="border-b border-border p-3">
       <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Start a run</div>
       <Composer
         ref={composerRef}
