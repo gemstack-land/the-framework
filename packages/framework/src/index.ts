@@ -94,6 +94,7 @@ export {
   type ChoiceRequest,
   type ChoicePick,
   type ChoiceBy,
+  type OnBeforeMergeableSkip,
   pickedIds,
   OPEN_LOOP_MODES,
 } from './events.js'

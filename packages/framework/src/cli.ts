@@ -22,7 +22,7 @@ import { startRelay, relayPublisher, type RelayPublisher } from './relay.js'
 import { randomUUID } from 'node:crypto'
 import { formatFrameworkEvent } from './terminal.js'
 import { CLAUDE_CODE_SESSION_LINK } from './session-link.js'
-import { type ChoicePick, type ChoiceRequest, type FrameworkEvent } from './events.js'
+import { type ChoicePick, type ChoiceRequest, type FrameworkEvent, type OnBeforeMergeableSkip } from './events.js'
 import {
   runFramework,
   type AppPreview,
@@ -786,8 +786,10 @@ async function settleRun(
     ctx.clearInterrupt()
     io.out(successLine)
     if (preview) io.out(`\n▶ Your app is running at ${preview.url} — open it in a browser.`)
-    await ctx.store?.close() // flush the event log; best-effort
+    // Before the close, not after (#835): close() archives the log into `runs/`, so an
+    // outcome appended afterwards would miss the copy the dashboard's history reads.
     await ctx.maybeFireOnBeforeMergeable()
+    await ctx.store?.close() // flush the event log; best-effort
     // Stay up while the dashboard and/or the app are live, then tear both down.
     if (dashboard || preview) {
       if (dashboard) io.out(`\nDashboard still live at ${dashboard.url}. Press Ctrl+C to exit.`)
@@ -1206,21 +1208,27 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
   }
 
   // Fire the #326 on-before-mergeable prompt once a --on-before-mergeable run has settled and the agent
-  // signalled setReadyForMerge(). Skipped for a fake/offline run and when the run was stopped.
+  // signalled setReadyForMerge(). Skipped for a fake/offline run and when the run was stopped —
+  // and every outcome, including each skip, is emitted as an event so the dashboard can show it (#835).
   const maybeFireOnBeforeMergeable = async (): Promise<void> => {
-    if (!opts.onBeforeMergeable || !sawReadyForMerge || stoppedCleanly || fake) return
+    // The step was never asked for, so there is no outcome to report and nothing to explain.
+    if (!opts.onBeforeMergeable) return
+    // Every other exit says so as an event (#835). stdout cannot carry this: a dashboard-started
+    // run is spawned with `stdio: 'ignore'`, so silence there read as "it ran and found nothing".
+    const skip = (reason: OnBeforeMergeableSkip) =>
+      onEvent({ kind: 'on-before-mergeable', outcome: 'skipped', reason })
+    if (!sawReadyForMerge) return skip('not-ready-for-merge')
+    if (stoppedCleanly) return skip('run-stopped')
+    if (fake) return skip('fake-run')
     // --eco-auto-maintenance (#314) no longer skips the whole run: since #537 this prompt
     // also carries `## Business knowledge`, which the flag does not name. It drops just
     // `## Maintenance` inside renderOnBeforeMergeablePrompt() instead.
     // Every line of the prompt names the session, so there is nothing to queue without one.
     // An agent that made changes has one; this is the agent that ignored the instruction.
-    if (!sessionName) {
-      io.out('  ! on-before-mergeable skipped: the session never called setSessionName().')
-      return
-    }
+    if (!sessionName) return skip('no-session-name')
     const binPath = process.argv[1]
-    if (!binPath) return
-    await runOnBeforeMergeable(
+    if (!binPath) return skip('no-bin-path')
+    const outcome = await runOnBeforeMergeable(
       cwd,
       binPath,
       io,
@@ -1228,6 +1236,7 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
       opts.maxCost,
       opts.eco,
     )
+    onEvent({ kind: 'on-before-mergeable', outcome })
   }
 
   // A mode/kind given with no preset in effect has nothing to act on: note it.
@@ -1633,6 +1642,9 @@ export type PromptRunner = (prompt: string, cwd: string, binPath: string, maxCos
  * child runs back to back (#556). Queueing is both what the doc says and the cheaper thing:
  * one short turn that writes a few TODO lines, rather than three full preset passes serialized
  * on the same git index. Best-effort, like the suite was: a failure is logged, never thrown.
+ *
+ * Returns how it went so the caller can emit it as an event (#835); the `io` lines stay for
+ * a terminal run, which is the one surface that can still read them.
  */
 export async function runOnBeforeMergeable(
   cwd: string,
@@ -1644,7 +1656,7 @@ export async function runOnBeforeMergeable(
   // Vanilla by default: the follow-up must not run the session-name step and branch (#560).
   run: PromptRunner = (prompt, cwd, binPath, maxCost) => spawnPromptRun(prompt, cwd, binPath, maxCost, true),
   fs: StoreFs = nodeStoreFs(),
-): Promise<void> {
+): Promise<'queued' | 'incomplete'> {
   // Ensure the presets exist so the queued entries' filePaths resolve, even in a repo
   // activated before they shipped or a fresh clone (they are gitignored) (#598). Best-effort,
   // like the rest of this run: a materialize failure must not block the queueing.
@@ -1656,6 +1668,7 @@ export async function runOnBeforeMergeable(
   io.out(`\n◆ on-before-mergeable: queueing quality follow-ups for ${tf.session_name}`)
   const ok = await run(renderOnBeforeMergeablePrompt(tf, eco), cwd, binPath, maxCost)
   if (!ok) io.out(`  ! on-before-mergeable queueing did not complete cleanly.`)
+  return ok ? 'queued' : 'incomplete'
 }
 
 /**

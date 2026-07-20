@@ -1,6 +1,6 @@
 import { strict as assert } from 'node:assert'
 import { test } from 'node:test'
-import { OPEN_LOOP_MODES, pickedIds } from './events.js'
+import { OPEN_LOOP_MODES, pickedIds, type OnBeforeMergeableSkip } from './events.js'
 import { formatFrameworkEvent } from './terminal.js'
 import { SESSION_ID_PLACEHOLDER, hasSessionIdPlaceholder, resolveSessionLink } from './session-link.js'
 
@@ -144,4 +144,16 @@ test('formats the rate-limit line by how much the quota actually matters (#517)'
   // An unseen status still renders rather than blowing up or vanishing.
   assert.match(line('some_new_status'), /quota some_new_status/)
   assert.ok(line('allowed').includes(new Date(at).toISOString()))
+})
+
+test('formatFrameworkEvent renders every post-merge cleanup outcome, naming the skip reason (#835)', () => {
+  assert.match(formatFrameworkEvent({ kind: 'on-before-mergeable', outcome: 'queued' })!, /^✓ post-merge cleanup: quality follow-ups queued$/)
+  assert.match(formatFrameworkEvent({ kind: 'on-before-mergeable', outcome: 'incomplete' })!, /! post-merge cleanup: queueing did not complete cleanly/)
+  const skipped = (reason: OnBeforeMergeableSkip) =>
+    formatFrameworkEvent({ kind: 'on-before-mergeable', outcome: 'skipped', reason })!
+  assert.match(skipped('not-ready-for-merge'), /skipped: the session never signalled ready-for-merge/)
+  assert.match(skipped('run-stopped'), /skipped: the run was stopped/)
+  assert.match(skipped('fake-run'), /skipped: this was a fake run/)
+  assert.match(skipped('no-session-name'), /skipped: the session never called setSessionName\(\)/)
+  assert.match(skipped('no-bin-path'), /skipped: the framework binary path is unknown/)
 })

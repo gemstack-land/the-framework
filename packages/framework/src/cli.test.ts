@@ -1,11 +1,11 @@
 import { strict as assert } from 'node:assert'
 import { test } from 'node:test'
-import { mkdtemp, mkdir, readFile, writeFile, rm } from 'node:fs/promises'
+import { mkdtemp, mkdir, readdir, readFile, writeFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, dirname } from 'node:path'
 import { appendControl } from './control.js'
 import { daemonStatePath } from './daemon.js'
-import { EVENTS_FILE, FRAMEWORK_DIR, type StoreFs } from './store/index.js'
+import { EVENTS_FILE, FRAMEWORK_DIR, RUNS_DIR, type StoreFs } from './store/index.js'
 import {
   activeModes,
   antiLazyPillOff,
@@ -742,5 +742,54 @@ test('a live daemon steers a dashboard-less run through its gates via control.js
     else process.env.XDG_CONFIG_HOME = prevXdg
     await rm(cwd, { recursive: true, force: true })
     await rm(cfg, { recursive: true, force: true })
+  }
+})
+
+test('runOnBeforeMergeable reports how it went, so the caller can emit it (#835)', async () => {
+  const { io } = capture()
+  const fire = (ok: boolean) =>
+    runOnBeforeMergeable('/work/app', '/bin/framework', io, { session_name: 'add-oauth' }, undefined, undefined, () =>
+      Promise.resolve(ok), memFs(),
+    )
+  assert.equal(await fire(true), 'queued')
+  assert.equal(await fire(false), 'incomplete')
+})
+
+test('a declined post-merge cleanup lands in the archived event log, not on stdout (#835)', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'framework-obm-'))
+  try {
+    const { io } = capture()
+    // A fake run never signals ready-for-merge, so the step declines. The point is that the
+    // decline is *reported*: it has to survive into runs/, which close() copies the log into.
+    const code = await runCli(['prompt', 'review the auth flow', '--fake', '--no-dashboard', '--on-before-mergeable', '--cwd', dir], io)
+    assert.equal(code, 0)
+    const runs = join(dir, FRAMEWORK_DIR, RUNS_DIR)
+    const archived = (await readdir(runs)).filter(f => f.endsWith('.jsonl'))
+    assert.equal(archived.length, 1, 'the run was archived')
+    const events = (await readFile(join(runs, archived[0]!), 'utf8'))
+      .split('\n')
+      .filter(Boolean)
+      .map(l => JSON.parse(l) as FrameworkEvent)
+    const outcome = events.find(e => e.kind === 'on-before-mergeable')
+    assert.ok(outcome, 'the outcome is in the archived log')
+    assert.equal(outcome.kind === 'on-before-mergeable' && outcome.outcome, 'skipped')
+    assert.equal(outcome.kind === 'on-before-mergeable' && outcome.outcome === 'skipped' && outcome.reason, 'not-ready-for-merge')
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
+test('a run that never asked for the post-merge cleanup stays quiet about it (#835)', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'framework-obm-off-'))
+  try {
+    const { io } = capture()
+    assert.equal(await runCli(['prompt', 'review the auth flow', '--fake', '--no-dashboard', '--cwd', dir], io), 0)
+    const events = (await readFile(join(dir, FRAMEWORK_DIR, EVENTS_FILE), 'utf8'))
+      .split('\n')
+      .filter(Boolean)
+      .map(l => JSON.parse(l) as FrameworkEvent)
+    assert.equal(events.some(e => e.kind === 'on-before-mergeable'), false)
+  } finally {
+    await rm(dir, { recursive: true, force: true })
   }
 })

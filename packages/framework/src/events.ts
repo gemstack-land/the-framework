@@ -49,6 +49,22 @@ export interface ChoiceRequest {
   file?: string
 }
 
+/**
+ * Why the #326 post-merge cleanup step declined to run (#835). Every decline carries one,
+ * so "I turned it on and nothing happened" has an answer in the log.
+ */
+export type OnBeforeMergeableSkip =
+  /** The agent never signalled `setReadyForMerge()`, so there is nothing to clean up after. */
+  | 'not-ready-for-merge'
+  /** The run was stopped (Stop button, Ctrl+C, budget cap) rather than finished. */
+  | 'run-stopped'
+  /** A fake/offline run: no agent to hand the follow-up prompt to. */
+  | 'fake-run'
+  /** The agent never called `setSessionName()`, which every line of the prompt names. */
+  | 'no-session-name'
+  /** `process.argv[1]` was empty, so there is no binary to spawn the follow-up with. */
+  | 'no-bin-path'
+
 /** Who resolved a {@link ChoiceRequest}: a human, the autopilot countdown, or a headless auto-accept. */
 export type ChoiceBy = 'user' | 'autopilot' | 'auto'
 
@@ -130,6 +146,16 @@ export type FrameworkEvent =
    * building (orange) to ready (green); the on-before-mergeable quality prompts hang off it.
    */
   | { kind: 'ready-for-merge' }
+  /**
+   * The #326 post-merge cleanup step settled (#835): it queued the quality follow-ups,
+   * queued them but did not finish cleanly, or declined with a {@link OnBeforeMergeableSkip}.
+   *
+   * An event rather than stdout because the surfaces that need it cannot read stdout: a
+   * dashboard-started run is spawned with `stdio: 'ignore'`. Emitted only when the option
+   * was on, so a run that never asked for the step stays quiet.
+   */
+  | { kind: 'on-before-mergeable'; outcome: 'queued' | 'incomplete' }
+  | { kind: 'on-before-mergeable'; outcome: 'skipped'; reason: OnBeforeMergeableSkip }
   /**
    * The work has settled and the run is parked on the user (#785): it stays open as a
    * conversation (#714), so its process is still alive and it still takes messages, but

@@ -1,6 +1,6 @@
 import type { BootstrapEvent } from '@gemstack/ai-autopilot'
 import type { DriverEvent, DriverRateLimit } from './driver/index.js'
-import { pickedIds, type ChoiceOption, type FrameworkEvent } from './events.js'
+import { pickedIds, type ChoiceOption, type FrameworkEvent, type OnBeforeMergeableSkip } from './events.js'
 
 // The terminal surface for the run's event stream: render one {@link FrameworkEvent} as one
 // human-readable line. This is the CLI's counterpart to the dashboard's read-model
@@ -32,6 +32,15 @@ export function formatFrameworkEvent(event: FrameworkEvent): string {
       return `✓ ready for merge`
     case 'settled':
       return `◆ done for now — waiting for your next message`
+    case 'on-before-mergeable':
+      switch (event.outcome) {
+        case 'queued':
+          return `✓ post-merge cleanup: quality follow-ups queued`
+        case 'incomplete':
+          return `  ! post-merge cleanup: queueing did not complete cleanly`
+        case 'skipped':
+          return `  ~ post-merge cleanup skipped: ${skipReason(event.reason)}`
+      }
     case 'usage': {
       const turns = `over ${event.turns} turn${event.turns === 1 ? '' : 's'}`
       // No price to show: report the tokens the agent *did* report, rather than a
@@ -60,6 +69,22 @@ export function formatFrameworkEvent(event: FrameworkEvent): string {
       return formatBootstrapEvent(event.event)
     case 'end':
       return event.ok ? '✓ finished' : event.stopped ? '■ stopped' : `✗ failed: ${event.detail ?? 'unknown error'}`
+  }
+}
+
+/** Say why the post-merge cleanup declined in the reader's terms, not the guard's (#835). */
+function skipReason(reason: OnBeforeMergeableSkip): string {
+  switch (reason) {
+    case 'not-ready-for-merge':
+      return 'the session never signalled ready-for-merge'
+    case 'run-stopped':
+      return 'the run was stopped'
+    case 'fake-run':
+      return 'this was a fake run'
+    case 'no-session-name':
+      return 'the session never called setSessionName()'
+    case 'no-bin-path':
+      return 'the framework binary path is unknown'
   }
 }
 
