@@ -3,6 +3,12 @@ import { renderSpikeAndPlanPrompt, SPIKE_AND_PLAN_PRESET_NAME } from './spike-an
 import { renderQuickWinsPrompt, QUICK_WINS_PRESET_NAME } from './quick-wins-preset.js'
 import { renderDrainQueuePrompt, DRAIN_QUEUE_PRESET_NAME } from './drain-queue-preset.js'
 import { renderMaintenancePrompt, MAINTENANCE_PRESET_NAME } from './maintenance-preset.js'
+import {
+  renderTriageQuickPrompt,
+  TRIAGE_QUICK_PRESET_NAME,
+  renderTriageConsensualPrompt,
+  TRIAGE_CONSENSUAL_PRESET_NAME,
+} from './triage-presets.js'
 
 /**
  * Auto PM (#685): spend leftover subscription quota on product management instead of
@@ -135,11 +141,34 @@ export interface AutoPmJob {
 }
 
 /**
- * The default cycle: harvest the plans we have (#773), then make more plans (#685). Quick wins
- * lead because a machine sitting on unharvested plans should start doing rather than planning.
+ * The default cycle, ordered cheapest-and-readiest first: harvest the plans we have (#773), triage
+ * the quick tickets (#891), then the significant-but-agreed ones (#892), and only then make more
+ * plans (#685). A machine sitting on work it has already thought through should start *doing*
+ * rather than planning, and planning is both the most expensive turn and the one whose output the
+ * earlier jobs consume.
+ *
+ * This rotation is what #891/#892 mean by "with a cron job regularly firing this preset". No
+ * separate scheduler is involved and none is needed: the rotation already fires on every idle tick
+ * where the queue is dry, which is exactly when the queue wants refilling. That is the opposite of
+ * the maintenance sweep (#882), which is paced by a calendar because it looks at static history and
+ * would otherwise never come due — hence its own {@link AUTO_PM_MAINTENANCE_JOB} outside the cycle.
+ *
+ * The gated triage sibling (#698) is deliberately not here: it ends in `<AWAIT>`, so firing it with
+ * nobody at the keyboard would park a run against a human who will never answer.
+ *
+ * Each triage prompt pins its own session name and aborts if that branch already exists, so a
+ * rotation that comes round again while the previous triage is still in flight is a no-op rather
+ * than a duplicate. The rotation still advances past it, which is the wanted behaviour: the next
+ * idle tick tries the next job instead of retrying a job that is already running.
  */
 export const AUTO_PM_JOBS: readonly AutoPmJob[] = [
   { name: QUICK_WINS_PRESET_NAME, prompt: renderQuickWinsPrompt(), describe: 'harvesting quick-wins from the plans' },
+  { name: TRIAGE_QUICK_PRESET_NAME, prompt: renderTriageQuickPrompt(), describe: 'triaging quick-win tickets' },
+  {
+    name: TRIAGE_CONSENSUAL_PRESET_NAME,
+    prompt: renderTriageConsensualPrompt(),
+    describe: 'triaging consensual tickets',
+  },
   { name: SPIKE_AND_PLAN_PRESET_NAME, prompt: renderSpikeAndPlanPrompt(), describe: 'spiking & planning tickets' },
 ]
 

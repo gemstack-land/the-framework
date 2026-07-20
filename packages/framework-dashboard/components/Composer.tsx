@@ -13,6 +13,8 @@ import {
   renderQuickWinsPrompt,
   renderMarketResearchPrompt,
   renderMaintenancePrompt,
+  renderTriageQuickPrompt,
+  renderTriageConsensualPrompt,
 } from '@gemstack/framework/client'
 import { usePreferences, updatePreferences, autopilotEnabled, themePreference } from '../lib/preferences.js'
 import { useDetectedEditors } from '../lib/editors.js'
@@ -48,6 +50,18 @@ const PRESETS: { id: string; label: string; render: (what?: string, ctx?: Preset
     label: 'Maintenance',
     render: renderMaintenancePrompt,
     tooltip: 'Queue maintainability + security work per codebase subset (TODO_AGENTS.md)',
+  },
+  {
+    id: 'triage-quick',
+    label: 'Do quick-win work',
+    render: renderTriageQuickPrompt,
+    tooltip: 'Add `tickets/*.md` to queue (TODO_AGENTS.md), only quick-win and consensual tickets',
+  },
+  {
+    id: 'triage-consensual',
+    label: 'Do consensual work',
+    render: renderTriageConsensualPrompt,
+    tooltip: 'Add `tickets/*.md` to queue (TODO_AGENTS.md), only significant (no quick-wins) and consensual tickets',
   },
 ]
 

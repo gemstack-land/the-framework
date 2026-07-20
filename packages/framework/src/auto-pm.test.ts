@@ -176,9 +176,30 @@ test('startAutoPm survives a project whose backlog cannot be read (#685)', async
   assert.deepEqual(started, [])
 })
 
-test('AUTO_PM_JOBS harvests before it plans (#773)', () => {
-  // Quick wins lead: a machine that already has plans should start doing, not planning more.
-  assert.deepEqual(AUTO_PM_JOBS.map(j => j.name), ['quick-wins', 'spike-and-plan'])
+test('AUTO_PM_JOBS harvests, then triages, then plans (#773/#891/#892)', () => {
+  // Cheapest-and-readiest first: harvest existing plans, triage the cheap tickets, then the
+  // significant ones, and leave planning last — it is the priciest turn and the one whose
+  // output every earlier job consumes.
+  assert.deepEqual(AUTO_PM_JOBS.map(j => j.name), [
+    'quick-wins',
+    'triage-quick',
+    'triage-consensual',
+    'spike-and-plan',
+  ])
+})
+
+test('the rotation is the schedule the triage presets asked for (#891/#892)', () => {
+  // #891/#892 both say "with a cron job regularly firing this preset". The rotation already
+  // fires on every idle tick where the queue is dry, so no separate scheduler exists — unlike
+  // the maintenance sweep (#882), which needs a calendar key because it would never come due.
+  const names = AUTO_PM_JOBS.map(j => j.name)
+  assert.ok(names.includes('triage-quick'), 'quick triage must be in the rotation')
+  assert.ok(names.includes('triage-consensual'), 'consensual triage must be in the rotation')
+  // The gated sibling (#698) must never be: it ends in <AWAIT> and would park a run forever.
+  assert.equal(names.includes('suggest-tickets-to-work-on'), false)
+  for (const job of AUTO_PM_JOBS) {
+    assert.equal(job.prompt.includes('<AWAIT>'), false, `${job.name} must not wait on a human`)
+  }
 })
 
 test('startAutoPm walks the job cycle across idle moments (#773)', async () => {

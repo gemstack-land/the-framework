@@ -44,6 +44,7 @@ export { renderSuggestTicketsToWorkOnPrompt } from './suggest-tickets-to-work-on
 export { renderSpikeAndPlanPrompt } from './spike-and-plan-preset.js'
 export { renderQuickWinsPrompt } from './quick-wins-preset.js'
 export { renderMaintenancePrompt } from './maintenance-preset.js'
+export { renderTriageQuickPrompt, renderTriageConsensualPrompt } from './triage-presets.js'
 // The preferences -> run options mapping (#858), shared with the daemon so an unattended run
 // starts with the same settings a launcher-started one would. Pure field logic, no Node imports.
 export { runOptionsFromPreferences, autopilotEnabled } from './run-options.js'
