@@ -1,5 +1,6 @@
-import { forwardRef, useImperativeHandle, useRef, useState, type FormEvent } from 'react'
+import { forwardRef, useImperativeHandle, useMemo, useRef, useState, type FormEvent } from 'react'
 import type { ProjectSummary } from '@gemstack/framework'
+import type { PresetRenderContext } from '@gemstack/framework/client'
 import {
   renderResearchPrompt,
   renderReadabilityPrompt,
@@ -25,7 +26,7 @@ import { Button } from './ui/button.js'
 
 // The presets (#353/#433): each PREFILLS the editor with a rendered prompt and runs it verbatim
 // (`kind: 'prompt'`). Emptying the box falls back to a normal `build` run.
-const PRESETS: { id: string; label: string; render: () => string; tooltip?: string }[] = [
+const PRESETS: { id: string; label: string; render: (what?: string, ctx?: PresetRenderContext) => string; tooltip?: string }[] = [
   { id: 'research', label: 'Research', render: renderResearchPrompt },
   { id: 'readability', label: 'Readability', render: renderReadabilityPrompt },
   { id: 'maintainability', label: 'Maintainability', render: renderMaintainabilityPrompt },
@@ -108,8 +109,12 @@ export const Composer = forwardRef<ComposerHandle, {
   /** Off inside a session (#831): a session is bound to the agent it started with, so the select
    *  would only ever rewrite the *next* session's default. Chosen at the launcher instead. */
   showAgentModel?: boolean | undefined
+  /** The session this composer sits in, if any (#874): a preset launched from a run page targets
+   *  that session by default, instead of the whole codebase. Absent at the launcher, where no
+   *  session exists yet. */
+  sessionName?: string | undefined
 }>(function Composer(
-  { files, addContext, onSubmit, onPromptChange, onPreset, busy, submitLabel, submitBusyLabel, placeholder, showShortcutHint = false, compact = false, showAgentModel = true },
+  { files, addContext, onSubmit, onPromptChange, onPreset, busy, submitLabel, submitBusyLabel, placeholder, showShortcutHint = false, compact = false, showAgentModel = true, sessionName },
   ref,
 ) {
   const [prompt, setPrompt] = useState('')
@@ -123,6 +128,18 @@ export const Composer = forwardRef<ComposerHandle, {
   const autopilot = autopilotEnabled(preferences)
   const technical = preferences.technical ?? false
   const vanilla = preferences.vanilla ?? false
+
+  // Presets render against the session they are launched from (#874). The run pages pass their
+  // session name so a preset targets that session by default; the launcher passes none, and the
+  // default falls through to the whole codebase.
+  const presets = useMemo(
+    () =>
+      PRESETS.map(p => ({
+        ...p,
+        render: () => p.render(undefined, { session_name: sessionName, settings: { technical_control: technical } }),
+      })),
+    [sessionName, technical],
+  )
   const transparent = preferences.transparent ?? false // #625: the master off-switch (raw Claude Code)
   const eco = preferences.eco ?? false
   const ecoPlanning = preferences.ecoPlanning ?? false
@@ -207,7 +224,7 @@ export const Composer = forwardRef<ComposerHandle, {
       onMentionFile={addContext}
       projects={projects}
       files={files}
-      presets={PRESETS}
+      presets={presets}
       customPresets={customPresets}
       // The `/` menu offers "New preset…" only in the full composer, where the create panel renders;
       // the compact navbar launch has no panel, so it gets no callback (and no item).

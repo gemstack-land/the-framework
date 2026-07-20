@@ -1,4 +1,5 @@
 import { join } from 'node:path'
+import { THE_FRAMEWORK_DIR } from './framework-dir.js'
 import { nodeStoreFs, type StoreFs } from './store/index.js'
 
 /**
@@ -8,8 +9,10 @@ import { nodeStoreFs, type StoreFs } from './store/index.js'
  * land in later issues (#379/#380).
  */
 
-/** The directory, under the project root, that holds the log. */
-export const THE_FRAMEWORK_DIR = '.the-framework'
+/** The directory, under the project root, that holds the log. Defined in its own node-free
+ * module (#874) so the browser-reachable preset registry can share it; re-exported here
+ * because this is where every existing import site expects to find it. */
+export { THE_FRAMEWORK_DIR }
 
 /** The markdown log file name. */
 export const LOGS_FILE = 'LOGS.md'

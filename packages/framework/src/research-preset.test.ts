@@ -13,11 +13,11 @@ test('the Research template carries the #331 flow: rating, multi-select gate, TO
   assert.deepEqual(RESEARCH_PARAMS.map(p => p.name), ['what'])
 })
 
-test('renderResearchPrompt defaults the blank to "this PR" and takes an override', () => {
+test('renderResearchPrompt defaults the blank to the session, else the whole codebase (#874)', () => {
   const byDefault = renderResearchPrompt()
-  assert.match(byDefault, /problem variability" of this PR/)
+  assert.match(byDefault, /problem variability" of entire codebase/)
   const blank = renderResearchPrompt('   ')
-  assert.match(blank, /problem variability" of this PR/) // blank falls back, not erased
+  assert.match(blank, /problem variability" of entire codebase/) // blank falls back, not erased
   const custom = renderResearchPrompt('the auth flow')
   assert.match(custom, /problem variability" of the auth flow/)
   // No raw placeholder survives a render.

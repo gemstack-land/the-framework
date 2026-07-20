@@ -1,4 +1,5 @@
 import type { FrameworkEvent } from '@gemstack/framework'
+import { runProgress } from '@gemstack/framework/client'
 import { RunActionBar } from './RunActionBar.js'
 import { RunChat } from './RunChat.js'
 import { RunFeed } from './RunFeed.js'
@@ -25,6 +26,9 @@ export function RunLive({
   files: string[]
   addContext: (path: string) => void
 }) {
+  // The session's own name, once the agent has set it (#874): presets in the chat below default
+  // to targeting this session rather than the whole codebase.
+  const sessionName = runProgress(events).sessionName
   return (
     <>
       <RunActionBar projectId={projectId} runId={runId} events={events} />
@@ -32,7 +36,7 @@ export function RunLive({
           falls back to the project root and would report the user's own dirty files as the run's. */}
       {runId && <RunChanges projectId={projectId} runId={runId} />}
       <RunFeed events={events} showSessionLink={false} />
-      <RunChat projectId={projectId} runId={runId} files={files} addContext={addContext} />
+      <RunChat projectId={projectId} runId={runId} files={files} addContext={addContext} sessionName={sessionName} />
     </>
   )
 }

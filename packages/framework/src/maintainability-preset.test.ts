@@ -14,11 +14,11 @@ test('the Maintainability template carries the #361 prompt: deliberately minimal
   assert.deepEqual(MAINTAINABILITY_PARAMS.map(p => p.name), ['what'])
 })
 
-test('renderMaintainabilityPrompt defaults the blank to "this PR" and takes an override', () => {
+test('renderMaintainabilityPrompt defaults the blank to the session, else the whole codebase (#874)', () => {
   const byDefault = renderMaintainabilityPrompt()
-  assert.match(byDefault, /^Refactor this PR to make it/)
+  assert.match(byDefault, /^Refactor entire codebase to make it/)
   const blank = renderMaintainabilityPrompt('   ')
-  assert.match(blank, /^Refactor this PR to make it/) // blank falls back, not erased
+  assert.match(blank, /^Refactor entire codebase to make it/) // blank falls back, not erased
   const custom = renderMaintainabilityPrompt('the queue package')
   assert.match(custom, /^Refactor the queue package to make it/)
   // No raw placeholder survives a render.

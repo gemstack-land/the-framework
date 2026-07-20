@@ -12,9 +12,9 @@ const readability = definePreset('readability', PRESETS_READABILITY, 'What to re
 
 /** The preset's name, as the dashboard button uses it. */
 export const READABILITY_PRESET_NAME = readability.name
-/** The one user param: what to refactor. Defaults to `this PR`, like Research. */
+/** The one user param: what to refactor. Defaults to the launching session, else the whole codebase (#874). */
 export const READABILITY_PARAMS = readability.params
 /** The prompt template, verbatim from #360 (with `${{ tf.params.what }}` as the blank). */
 export const READABILITY_PROMPT_TEMPLATE = readability.template
-/** Render the Readability prompt, filling its `${{ tf.params.what }}` blank (defaults to `this PR`). */
+/** Render the Readability prompt, filling its `${{ tf.params.what }}` blank (defaults to the launching session, else the whole codebase). */
 export const renderReadabilityPrompt = readability.render

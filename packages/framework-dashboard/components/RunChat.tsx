@@ -13,6 +13,7 @@ export function RunChat({
   runId,
   files,
   addContext,
+  sessionName,
 }: {
   projectId: string
   /** Which run the message goes to (#749); absent falls back to the project's control log. */
@@ -21,6 +22,8 @@ export function RunChat({
   files: string[]
   /** Add a path to the run Context (from an `@`/`#` mention). */
   addContext: (path: string) => void
+  /** This session's name (#874), so a preset launched here targets it by default. */
+  sessionName?: string | undefined
 }) {
   const composerRef = useRef<ComposerHandle>(null)
   const [sending, setSending] = useState(false)
@@ -50,6 +53,7 @@ export function RunChat({
         submitLabel="Send"
         submitBusyLabel="Sending…"
         showAgentModel={false}
+        sessionName={sessionName}
         placeholder="Message the session…  ( / commands · < tags · @ projects · # files )"
       />
     </div>

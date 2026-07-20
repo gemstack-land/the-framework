@@ -20,6 +20,7 @@ export function RunResumeChat({
   files,
   addContext,
   onRunStarted,
+  sessionName,
 }: {
   projectId: string
   /** The run being continued (#762), so the follow-up reopens it instead of starting a new one. */
@@ -31,6 +32,8 @@ export function RunResumeChat({
   files: string[]
   addContext: (path: string) => void
   onRunStarted: (intent: string, runId?: string) => void
+  /** This session's name (#874), so a preset launched here targets it by default. */
+  sessionName?: string | undefined
 }) {
   const composerRef = useRef<ComposerHandle>(null)
   const [busy, setBusy] = useState(false)
@@ -77,6 +80,7 @@ export function RunResumeChat({
         submitLabel="Send"
         submitBusyLabel="Resuming…"
         showAgentModel={false}
+        sessionName={sessionName}
         placeholder="Message the session to continue it…  ( / commands · < tags · @ projects · # files )"
       />
       {error && <p className="mt-1 text-xs text-red-500">{error}</p>}

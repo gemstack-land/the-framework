@@ -54,6 +54,7 @@ import {
   short,
   type RepoReview,
 } from './maintenance.js'
+import { defaultWhat } from './preset-prompt.js'
 import { renderMaintainabilityPrompt } from './maintainability-preset.js'
 import { renderOnBeforeMergeablePrompt, type OnBeforeMergeableContext } from './on-before-mergeable-prompt.js'
 import { runPrompt } from './prompt-run.js'
@@ -938,7 +939,7 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
     io.err('Run `framework --help` for usage.')
     return 2
   }
-  // A bare `framework research` is a real run — its "what" defaults to `this PR`.
+  // A bare `framework research` is a real run — its "what" falls back to the preset default.
   if (!intent && !fake && !opts.research) return runForegroundDaemonCmd(opts, io)
 
   const cwd = opts.cwd ?? (fake ? join(tmpdir(), 'framework-fake-workspace') : process.cwd())
@@ -1075,10 +1076,10 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
     try {
       // Seed the run's intent (its prompt) so the dashboard's Runs list labels it instead of
       // showing "(no prompt)". A build run refines this via its scope event; a prompt/research
-      // run keeps it. Research with no "what" defaults to the same "this PR" the log title uses.
+      // run keeps it. Research with no "what" uses the same preset default the log title uses.
       store = await RunStore.open(cwd, {
         fresh: true,
-        intent: intent || (opts.research ? 'this PR' : ''),
+        intent: intent || (opts.research ? defaultWhat() : ''),
         // Adopt the daemon's id (#736) so the run and the worktree it lives in share one.
         ...(opts.runId ? { id: opts.runId } : {}),
         // Continuing (#762): keep the existing log rather than starting this run's history over.
@@ -1160,7 +1161,7 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
   // `end` event (fired once by both run paths) closes the entry. Best-effort: the
   // project DB is committed history, so it must never break a run.
   const logKind = runLogKind(opts, transparent)
-  const logTitle = intent || (opts.research ? 'this PR' : '')
+  const logTitle = intent || (opts.research ? defaultWhat() : '')
   let logSessionId: string | undefined
   let logSessionLink: string | undefined
   // The browser preview's port, announced on the first `session` event rather than when the
