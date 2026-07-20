@@ -65,3 +65,41 @@ describe('RunHistory (#785)', () => {
     expect(screen.queryByText('waiting')).toBeNull()
   })
 })
+
+// #862: a big view in the right rail takes the room, and the sessions rail gives up its column.
+describe('RunHistory collapsed (#862)', () => {
+  const rail = (container: HTMLElement) => container.querySelector('aside')!
+
+  test('expanded by default, so nothing changes for the ordinary layout', () => {
+    const { container } = render(<RunHistory projectId="p1" runs={[run()]} selectedRunId={null} onSelect={() => {}} />)
+    expect(rail(container).className).toContain('w-60')
+    expect(rail(container).className).not.toContain('w-12')
+  })
+
+  test('collapsed reserves only a strip', () => {
+    const { container } = render(
+      <RunHistory projectId="p1" runs={[run()]} selectedRunId={null} onSelect={() => {}} collapsed />,
+    )
+    expect(rail(container).className).toContain('w-12')
+  })
+
+  // The rows must stay reachable while narrow: it is a squeeze, not a hidden rail.
+  test('collapsed still renders the sessions, and reopens on hover or focus', () => {
+    const { container } = render(
+      <RunHistory projectId="p1" runs={[run()]} selectedRunId={null} onSelect={() => {}} collapsed />,
+    )
+    expect(screen.getByText("replace 'Hello, world!' with 'Welcome!'")).toBeTruthy()
+    const panel = rail(container).firstElementChild as HTMLElement
+    expect(panel.className).toContain('group-hover:w-60')
+    expect(panel.className).toContain('group-focus-within:w-60')
+  })
+
+  // Floating rather than pushing: hovering the rail must not reflow what is being read.
+  test('the collapsed panel floats over the main pane', () => {
+    const { container } = render(
+      <RunHistory projectId="p1" runs={[run()]} selectedRunId={null} onSelect={() => {}} collapsed />,
+    )
+    const panel = rail(container).firstElementChild as HTMLElement
+    expect(panel.className).toContain('absolute')
+  })
+})
