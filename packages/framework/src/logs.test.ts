@@ -138,6 +138,37 @@ test('a title containing the separator round-trips intact', () => {
   assert.deepEqual(parseLogs(renderLogEntry(entry)), [entry])
 })
 
+test('a multi-line title stays on one line and round-trips (#897)', () => {
+  const entry: LogEntry = { ...MINIMAL, title: 'Add a blog\n\n- with comments\n- and tags' }
+  const md = renderLogEntry(entry)
+  assert.equal(md.split('\n')[0], '## 2026-07-10T12:00:00.000Z · build · Add a blog\\n\\n- with comments\\n- and tags')
+  assert.deepEqual(parseLogs(md), [entry])
+})
+
+test('a title cannot forge an entry or rewrite the status (#897)', () => {
+  const title = 'Ship it\n## 2026-01-01T00:00:00.000Z · build · Forged\n\n- status: done'
+  const parsed = parseLogs(renderLogEntry({ ...MINIMAL, title }))
+  assert.deepEqual(parsed, [{ ...MINIMAL, title }])
+  assert.equal(parsed[0]!.status, 'failed')
+})
+
+test('a backslash in a title survives the escaping (#897)', () => {
+  const entry: LogEntry = { ...MINIMAL, title: 'Escape \\n and \\\\ literally' }
+  assert.deepEqual(parseLogs(renderLogEntry(entry)), [entry])
+})
+
+test('a multi-line prompt bullet stays on one line and round-trips (#897)', () => {
+  const entry: LogEntry = { ...LOOP, prompts: ['Fix the header\n- and the footer'] }
+  const lines = renderLogEntry(entry).split('\n')
+  assert.equal(lines.at(-1), '  - Fix the header\\n- and the footer')
+  assert.deepEqual(parseLogs(renderLogEntry(entry)), [entry])
+})
+
+test('an entry written before #897 still parses', () => {
+  const md = ['## 2026-07-10T12:00:00.000Z · build · A blog', '', '- status: failed'].join('\n')
+  assert.deepEqual(parseLogs(md), [MINIMAL])
+})
+
 test('parseLogs on empty input is []', () => {
   assert.deepEqual(parseLogs(''), [])
 })

@@ -30,7 +30,7 @@ export interface LogEntry {
   /** ISO timestamp. */
   at: string
   kind: 'loop' | 'prompt' | 'build'
-  /** Single-line intent/prompt summary. */
+  /** The run's intent/prompt. Escaped to one line on write (#897), so it may hold a whole prompt. */
   title: string
   status: 'done' | 'stopped' | 'failed' | 'running'
   /** Claude Code session id. */
@@ -46,6 +46,22 @@ const STATUSES: readonly string[] = ['done', 'stopped', 'failed', 'running']
 
 /** Heading field separator: a middle dot (U+00B7) with a space on each side. */
 const SEP = ' · '
+
+/**
+ * Escape a free-text field so it stays on its own line (#897). A title is the run's prompt and a
+ * prompt bullet is agent text, but the file is committed history parsed line by line: an unescaped
+ * newline spills the rest of the prompt into the file, where a `## ` line forges an entry and a
+ * `- status: ` line rewrites one. Reversed by {@link decodeField}.
+ */
+export function encodeField(value: string): string {
+  return value.replace(/\\/g, '\\\\').replace(/\r\n|\r|\n/g, '\\n')
+}
+
+/** Reverse {@link encodeField}. Entries written before #897 are unescaped, so a literal `\n` in
+ * one of them decodes to a newline; harmless next to reading the rest of the prompt as entries. */
+export function decodeField(value: string): string {
+  return value.replace(/\\(\\|n)/g, (_, char) => (char === 'n' ? '\n' : '\\'))
+}
 
 /** The one-time first line of the file, written on the first append. */
 export const LOGS_HEADER = '# The Framework logs\n'
@@ -63,7 +79,7 @@ export function gitignorePath(cwd: string): string {
 /** Markdown for one entry, starting at `## ` (no file header, no blank lines around it). */
 export function renderLogEntry(entry: LogEntry): string {
   const lines = [
-    `## ${entry.at}${SEP}${entry.kind}${SEP}${entry.title}`,
+    `## ${entry.at}${SEP}${entry.kind}${SEP}${encodeField(entry.title)}`,
     '',
     `- status: ${entry.status}`,
   ]
@@ -76,7 +92,7 @@ export function renderLogEntry(entry: LogEntry): string {
   }
   if (entry.prompts && entry.prompts.length > 0) {
     lines.push('- prompts:')
-    for (const prompt of entry.prompts) lines.push(`  - ${prompt}`)
+    for (const prompt of entry.prompts) lines.push(`  - ${encodeField(prompt)}`)
   }
   return lines.join('\n')
 }
@@ -113,7 +129,7 @@ function parseEntry(lines: string[]): LogEntry | undefined {
   const at = parts[0]
   const kind = parts[1]
   // Re-join the rest so a title containing the separator survives.
-  const title = parts.slice(2).join(SEP)
+  const title = decodeField(parts.slice(2).join(SEP))
   if (!at || !kind || !title || !KINDS.includes(kind)) return undefined
 
   let status: string | undefined
@@ -123,7 +139,7 @@ function parseEntry(lines: string[]): LogEntry | undefined {
   let inPrompts = false
   for (const line of lines.slice(1)) {
     if (inPrompts && line.startsWith('  - ')) {
-      prompts!.push(line.slice('  - '.length))
+      prompts!.push(decodeField(line.slice('  - '.length)))
       continue
     }
     inPrompts = false
