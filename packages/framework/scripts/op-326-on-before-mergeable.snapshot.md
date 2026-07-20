@@ -1,4 +1,4 @@
-TODO_FILE: `TODO_<SESSION_NAME>.agent.md`
+TODO_FILE: `TODO_AGENTS.md`
 
 ## Maintenance
 

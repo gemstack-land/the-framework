@@ -3,9 +3,12 @@ import { test } from 'node:test'
 import { renderOnBeforeMergeablePrompt, ON_BEFORE_MERGEABLE_PROMPT_TEMPLATE } from './on-before-mergeable-prompt.js'
 import { TemplateFragmentError } from './prompt-template.js'
 import { BUSINESS_KNOWLEDGE_DOCS } from './system-prompt.js'
+import { FLAT_TODO_FILE } from './tickets.js'
 
 test('ON_BEFORE_MERGEABLE_PROMPT_TEMPLATE carries the #326 on-before-mergeable block', () => {
-  assert.ok(ON_BEFORE_MERGEABLE_PROMPT_TEMPLATE.includes('TODO_FILE: `TODO_<SESSION_NAME>.agent.md`'))
+  // Derived from the constant, not a literal (#885) — see the same assertion in
+  // system-prompt.test.ts. Both blocks declare TODO_FILE, so both can drift from the code.
+  assert.ok(ON_BEFORE_MERGEABLE_PROMPT_TEMPLATE.includes(`TODO_FILE: \`${FLAT_TODO_FILE}\``))
   assert.ok(ON_BEFORE_MERGEABLE_PROMPT_TEMPLATE.includes('## Maintenance'))
   for (const preset of ['maintainability', 'readability', 'security_audit']) {
     assert.ok(ON_BEFORE_MERGEABLE_PROMPT_TEMPLATE.includes(`tf.presets.${preset}.filePath`), `missing ${preset}`)
