@@ -342,6 +342,7 @@ export {
   QUICK_WINS_PROMPT_TEMPLATE,
   QUICK_WINS_PARAMS,
 } from './quick-wins-preset.js'
+export { runOptionsFromPreferences, autopilotEnabled } from './run-options.js'
 export {
   startAutoPm,
   AUTO_PM_JOBS,

@@ -151,10 +151,10 @@ export function usePreferences(): Preferences {
   return preferences
 }
 
-/** Autopilot defaults on (the demo default), matching the old localStorage semantics. */
-export function autopilotEnabled(preferences: Preferences): boolean {
-  return preferences.autopilot ?? true
-}
+// Autopilot's default-on moved into @gemstack/framework with the rest of the preferences ->
+// run options mapping (#858), so the daemon resolves it the same way. Re-exported here because
+// every component reaches for it through this module.
+export { autopilotEnabled } from '@gemstack/framework/client'
 
 export type ThemePreference = NonNullable<Preferences['theme']>
 

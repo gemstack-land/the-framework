@@ -33,7 +33,8 @@ import { findTodoBacklog } from './todo-loop.js'
 import { startPreview, detectServeTargets, type PreviewHandle, type ServeTarget } from './preview.js'
 import { resolveDashboardBundle } from './dashboard/bundle.js'
 import { isActivated } from './project.js'
-import { addProject, listProjects, projectId, readPreferences } from './registry.js'
+import { addProject, listProjects, projectId, readPreferences, readProjectPreferences, resolvePreferences } from './registry.js'
+import { runOptionsFromPreferences } from './run-options.js'
 import { installProject, enumerateGitRepos } from './install.js'
 import { JsonlTailer } from './jsonl-tail.js'
 
@@ -415,6 +416,17 @@ export async function runDaemon(cwd: string, opts: RunDaemonOptions = {}): Promi
     }))
   const readPrefs = () =>
     readPreferences(undefined, env).catch(() => ({}) as Awaited<ReturnType<typeof readPreferences>>)
+  /**
+   * The run options a project's settings imply (#858), global tier overlaid with its own (#840).
+   * The same mapping the launcher uses, so a run started by the daemon and a run started by hand
+   * differ only in who asked for it. An unreadable tier falls back to empty rather than failing
+   * the start: the defaults are what the run would have used anyway.
+   */
+  const resolvedRunOptions = async (id: string) => {
+    const global = await readPrefs()
+    const project = await readProjectPreferences(id, undefined, env).catch(() => undefined)
+    return runOptionsFromPreferences(resolvePreferences(global, project))
+  }
   let watcher: InterventionWatcher | undefined
   let activityWatcher: ActivityWatcher | undefined
   if (webhook) {
@@ -462,7 +474,12 @@ export async function runDaemon(cwd: string, opts: RunDaemonOptions = {}): Promi
       return { status: view.limits, weekPercentUsed: typeof week === 'number' ? week : undefined }
     },
     start: async (project, job) => {
-      const result = await runtime.onStart(job.prompt, 'prompt', { unattended: true }, project.id)
+      // The settings a launcher-started run would have used (#858). `onStart` does not resolve
+      // these itself, so passing nothing meant an unattended run silently ignored the project's
+      // agent and model. `unattended` is forced on top: it is a property of nobody watching, not
+      // a preference, and without it every gate parks forever (#846).
+      const options = await resolvedRunOptions(project.id)
+      const result = await runtime.onStart(job.prompt, 'prompt', { ...options, unattended: true }, project.id)
       return result.ok ? result.runId : undefined
     },
     // The daemon promotes the queue, never the agent (#852): the run stays sandboxed in its
