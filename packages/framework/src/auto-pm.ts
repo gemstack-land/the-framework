@@ -35,8 +35,8 @@ export interface AutoPmInputs {
   backlogEmpty: boolean
   /** Live runs on this project. Any run at all means the user's quota is already being spent. */
   activeRuns: number
-  /** Where the consumption limits stand, or `undefined` when the quota could not be read. */
-  quota: ConsumptionStatus | undefined
+  /** The budget readings, or `undefined` when the quota could not be read. */
+  quota: AutoPmQuota | undefined
   /** Milliseconds since this project was last auto-started, or `undefined` if it never was. */
   sinceLastStartMs?: number
   /** Override {@link DEFAULT_MIN_FREE_PERCENT}. */
@@ -49,28 +49,64 @@ export interface AutoPmInputs {
 export type AutoPmDecision = { start: true } | { start: false; reason: string }
 
 /**
- * Whether there is enough headroom to spend unasked, across the windows that recover
- * slowly enough to matter (the day and the rolling 5h). The session window is ignored:
- * this only ever runs when nothing is running, so there is no session to measure.
+ * What one tick knows about the budget: the rolling windows, and the account's own weekly
+ * figure (#848).
+ *
+ * Both, because they fail in opposite directions. The rolling windows come from
+ * {@link ConsumptionMeter}, which measures how much usage has gone *up* since it started
+ * watching — so a restarted daemon has nothing to compare against and honestly reports zero
+ * consumed, whatever the account has actually spent. `weekPercentUsed` is the account's own
+ * absolute number, which survives a restart but says nothing about the last five hours.
+ */
+export interface AutoPmQuota {
+  /** Where the user's configured limits stand, from the rolling meter. */
+  status: ConsumptionStatus
+  /**
+   * The account's weekly allowance consumed so far, 0-100, straight from the agent's own
+   * readout (`kind: 'week'`). `undefined` when there is no reading to take it from.
+   */
+  weekPercentUsed: number | undefined
+}
+
+/**
+ * Whether there is enough headroom to spend unasked.
  *
  * **This gate fails closed, and that is the opposite of the per-run guard.** #519 settled
  * that an unreadable quota must never *stop* the user's own work, so `startConsumptionGuard`
  * fails open. Work nobody asked for is the other way round: if we cannot see the meter we
  * cannot promise we are spending a surplus, and quietly burning a subscription is a far worse
- * failure than skipping a tick. So no reading means no run, and a disabled limit means we
- * have no denominator to call anything "spare".
+ * failure than skipping a tick.
+ *
+ * Two independent checks, because either alone has a blind spot (#848):
+ *
+ * 1. The account's own weekly figure, which is absolute and survives a daemon restart. This
+ *    is the one that matters most, and its absence is itself a refusal.
+ * 2. The rolling day and 5h windows, which catch a burst the weekly figure is too coarse to
+ *    see. The session window is ignored: this only runs when nothing is running.
+ *
+ * The rolling windows cannot carry the decision on their own. They come from a delta meter,
+ * so an empty one reports **0 consumed** rather than "unknown" — indistinguishable from a
+ * genuinely untouched budget, and true every time the daemon restarts, which is usually right
+ * after a long session. `usedPercent === undefined` is kept as a guard but effectively never
+ * fires; `complete` is what says the figure does not yet cover its window, and an incomplete
+ * window is trusted only because check 1 is standing behind it.
  */
-export function quotaHeadroom(quota: ConsumptionStatus | undefined, minFreePercent: number): AutoPmDecision {
+export function quotaHeadroom(quota: AutoPmQuota | undefined, minFreePercent: number): AutoPmDecision {
   if (!quota) return { start: false, reason: 'the quota could not be read, so there is no way to tell what is spare' }
-  const windows: [string, LimitStatus][] = [
-    ['the daily budget', quota.daily],
-    ['the 5h budget', quota.fiveHour],
-  ]
-  const enabled = windows.filter(([, limit]) => limit.enabled)
-  if (!enabled.length) {
-    return { start: false, reason: 'no consumption limit is enabled, so there is no budget to spend a share of' }
+
+  // The absolute check first: it is the only one a restarted daemon can trust.
+  if (quota.weekPercentUsed === undefined) {
+    return { start: false, reason: "the account's weekly usage could not be read, so there is no way to tell what is spare" }
   }
-  for (const [label, limit] of enabled) {
+  if (quota.weekPercentUsed > 100 - minFreePercent) {
+    return { start: false, reason: `the account's week is ${Math.round(quota.weekPercentUsed)}% used` }
+  }
+
+  const windows: [string, LimitStatus][] = [
+    ['the daily budget', quota.status.daily],
+    ['the 5h budget', quota.status.fiveHour],
+  ]
+  for (const [label, limit] of windows.filter(([, limit]) => limit.enabled)) {
     if (limit.usedPercent === undefined) {
       return { start: false, reason: `${label} has no reading yet` }
     }
@@ -146,8 +182,8 @@ export interface AutoPmDeps {
   backlogEmpty(project: AutoPmProject): Promise<boolean>
   /** How many runs are live on a project. */
   activeRuns(project: AutoPmProject): number
-  /** The current consumption reading, or `undefined` when there is none. */
-  quota(): Promise<ConsumptionStatus | undefined>
+  /** The current budget readings, or `undefined` when there are none. */
+  quota(): Promise<AutoPmQuota | undefined>
   /** The jobs to rotate through, in cycle order. */
   jobs: readonly AutoPmJob[]
   /** Start the PM run. Resolves false when the daemon refused, so the cooldown is not armed. */

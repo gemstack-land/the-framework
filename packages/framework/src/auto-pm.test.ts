@@ -9,20 +9,27 @@ import {
   type AutoPmDeps,
   type AutoPmJob,
   type AutoPmProject,
+  type AutoPmQuota,
 } from './auto-pm.js'
-import { ConsumptionMeter, consumptionStatus, DEFAULT_CONSUMPTION_LIMITS, type ConsumptionStatus } from './consumption.js'
+import { ConsumptionMeter, consumptionStatus, DEFAULT_CONSUMPTION_LIMITS } from './consumption.js'
 
 const T0 = 1_800_000_000_000
 
-/** A status whose windows read `weekPercent` of the account's week as spent. */
-function status(weekPercent: number | undefined): ConsumptionStatus {
+/**
+ * A reading where the rolling meter has seen `weekPercent` points burned, and the account's
+ * own week is `accountWeek` spent (default: the same, the honest case).
+ */
+function status(weekPercent: number | undefined, accountWeek: number | undefined = weekPercent ?? 0): AutoPmQuota {
   const meter = new ConsumptionMeter()
   if (weekPercent !== undefined) {
     // Two samples, because the meter measures the delta between readings, not an absolute.
     meter.record({ at: T0 - 1000, weeklyPercent: 0 })
     meter.record({ at: T0, weeklyPercent: weekPercent })
   }
-  return consumptionStatus({ meter, limits: DEFAULT_CONSUMPTION_LIMITS, now: T0 })
+  return {
+    status: consumptionStatus({ meter, limits: DEFAULT_CONSUMPTION_LIMITS, now: T0 }),
+    weekPercentUsed: accountWeek,
+  }
 }
 
 /** The happy inputs, so each test names only the condition it is about. */
@@ -79,17 +86,54 @@ test('quotaHeadroom refuses once a window is past the threshold (#685)', () => {
   assert.match(decision.start === false ? decision.reason : '', /% used/)
 })
 
-test('quotaHeadroom refuses when no limit is enabled, having no budget to call spare (#685)', () => {
+test('quotaHeadroom still starts with the rolling limits off, guarded by the account week (#848)', () => {
+  // The rolling limits are the user's own pacing knobs; switching them off used to leave the
+  // gate with no denominator at all. The account's absolute week is the denominator now.
+  const off = { enabled: false, percent: 20 }
   const meter = new ConsumptionMeter()
   meter.record({ at: T0 - 1000, weeklyPercent: 0 })
   meter.record({ at: T0, weeklyPercent: 1 })
-  const off = { enabled: false, percent: 20 }
-  const decision = quotaHeadroom(
-    consumptionStatus({ meter, limits: { daily: off, fiveHour: off, session: off }, now: T0 }),
-    DEFAULT_MIN_FREE_PERCENT,
-  )
+  const quota: AutoPmQuota = {
+    status: consumptionStatus({ meter, limits: { daily: off, fiveHour: off, session: off }, now: T0 }),
+    weekPercentUsed: 5,
+  }
+  assert.deepEqual(quotaHeadroom(quota, DEFAULT_MIN_FREE_PERCENT), { start: true })
+  assert.equal(quotaHeadroom({ ...quota, weekPercentUsed: 95 }, DEFAULT_MIN_FREE_PERCENT).start, false)
+})
+
+test('quotaHeadroom refuses when the account week is nearly spent (#848)', () => {
+  const decision = quotaHeadroom(status(1, 95), DEFAULT_MIN_FREE_PERCENT)
   assert.equal(decision.start, false)
-  assert.match(decision.start === false ? decision.reason : '', /no consumption limit is enabled/)
+  assert.match(decision.start === false ? decision.reason : '', /account's week is 95% used/)
+})
+
+test('quotaHeadroom refuses when the account week cannot be read (#848)', () => {
+  // Built inline, not via status(1, undefined): an explicit undefined argument still triggers
+  // the default parameter, which would quietly hand the check a real number.
+  const decision = quotaHeadroom({ ...status(1), weekPercentUsed: undefined }, DEFAULT_MIN_FREE_PERCENT)
+  assert.equal(decision.start, false)
+  assert.match(decision.start === false ? decision.reason : '', /weekly usage could not be read/)
+})
+
+test('a restarted daemon does not spend the last of the quota (#848)', () => {
+  // The regression, reproduced live on 0f16b3e before the fix. The meter is delta-based, so a
+  // daemon that just restarted has one sample, nothing to diff it against, and honestly reports
+  // 0 consumed -- while the account sits at 95% of its week. Zero and unknown look identical to
+  // a usedPercent check, which is why the absolute reading has to be the one in charge.
+  const fresh = new ConsumptionMeter()
+  fresh.record({ at: T0, weeklyPercent: 95 })
+  const rolling = consumptionStatus({ meter: fresh, limits: DEFAULT_CONSUMPTION_LIMITS, now: T0 })
+  assert.equal(rolling.daily.usedPercent, 0) // the trap: not undefined
+  assert.equal(rolling.daily.complete, false) // the honest signal underneath it
+
+  const decision = autoPmDecision({
+    enabled: true,
+    backlogEmpty: true,
+    activeRuns: 0,
+    quota: { status: rolling, weekPercentUsed: 95 },
+  })
+  assert.equal(decision.start, false)
+  assert.match(decision.start === false ? decision.reason : '', /account's week is 95% used/)
 })
 
 const JOBS: readonly AutoPmJob[] = [

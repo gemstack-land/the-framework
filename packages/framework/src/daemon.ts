@@ -453,7 +453,13 @@ export async function runDaemon(cwd: string, opts: RunDaemonOptions = {}): Promi
     enabled: async () => (await readPrefs()).autoPm === true,
     backlogEmpty: async project => (await findTodoBacklog(project.path)) === undefined,
     activeRuns: project => runtime.activeRunCount(project.id),
-    quota: async () => (await quota.read()).limits,
+    quota: async () => {
+      const view = await quota.read()
+      // The account's own week (#848): absolute, so it still means something after a restart
+      // emptied the rolling meter. `percentUsed` of the `week` window, or nothing.
+      const week = view.windows.find(w => w.kind === 'week')?.percentUsed
+      return { status: view.limits, weekPercentUsed: typeof week === 'number' ? week : undefined }
+    },
     start: async (project, job) => (await runtime.onStart(job.prompt, 'prompt', { unattended: true }, project.id)).ok,
     log: message => console.log(message),
   })
