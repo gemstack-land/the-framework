@@ -164,3 +164,60 @@ body {
 .ProseMirror-selectednode.pe-token {
   outline: 2px solid var(--primary);
 }
+
+/* The chat log's scrollbar (#914). shadcn's message-scroller styles its viewport with
+   `scrollbar-thin` / `scrollbar-thumb-*`, which are not in their repo at all — they come from the
+   tailwind-scrollbar plugin. Standard `scrollbar-width` + `scrollbar-color` says the same thing in
+   four lines and needs no plugin, and it is not a `::-webkit-scrollbar` rule, so #710's reasoning
+   (let the browser paint, themed by color-scheme) still holds: this only tones what it paints. */
+@utility scrollbar-thin {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in oklab, var(--muted-foreground) 40%, transparent) transparent;
+}
+
+/* The log is following the live edge, so the bar would be a twitching distraction. */
+@utility scrollbar-quiet {
+  scrollbar-color: transparent transparent;
+}
+
+/* Reserve the bar's width always, so arriving output does not shift the text sideways. */
+@utility scrollbar-gutter-stable {
+  scrollbar-gutter: stable;
+}
+
+/* The log's bottom edge fades out while there is more below it (#914), so the cut is a gradient
+   rather than a guillotine. Reduced from shadcn's published `scroll-fade` (packages/shadcn/src/
+   tailwind.css) to the one edge we use: the mask size is animated on a scroll timeline, so it
+   reaches zero at the live edge and the newest line is never dimmed. Browsers without scroll
+   timelines get the static fade, which is only wrong at the very bottom. */
+@property --scroll-fade-b {
+  syntax: '<length-percentage>';
+  inherits: false;
+  initial-value: 0px;
+}
+
+@keyframes scroll-fade-reveal-b {
+  from {
+    --scroll-fade-b: var(--scroll-fade-size);
+  }
+  to {
+    --scroll-fade-b: 0px;
+  }
+}
+
+@utility scroll-fade-b {
+  --scroll-fade-size: min(12%, 2.5rem);
+  mask-image: linear-gradient(to bottom, #000 0, #000 calc(100% - var(--scroll-fade-b, 0px)), transparent 100%);
+  mask-repeat: no-repeat;
+
+  @supports (animation-timeline: scroll()) {
+    animation: scroll-fade-reveal-b 1ms ease-in-out;
+    animation-timeline: scroll(self y);
+    animation-range: calc(100% - 6rem) 100%;
+    animation-fill-mode: both;
+  }
+
+  @supports not (animation-timeline: scroll()) {
+    --scroll-fade-b: var(--scroll-fade-size);
+  }
+}

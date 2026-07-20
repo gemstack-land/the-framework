@@ -13,8 +13,12 @@ import { cn } from '../../lib/utils.js'
 // scrollable scroll button — lives in the dependency-free @shadcn/react primitive; these are the
 // styled wrappers. Adapted from the upstream `bases/base` variant: our own `cn`, a native button
 // (our Button is not Base-UI render-ready) rather than `render={<Button/>}`, lucide instead of the
-// icon placeholder, and the scrollbar-plugin utilities dropped (the app paints native scrollbars
-// via color-scheme, #710).
+// icon placeholder.
+//
+// Upstream's viewport also carries `scrollbar-thin` / `scrollbar-thumb-*`, which come from the
+// tailwind-scrollbar plugin rather than from shadcn. #914 puts that back as three local utilities
+// on plain `scrollbar-width` / `scrollbar-color` / `scrollbar-gutter` (see tailwind.css), so the
+// log's bar is toned like the rest of the app instead of being whatever the OS paints.
 
 // The Provider needs no styling (no data-slot / className), so it is the primitive's directly,
 // re-exported for a uniform `message-scroller` import site rather than wrapped for nothing.
@@ -34,7 +38,11 @@ export function MessageScrollerViewport({ className, ...props }: ComponentProps<
   return (
     <MessageScrollerPrimitive.Viewport
       data-slot="message-scroller-viewport"
-      className={cn('size-full min-h-0 min-w-0 overflow-y-auto overscroll-contain', className)}
+      className={cn(
+        'size-full min-h-0 min-w-0 overflow-y-auto overscroll-contain',
+        'scroll-fade-b scrollbar-thin scrollbar-gutter-stable data-autoscrolling:scrollbar-quiet',
+        className,
+      )}
       {...props}
     />
   )
