@@ -28,6 +28,7 @@ import { buildInterventions } from './dashboard/interventions.js'
 import { startActivityWatcher, postActivityDiscord, type ActivityWatcher } from './dashboard/activity-watcher.js'
 import { defaultQuotaSource } from './dashboard/quota.js'
 import { startAutoPm, AUTO_PM_JOBS } from './auto-pm.js'
+import { promoteQueue } from './queue-promote.js'
 import { findTodoBacklog } from './todo-loop.js'
 import { startPreview, detectServeTargets, type PreviewHandle, type ServeTarget } from './preview.js'
 import { resolveDashboardBundle } from './dashboard/bundle.js'
@@ -460,7 +461,23 @@ export async function runDaemon(cwd: string, opts: RunDaemonOptions = {}): Promi
       const week = view.windows.find(w => w.kind === 'week')?.percentUsed
       return { status: view.limits, weekPercentUsed: typeof week === 'number' ? week : undefined }
     },
-    start: async (project, job) => (await runtime.onStart(job.prompt, 'prompt', { unattended: true }, project.id)).ok,
+    start: async (project, job) => {
+      const result = await runtime.onStart(job.prompt, 'prompt', { unattended: true }, project.id)
+      return result.ok ? result.runId : undefined
+    },
+    // The daemon promotes the queue, never the agent (#852): the run stays sandboxed in its
+    // worktree, and one known file is copied across once it has finished cleanly.
+    promote: async (project, runId) => {
+      const run = (await listRuns(project.path).catch(() => [])).find(r => r.id === runId)
+      // Unknown or still going: not settled, so it is tried again next tick.
+      if (!run || run.status === 'running') return { settled: false, promoted: false }
+      const outcome = await promoteQueue(project.path, run)
+      if (!outcome.promoted) console.log(`[framework] auto PM: ${outcome.reason} (${runId})`)
+      // A finished run is settled either way -- one that wrote no queue is not going to start.
+      // The exception is a checkout busy with the user's own queue edits, which is worth retrying.
+      const retry = !outcome.promoted && outcome.reason === 'the checkout has uncommitted queue changes'
+      return { settled: !retry, promoted: outcome.promoted }
+    },
     log: message => console.log(message),
   })
 
