@@ -12,6 +12,7 @@ import {
   renderSpikeAndPlanPrompt,
   renderQuickWinsPrompt,
   renderMarketResearchPrompt,
+  renderMaintenancePrompt,
 } from '@gemstack/framework/client'
 import { usePreferences, updatePreferences, autopilotEnabled, themePreference } from '../lib/preferences.js'
 import { useDetectedEditors } from '../lib/editors.js'
@@ -42,6 +43,12 @@ const PRESETS: { id: string; label: string; render: (what?: string, ctx?: Preset
   { id: 'spike-and-plan', label: 'Spike & plan', render: renderSpikeAndPlanPrompt },
   { id: 'quick-wins', label: 'Quick wins', render: renderQuickWinsPrompt },
   { id: 'market-research', label: 'Market research', render: renderMarketResearchPrompt },
+  {
+    id: 'maintenance',
+    label: 'Maintenance',
+    render: renderMaintenancePrompt,
+    tooltip: 'Queue maintainability + security work per codebase subset (TODO_AGENTS.md)',
+  },
 ]
 
 // The agent + model tree (#650/#656/#658): each agent lists ONLY its own models, since `--model`

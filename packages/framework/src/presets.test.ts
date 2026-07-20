@@ -4,11 +4,13 @@ import { join } from 'node:path'
 import { PRESETS, PRESET_DIR, presetFilePath, presetContext, materializePresets } from './presets.js'
 import type { StoreFs } from './store/index.js'
 
-test('PRESETS carries the five quality presets, keyed by file stem (#326)', () => {
+test('PRESETS carries the quality presets, keyed by file stem (#326/#881)', () => {
   assert.deepEqual(
     Object.keys(PRESETS).sort(),
-    ['maintainability', 'readability', 'research', 'security_audit', 'ux'],
+    ['maintainability', 'maintenance', 'readability', 'research', 'security_audit', 'ux'],
   )
+  // `maintenance` (#881) is in the registry, not just exported: it materializes like the rest, so
+  // a scheduled entry (#882) can point at `.the-framework/presets/maintenance.md` by path.
   // Underscore stem, not the hyphenated SECURITY_AUDIT_PRESET_NAME: matches the tf.presets key
   // Rom's #326 OP reads (`tf.presets.security_audit.filePath`).
   assert.ok('security_audit' in PRESETS)
