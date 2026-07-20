@@ -1,6 +1,7 @@
 import { strict as assert } from 'node:assert'
 import { test } from 'node:test'
 import { buildInterventions, interventionKey, type OpenPr } from './interventions.js'
+import type { RunHandoff } from './run-handoff.js'
 import type { ProjectSummary } from './projects.js'
 import type { LiveRun, RunMeta } from '../store/index.js'
 
@@ -111,5 +112,122 @@ test('interventionKey is the url for a PR and project+gate for an awaiting run',
   assert.equal(
     interventionKey({ projectId: 'a', projectName: 'a', kind: 'awaiting', title: 't', url: '', awaitId: 'g1' }),
     'awaiting:a:g1',
+  )
+})
+
+// #860: a finished run whose branch still holds unpushed, unmerged commits.
+
+const doneMeta = (over: Partial<RunMeta> = {}): RunMeta => ({
+  version: 1,
+  status: 'done',
+  id: 'r1',
+  startedAt: '2026-07-16T00:00:00Z',
+  updatedAt: '2026-07-16T01:00:00Z',
+  passes: 0,
+  branch: 'the-framework/add-cart',
+  intent: 'add the cart',
+  ...over,
+})
+
+/** A branch with work on it that never left the machine. */
+const waiting = (over: Partial<RunHandoff> = {}): RunHandoff => ({
+  branch: 'the-framework/add-cart',
+  exists: true,
+  base: 'main',
+  commits: [{ sha: 'abc1234', short: 'abc1234', subject: 'add the cart' }],
+  files: [],
+  insertions: 0,
+  deletions: 0,
+  empty: false,
+  hasRemote: true,
+  pushed: false,
+  merged: false,
+  ...over,
+})
+
+/** Only the unpushed source: no PRs, no paused runs. */
+const onlyUnpushed = (runs: RunMeta[], handoff: (cwd: string, branch: string) => Promise<RunHandoff | undefined>) => ({
+  prs: async () => [],
+  liveRuns: noRuns,
+  runs: async () => runs,
+  handoff,
+})
+
+test('a finished run with unpushed commits lands on the queue (#860)', async () => {
+  const items = await buildInterventions(
+    [project('a', '/a')],
+    onlyUnpushed([doneMeta()], async () => waiting()),
+  )
+
+  assert.equal(items.length, 1)
+  assert.equal(items[0]?.kind, 'unpushed')
+  assert.equal(items[0]?.title, 'add the cart', 'what was asked, not the branch name')
+  assert.equal(items[0]?.branch, 'the-framework/add-cart')
+  assert.equal(items[0]?.commits, 1)
+  assert.equal(items[0]?.runId, 'r1')
+})
+
+test('nothing is waiting when the work already went somewhere (#860)', async () => {
+  // Each of these is a reason it is NOT waiting on a human.
+  const cases: [string, Partial<RunHandoff>][] = [
+    ['already pushed', { pushed: true }],
+    ['already merged', { merged: true }],
+    ['the session wrote nothing', { empty: true, commits: [] }],
+    ['the branch is gone', { exists: false }],
+    ['there is nowhere to push', { hasRemote: false }],
+  ]
+  for (const [why, over] of cases) {
+    const items = await buildInterventions(
+      [project('a', '/a')],
+      onlyUnpushed([doneMeta()], async () => waiting(over)),
+    )
+    assert.deepEqual(items, [], `should not be surfaced: ${why}`)
+  }
+})
+
+test('a still-running run is not unpushed work (#860)', async () => {
+  // It is still writing; the overview already shows it.
+  const items = await buildInterventions(
+    [project('a', '/a')],
+    onlyUnpushed([doneMeta({ status: 'running' })], async () => waiting()),
+  )
+  assert.deepEqual(items, [])
+})
+
+test('an unreadable branch is skipped rather than throwing (#860)', async () => {
+  const items = await buildInterventions(
+    [project('a', '/a')],
+    onlyUnpushed([doneMeta()], async () => {
+      throw new Error('not a repo')
+    }),
+  )
+  assert.deepEqual(items, [])
+})
+
+test('only the most recent finished runs are inspected (#860)', async () => {
+  // Each inspection costs several git reads on a poll, and work sitting unpushed for dozens of
+  // runs is not news.
+  const runs = Array.from({ length: 12 }, (_, i) =>
+    doneMeta({ id: `r${i}`, startedAt: `2026-07-${String(i + 1).padStart(2, '0')}T00:00:00Z`, branch: `b${i}` }),
+  )
+  const inspected: string[] = []
+  const items = await buildInterventions(
+    [project('a', '/a')],
+    { ...onlyUnpushed(runs, async (_cwd, branch) => (inspected.push(branch), waiting({ branch }))), handoffLimit: 3 },
+  )
+
+  assert.equal(inspected.length, 3)
+  assert.deepEqual(inspected, ['b11', 'b10', 'b9'], 'the newest three, by start time')
+  assert.equal(items.length, 3)
+})
+
+test('unpushed items key on the run, so each notifies once (#860)', () => {
+  const base = { projectId: 'p', projectName: 'p', kind: 'unpushed' as const, title: 't', url: '' }
+  assert.equal(interventionKey({ ...base, runId: 'r1' }), 'unpushed:p:r1')
+  assert.notEqual(interventionKey({ ...base, runId: 'r1' }), interventionKey({ ...base, runId: 'r2' }))
+  // And never collides with the other kinds, whose url is the same shared dashboard URL.
+  assert.notEqual(
+    interventionKey({ ...base, runId: 'r1' }),
+    interventionKey({ ...base, kind: 'awaiting', awaitId: 'r1' }),
   )
 })

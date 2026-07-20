@@ -34,10 +34,15 @@ export async function postDiscord(
   if (items.length === 0) return
   // A PR reads `#123 Title — url`; a paused run (#636) has no number and only the dashboard url,
   // so it reads `Title — awaiting your answer` with the link appended when the daemon knows it.
-  const line = (i: Intervention): string =>
-    i.kind === 'awaiting'
-      ? `${i.title} — awaiting your answer${i.url ? ` — ${i.url}` : ''}`
-      : `#${i.number} ${i.title} — ${i.url}`
+  // Unpushed work (#860) names the branch, since that is the actionable part.
+  const line = (i: Intervention): string => {
+    if (i.kind === 'awaiting') return `${i.title} — awaiting your answer${i.url ? ` — ${i.url}` : ''}`
+    if (i.kind === 'unpushed') {
+      const count = i.commits === 1 ? '1 commit' : `${i.commits ?? 0} commits`
+      return `${i.title} — ${count} on ${i.branch ?? ''}, never pushed${i.url ? ` — ${i.url}` : ''}`
+    }
+    return `#${i.number} ${i.title} — ${i.url}`
+  }
   const content =
     items.length === 1
       ? `🔔 Needs you (${items[0]!.projectName}): ${line(items[0]!)}`

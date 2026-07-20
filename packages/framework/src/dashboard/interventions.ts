@@ -1,5 +1,6 @@
-import { readLiveMetas, type LiveRun } from '../store/index.js'
+import { listRuns, readLiveMetas, type LiveRun, type RunMeta } from '../store/index.js'
 import type { ProjectSummary } from './projects.js'
+import { readRunHandoff, runBranchFor, type RunHandoff } from './run-handoff.js'
 
 // The interventions queue (#632, part of the Queue #624): the cross-project "needs you" list.
 // Rom's design (#624): proposals and finished work are both just PRs, so the bulk of what
@@ -16,18 +17,25 @@ import type { ProjectSummary } from './projects.js'
 export interface Intervention {
   projectId: string
   projectName: string
-  /** `pr` = an open PR to review/merge or close; `awaiting` = a run paused on a choice gate (#636). */
-  kind: 'pr' | 'awaiting'
+  /**
+   * `pr` = an open PR to review/merge or close; `awaiting` = a run paused on a choice gate (#636);
+   * `unpushed` = a finished run whose branch has commits that were never pushed (#860).
+   */
+  kind: 'pr' | 'awaiting' | 'unpushed'
   title: string
-  /** Where to act: the PR on GitHub (`pr`), or the dashboard (`awaiting`, when the URL is known). */
+  /** Where to act: the PR on GitHub (`pr`), or the dashboard (the other two, when the URL is known). */
   url: string
   /** The PR number (`pr` only). */
   number?: number
   /** The parked gate's id (`awaiting` only) — its stable identity, so it notifies exactly once. */
   awaitId?: string
-  /** Which run is asking (`awaiting` only, #738): a project can have several parked at once. */
+  /** Which run this is about (`awaiting` #738 / `unpushed`): a project has several runs. */
   runId?: string
-  /** When the PR was opened (`pr`) or the run last updated (`awaiting`), ISO, for ordering. */
+  /** The branch the work is sitting on (`unpushed` only). */
+  branch?: string
+  /** How many commits are waiting (`unpushed` only). */
+  commits?: number
+  /** When the PR was opened (`pr`) or the run last updated (the other two), ISO, for ordering. */
   createdAt?: string
 }
 
@@ -67,6 +75,16 @@ export interface InterventionsDeps {
   prs?: PrLister
   /** The live-run reader (default {@link readLiveMetas}); drives the `awaiting` source (#636). */
   liveRuns?: (cwd: string) => Promise<LiveRun[]>
+  /** The finished-run reader (default {@link listRuns}); drives the `unpushed` source (#860). */
+  runs?: (cwd: string) => Promise<RunMeta[]>
+  /** Reads a branch's state (default {@link readRunHandoff}); drives the `unpushed` source (#860). */
+  handoff?: (cwd: string, branch: string) => Promise<RunHandoff | undefined>
+  /**
+   * How many of a project's most recent finished runs to inspect for unpushed work. Each one costs
+   * a handful of git reads, and this runs on a poll, so old history is not re-walked every minute:
+   * work that has sat unpushed for dozens of runs is not news, and the run list stays the record.
+   */
+  handoffLimit?: number
   /**
    * The dashboard's own URL, so an `awaiting` item can link back to it. Only the daemon knows
    * it (the card path resolves the project client-side and needs no URL), so it is optional; an
@@ -74,6 +92,9 @@ export interface InterventionsDeps {
    */
   dashboardUrl?: string
 }
+
+/** How many recent finished runs are inspected per project by default. */
+export const HANDOFF_LIMIT = 5
 
 /**
  * Build the cross-project interventions queue: every registered project's open, non-draft PRs,
@@ -119,6 +140,14 @@ export async function buildInterventions(
         ...(meta.updatedAt ? { createdAt: meta.updatedAt } : {}),
       })
     }
+    // A finished run whose work never left the machine is a "needs you" too (#860). Until now the
+    // queue only knew about a PR that is *already on GitHub* and a run parked on a gate, so a run
+    // that committed real code and stopped produced neither, and nothing told anyone: the overview
+    // drops it (it filters on `running`) and the handoff panel is behind clicking into that run.
+    //
+    // Surfacing only. Pushing publishes the agent's work under the user's name, which stays their
+    // click (see `pushRunBranch`) — this just says there is a decision waiting.
+    for (const item of await unpushedFor(project, deps).catch(() => [])) items.push(item)
   }
   items.sort((a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? ''))
   // The same repo can be registered under two projects (e.g. a monorepo root + a subdir), so a
@@ -128,12 +157,57 @@ export async function buildInterventions(
 }
 
 /**
+ * The finished runs of a project whose branch still holds unpushed, unmerged commits (#860).
+ *
+ * Only the most recent {@link InterventionsDeps.handoffLimit} finished runs are inspected: each
+ * costs several git reads and this runs on a poll.
+ */
+async function unpushedFor(project: ProjectSummary, deps: InterventionsDeps): Promise<Intervention[]> {
+  const runs = deps.runs ?? listRuns
+  const handoff =
+    deps.handoff ??
+    // The default skips the `gh` PR lookup `readRunHandoff` would otherwise do per branch: an open
+    // PR means the branch was pushed, so `pushed` already excludes it, and the `pr` kind above is
+    // what surfaces it. Paying an 8s-timeout network call per run on every poll to learn that
+    // would be the most expensive part of this whole queue.
+    ((cwd: string, branch: string) => readRunHandoff(cwd, branch, { pr: async () => undefined }))
+
+  const finished = (await runs(project.path))
+    .filter(run => run.status !== 'running')
+    .sort((a, b) => (b.startedAt ?? '').localeCompare(a.startedAt ?? ''))
+    .slice(0, deps.handoffLimit ?? HANDOFF_LIMIT)
+
+  const items: Intervention[] = []
+  for (const run of finished) {
+    const branch = runBranchFor(run)
+    const state = await handoff(project.path, branch).catch(() => undefined)
+    // Every condition is a reason this is *not* waiting on anyone: the branch is gone, the session
+    // wrote nothing, it already landed, it is already on the remote, or there is nowhere to push.
+    if (!state || !state.exists || state.empty || state.merged || state.pushed || !state.hasRemote) continue
+    items.push({
+      projectId: project.id,
+      projectName: project.name,
+      kind: 'unpushed',
+      title: run.intent?.trim() || branch,
+      url: deps.dashboardUrl ?? '',
+      runId: run.id,
+      branch,
+      commits: state.commits.length,
+      ...(run.updatedAt ? { createdAt: run.updatedAt } : {}),
+    })
+  }
+  return items
+}
+
+/**
  * The stable identity of an intervention. A PR is its url (survives title edits and re-sorts);
- * an awaiting run is its project + gate id, since its url is the shared dashboard URL and would
- * otherwise collide across projects.
+ * the other two are keyed on the project plus the thing waiting — the gate id, or the run whose
+ * branch is unpushed — since their url is the shared dashboard URL and would otherwise collide.
  */
 export function interventionKey(item: Intervention): string {
-  return item.kind === 'awaiting' ? `awaiting:${item.projectId}:${item.awaitId ?? ''}` : item.url
+  if (item.kind === 'awaiting') return `awaiting:${item.projectId}:${item.awaitId ?? ''}`
+  if (item.kind === 'unpushed') return `unpushed:${item.projectId}:${item.runId ?? ''}`
+  return item.url
 }
 
 /**

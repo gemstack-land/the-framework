@@ -91,3 +91,50 @@ test('startInterventionWatcher announces only items that appear after the first 
     watcher.stop()
   }
 })
+
+test('postDiscord names the branch for unpushed work, not a PR number (#860)', async () => {
+  let body: unknown
+  const fetchImpl = (async (_url: string, init?: RequestInit) => {
+    body = JSON.parse(String(init!.body))
+    return new Response(null, { status: 204 })
+  }) as typeof fetch
+
+  await postDiscord(
+    'https://discord/hook',
+    [
+      {
+        projectId: 'p',
+        projectName: 'gemstack',
+        kind: 'unpushed',
+        title: 'add the cart',
+        url: 'http://localhost:4300',
+        runId: 'r1',
+        branch: 'the-framework/add-cart',
+        commits: 2,
+      },
+    ],
+    fetchImpl,
+  )
+
+  const content = String((body as { content: string }).content)
+  assert.match(content, /add the cart/)
+  assert.match(content, /2 commits/)
+  assert.match(content, /the-framework\/add-cart/)
+  assert.match(content, /never pushed/)
+  assert.doesNotMatch(content, /#undefined/, 'must not fall through to the PR shape')
+})
+
+test('postDiscord says "1 commit" rather than "1 commits" (#860)', async () => {
+  let body: unknown
+  const fetchImpl = (async (_url: string, init?: RequestInit) => {
+    body = JSON.parse(String(init!.body))
+    return new Response(null, { status: 204 })
+  }) as typeof fetch
+
+  await postDiscord(
+    'https://discord/hook',
+    [{ projectId: 'p', projectName: 'g', kind: 'unpushed', title: 't', url: '', runId: 'r', branch: 'b', commits: 1 }],
+    fetchImpl,
+  )
+  assert.match(String((body as { content: string }).content), /1 commit(?!s)/)
+})
