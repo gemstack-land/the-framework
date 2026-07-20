@@ -34,6 +34,7 @@ import { defaultQuotaSource } from './dashboard/quota.js'
 import { startAutoPm, AUTO_PM_JOBS } from './auto-pm.js'
 import { maintenanceDue, readMaintenanceState, mergeMaintenanceState } from './maintenance.js'
 import { promoteQueue } from './queue-promote.js'
+import { startConversationCommitter, type ConversationCommitter } from './conversation-commit.js'
 import { findTodoBacklog } from './todo-loop.js'
 import { startPreview, detectServeTargets, type PreviewHandle, type ServeTarget } from './preview.js'
 import { resolveDashboardBundle } from './dashboard/bundle.js'
@@ -636,6 +637,15 @@ export async function runDaemon(cwd: string, opts: RunDaemonOptions = {}): Promi
     log: message => console.log(message),
   })
 
+  // Commit the conversations recorded on the main checkout (#912). A run's own worktree already
+  // sweeps its transcript on teardown; nothing did the same for a chat held in the checkout itself,
+  // so it sat as an uncommitted change until a human noticed. Path-scoped and debounced, and it
+  // skips a repo that is mid-rebase or index-locked rather than committing into someone's work.
+  const conversationCommitter = startConversationCommitter({
+    projects: listSummaries,
+    log: message => console.log(message),
+  })
+
   // The Discord chatbot (#680): chat to The Framework from Discord. Two gates, mirroring the
   // notification watchers above — a `DISCORD_BOT_TOKEN` (a bot can read replies; the #627 webhook
   // cannot) and the per-user `discordBot` preference, read per message so the toggle takes effect
@@ -690,6 +700,13 @@ export async function runDaemon(cwd: string, opts: RunDaemonOptions = {}): Promi
   // next boot. Auto PM is stopped first so nothing starts a run while we are stopping them.
   const suspended = await runtime.suspendRuns().catch(() => 0)
   if (suspended > 0) console.log(`[framework] suspended ${suspended} session(s); they resume when the daemon starts again`)
+  // Commit whatever conversation the shutdown just ended (#912), after the runs have been stopped
+  // so their last turns are on disk. Stop the timer first, then flush once past the idle window:
+  // there is no next poll to wait for, and an uncommitted chat would otherwise sit until a human
+  // committed it by hand -- the exact gap this service exists to close.
+  conversationCommitter.stop()
+  const conversations = await conversationCommitter.flush().catch(() => 0)
+  if (conversations > 0) console.log(`[framework] committed conversations in ${conversations} project(s)`)
   // Stopped here as well as by the dashboard: a broken install serves 503s without ever taking
   // ownership of the source we handed in, and that poller would go on reading by itself.
   quota.stop()

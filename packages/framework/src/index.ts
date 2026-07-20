@@ -174,6 +174,21 @@ export {
   type ConversationRole,
 } from './conversations.js'
 export {
+  startConversationCommitter,
+  commitConversations,
+  pendingConversations,
+  gitBusy,
+  commitMessage,
+  nodePathProbe,
+  CONVERSATIONS_PATHSPEC,
+  COMMIT_POLL_MS,
+  COMMIT_MAX_WAIT_MS,
+  type ConversationCommitter,
+  type ConversationCommitterOptions,
+  type CommitOutcome,
+  type PathProbe,
+} from './conversation-commit.js'
+export {
   theFrameworkDir,
   isActivated,
   nodeProjectFs,
