@@ -28,6 +28,7 @@ import { buildInterventions } from './dashboard/interventions.js'
 import { startActivityWatcher, postActivityDiscord, type ActivityWatcher } from './dashboard/activity-watcher.js'
 import { defaultQuotaSource } from './dashboard/quota.js'
 import { startAutoPm, AUTO_PM_JOBS } from './auto-pm.js'
+import { maintenanceDue, readMaintenanceState, mergeMaintenanceState } from './maintenance.js'
 import { promoteQueue } from './queue-promote.js'
 import { findTodoBacklog } from './todo-loop.js'
 import { startPreview, detectServeTargets, type PreviewHandle, type ServeTarget } from './preview.js'
@@ -468,6 +469,11 @@ export async function runDaemon(cwd: string, opts: RunDaemonOptions = {}): Promi
     activeRuns: project => runtime.activeRunCount(project.id),
     // The quota boundary is the gate (#879): auto PM has no budget notion of its own.
     quota: async () => (await quota.read()).boundary,
+    // The periodic codebase sweep (#882). The schedule is a file in the project checkout rather
+    // than loop state, because unlike the rotation it has to survive a daemon restart: a machine
+    // rebooted daily would otherwise sweep every morning and never reach its interval.
+    maintenanceDue: async project => maintenanceDue(await readMaintenanceState(project.path), Date.now()),
+    recordMaintenance: async project => mergeMaintenanceState(project.path, { sweptAt: new Date().toISOString() }),
     start: async (project, job) => {
       // The settings a launcher-started run would have used (#858). `onStart` does not resolve
       // these itself, so passing nothing meant an unattended run silently ignored the project's

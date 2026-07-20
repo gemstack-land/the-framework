@@ -2,6 +2,7 @@ import type { QuotaBoundaryStatus } from './quota-boundary.js'
 import { renderSpikeAndPlanPrompt, SPIKE_AND_PLAN_PRESET_NAME } from './spike-and-plan-preset.js'
 import { renderQuickWinsPrompt, QUICK_WINS_PRESET_NAME } from './quick-wins-preset.js'
 import { renderDrainQueuePrompt, DRAIN_QUEUE_PRESET_NAME } from './drain-queue-preset.js'
+import { renderMaintenancePrompt, MAINTENANCE_PRESET_NAME } from './maintenance-preset.js'
 
 /**
  * Auto PM (#685): spend leftover subscription quota on product management instead of
@@ -154,6 +155,25 @@ export const AUTO_PM_DRAIN_JOB: AutoPmJob = {
 }
 
 /**
+ * The periodic codebase-wide sweep (#882): fire the [Maintenance] preset (#881) so a repo that
+ * adopted The Framework late gets its pre-existing history looked at.
+ *
+ * Outside the rotation, like {@link AUTO_PM_DRAIN_JOB} and for the same kind of reason: the
+ * rotation is "what to make next" and cycles every idle tick, while this is paced by a calendar
+ * and must not advance or be advanced by the cycle. It takes precedence over the rotation when
+ * due, because the entries it queues are what the rotation would otherwise be inventing work
+ * instead of.
+ *
+ * The prompt renders at module load with no session, so `tf.params.what` falls back to its
+ * default of the entire codebase, which is exactly this job's scope.
+ */
+export const AUTO_PM_MAINTENANCE_JOB: AutoPmJob = {
+  name: MAINTENANCE_PRESET_NAME,
+  prompt: renderMaintenancePrompt(),
+  describe: 'sweeping the codebase for maintenance work',
+}
+
+/**
  * What became of one attempt to land a run's queue (#852). The two flags are separate on purpose:
  * a finished run that wrote no queue is `settled` without being `promoted`, and must stop being
  * retried; a still-running one is neither, and is tried again next tick.
@@ -189,6 +209,17 @@ export interface AutoPmDeps {
   jobs: readonly AutoPmJob[]
   /** The job for a queue with open entries (#855); {@link AUTO_PM_DRAIN_JOB} by default. */
   drainJob?: AutoPmJob
+  /**
+   * Whether a project is due its periodic codebase sweep (#882). Injected rather than computed
+   * here because the schedule lives in a file in the project checkout, and this module is pure
+   * policy. Omitted entirely (or throwing) means "not due", so a daemon that cannot read the
+   * schedule keeps doing the rotation rather than sweeping on every tick.
+   */
+  maintenanceDue?(project: AutoPmProject): Promise<boolean>
+  /** Stamp a project as swept, so the next sweep is an interval away. Paired with {@link AutoPmDeps.maintenanceDue}. */
+  recordMaintenance?(project: AutoPmProject): Promise<void>
+  /** The job fired when {@link AutoPmDeps.maintenanceDue} says yes; {@link AUTO_PM_MAINTENANCE_JOB} by default. */
+  maintenanceJob?: AutoPmJob
   /** Start the PM run. Resolves the run's id, or undefined when the daemon refused. */
   start(project: AutoPmProject, job: AutoPmJob): Promise<string | undefined>
   /**
@@ -282,7 +313,15 @@ export function startAutoPm(deps: AutoPmDeps): AutoPmLoop {
           continue
         }
         const index = nextJob.get(project.id) ?? 0
-        const job = decision.mode === 'drain' ? (deps.drainJob ?? AUTO_PM_DRAIN_JOB) : deps.jobs[index % deps.jobs.length]
+        // A due codebase sweep (#882) outranks the rotation: the rotation invents work, and the
+        // sweep is a standing instruction to go find some. Only ever while the queue is empty --
+        // a repo with entries waiting has plenty to do, and the sweep would only add more.
+        const sweep = decision.mode === 'pm' && (await deps.maintenanceDue?.(project).catch(() => false)) === true
+        const job = sweep
+          ? (deps.maintenanceJob ?? AUTO_PM_MAINTENANCE_JOB)
+          : decision.mode === 'drain'
+            ? (deps.drainJob ?? AUTO_PM_DRAIN_JOB)
+            : deps.jobs[index % deps.jobs.length]
         if (!job) continue
         // Armed before the spawn, not after: starting is slow, and a tick that overlapped the
         // spawn would otherwise see no live run yet and start a second one.
@@ -293,7 +332,13 @@ export function startAutoPm(deps: AutoPmDeps): AutoPmLoop {
           // Advanced only on a start that took, so a refused job is retried rather than skipped.
           // Draining does not advance it: it is not part of the cycle, and a queue worked off
           // over several ticks must not skip the rotation forward once per entry.
-          if (decision.mode === 'pm') nextJob.set(project.id, index + 1)
+          //
+          // A sweep does not advance it either, and stamps its own schedule instead: it is paced
+          // by the calendar, not the cycle, so borrowing this tick must not cost the rotation its
+          // turn. Stamped after the start took for the same reason the rotation is -- a sweep the
+          // daemon refused should be retried next tick, not postponed a whole interval.
+          if (sweep) await deps.recordMaintenance?.(project).catch(() => {})
+          else if (decision.mode === 'pm') nextJob.set(project.id, index + 1)
           // Its queue lives on the run's branch until a later tick promotes it.
           pending.set(project.id, [...(pending.get(project.id) ?? []), runId])
         } else {

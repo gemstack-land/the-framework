@@ -23,6 +23,40 @@ export interface MaintenanceState {
   reviewedSha?: string
   /** ISO timestamp of that review. */
   reviewedAt?: string
+  /**
+   * ISO timestamp of the last automatic codebase-wide sweep (#882). Deliberately separate
+   * from {@link MaintenanceState.reviewedAt}: that one tracks how far the commit-delta sweep
+   * (#298) has read, and this one paces a whole-codebase pass that ignores commits entirely.
+   * Sharing a key would make either feature silently reset the other's schedule.
+   */
+  sweptAt?: string
+}
+
+/**
+ * How long a repo is left alone between automatic codebase-wide sweeps (#882).
+ *
+ * A week, and deliberately not configurable: per #879 the answer to "should this have a
+ * setting?" is no unless a setting earns itself. The sweep only queues follow-up entries and
+ * only runs on an idle machine under its quota boundary, so the cost of it being a little too
+ * eager is a backlog entry, not a bill.
+ */
+export const DEFAULT_MAINTENANCE_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000
+
+/**
+ * Whether a repo is due an automatic sweep: never swept, or swept longer ago than the interval.
+ *
+ * A never-swept repo is due immediately, which is the case #882 exists for. The commit-delta
+ * sweep (#298) treats a first-seen repo the opposite way, baselining it at HEAD so its whole
+ * pre-existing history is never reviewed, and that is precisely the gap this closes.
+ *
+ * An unparseable timestamp counts as due: a repo whose state file was hand-edited into nonsense
+ * should get swept, not fall silently out of the schedule forever.
+ */
+export function maintenanceDue(state: MaintenanceState, now: number, intervalMs: number = DEFAULT_MAINTENANCE_INTERVAL_MS): boolean {
+  if (!state.sweptAt) return true
+  const last = Date.parse(state.sweptAt)
+  if (!Number.isFinite(last)) return true
+  return now - last >= intervalMs
 }
 
 /** Minimal fs seam so the state IO is unit-testable without touching disk. */
@@ -52,6 +86,7 @@ export async function readMaintenanceState(cwd: string, fs: MaintenanceFs = node
       const state: MaintenanceState = {}
       if (typeof record['reviewedSha'] === 'string') state.reviewedSha = record['reviewedSha']
       if (typeof record['reviewedAt'] === 'string') state.reviewedAt = record['reviewedAt']
+      if (typeof record['sweptAt'] === 'string') state.sweptAt = record['sweptAt']
       return state
     }
   } catch {
@@ -68,6 +103,22 @@ export async function writeMaintenanceState(
 ): Promise<void> {
   await fs.mkdir(join(cwd, FRAMEWORK_DIR))
   await fs.write(maintenanceStatePath(cwd), JSON.stringify(state, null, 2))
+}
+
+/**
+ * Record part of a repo's state, leaving the keys not mentioned alone.
+ *
+ * Load-bearing since #882: {@link writeMaintenanceState} replaces the file wholesale, and two
+ * features now write it. The commit-delta sweep (#298) writes `reviewedSha`/`reviewedAt` and the
+ * automatic sweep writes `sweptAt`, so a wholesale write from either one would silently reset the
+ * other's schedule.
+ */
+export async function mergeMaintenanceState(
+  cwd: string,
+  patch: MaintenanceState,
+  fs: MaintenanceFs = nodeMaintenanceFs(),
+): Promise<void> {
+  await writeMaintenanceState(cwd, { ...(await readMaintenanceState(cwd, fs)), ...patch }, fs)
 }
 
 /** What the sweep decided for one repo. */

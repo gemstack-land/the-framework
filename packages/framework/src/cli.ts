@@ -50,7 +50,7 @@ import { startConsumptionGuard } from './consumption-guard.js'
 import {
   planMaintenanceSweep,
   maintainSweep,
-  writeMaintenanceState,
+  mergeMaintenanceState,
   short,
   type RepoReview,
 } from './maintenance.js'
@@ -1543,7 +1543,8 @@ async function maintainCmd(opts: CliOptions, io: CliIO): Promise<number> {
 
   const summary = await maintainSweep(reviews, {
     run: review => spawnMaintenanceRun(review, binPath, opts.maxCost),
-    record: (path, state) => writeMaintenanceState(path, state),
+    // Merged, not replaced: the automatic sweep (#882) keeps its own `sweptAt` in this file.
+    record: (path, state) => mergeMaintenanceState(path, state),
     log: message => io.out(message),
     now: () => new Date().toISOString(),
     ...(opts.maxRepos !== undefined ? { maxRepos: opts.maxRepos } : {}),

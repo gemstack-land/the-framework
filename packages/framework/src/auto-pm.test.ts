@@ -6,6 +6,7 @@ import {
   startAutoPm,
   AUTO_PM_JOBS,
   AUTO_PM_DRAIN_JOB,
+  AUTO_PM_MAINTENANCE_JOB,
   type AutoPmDeps,
   type AutoPmJob,
   type AutoPmProject,
@@ -315,4 +316,81 @@ test('an unreadable queue starts nothing at all (#855)', async () => {
   await loop.tick()
   loop.stop()
   assert.deepEqual(ran, [])
+})
+
+test('AUTO_PM_MAINTENANCE_JOB fires the [Maintenance] preset over the whole codebase (#882)', () => {
+  // It renders with no session, so the preset's own default is what scopes it. A sweep that
+  // silently scoped itself to one session would miss the pre-existing history it exists for.
+  assert.equal(AUTO_PM_MAINTENANCE_JOB.name, 'maintenance')
+  assert.match(AUTO_PM_MAINTENANCE_JOB.prompt, /entire codebase/)
+  assert.doesNotMatch(AUTO_PM_MAINTENANCE_JOB.prompt, /\$\{\{/)
+})
+
+test('a due project is swept before the rotation gets a turn (#882)', async () => {
+  const { loop, ran } = harness({ cooldownMs: 0, maintenanceDue: async () => true })
+  await loop.tick()
+  loop.stop()
+  assert.deepEqual(ran, [AUTO_PM_MAINTENANCE_JOB.name])
+})
+
+test('a project that is not due keeps doing the rotation (#882)', async () => {
+  const { loop, ran } = harness({ cooldownMs: 0, maintenanceDue: async () => false })
+  await loop.tick()
+  await loop.tick()
+  loop.stop()
+  assert.deepEqual(ran, ['first', 'second'])
+})
+
+test('a sweep does not cost the rotation its turn (#882)', async () => {
+  // The sweep is paced by the calendar, not the cycle. If it advanced the rotation, the job it
+  // borrowed the tick from would be skipped and never run.
+  let due = true
+  const { loop, ran } = harness({
+    cooldownMs: 0,
+    maintenanceDue: async () => due,
+    recordMaintenance: async () => {
+      due = false
+    },
+  })
+  await loop.tick()
+  await loop.tick()
+  loop.stop()
+  assert.deepEqual(ran, [AUTO_PM_MAINTENANCE_JOB.name, 'first'])
+})
+
+test('a sweep is stamped only when the run actually started (#882)', async () => {
+  // Stamping a refused sweep would postpone it a whole interval for a run that never happened.
+  const stamped: string[] = []
+  const { loop } = harness({
+    cooldownMs: 0,
+    maintenanceDue: async () => true,
+    recordMaintenance: async project => {
+      stamped.push(project.id)
+    },
+    start: async () => undefined,
+  })
+  await loop.tick()
+  loop.stop()
+  assert.deepEqual(stamped, [])
+})
+
+test('a queue with work in it is drained rather than swept (#882)', async () => {
+  // A repo with entries waiting has plenty to do; sweeping would only pile more on.
+  const { loop, ran } = harness({ cooldownMs: 0, backlogEmpty: async () => false, maintenanceDue: async () => true })
+  await loop.tick()
+  loop.stop()
+  assert.deepEqual(ran, [AUTO_PM_DRAIN_JOB.name])
+})
+
+test('an unreadable sweep schedule falls back to the rotation (#882)', async () => {
+  // Treating "cannot tell" as due would sweep the codebase on every single tick.
+  const { loop, ran } = harness({
+    cooldownMs: 0,
+    maintenanceDue: async () => {
+      throw new Error('no such file')
+    },
+  })
+  await loop.tick()
+  loop.stop()
+  assert.deepEqual(ran, ['first'])
 })
