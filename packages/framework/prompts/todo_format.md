@@ -2,23 +2,19 @@
 
 Content:
 ```md
-## URGENT
+## Priority 10 (critical — act immediately)
 
 ...
 
-## High priority
+## Priority 9
 
 ...
 
-## Medium priority
-
-...
-
-## Low priority
+## Priority 0 (only if capacity)
 
 ...
 ```
 
 The TODO_AGENTS.md file lists *all* tasks AI will work on next, sorted by priority.
 
-URGENT is rarely used (e.g. for critical production bugs) and should be treated as utmost priority.
+Priority 10 is rarely used (e.g. critical production bugs) and should be treated as utmost priority.

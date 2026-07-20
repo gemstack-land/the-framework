@@ -38,11 +38,12 @@ test('the backlog-format spec ships in the package and teaches the priority sect
   // Ships inside the package like the ticket format, so the layout versions with the package.
   assert.equal(TODO_FORMAT_FILE, 'node_modules/@gemstack/framework/prompts/todo_format.md')
   assert.ok(TODO_FORMAT.includes(FLAT_TODO_FILE))
-  for (const section of ['## URGENT', '## High priority', '## Medium priority', '## Low priority']) {
+  // A numeric 0-10 scale, not named tiers: 10 is act-immediately, 0 is only-if-capacity.
+  for (const section of ['## Priority 10 (critical', '## Priority 9', '## Priority 0 (only if capacity)']) {
     assert.ok(TODO_FORMAT.includes(section), `expected the ${section} section`)
   }
-  // URGENT is the exception, not the default, and the file is priority-sorted.
-  assert.ok(TODO_FORMAT.includes('rarely used'))
+  // Priority 10 is the exception, not the default, and the file is priority-sorted.
+  assert.ok(TODO_FORMAT.includes('Priority 10 is rarely used'))
   assert.ok(TODO_FORMAT.includes('sorted by priority'))
 })
 

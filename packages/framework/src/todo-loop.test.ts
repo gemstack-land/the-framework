@@ -36,16 +36,16 @@ test('parseTodoEntries reads open list items and skips checked/blank/prose lines
 
 test('the #880 priority sections need no parser support: headings are skipped, so a sorted file drains in priority order', () => {
   const md = [
-    '## URGENT',
+    '## Priority 10 (critical — act immediately)',
     '- restore checkout',
     '',
-    '## High priority',
+    '## Priority 9',
     '- flaky auth test',
     '',
-    '## Medium priority',
+    '## Priority 5',
     '- tidy the config loader',
     '',
-    '## Low priority',
+    '## Priority 0 (only if capacity)',
     '- rename the legacy flag',
   ].join('\n')
   assert.deepEqual(parseTodoEntries(md), [
