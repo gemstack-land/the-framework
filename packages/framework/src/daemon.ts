@@ -1,5 +1,5 @@
 import { spawn, type ChildProcess } from 'node:child_process'
-import { mkdir, readFile, writeFile, rm, stat } from 'node:fs/promises'
+import { mkdir, readFile, writeFile, rename, rm, stat } from 'node:fs/promises'
 import { basename, dirname, join, resolve, relative, isAbsolute } from 'node:path'
 import type { FrameworkEvent } from './events.js'
 import {
@@ -209,16 +209,82 @@ export function isProcessAlive(pid: number): boolean {
 }
 
 /**
- * The live daemon for this machine, or `undefined` when none is running. A state
- * file whose process is gone is stale — it is removed so the next `ensureDaemon`
- * starts fresh.
+ * The live daemon for this machine, or `undefined` when none is running. A state file
+ * whose process is gone is reported as no daemon, but left alone (#922): this is a read,
+ * and it used to delete the file. One check against a stale pid then unregistered a
+ * daemon that was actually running, for good — the file is only written at startup, so
+ * `framework stop` could no longer find it and `framework --daemon` spawned a second
+ * daemon that died on the bound port. Removal belongs to the two owners: the daemon's own
+ * teardown and {@link stopDaemon}.
  */
 export async function daemonStatus(env: NodeJS.ProcessEnv = process.env): Promise<DaemonState | undefined> {
   const state = await readDaemonState(env)
   if (!state) return undefined
-  if (isProcessAlive(state.pid)) return state
+  return isProcessAlive(state.pid) ? state : undefined
+}
+
+/**
+ * Record this daemon as the machine's live one, atomically (#922): a temp file in the same
+ * directory, then a rename, so a concurrent reader sees either the whole old file or the
+ * whole new one. A torn read parses as malformed, which reads as "no daemon".
+ */
+export async function writeDaemonState(state: DaemonState, env: NodeJS.ProcessEnv = process.env): Promise<void> {
+  const path = daemonStatePath(env)
+  await mkdir(dirname(path), { recursive: true })
+  const temp = `${path}.${process.pid}.tmp`
+  await writeFile(temp, JSON.stringify(state, null, 2))
+  await rename(temp, path)
+}
+
+/**
+ * Remove the state file only while it still names `pid` (#922). The daemon's teardown must
+ * not delete a record another daemon has since written, which is what an unconditional
+ * remove does when the two overlap by a moment.
+ */
+async function removeDaemonStateIfOwned(pid: number, env: NodeJS.ProcessEnv): Promise<void> {
+  const state = await readDaemonState(env)
+  if (state && state.pid !== pid) return
   await rm(daemonStatePath(env), { force: true }).catch(() => {})
-  return undefined
+}
+
+/** How often a running daemon re-asserts its state file, ms (#922). */
+export const DAEMON_STATE_HEARTBEAT_MS = 5000
+
+/** A running daemon's state-file heartbeat: stoppable, and awaitable in tests. */
+export interface DaemonStateHeartbeat {
+  stop: () => void
+  /** Re-assert once, now. The interval calls this; tests call it instead of waiting. */
+  beat: () => Promise<void>
+}
+
+/**
+ * Keep the state file saying this daemon is live (#922). A missing file, or one naming a
+ * process that is gone, is rewritten; a file naming a different *live* daemon is left
+ * alone, since that one owns the port and this one is the impostor.
+ *
+ * The timer is unref'd: re-asserting a record is not a reason to hold the process open.
+ */
+export function startDaemonStateHeartbeat(
+  state: DaemonState,
+  env: NodeJS.ProcessEnv = process.env,
+  everyMs: number = DAEMON_STATE_HEARTBEAT_MS,
+): DaemonStateHeartbeat {
+  let stopped = false
+  const beat = async (): Promise<void> => {
+    if (stopped) return
+    const current = await readDaemonState(env)
+    if (current && (current.pid === state.pid || isProcessAlive(current.pid))) return
+    await writeDaemonState(state, env).catch(() => {})
+  }
+  const timer = setInterval(() => void beat(), everyMs)
+  timer.unref()
+  return {
+    stop: () => {
+      stopped = true
+      clearInterval(timer)
+    },
+    beat,
+  }
 }
 
 /** Result of {@link ensureDaemon}: the running daemon and whether we just started it. */
@@ -344,6 +410,8 @@ export interface RunDaemonOptions {
   env?: NodeJS.ProcessEnv
   /** Called once the server has bound and recorded its state, before it blocks (#456). For the foreground banner. */
   onListening?: (state: DaemonState) => void
+  /** How often to re-assert the state file, ms (#922). Default {@link DAEMON_STATE_HEARTBEAT_MS}; for tests. */
+  heartbeatMs?: number
 }
 
 /**
@@ -401,16 +469,20 @@ export async function runDaemon(cwd: string, opts: RunDaemonOptions = {}): Promi
     ...(clientBundleDir ? { clientBundleDir } : {}),
   })
 
+  // Re-asserts the state file for as long as this daemon runs (#922), so anything that
+  // deletes it heals within a tick instead of lasting until a restart.
+  let selfHeal: DaemonStateHeartbeat | undefined
   try {
     const actualPort = Number(new URL(dashboard.url).port) || port
     const state: DaemonState = { pid: process.pid, port: actualPort, url: dashboard.url, startedAt: new Date().toISOString() }
-    await mkdir(dirname(daemonStatePath(env)), { recursive: true })
-    await writeFile(daemonStatePath(env), JSON.stringify(state, null, 2))
+    await writeDaemonState(state, env)
     opts.onListening?.(state)
+    selfHeal = startDaemonStateHeartbeat(state, env, opts.heartbeatMs ?? DAEMON_STATE_HEARTBEAT_MS)
   } catch (err) {
     // Startup failed after the port was bound. Tear the server down, or it keeps the
     // event loop alive: a zombie daemon squatting the port with no state file, which
     // also wedges every later `framework` start.
+    selfHeal?.stop()
     await dashboard.close()
     throw err
   }
@@ -573,7 +645,9 @@ export async function runDaemon(cwd: string, opts: RunDaemonOptions = {}): Promi
   activityWatcher?.stop()
   await runtime.dispose() // stop live previews (#475) so their dev servers do not outlive us
   await dashboard.close()
-  await rm(daemonStatePath(env), { force: true }).catch(() => {})
+  // Stop re-asserting before removing, or the heartbeat writes the record back (#922).
+  selfHeal?.stop()
+  await removeDaemonStateIfOwned(process.pid, env)
 }
 
 /** Inputs to {@link createProjectRuntime}. */

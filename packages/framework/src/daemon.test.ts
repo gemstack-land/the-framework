@@ -13,6 +13,8 @@ import {
   stopDaemon,
   runDaemon,
   daemonStatePath,
+  writeDaemonState,
+  startDaemonStateHeartbeat,
   startOptionFlags,
   registerHomeProject,
   isNestedWithin,
@@ -194,16 +196,48 @@ test('readDaemonState returns undefined when absent or malformed', async () => {
   }
 })
 
-test('daemonStatus removes a stale state file whose process is gone', async () => {
+// #922: it used to delete the file here, so one check against a stale pid unregistered a
+// daemon that was actually running, and nothing ever wrote the record back.
+test('daemonStatus reports a stale state file as no daemon, without deleting it', async () => {
   const cwd = await tmpWorkspace()
   const env = await configEnv(cwd)
   try {
-    await writeFile(
-      daemonStatePath(env),
-      JSON.stringify({ pid: 2 ** 31 - 1, port: 4477, url: 'http://127.0.0.1:4477', startedAt: '' }),
-    )
+    const stale = { pid: 2 ** 31 - 1, port: 4477, url: 'http://127.0.0.1:4477', startedAt: '' }
+    await writeFile(daemonStatePath(env), JSON.stringify(stale))
     assert.equal(await daemonStatus(env), undefined) // dead pid -> not running
-    assert.equal(await readDaemonState(env), undefined) // ...and the stale file is cleaned up
+    assert.deepEqual(await readDaemonState(env), stale) // ...and the read left the file alone
+  } finally {
+    await rm(cwd, { recursive: true, force: true })
+  }
+})
+
+test('the state-file heartbeat rewrites a deleted record and yields to a live daemon', async () => {
+  const cwd = await tmpWorkspace()
+  const env = await configEnv(cwd)
+  try {
+    const mine = { pid: process.pid, port: 4478, url: 'http://127.0.0.1:4478', startedAt: '' }
+    const heartbeat = startDaemonStateHeartbeat(mine, env, 60_000) // driven by hand, not by time
+    await writeDaemonState(mine, env)
+
+    await rm(daemonStatePath(env), { force: true })
+    await heartbeat.beat()
+    assert.deepEqual(await readDaemonState(env), mine) // a deletion heals
+
+    // A record naming another *live* process belongs to that daemon; ours must not clobber it.
+    const other = { pid: process.ppid, port: 4479, url: 'http://127.0.0.1:4479', startedAt: '' }
+    await writeFile(daemonStatePath(env), JSON.stringify(other))
+    await heartbeat.beat()
+    assert.deepEqual(await readDaemonState(env), other)
+
+    // A record naming a dead process is stale, so it is taken over.
+    await writeFile(daemonStatePath(env), JSON.stringify({ ...other, pid: 2 ** 31 - 1 }))
+    await heartbeat.beat()
+    assert.deepEqual(await readDaemonState(env), mine)
+
+    heartbeat.stop()
+    await rm(daemonStatePath(env), { force: true })
+    await heartbeat.beat()
+    assert.equal(await readDaemonState(env), undefined) // stopped means stopped
   } finally {
     await rm(cwd, { recursive: true, force: true })
   }
