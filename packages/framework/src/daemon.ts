@@ -34,6 +34,7 @@ import { defaultQuotaSource } from './dashboard/quota.js'
 import { startAutoPm, AUTO_PM_JOBS } from './auto-pm.js'
 import { maintenanceDue, readMaintenanceState, mergeMaintenanceState } from './maintenance.js'
 import { promoteQueue } from './queue-promote.js'
+import { isSafeVia } from './conversations.js'
 import { startConversationCommitter, type ConversationCommitter } from './conversation-commit.js'
 import { findTodoBacklog } from './todo-loop.js'
 import { startPreview, detectServeTargets, type PreviewHandle, type ServeTarget } from './preview.js'
@@ -44,7 +45,7 @@ import { runOptionsFromPreferences, preferencesFromFileConfig } from './run-opti
 import { loadFrameworkConfig } from './config.js'
 import { installProject, enumerateGitRepos } from './install.js'
 import { JsonlTailer } from './jsonl-tail.js'
-import { startDiscordBot } from './discord/bot.js'
+import { startDiscordBot, DISCORD_VIA } from './discord/bot.js'
 import { snapshotLiveRun } from './discord/live-run.js'
 import { sendChoice, sendMessage, sendStop } from './dashboard-rpc/control.telefunc.js'
 
@@ -177,6 +178,9 @@ export function startOptionFlags(options: StartRunOptions): string[] {
   // Unattended (#846): nobody is at the keyboard, so gates take the recommended option
   // rather than park for an answer that is not coming.
   if (options.unattended) flags.push('--unattended')
+  // The originating surface (#917): only a safe transport name is forwarded, since it reaches the
+  // conversation heading, which is line-parsed.
+  if (isSafeVia(options.via)) flags.push('--via', options.via)
   // Resume a finished run's session (#720): the spawned run continues that conversation.
   if (typeof options.resumeSession === 'string' && options.resumeSession.trim()) {
     flags.push('--resume-session', options.resumeSession.trim())
@@ -677,10 +681,13 @@ export async function runDaemon(cwd: string, opts: RunDaemonOptions = {}): Promi
           // watching a chat-started run either, so a parked gate would hang it. The gate is then
           // answered from Discord by number instead.
           const options = await resolvedRunOptions(id)
-          const result = await runtime.onStart(text, 'prompt', { ...options, unattended: true }, id)
+          // `via` so the opening turn is filed under Discord too (#917). Without it a chat-started
+          // session reads as if its first message came from the dashboard and only the follow-ups
+          // came from Discord, which is a worse record than attributing none of it.
+          const result = await runtime.onStart(text, 'prompt', { ...options, unattended: true, via: DISCORD_VIA }, id)
           return result.ok ? result.runId : undefined
         },
-        sendMessage: (id, text, runId) => sendMessage(id, text, runId),
+        sendMessage: (id, text, runId) => sendMessage(id, text, runId, DISCORD_VIA),
         sendChoice: (id, gateId, pick, runId) => sendChoice(id, gateId, pick, 'user', runId),
         sendStop: (id, runId) => sendStop(id, runId),
         enabled: async () => (await readPrefs()).discordBot === true,

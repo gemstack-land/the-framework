@@ -55,6 +55,17 @@ const SEP = ' · '
 const VIA = /^[A-Za-z0-9_-]+$/
 
 /**
+ * Whether a transport name is safe to record. Exported because #917 lets a surface name itself
+ * over the control channel, so the name now arrives from outside this module: a `via` carrying
+ * the heading separator, a newline or a `#` would forge structure in a file whose entries are
+ * line-parsed, exactly the way #897 forged a LOGS.md title. Checked at the boundary rather than
+ * trusted, and the same predicate {@link parseConversation} reads back with.
+ */
+export function isSafeVia(via: unknown): via is string {
+  return typeof via === 'string' && VIA.test(via)
+}
+
+/**
  * Escape a message body so it cannot forge structure (#897's threat model, applied to a
  * transcript). LOGS.md collapses free text to one line, which is right for a line-parsed record
  * and wrong here: a multi-paragraph reply has to stay readable in a `git diff`. So the text stays

@@ -1,5 +1,6 @@
 import { getContext } from 'telefunc'
 import { appendControl, type ControlEntry } from '../control.js'
+import { isSafeVia } from '../conversations.js'
 import { openInApp, type OpenTarget, type OpenResult } from '../dashboard/open-in-app.js'
 import { resolveProjectPath, resolveRunPath, contextPreferences, contextPreview } from './context.js'
 import { appendFlatTodoEntry } from '../todo-loop.js'
@@ -70,11 +71,17 @@ export async function sendChoice(
  * Send a live-chat message to the project's running run (#714): append a `message` entry
  * that the run drains between turns, continuing the same session via `--resume`. Empty
  * messages are dropped.
+ *
+ * `via` names the surface the message came through (#917), so the run records the turn where it
+ * actually happened. The dashboard omits it and keeps its own default; the Discord bot passes
+ * `discord`. An unsafe name is dropped rather than forwarded: it would reach a line-parsed
+ * conversation heading, and the browser can call this, so it is not trusted input.
  */
-export async function sendMessage(projectId: string, text: string, runId?: string): Promise<void> {
+export async function sendMessage(projectId: string, text: string, runId?: string, via?: string): Promise<void> {
   const message = text.trim()
   if (!message) return
-  await appendControlFor(projectId, { kind: 'message', text: message }, runId)
+  const origin = isSafeVia(via) ? { via } : {}
+  await appendControlFor(projectId, { kind: 'message', text: message, ...origin }, runId)
 }
 
 /**

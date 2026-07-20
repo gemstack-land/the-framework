@@ -14,6 +14,12 @@ import { decideAction, type ProjectTarget, type RunSnapshot } from './routing.js
  * That is the answer to the question #680 asked — the Git repo, via the run that received it.
  */
 
+/**
+ * How a turn that arrived here is attributed in the committed conversation (#917). Named once,
+ * here, so the surface owns its own name rather than the daemon spelling it inline twice.
+ */
+export const DISCORD_VIA = 'discord'
+
 /** Everything the bot needs from the daemon. */
 export interface DiscordBotOptions {
   /** The bot token. Distinct from the notification webhook (#627), which cannot read replies. */

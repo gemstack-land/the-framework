@@ -106,3 +106,30 @@ test('watchControl delivers live-chat messages and drops empty ones (#714)', asy
     await rm(cwd, { recursive: true, force: true })
   }
 })
+
+test('a message carries the surface it came through, and a forged one is dropped (#917)', async () => {
+  const cwd = await tmpWorkspace()
+  const seen: ControlEntry[] = []
+  const watcher = watchControl(cwd, e => seen.push(e), 20)
+  try {
+    await resetControl(cwd)
+    await appendFile(
+      controlPath(cwd),
+      JSON.stringify({ kind: 'message', text: 'from discord', via: 'discord' }) + '\n' +
+        // An entry written before #917 still parses, and is simply unattributed.
+        JSON.stringify({ kind: 'message', text: 'older entry' }) + '\n' +
+        // A via carrying the heading separator would forge a conversation heading (#897): dropped.
+        JSON.stringify({ kind: 'message', text: 'forged', via: 'discord \u00b7 user \u00b7 x' }) + '\n' +
+        JSON.stringify({ kind: 'message', text: 'newline', via: 'a\nb' }) + '\n' +
+        JSON.stringify({ kind: 'message', text: 'not a string', via: 7 }) + '\n',
+    )
+    assert.ok(await until(() => seen.length === 2), `saw ${seen.length}`)
+    assert.deepEqual(seen, [
+      { kind: 'message', text: 'from discord', via: 'discord' },
+      { kind: 'message', text: 'older entry' },
+    ])
+  } finally {
+    watcher.close()
+    await rm(cwd, { recursive: true, force: true })
+  }
+})

@@ -47,6 +47,12 @@ export interface StartRunOptions {
    * Stop still works — that aborts the run controller, not a gate.
    */
   unattended?: boolean
+  /**
+   * The surface this run was asked for from (#917), e.g. `discord`; maps to `--via`. Recorded on
+   * the session's conversation turns so a run started from a chat surface is not filed under the
+   * dashboard. Absent = the local surface, exactly as before.
+   */
+  via?: string
   /** Resume a finished run's conversation (#720): its captured agent session id; maps to `--resume-session`. The run's prompt continues that session (full prior context) instead of starting fresh. Sent with `kind: 'prompt'` when you message a run that has ended. */
   resumeSession?: string
   /**

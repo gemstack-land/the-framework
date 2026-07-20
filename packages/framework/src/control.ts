@@ -1,5 +1,6 @@
 import { appendFile, mkdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
+import { isSafeVia } from './conversations.js'
 import type { ChoiceBy } from './events.js'
 import { FRAMEWORK_DIR } from './store/index.js'
 import { JsonlTailer, followFile } from './jsonl-tail.js'
@@ -22,8 +23,14 @@ export type ControlEntry =
   | { kind: 'stop' }
   /** Resolve a parked choice gate: the pick for the pending {@link ChoiceRequest} id. */
   | { kind: 'choice'; id: string; pick: string | string[]; by: ChoiceBy }
-  /** A live-chat message the user sent to the running run (#714). */
-  | { kind: 'message'; text: string }
+  /**
+   * A live-chat message the user sent to the running run (#714).
+   *
+   * `via` names the surface it came through (#917), so the conversation records where it happened
+   * rather than assuming the local one. Optional: entries written before this existed still parse,
+   * and a run reading one falls back to its own surface exactly as before.
+   */
+  | { kind: 'message'; text: string; via?: string }
 
 /** The control log path for a workspace. */
 export function controlPath(cwd: string): string {
@@ -74,7 +81,12 @@ function isControlEntry(value: unknown): value is ControlEntry {
   if (!value || typeof value !== 'object') return false
   const v = value as Record<string, unknown>
   if (v['kind'] === 'stop') return true
-  if (v['kind'] === 'message') return typeof v['text'] === 'string' && v['text'].length > 0
+  // `via` is optional (older entries have none), but a present one must be a safe transport name:
+  // it is written into a line-parsed conversation heading, and a surface names itself (#917).
+  if (v['kind'] === 'message') {
+    if (typeof v['text'] !== 'string' || v['text'].length === 0) return false
+    return v['via'] === undefined || isSafeVia(v['via'])
+  }
   if (v['kind'] !== 'choice') return false
   if (typeof v['id'] !== 'string' || !v['id']) return false
   const pick = v['pick']

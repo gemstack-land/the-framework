@@ -7,6 +7,7 @@ import {
   conversationsDir,
   ensureConversationsIgnored,
   escapeBody,
+  isSafeVia,
   listConversations,
   parseConversation,
   readConversation,
@@ -207,4 +208,25 @@ test('a torn or foreign block is skipped, never thrown', () => {
   const messages = parseConversation(md)
   assert.equal(messages.length, 1)
   assert.equal(messages[0]?.text, 'the good one')
+})
+
+test('isSafeVia accepts a plain transport name and rejects anything that could forge a heading (#917)', () => {
+  assert.equal(isSafeVia('discord'), true)
+  assert.equal(isSafeVia('dashboard'), true)
+  assert.equal(isSafeVia('slack-2'), true)
+  assert.equal(isSafeVia('my_surface'), true)
+
+  // The heading is `## <at> · <role> · <via>`, line-parsed, so these must never reach it.
+  assert.equal(isSafeVia('discord · user · nope'), false, 'the field separator')
+  assert.equal(isSafeVia('a\nb'), false, 'a newline')
+  assert.equal(isSafeVia('a b'), false, 'a space')
+  assert.equal(isSafeVia(''), false, 'empty')
+  assert.equal(isSafeVia(undefined), false)
+  assert.equal(isSafeVia(7), false)
+})
+
+test('a turn records the surface it came through, and it round-trips (#917)', () => {
+  const md = renderMessage(msg({ via: 'discord' }))
+  assert.ok(md.includes(' · discord'), md)
+  assert.deepEqual(parseConversation(md), [msg({ via: 'discord' })])
 })

@@ -46,7 +46,7 @@ import { type EcoOptions } from './system-prompt.js'
 import { loadUserSystemPrompt, SYSTEM_PROMPT_FILE } from './system-prompt-file.js'
 import { checkForUpdate, formatUpdateStatus, nodeVersionFetcher } from './update-check.js'
 import { appendLog, type LogEntry } from './logs.js'
-import { appendMessage } from './conversations.js'
+import { appendMessage, isSafeVia } from './conversations.js'
 import type { RecordMessage } from './run.js'
 import { preflight } from './preflight.js'
 import { RunStore, currentBranch, nodeStoreFs, renameRunBranch, runBranchName, type StoreFs } from './store/index.js'
@@ -161,6 +161,8 @@ Options:
                          the session says so at startup rather than imply a guard.
   --cwd <dir>            Workspace the agent builds in (default: current directory).
   --model <id>           Model to pass through to the wrapped agent.
+  --via <surface>        Surface this run was started from (e.g. discord); recorded
+                         on the session's conversation turns.
   --scope <prototype|full>   How much app to build (default: full).
   --preset <name>        Run under an Open Loop domain preset (its loops + prompts
                          + skills frame the build), e.g. software-development.
@@ -273,6 +275,8 @@ export interface CliOptions {
   model?: string | undefined
   /** `--resume-session <id>` (#720): continue a finished run's agent session — the prompt resumes that conversation (full prior context). Set by the dashboard when you message a run that has ended. */
   resumeSession?: string | undefined
+  /** `--via <surface>` (#917): the surface this run was started from, recorded on its conversation turns. Set by the daemon when a non-local surface (e.g. Discord) asked for the run. */
+  via?: string | undefined
   /** `--unattended`: no human is watching, so choice gates take the recommended option (#846). */
   unattended?: boolean
   scope: 'prototype' | 'full'
@@ -495,6 +499,9 @@ export function parseArgs(argv: string[]): CliOptions {
         break
       case '--resume-session':
         opts.resumeSession = argv[++i]
+        break
+      case '--via':
+        opts.via = argv[++i]
         break
       case '--unattended':
         opts.unattended = true
@@ -1217,7 +1224,8 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
           return
         }
         if (entry.kind === 'message') {
-          messages.push(entry.text)
+          // Carry the origin the sender named (#917), so the turn is recorded where it happened.
+          messages.push(entry.text, entry.via)
           return
         }
         const resolve = pendingChoices.get(entry.id)
@@ -1266,10 +1274,16 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
   // Appends are chained rather than fired in parallel: each one creates the dir/header before it
   // writes, so two overlapping turns race and can land the reply above the message it answers.
   let conversationTail: Promise<void> = Promise.resolve()
+  // The surface this run is being driven from, when nothing more specific is known. `--via` names
+  // it for a run the daemon started on a surface's behalf (#917), so a Discord-started session's
+  // opening turn is not filed under the dashboard; otherwise it is whichever local surface is here.
+  const localVia = isSafeVia(opts.via) ? opts.via : requestChoice ? 'dashboard' : 'cli'
   const recordMessage: RecordMessage | undefined =
     opts.persist && conversationId
-      ? (role, text) => {
-          const message = { at: new Date().toISOString(), role, via: requestChoice ? 'dashboard' : 'cli', text }
+      ? (role, text, via) => {
+          // A per-turn origin wins, but only a safe one: it arrives from a chat surface over the
+          // control channel, and the heading it lands in is line-parsed (#897's threat model).
+          const message = { at: new Date().toISOString(), role, via: isSafeVia(via) ? via : localVia, text }
           conversationTail = conversationTail.then(() => appendMessage(cwd, conversationId, message)).catch(() => {})
         }
       : undefined

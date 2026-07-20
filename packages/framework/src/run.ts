@@ -696,8 +696,13 @@ export interface AwaitRoundsOptions {
   recordMessage?: RecordMessage | undefined
 }
 
-/** Persist one chat turn. See {@link AwaitRoundsOptions.recordMessage}. */
-export type RecordMessage = (role: 'user' | 'agent', text: string) => void
+/**
+ * Persist one chat turn. See {@link AwaitRoundsOptions.recordMessage}.
+ *
+ * `via` names the surface the turn happened on (#917). Omitted, the recorder falls back to the
+ * run's own surface, which is what every turn did before a message could arrive from elsewhere.
+ */
+export type RecordMessage = (role: 'user' | 'agent', text: string, via?: string) => void
 
 /** The shared deps of a turn that may hit an await gate or a chat message. */
 interface AwaitTurnDeps {
@@ -752,15 +757,17 @@ export async function runChatPhase(session: DriverSession, messages: RunMessages
     deps.emit({ kind: 'settled' })
     const message = await messages.next(deps.signal)
     if (message === undefined) return { turn, exhausted } // Stop / budget cap: end the conversation.
-    deps.emit({ kind: 'log', message: `You: ${message}` })
-    deps.recordMessage?.('user', message)
-    turn = await session.prompt(message, { ...signalOpt, resume: true })
+    deps.emit({ kind: 'log', message: `You: ${message.text}` })
+    deps.recordMessage?.('user', message.text, message.via)
+    turn = await session.prompt(message.text, { ...signalOpt, resume: true })
     deps.emitTurnSignals(turn.text)
     const drained = await drainGates(session, turn, deps)
     turn = drained.turn
     exhausted = drained.exhausted
-    // The settled text, so the recorded reply is what the user actually read (#908).
-    deps.recordMessage?.('agent', turn.text)
+    // The settled text, so the recorded reply is what the user actually read (#908). Attributed to
+    // the surface that asked (#917): a reply belongs to the conversation it answers, so a Discord
+    // question and its answer read as one exchange rather than two different places.
+    deps.recordMessage?.('agent', turn.text, message.via)
     if (drained.declined) return { turn, exhausted }
   }
 }
