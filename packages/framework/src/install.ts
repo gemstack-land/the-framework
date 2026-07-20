@@ -1,6 +1,7 @@
 import { join } from 'node:path'
 import { nodeGitRunner, type GitRunner } from './project.js'
 import { logsPath, LOGS_HEADER, THE_FRAMEWORK_DIR, gitignorePath, LOGS_GITIGNORE } from './logs.js'
+import { CONVERSATIONS_GITIGNORE } from './conversations.js'
 import { nodeStoreFs, type StoreFs } from './store/index.js'
 import { materializePresets } from './presets.js'
 
@@ -53,10 +54,10 @@ export async function installProject(cwd: string, deps: InstallDeps = {}): Promi
     await fs.mkdir(join(cwd, THE_FRAMEWORK_DIR))
     // The early return above already established LOGS.md is absent, so write it unconditionally.
     await fs.write(logsPath(cwd), LOGS_HEADER)
-    // Keep the transient run state (events.jsonl / run.json / runs/) out of git;
-    // only LOGS.md is the committed DB (#313).
+    // Keep the transient run state (events.jsonl / run.json / runs/) out of git; the committed
+    // DB is LOGS.md (#313) plus the conversations (#908), each needing its own negation.
     const ignore = gitignorePath(cwd)
-    if (!(await fs.exists(ignore))) await fs.write(ignore, LOGS_GITIGNORE)
+    if (!(await fs.exists(ignore))) await fs.write(ignore, LOGS_GITIGNORE + CONVERSATIONS_GITIGNORE)
 
     // Materialize the quality presets so an on-before-mergeable TODO entry's filePath resolves to a
     // real file the agent can open (#326). The .the-framework/.gitignore above keeps them out

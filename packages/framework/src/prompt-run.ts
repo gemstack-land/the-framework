@@ -1,6 +1,6 @@
 import type { Driver, DriverSession } from './driver/index.js'
 import { type ChoicePick, type ChoiceRequest, type FrameworkEvent } from './events.js'
-import { runAwaitRounds } from './run.js'
+import { runAwaitRounds, type RecordMessage } from './run.js'
 import { composeRunSystem, renderSystemPrompt, type EcoOptions, type TfContext } from './system-prompt.js'
 import { createRunControls, emitSessionStart, endStopDetail } from './run-telemetry.js'
 import { createTurnSignalEmitter } from './turn-gate.js'
@@ -66,6 +66,8 @@ export interface RunPromptOptions {
    * when the agent stops asking — exactly as before.
    */
   messages?: RunMessages
+  /** Record each chat turn to the committed conversation (#908). Best-effort; unset = not recorded. */
+  recordMessage?: RecordMessage
   /**
    * Resume a finished run's conversation (#720): the captured agent session id to
    * continue. When set, the prompt is sent as a plain continuation message that
@@ -155,6 +157,7 @@ export async function runPrompt(opts: RunPromptOptions): Promise<RunPromptResult
       signal: runSignal,
       ...(resuming ? { resume: true } : {}),
       ...(opts.messages ? { messages: opts.messages } : {}),
+      ...(opts.recordMessage ? { recordMessage: opts.recordMessage } : {}),
     })
     // The agent kept asking past the limit: finish with the latest turn rather than loop.
     if (rounds.exhausted) emit({ kind: 'log', message: 'Finishing the session (await limit reached).' })

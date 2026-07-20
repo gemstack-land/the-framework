@@ -21,9 +21,12 @@ export const LOGS_FILE = 'LOGS.md'
  * The `.the-framework/.gitignore` that keeps run state transient (#313): the dir
  * holds both the committed DB (LOGS.md) and the transient run logs, so this
  * ignores everything except LOGS.md and itself.
+ *
+ * An allow-list, so anything else meant to be committed needs its own negation —
+ * see `CONVERSATIONS_GITIGNORE` (#908), which install appends to this.
  */
 export const LOGS_GITIGNORE =
-  '# The Framework: only LOGS.md is the committed project DB; session state is transient.\n*\n!.gitignore\n!LOGS.md\n'
+  '# The Framework: the committed project DB; session state is transient.\n*\n!.gitignore\n!LOGS.md\n'
 
 /** One project-log entry: a loop, or a standalone prompt/build. */
 export interface LogEntry {

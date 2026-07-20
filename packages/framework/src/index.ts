@@ -160,6 +160,20 @@ export {
   type LogEntry,
 } from './logs.js'
 export {
+  conversationPath,
+  conversationsDir,
+  renderMessage,
+  parseConversation,
+  appendMessage,
+  readConversation,
+  listConversations,
+  ensureConversationsIgnored,
+  CONVERSATIONS_DIR,
+  CONVERSATIONS_GITIGNORE,
+  type ConversationMessage,
+  type ConversationRole,
+} from './conversations.js'
+export {
   theFrameworkDir,
   isActivated,
   nodeProjectFs,

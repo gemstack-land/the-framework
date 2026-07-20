@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { enumerateGitRepos, installProject, type DirLister } from './install.js'
 import { PRESETS, PRESET_DIR } from './presets.js'
 import { logsPath, readLogs, LOGS_HEADER, gitignorePath, LOGS_GITIGNORE } from './logs.js'
+import { CONVERSATIONS_GITIGNORE } from './conversations.js'
 import type { GitRunner } from './project.js'
 import type { StoreFs } from './store/index.js'
 
@@ -74,15 +75,27 @@ test('installProject materializes the quality presets so an on-before-mergeable 
   }
 })
 
-test('installProject seeds .the-framework/.gitignore so only LOGS.md is committed (#313)', async () => {
+test('installProject seeds .the-framework/.gitignore so only the DB is committed (#313)', async () => {
   const fs = memFs()
   const { git } = fakeGit(args => (args[0] === 'rev-parse' ? 'true' : ''))
 
   await installProject(CWD, { git, fs })
-  assert.equal(fs.files.get(gitignorePath(CWD)), LOGS_GITIGNORE)
+  assert.equal(fs.files.get(gitignorePath(CWD)), LOGS_GITIGNORE + CONVERSATIONS_GITIGNORE)
   // The ignore keeps run state (events.jsonl / run.json / runs/) untracked while committing LOGS.md.
   assert.match(LOGS_GITIGNORE, /^\*$/m)
   assert.match(LOGS_GITIGNORE, /^!LOGS\.md$/m)
+})
+
+test('a fresh install already un-ignores the conversations dir (#908)', async () => {
+  const fs = memFs()
+  const { git } = fakeGit(args => (args[0] === 'rev-parse' ? 'true' : ''))
+
+  await installProject(CWD, { git, fs })
+  const ignore = fs.files.get(gitignorePath(CWD)) ?? ''
+  // Both rules: `*` makes git skip the dir without descending, so un-ignoring the files alone
+  // would never be reached.
+  assert.match(ignore, /^!conversations\/$/m)
+  assert.match(ignore, /^!conversations\/\*\*$/m)
 })
 
 test('installProject on a dirty repo commits the pre-existing changes first', async () => {

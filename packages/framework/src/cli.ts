@@ -46,6 +46,8 @@ import { type EcoOptions } from './system-prompt.js'
 import { loadUserSystemPrompt, SYSTEM_PROMPT_FILE } from './system-prompt-file.js'
 import { checkForUpdate, formatUpdateStatus, nodeVersionFetcher } from './update-check.js'
 import { appendLog, type LogEntry } from './logs.js'
+import { appendMessage } from './conversations.js'
+import type { RecordMessage } from './run.js'
 import { preflight } from './preflight.js'
 import { RunStore, currentBranch, nodeStoreFs, renameRunBranch, runBranchName, type StoreFs } from './store/index.js'
 import { materializePresets } from './presets.js'
@@ -1180,6 +1182,23 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
     (dashboard || control) && !opts.unattended
       ? (req: ChoiceRequest): Promise<ChoicePick> => new Promise(resolve => pendingChoices.set(req.id, resolve))
       : undefined
+
+  // Persist the chat into the committed conversation (#908/#857), so a clone carries what was
+  // said and not just the fact a run happened. Keyed by the same run id LOGS.md records, which
+  // is what joins the committed session list to the committed chat. Fire-and-forget: a failed
+  // write must never stall or fail a run, exactly like the project log above.
+  const conversationId = opts.runId ?? store?.snapshot().id
+  // Appends are chained rather than fired in parallel: each one creates the dir/header before it
+  // writes, so two overlapping turns race and can land the reply above the message it answers.
+  let conversationTail: Promise<void> = Promise.resolve()
+  const recordMessage: RecordMessage | undefined =
+    opts.persist && conversationId
+      ? (role, text) => {
+          const message = { at: new Date().toISOString(), role, via: requestChoice ? 'dashboard' : 'cli', text }
+          conversationTail = conversationTail.then(() => appendMessage(cwd, conversationId, message)).catch(() => {})
+        }
+      : undefined
+
   // The session link shown on the dashboard: --session-link, else Claude Code's own entry for
   // a live Claude run, else nothing (#212/#542). Same for both run paths.
   const sessionLink = chooseSessionLink(opts, fake)
@@ -1279,6 +1298,8 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
   const finishLog = async (): Promise<void> => {
     if (logged) return
     logged = true
+    // Let the queued conversation appends land before we exit, or the last reply is lost (#908).
+    await conversationTail
     const entry = runLogEntry({
       at: new Date().toISOString(),
       kind: logKind,
@@ -1403,6 +1424,7 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
         signal: controller.signal,
         ...(requestChoice ? { requestChoice } : {}),
         ...(requestChoice ? { messages } : {}),
+        ...(recordMessage ? { recordMessage } : {}),
         ...(opts.model ? { model: opts.model } : {}),
         ...(opts.maxCost ? { budgetUsd: opts.maxCost } : {}),
         ...(guard ? { consumptionGate: guard.gate } : {}),
@@ -1471,6 +1493,7 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
     signal: controller.signal,
     ...(requestChoice ? { requestChoice } : {}),
     ...(requestChoice ? { messages } : {}),
+    ...(recordMessage ? { recordMessage } : {}),
     ...(opts.model ? { model: opts.model } : {}),
     ...(opts.maxPasses ? { maxPasses: opts.maxPasses } : {}),
     ...(opts.maxCost ? { budgetUsd: opts.maxCost } : {}),
