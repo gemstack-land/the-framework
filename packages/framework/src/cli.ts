@@ -34,6 +34,14 @@ import {
 import { FAKE_DEPLOY, FAKE_INTENT, FAKE_SIGNALS, fakeDriver } from './fake-script.js'
 import { readProjectSignals } from './project.js'
 import { loadFrameworkConfig, type FrameworkFileConfig } from './config.js'
+import {
+  describeResolvedConfig,
+  fileConfigLayer,
+  resolveRunConfig,
+  resolvedModes,
+  type ConfigLayer,
+  type ResolvedRunConfig,
+} from './config-layers.js'
 import { type EcoOptions } from './system-prompt.js'
 import { loadUserSystemPrompt, SYSTEM_PROMPT_FILE } from './system-prompt-file.js'
 import { checkForUpdate, formatUpdateStatus, nodeVersionFetcher } from './update-check.js'
@@ -149,6 +157,10 @@ Options:
   --technical            Activate the preset's Technical mode variants.
                          (--preset / --autopilot / --technical / --kind can also be
                           set per repo in the-framework.yml; these flags override it.)
+  --no-autopilot, --no-technical, --no-vanilla, --no-transparent
+                         The off switch for each toggle: this run overrides a repo
+                         the-framework.yml that turned it on (--no-vanilla puts the
+                         built-in prompt back). With neither form, the file decides.
   --vanilla              Remove the built-in system prompt entirely. The agent still
                          gets the AWAIT/SIGNAL emit contract, so it can drive the
                          dashboard's gates; for a fully raw session use --transparent.
@@ -254,13 +266,17 @@ export interface CliOptions {
   unattended?: boolean
   scope: 'prototype' | 'full'
   preset?: string | undefined
-  autopilot: boolean
-  technical: boolean
+  /**
+   * The mode toggles are tri-state (#841): `undefined` is "this run said nothing", so the repo's
+   * the-framework.yml decides, while an explicit `--no-*` turns the mode off over the file.
+   */
+  autopilot?: boolean | undefined
+  technical?: boolean | undefined
   /** `--vanilla`: remove the built-in #326 system prompt entirely (antiLazyPill off, #314). */
-  vanilla: boolean
+  vanilla?: boolean | undefined
   /** `--transparent` (#625): run the wrapped agent fully raw — no framework system prompt, emit
    * protocols, consumption guard, dashboard, or TODO loop, so a run is identical to `claude -p`. */
-  transparent: boolean
+  transparent?: boolean | undefined
   /** `--eco-*`: fine-grained #326 section drops to save tokens (#314). */
   eco: Required<EcoOptions>
   /** `--context <dir>` (repeatable): in-context directories added as one `Context:` line (#439). */
@@ -323,10 +339,6 @@ export function parseArgs(argv: string[]): CliOptions {
     intent: '',
     agent: 'claude',
     scope: 'full',
-    autopilot: false,
-    technical: false,
-    vanilla: false,
-    transparent: false,
     eco: { autoPlanning: false, autoResearch: false, autoMaintenance: false },
     context: [],
     onBeforeMergeable: false,
@@ -378,14 +390,26 @@ export function parseArgs(argv: string[]): CliOptions {
       case '--autopilot':
         opts.autopilot = true
         break
+      case '--no-autopilot':
+        opts.autopilot = false
+        break
       case '--technical':
         opts.technical = true
+        break
+      case '--no-technical':
+        opts.technical = false
         break
       case '--vanilla':
         opts.vanilla = true
         break
+      case '--no-vanilla':
+        opts.vanilla = false
+        break
       case '--transparent':
         opts.transparent = true
+        break
+      case '--no-transparent':
+        opts.transparent = false
         break
       case '--on-before-mergeable':
         opts.onBeforeMergeable = true
@@ -644,21 +668,8 @@ export function unguardedNotices(
   return notices
 }
 
-/** The active Open Loop modes from the mode flags, in a stable order. */
-export function activeModes(opts: Pick<CliOptions, 'autopilot' | 'technical'>): string[] {
-  const modes: string[] = []
-  if (opts.autopilot) modes.push('autopilot')
-  if (opts.technical) modes.push('technical')
-  return modes
-}
-
-/**
- * Whether the built-in #326 system prompt is removed for this run (#314): the
- * Vanilla toggle (`--vanilla`) or `the-framework.yml`'s `antiLazyPill: false`.
- */
-export function antiLazyPillOff(opts: Pick<CliOptions, 'vanilla'>, file: FrameworkFileConfig): boolean {
-  return opts.vanilla || file.antiLazyPill === false
-}
+/** The active Open Loop modes of a resolved run config, in a stable order. */
+export const activeModes = resolvedModes
 
 /** The Eco section drops in effect (#314), or `undefined` when none are set. */
 export function ecoOptions(opts: Pick<CliOptions, 'eco'>): EcoOptions | undefined {
@@ -698,33 +709,30 @@ export function runLogEntry(input: {
   }
 }
 
-/**
- * Merge CLI flags over a project's `the-framework.yml` defaults (#258). A `--preset`
- * flag wins over the file's `preset`; the mode flags OR with the file's booleans
- * (a flag can only *enable* a mode, so there is nothing to override the other way).
- */
-export function mergeRunConfig(
-  opts: Pick<CliOptions, 'preset' | 'autopilot' | 'technical' | 'buildEvent'>,
-  file: FrameworkFileConfig,
-): { presetName?: string; autopilot: boolean; technical: boolean; buildEvent?: string } {
-  const presetName = opts.preset ?? file.preset
-  const buildEvent = opts.buildEvent ?? file.event
+/** This run's own flags as the nearest config layer (#841). A flag left off says nothing. */
+export function flagConfigLayer(opts: RunConfigFlags): ConfigLayer {
   return {
-    ...(presetName ? { presetName } : {}),
-    ...(buildEvent ? { buildEvent } : {}),
-    autopilot: opts.autopilot || file.autopilot === true,
-    technical: opts.technical || file.technical === true,
+    name: 'flag',
+    values: {
+      ...(opts.preset !== undefined ? { preset: opts.preset } : {}),
+      ...(opts.buildEvent !== undefined ? { event: opts.buildEvent } : {}),
+      ...(opts.autopilot !== undefined ? { autopilot: opts.autopilot } : {}),
+      ...(opts.technical !== undefined ? { technical: opts.technical } : {}),
+      // --vanilla is the negative face of the same key: it removes the built-in prompt.
+      ...(opts.vanilla !== undefined ? { antiLazyPill: !opts.vanilla } : {}),
+      ...(opts.transparent !== undefined ? { transparent: opts.transparent } : {}),
+    },
   }
 }
 
-/** A short summary of what the-framework.yml contributed and is in effect, or `''` for nothing to report. */
-function describeConfigSource(opts: Pick<CliOptions, 'preset' | 'buildEvent'>, file: FrameworkFileConfig): string {
-  const parts: string[] = []
-  if (file.preset && !opts.preset) parts.push(`preset=${file.preset}`) // a --preset flag would override it
-  if (file.autopilot) parts.push('autopilot')
-  if (file.technical) parts.push('technical')
-  if (file.event && !opts.buildEvent) parts.push(`event=${file.event}`) // a --kind flag would override it
-  return parts.join(', ')
+type RunConfigFlags = Pick<CliOptions, 'preset' | 'autopilot' | 'technical' | 'buildEvent' | 'vanilla' | 'transparent'>
+
+/**
+ * Resolve a run's config over its layers, nearest wins (#841): the run's flags, then the repo's
+ * `the-framework.yml`. #800 slots the project-user and global tiers in between and at the end.
+ */
+export function mergeRunConfig(opts: RunConfigFlags, file: FrameworkFileConfig): ResolvedRunConfig {
+  return resolveRunConfig([flagConfigLayer(opts), fileConfigLayer(file)])
 }
 
 /**
@@ -858,18 +866,20 @@ async function startRunDashboard(
  */
 async function resolvePromptConfig(
   opts: CliOptions,
-  fileConfig: FrameworkFileConfig,
+  config: ResolvedRunConfig,
   cwd: string,
   io: CliIO,
   transparent: boolean,
 ): Promise<{ userSystemPrompt?: string; noBuiltinPrompt: boolean; eco?: EcoOptions }> {
   const userSystemPrompt = await loadUserSystemPrompt(cwd)
   // Transparent empties the whole channel, which subsumes "no built-in prompt".
-  const noBuiltinPrompt = transparent || antiLazyPillOff(opts, fileConfig)
+  const noBuiltinPrompt = transparent || !config.antiLazyPill
   const eco = ecoOptions(opts)
   if (userSystemPrompt) io.out(`◆ system prompt: ${SYSTEM_PROMPT_FILE}`)
   // Transparent already announced itself (guard line); don't double-report the prompt being off.
-  if (noBuiltinPrompt && !transparent) io.out(`◆ built-in system prompt: off (${opts.vanilla ? 'vanilla' : 'the-framework.yml'})`)
+  // Name the layer that turned it off; at the flag tier that flag is --vanilla.
+  const offBy = config.sources.antiLazyPill === 'flag' ? '--vanilla' : (config.sources.antiLazyPill ?? 'transparent')
+  if (noBuiltinPrompt && !transparent) io.out(`◆ built-in system prompt: off (${offBy})`)
   else if (eco) io.out(`◆ eco: dropping ${Object.keys(eco).filter(k => eco[k as keyof EcoOptions]).join(', ')}`)
   if (opts.context.length) io.out(`◆ context: ${opts.context.join(', ')}`)
   return { ...(userSystemPrompt ? { userSystemPrompt } : {}), noBuiltinPrompt, ...(eco ? { eco } : {}) }
@@ -949,14 +959,17 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
   // file is a warning, never a failed run. Read from the run's own workspace, so a
   // --fake demo (empty tmp cwd) stays deterministic unless pointed at a config dir.
   const fileConfig = await loadFrameworkConfig(cwd, msg => io.err(msg))
-  const fromFile = describeConfigSource(opts, fileConfig)
-  if (fromFile) io.out(`◆ the-framework.yml: ${fromFile}`)
+  // One resolve over the layers (#841): the nearest layer that set a key wins, so this run's
+  // flags beat the repo file and an explicit `--no-autopilot` can turn off what the file set.
+  const config = mergeRunConfig(opts, fileConfig)
+  const fromConfig = describeResolvedConfig(config)
+  if (fromConfig) io.out(`◆ config: ${fromConfig}`)
 
   // Transparent mode (#625): the coarse master off-switch — `--transparent` or the-framework.yml.
   // When on, this run is byte-identical to raw `claude -p`: no framework system channel (composed
   // empty below), no consumption guard, no dashboard, no TODO loop. Resolved once here so every
   // one of those sites reads the same answer.
-  const transparent = opts.transparent || fileConfig.transparent === true
+  const transparent = config.transparent
 
   // Only the direct-prompt path resumes a conversation (#782): a build run rebuilds the
   // scope/build framing a resumed transcript already carries, so it takes no session id and
@@ -971,10 +984,9 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
 
   // Resolve which Open Loop domain preset (+ modes + build event) to run under:
   // --preset / the-framework.yml, or none at all (#545). Nothing infers one.
-  const merged = mergeRunConfig(opts, fileConfig)
-  let presetName = merged.presetName
-  let modeList = activeModes(merged)
-  let buildEvent = merged.buildEvent
+  let presetName = config.presetName
+  let modeList = activeModes(config)
+  let buildEvent = config.buildEvent
   let domainPreset: DomainPreset | undefined
 
   // An explicit --preset / the-framework.yml preset is validated up front — a bad
@@ -1224,7 +1236,7 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
       cwd,
       binPath,
       io,
-      { session_name: sessionName, settings: { technical_control: opts.technical } },
+      { session_name: sessionName, settings: { technical_control: config.technical } },
       opts.maxCost,
       opts.eco,
     )
@@ -1295,7 +1307,7 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
 
   // A user SYSTEM.md + the anti-lazy-pill toggle shape the system prompt (#301), and the eco
   // flags trim the built-in one (#314). Resolve and echo once, shared by both run paths.
-  const promptConfig = await resolvePromptConfig(opts, fileConfig, cwd, io, transparent)
+  const promptConfig = await resolvePromptConfig(opts, config, cwd, io, transparent)
 
   // The run-scoped state both run paths hand to settleRun to close out. stoppedCleanly is a
   // getter because the onEvent sink sets it as the `end` event arrives.

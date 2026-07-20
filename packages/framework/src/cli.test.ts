@@ -8,7 +8,6 @@ import { daemonStatePath } from './daemon.js'
 import { EVENTS_FILE, FRAMEWORK_DIR, type StoreFs } from './store/index.js'
 import {
   activeModes,
-  antiLazyPillOff,
   buildDeployTarget,
   chooseSessionLink,
   claudeDriverOptions,
@@ -194,16 +193,18 @@ test('parseArgs reads the maintain subcommand + its bounds (#298)', () => {
 
 test('parseArgs reads the Global options flags: vanilla + eco (#314)', () => {
   const dflt = parseArgs(['x'])
-  assert.equal(dflt.vanilla, false)
+  assert.equal(dflt.vanilla, undefined) // tri-state since #841: unset, so the repo file decides
   assert.deepEqual(dflt.eco, { autoPlanning: false, autoResearch: false, autoMaintenance: false })
   const on = parseArgs(['--vanilla', '--eco-auto-planning', '--eco-auto-maintenance', 'x'])
   assert.equal(on.vanilla, true)
   assert.deepEqual(on.eco, { autoPlanning: true, autoResearch: false, autoMaintenance: true })
 })
 
-test('parseArgs reads --transparent, off by default (#625)', () => {
-  assert.equal(parseArgs(['x']).transparent, false)
+test('parseArgs reads --transparent, unset by default (#625)', () => {
+  assert.equal(parseArgs(['x']).transparent, undefined) // tri-state since #841
   assert.equal(parseArgs(['--transparent', 'x']).transparent, true)
+  // Unset resolves to off, so a run with no flag and no file is still a normal run.
+  assert.equal(mergeRunConfig(parseArgs(['x']), {}).transparent, false)
 })
 
 test('ecoOptions returns undefined when nothing is set, else only the enabled drops (#314)', () => {
@@ -215,10 +216,12 @@ test('ecoOptions returns undefined when nothing is set, else only the enabled dr
   })
 })
 
-test('antiLazyPillOff is true for --vanilla or the-framework.yml antiLazyPill:false (#314)', () => {
-  assert.equal(antiLazyPillOff(parseArgs(['x']), {}), false)
-  assert.equal(antiLazyPillOff(parseArgs(['--vanilla', 'x']), {}), true)
-  assert.equal(antiLazyPillOff(parseArgs(['x']), { antiLazyPill: false }), true)
+test('the built-in prompt is off for --vanilla or the-framework.yml antiLazyPill:false (#314)', () => {
+  assert.equal(mergeRunConfig(parseArgs(['x']), {}).antiLazyPill, true)
+  assert.equal(mergeRunConfig(parseArgs(['--vanilla', 'x']), {}).antiLazyPill, false)
+  assert.equal(mergeRunConfig(parseArgs(['x']), { antiLazyPill: false }).antiLazyPill, false)
+  // #841: --no-vanilla puts the prompt back over a file that removed it.
+  assert.equal(mergeRunConfig(parseArgs(['--no-vanilla', 'x']), { antiLazyPill: false }).antiLazyPill, true)
 })
 
 test('runLogKind maps the run path to a project-log kind (#379)', () => {
@@ -402,8 +405,8 @@ test('parseArgs reads --preset and the mode flags (#256)', () => {
   assert.equal(opts.technical, true)
   const dflt = parseArgs(['x'])
   assert.equal(dflt.preset, undefined)
-  assert.equal(dflt.autopilot, false)
-  assert.equal(dflt.technical, false)
+  assert.equal(dflt.autopilot, undefined) // tri-state since #841
+  assert.equal(dflt.technical, undefined)
 })
 
 test('parseArgs reads --kind as the build event (#265)', () => {
@@ -438,26 +441,55 @@ test('activeModes maps the mode flags to Open Loop mode names', () => {
 })
 
 test('mergeRunConfig: the-framework.yml supplies defaults, flags override (#258)', () => {
-  const flags = { preset: undefined, autopilot: false, technical: false }
+  const flags = {}
+  const modes = (config: { autopilot: boolean; technical: boolean }) => [config.autopilot, config.technical]
   // file-only: the repo config drives the run
-  assert.deepEqual(mergeRunConfig(flags, { preset: 'software-development', autopilot: true }), {
-    presetName: 'software-development',
-    autopilot: true,
-    technical: false,
-  })
+  const fromFile = mergeRunConfig(flags, { preset: 'software-development', autopilot: true })
+  assert.equal(fromFile.presetName, 'software-development')
+  assert.deepEqual(modes(fromFile), [true, false])
   // a --preset flag wins over the file's preset
-  assert.equal(mergeRunConfig({ ...flags, preset: 'web-dev' }, { preset: 'software-development' }).presetName, 'web-dev')
-  // modes OR together: a flag can only enable a mode
-  assert.deepEqual(mergeRunConfig({ ...flags, technical: true }, { autopilot: true }), {
-    autopilot: true,
-    technical: true,
-  })
+  assert.equal(mergeRunConfig({ preset: 'web-dev' }, { preset: 'software-development' }).presetName, 'web-dev')
+  // a mode set by either layer is on; the flag layer says nothing about the mode it did not set
+  assert.deepEqual(modes(mergeRunConfig({ technical: true }, { autopilot: true })), [true, true])
   // nothing set anywhere: no preset, no modes
-  assert.deepEqual(mergeRunConfig(flags, {}), { autopilot: false, technical: false })
+  assert.deepEqual(modes(mergeRunConfig(flags, {})), [false, false])
+  assert.equal(mergeRunConfig(flags, {}).presetName, undefined)
   // build event: the file's `event` supplies a default, --kind overrides it (#265)
   assert.equal(mergeRunConfig(flags, { event: 'bug-fix' }).buildEvent, 'bug-fix')
-  assert.equal(mergeRunConfig({ ...flags, buildEvent: 'major-change' }, { event: 'bug-fix' }).buildEvent, 'major-change')
+  assert.equal(mergeRunConfig({ buildEvent: 'major-change' }, { event: 'bug-fix' }).buildEvent, 'major-change')
   assert.equal(mergeRunConfig(flags, {}).buildEvent, undefined)
+})
+
+test('mergeRunConfig: a nearer layer can turn a mode off, not just on (#841)', () => {
+  // The bug: with OR, a flag could only ever enable. Now --no-* beats a file that enabled it.
+  assert.equal(mergeRunConfig(parseArgs(['--no-autopilot', 'x']), { autopilot: true }).autopilot, false)
+  assert.equal(mergeRunConfig(parseArgs(['--no-technical', 'x']), { technical: true }).technical, false)
+  assert.equal(mergeRunConfig(parseArgs(['--no-transparent', 'x']), { transparent: true }).transparent, false)
+  // And the file still supplies the value when this run says nothing.
+  assert.equal(mergeRunConfig(parseArgs(['x']), { autopilot: true }).autopilot, true)
+  assert.equal(mergeRunConfig(parseArgs(['x']), { transparent: true }).transparent, true)
+  // The flag layer still wins when it says "on" over a file that says "off".
+  assert.equal(mergeRunConfig(parseArgs(['--autopilot', 'x']), { autopilot: false }).autopilot, true)
+  // A layer that set nothing does not participate: absent stays absent, defaults hold.
+  const bare = mergeRunConfig(parseArgs(['x']), {})
+  assert.deepEqual(
+    { autopilot: bare.autopilot, technical: bare.technical, transparent: bare.transparent, antiLazyPill: bare.antiLazyPill },
+    { autopilot: false, technical: false, transparent: false, antiLazyPill: true },
+  )
+  assert.deepEqual(bare.sources, {})
+})
+
+test('parseArgs leaves the mode toggles unset until a flag names them (#841)', () => {
+  const bare = parseArgs(['x'])
+  assert.equal(bare.autopilot, undefined)
+  assert.equal(bare.technical, undefined)
+  assert.equal(bare.vanilla, undefined)
+  assert.equal(bare.transparent, undefined)
+  assert.equal(parseArgs(['--autopilot', 'x']).autopilot, true)
+  assert.equal(parseArgs(['--no-autopilot', 'x']).autopilot, false)
+  assert.equal(parseArgs(['--no-technical', 'x']).technical, false)
+  assert.equal(parseArgs(['--no-vanilla', 'x']).vanilla, false)
+  assert.equal(parseArgs(['--no-transparent', 'x']).transparent, false)
 })
 
 test('resolveDomainPreset resolves a shipped preset by name (#254/#256)', async () => {
