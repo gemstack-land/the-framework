@@ -14,7 +14,7 @@ const limit = { enabled: false, budget: 0, consumed: undefined, usedPercent: und
 /** A reading the hook should pass straight through; `percentUsed` just tells them apart. */
 const view = (percentUsed: number): QuotaView => ({
   windows: [{ label: 'Current session', kind: 'session', percentUsed }],
-  limits: { session: limit, fiveHour: limit, daily: limit, reached: null },
+  limits: { session: limit, fiveHour: limit, daily: limit, week: limit, reached: null },
 })
 
 /** Let queued RPCs settle and React apply the state they resolved with. */

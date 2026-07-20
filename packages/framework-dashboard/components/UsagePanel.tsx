@@ -11,6 +11,7 @@ import { cn } from '../lib/utils.js'
 
 /** The three limits, in the order they bite: widest first. */
 const LIMITS: { key: keyof ConsumptionLimits; label: string; hint: string }[] = [
+  { key: 'week', label: 'This week', hint: "How much of your account's week the framework may consume" },
   { key: 'daily', label: 'Daily', hint: 'How much of your week a single day may consume' },
   { key: 'fiveHour', label: 'Last 5h', hint: "How much of the day's budget a rolling 5 hours may consume" },
   { key: 'session', label: 'This session', hint: "How much of the day's budget one session may consume" },
@@ -155,7 +156,7 @@ export function UsagePanel() {
             </label>
             <p className="text-xs text-muted-foreground">
               When nothing is running and the queue is empty, spike &amp; plan tickets rather than let the
-              budget expire. Only while every limit above still has half its budget free.
+              budget expire. Only while the limits above are not reached.
             </p>
           </div>
         ) : null}

@@ -21,16 +21,17 @@ function meterOf(...samples: [hoursAgo: number, weeklyPercent: number][]): Consu
 
 test("budgetsFrom resolves Rom's chain into weekly-meter points (#523)", () => {
   // A day is 20% of the week; a 5h stretch 60% of that day; a session 40% of it.
-  assert.deepEqual(budgetsFrom(DEFAULT_CONSUMPTION_LIMITS), { daily: 20, fiveHour: 12, session: 8 })
+  assert.deepEqual(budgetsFrom(DEFAULT_CONSUMPTION_LIMITS), { week: 100, daily: 20, fiveHour: 12, session: 8 })
 })
 
 test('budgetsFrom rescales the shorter limits when the day changes (#523)', () => {
   const limits: ConsumptionLimits = {
+    week: { enabled: true, percent: 100 },
     daily: { enabled: true, percent: 50 },
     fiveHour: { enabled: true, percent: 60 },
     session: { enabled: true, percent: 40 },
   }
-  assert.deepEqual(budgetsFrom(limits), { daily: 50, fiveHour: 30, session: 20 })
+  assert.deepEqual(budgetsFrom(limits), { week: 100, daily: 50, fiveHour: 30, session: 20 })
 })
 
 test('ConsumptionMeter measures what was spent across a window (#523)', () => {
@@ -165,4 +166,60 @@ test('consumptionStatus keeps a full bar at 100 rather than overflowing it (#523
   const status = consumptionStatus({ meter, limits: DEFAULT_CONSUMPTION_LIMITS, sessionStartedAt: T0 - HOUR, now: T0 })
   assert.equal(status.daily.usedPercent, 100)
   assert.equal(status.session.usedPercent, 100)
+})
+
+// #876: the account's own week is absolute, so it is the one limit that still means something
+// to a daemon with nothing to diff. Rom's question on #871: "don't we retrieve the real quota
+// usage from CC?" -- we do, and this is it being used.
+test('the weekly limit is measured against the account, not the meter (#876)', () => {
+  const limits: ConsumptionLimits = {
+    week: { enabled: true, percent: 80 },
+    daily: { enabled: true, percent: 20 },
+    fiveHour: { enabled: true, percent: 60 },
+    session: { enabled: true, percent: 40 },
+  }
+  // A meter that has seen nothing at all: every rolling window is unmeasurable.
+  const status = consumptionStatus({ meter: new ConsumptionMeter(), limits, accountWeekPercent: 95 })
+  assert.equal(status.week.consumed, 95)
+  assert.equal(status.week.complete, true)
+  assert.equal(status.week.reached, true)
+  assert.equal(status.reached, 'week')
+})
+
+test('a restarted daemon still knows the account week is spent (#876)', () => {
+  // The #848 scenario, which #870 left uncovered: one sample, nothing to diff, so the rolling
+  // windows honestly read 0 consumed while the account sits at 95% of its week.
+  const meter = new ConsumptionMeter()
+  meter.record({ at: 1_800_000_000_000, weeklyPercent: 95 })
+  const limits: ConsumptionLimits = {
+    week: { enabled: true, percent: 90 },
+    daily: { enabled: true, percent: 20 },
+    fiveHour: { enabled: true, percent: 60 },
+    session: { enabled: true, percent: 40 },
+  }
+  const status = consumptionStatus({ meter, limits, accountWeekPercent: 95, now: 1_800_000_000_000 })
+  assert.equal(status.daily.usedPercent, 0) // the trap that fooled the old gate
+  assert.equal(status.reached, 'week') // and the limit that catches it anyway
+})
+
+test('the weekly limit is unmeasurable without a reading, never "untouched" (#876)', () => {
+  // Fail-open, as everywhere else: no reading must not stop the user's own work.
+  const status = consumptionStatus({ meter: new ConsumptionMeter(), limits: DEFAULT_CONSUMPTION_LIMITS })
+  assert.equal(status.week.consumed, undefined)
+  assert.equal(status.week.reached, false)
+  assert.equal(status.reached, null)
+})
+
+test('the default weekly limit only stops an account that is actually spent (#876)', () => {
+  const at99 = consumptionStatus({ meter: new ConsumptionMeter(), limits: DEFAULT_CONSUMPTION_LIMITS, accountWeekPercent: 99 })
+  assert.equal(at99.reached, null)
+  const at100 = consumptionStatus({ meter: new ConsumptionMeter(), limits: DEFAULT_CONSUMPTION_LIMITS, accountWeekPercent: 100 })
+  assert.equal(at100.reached, 'week')
+})
+
+test('a disabled weekly limit is not reached whatever the account says (#876)', () => {
+  const limits: ConsumptionLimits = { ...DEFAULT_CONSUMPTION_LIMITS, week: { enabled: false, percent: 50 } }
+  const status = consumptionStatus({ meter: new ConsumptionMeter(), limits, accountWeekPercent: 99 })
+  assert.equal(status.week.reached, false)
+  assert.equal(status.reached, null)
 })

@@ -369,6 +369,7 @@ test('registryPreferencesStore round-trips through the same file', async () => {
 })
 
 const LIMITS = {
+  week: { enabled: true, percent: 90 },
   daily: { enabled: true, percent: 25 },
   fiveHour: { enabled: false, percent: 50 },
   session: { enabled: true, percent: 30 },
@@ -394,6 +395,8 @@ test('a hand-edited limit falls back to the default rather than unguarding the a
   })
   const prefs = await readPreferences(memFs({ [FILE]: raw }), ENV)
   assert.deepEqual(prefs.consumptionLimits, {
+    // A config written before the weekly limit existed gets its default too (#876).
+    week: DEFAULT_CONSUMPTION_LIMITS.week,
     daily: { enabled: true, percent: 25 }, // the good one survives
     fiveHour: DEFAULT_CONSUMPTION_LIMITS.fiveHour,
     session: DEFAULT_CONSUMPTION_LIMITS.session,

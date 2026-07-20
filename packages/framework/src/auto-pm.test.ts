@@ -95,7 +95,7 @@ test('quotaHeadroom starts with every rolling limit switched off (#870)', () => 
   meter.record({ at: T0 - 1000, weeklyPercent: 0 })
   meter.record({ at: T0, weeklyPercent: 95 })
   const quota: AutoPmQuota = {
-    status: consumptionStatus({ meter, limits: { daily: off, fiveHour: off, session: off }, now: T0 }),
+    status: consumptionStatus({ meter, limits: { week: off, daily: off, fiveHour: off, session: off }, now: T0 }),
   }
   assert.deepEqual(quotaHeadroom(quota), { start: true })
 })

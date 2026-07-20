@@ -53,12 +53,17 @@ export function startConsumptionGuard(opts: StartConsumptionGuardOptions): Consu
   return {
     poller,
     stop: () => poller.stop(),
-    gate: () =>
-      consumptionStatus({
+    gate: () => {
+      // The same absolute weekly figure the panel draws (#876), so the run stops on the account's
+      // own week rather than only on the rolling windows the meter derives.
+      const accountWeek = poller.current().lastGood?.windows.find(w => w.kind === 'week')?.percentUsed
+      return consumptionStatus({
         meter: poller.meter,
         limits: opts.limits,
         sessionStartedAt,
+        ...(accountWeek !== undefined ? { accountWeekPercent: accountWeek } : {}),
         now: now(),
-      }).reached,
+      }).reached
+    },
   }
 }

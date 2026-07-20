@@ -44,9 +44,17 @@ export function pollerQuotaSource(poller: QuotaPoller, limits: () => Promise<Con
     stop: () => poller.stop(),
     read: async () => {
       const envelope = poller.current()
+      const windows = envelope.lastGood?.windows ?? []
+      // The account's own week, handed to the limits so the weekly one is measured against it
+      // rather than against the delta meter (#876).
+      const accountWeek = windows.find(w => w.kind === 'week')?.percentUsed
       const view: QuotaView = {
-        windows: envelope.lastGood?.windows ?? [],
-        limits: consumptionStatus({ meter: poller.meter, limits: await limits().catch(() => DEFAULT_CONSUMPTION_LIMITS) }),
+        windows,
+        limits: consumptionStatus({
+          meter: poller.meter,
+          limits: await limits().catch(() => DEFAULT_CONSUMPTION_LIMITS),
+          ...(accountWeek !== undefined ? { accountWeekPercent: accountWeek } : {}),
+        }),
         ...(envelope.lastGoodAt !== undefined ? { readAt: envelope.lastGoodAt } : {}),
         ...(envelope.latest && !envelope.latest.available ? { unavailable: envelope.latest.reason } : {}),
       }

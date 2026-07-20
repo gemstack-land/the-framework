@@ -19,6 +19,9 @@ export const FIVE_HOURS_MS = 5 * 60 * 60 * 1000
 /** A rolling day, in ms. */
 export const ONE_DAY_MS = 24 * 60 * 60 * 1000
 
+/** The account's own week, the window {@link ConsumptionLimits.week} is measured over. */
+export const ONE_WEEK_MS = 7 * ONE_DAY_MS
+
 /** One reading of the weekly meter. */
 export interface QuotaSample {
   /** When it was read, epoch ms. */
@@ -135,14 +138,15 @@ export class ConsumptionMeter {
   }
 }
 
-/** One of Rom's three limits. */
-export type ConsumptionWindow = 'session' | 'five-hour' | 'daily'
+/** One of the limits (#519, plus the account week from #876). */
+export type ConsumptionWindow = 'session' | 'five-hour' | 'daily' | 'week'
 
 /** How each limit reads in a log line and a stop reason. */
 export const CONSUMPTION_LIMIT_LABEL: Record<ConsumptionWindow, string> = {
   session: 'Session',
   'five-hour': '5h',
   daily: 'Daily',
+  week: 'Weekly',
 }
 
 /** A single limit: a share, and whether it's on. */
@@ -158,6 +162,15 @@ export interface ConsumptionLimit {
  * raises all three together.
  */
 export interface ConsumptionLimits {
+  /**
+   * Share of the account's weekly allowance the framework may consume (#876).
+   *
+   * The odd one out, and deliberately so: the other three are rolling windows the meter has
+   * to derive by diffing readings, while this one is measured straight against the agent's own
+   * absolute weekly figure. That is why it is the only limit that still means something to a
+   * daemon that just restarted and has nothing to diff.
+   */
+  week: ConsumptionLimit
   /** Share of the weekly allowance one day may consume. */
   daily: ConsumptionLimit
   /** Share of the day's budget a rolling 5h may consume. */
@@ -168,12 +181,16 @@ export interface ConsumptionLimits {
 
 /** Rom's defaults (#519). */
 export const DEFAULT_CONSUMPTION_LIMITS: ConsumptionLimits = {
+  // A ceiling rather than a pacing knob: at 100 it only stops work the account could not have
+  // run anyway, so it changes nothing until it is lowered. Lowering it is what reserves the
+  // rest of the week for a human.
+  week: { enabled: true, percent: 100 },
   daily: { enabled: true, percent: 20 },
   fiveHour: { enabled: true, percent: 60 },
   session: { enabled: true, percent: 40 },
 }
 
-const CONSUMPTION_LIMIT_KEYS = ['daily', 'fiveHour', 'session'] as const
+const CONSUMPTION_LIMIT_KEYS = ['week', 'daily', 'fiveHour', 'session'] as const
 
 /**
  * Read one limit out of a hand-edited or browser-supplied object.
@@ -208,6 +225,7 @@ export function sanitizeConsumptionLimits(value: unknown): ConsumptionLimits | u
 
 /** What each limit works out to, in points of the weekly meter. */
 export interface ConsumptionBudgets {
+  week: number
   daily: number
   fiveHour: number
   session: number
@@ -217,6 +235,8 @@ export interface ConsumptionBudgets {
 export function budgetsFrom(limits: ConsumptionLimits): ConsumptionBudgets {
   const daily = limits.daily.percent
   return {
+    // Already a share of the weekly allowance, which is the unit points are counted in.
+    week: limits.week.percent,
     daily,
     fiveHour: (limits.fiveHour.percent / 100) * daily,
     session: (limits.session.percent / 100) * daily,
@@ -243,6 +263,8 @@ export interface ConsumptionStatus {
   session: LimitStatus
   fiveHour: LimitStatus
   daily: LimitStatus
+  /** The account's own week (#876), measured absolutely rather than through the meter. */
+  week: LimitStatus
   /**
    * The limit to pause for, or `null`. Widest-first (`daily`, then `five-hour`,
    * then `session`), so what surfaces is the one that takes longest to recover.
@@ -283,10 +305,26 @@ export function consumptionStatus(input: {
   limits: ConsumptionLimits
   /** When the current session started, epoch ms. Omit when nothing is running. */
   sessionStartedAt?: number
+  /**
+   * How much of the account's week is gone, 0-100, straight from the agent's own reading
+   * (#876). Omit when there is none, which leaves the weekly limit unmeasurable rather than
+   * reading it as untouched.
+   */
+  accountWeekPercent?: number
   now?: number
 }): ConsumptionStatus {
   const now = input.now ?? Date.now()
   const budgets = budgetsFrom(input.limits)
+  // The account's week needs no meter: the agent reports it absolutely, so it is `complete` by
+  // construction and survives a daemon restart, which is exactly what the rolling windows cannot
+  // do (#876). Absent reading -> unmeasurable -> never reached, the same fail-open as the rest.
+  const week = statusFor(
+    input.limits.week,
+    budgets.week,
+    input.accountWeekPercent === undefined
+      ? undefined
+      : { points: input.accountWeekPercent, coveredMs: ONE_WEEK_MS, complete: true },
+  )
   const daily = statusFor(input.limits.daily, budgets.daily, input.meter.rolling(ONE_DAY_MS, now))
   const fiveHour = statusFor(input.limits.fiveHour, budgets.fiveHour, input.meter.rolling(FIVE_HOURS_MS, now))
   const session = statusFor(
@@ -294,12 +332,16 @@ export function consumptionStatus(input: {
     budgets.session,
     input.sessionStartedAt === undefined ? undefined : input.meter.since(input.sessionStartedAt, now),
   )
-  const reached: ConsumptionWindow | null = daily.reached
-    ? 'daily'
-    : fiveHour.reached
-      ? 'five-hour'
-      : session.reached
-        ? 'session'
-        : null
-  return { session, fiveHour, daily, reached }
+  // Widest first, so what surfaces is the limit that takes longest to recover. The account's
+  // week is wider than any of ours.
+  const reached: ConsumptionWindow | null = week.reached
+    ? 'week'
+    : daily.reached
+      ? 'daily'
+      : fiveHour.reached
+        ? 'five-hour'
+        : session.reached
+          ? 'session'
+          : null
+  return { session, fiveHour, daily, week, reached }
 }
