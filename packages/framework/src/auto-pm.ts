@@ -164,6 +164,18 @@ export const AUTO_PM_JOBS: readonly AutoPmJob[] = [
   { name: SPIKE_AND_PLAN_PRESET_NAME, prompt: renderSpikeAndPlanPrompt(), describe: 'spiking & planning tickets' },
 ]
 
+/**
+ * What became of one attempt to land a run's queue (#852). The two flags are separate on purpose:
+ * a finished run that wrote no queue is `settled` without being `promoted`, and must stop being
+ * retried; a still-running one is neither, and is tried again next tick.
+ */
+export interface PromoteOutcome {
+  /** Stop tracking this run: it is finished, whether or not it left anything behind. */
+  settled: boolean
+  /** The checkout's queue actually changed. */
+  promoted: boolean
+}
+
 /** A project the sweep considers. */
 export interface AutoPmProject {
   /** Registry id, as `start` and the live-run lookup take it. */
@@ -186,8 +198,14 @@ export interface AutoPmDeps {
   quota(): Promise<AutoPmQuota | undefined>
   /** The jobs to rotate through, in cycle order. */
   jobs: readonly AutoPmJob[]
-  /** Start the PM run. Resolves false when the daemon refused, so the cooldown is not armed. */
-  start(project: AutoPmProject, job: AutoPmJob): Promise<boolean>
+  /** Start the PM run. Resolves the run's id, or undefined when the daemon refused. */
+  start(project: AutoPmProject, job: AutoPmJob): Promise<string | undefined>
+  /**
+   * Land a finished run's queue in the project checkout (#852). Called before the sweep decides
+   * anything: a run's queue lives on its own worktree branch, so until it is promoted the checkout
+   * still reads empty and the sweep would start the same work over again.
+   */
+  promote(project: AutoPmProject, runId: string): Promise<PromoteOutcome>
   /** Progress line. */
   log(message: string): void
   /** Override the tick interval. */
@@ -220,6 +238,8 @@ export interface AutoPmLoop {
 export function startAutoPm(deps: AutoPmDeps): AutoPmLoop {
   const now = deps.now ?? (() => Date.now())
   const lastStart = new Map<string, number>()
+  // Runs this loop started whose queue has not reached the checkout yet, oldest first.
+  const pending = new Map<string, string[]>()
   // Where each project is in the job cycle. Per project, not global: two repos idle at once
   // should each work through the rotation, not take alternate halves of it.
   const nextJob = new Map<string, number>()
@@ -238,6 +258,26 @@ export function startAutoPm(deps: AutoPmDeps): AutoPmLoop {
       // project would spend a rate-limited call to learn the same number.
       const quota = await deps.quota().catch(() => undefined)
       for (const project of projects) {
+        // Land anything a previous run produced before judging whether the queue is empty:
+        // its entries are still on that run's branch, and the checkout cannot see them.
+        const outstanding = pending.get(project.id) ?? []
+        if (outstanding.length) {
+          const stillPending: string[] = []
+          let landed = 0
+          for (const runId of outstanding) {
+            const outcome = await deps.promote(project, runId).catch(() => ({ settled: false, promoted: false }))
+            if (outcome.promoted) landed++
+            if (!outcome.settled) stillPending.push(runId)
+          }
+          if (stillPending.length) pending.set(project.id, stillPending)
+          else pending.delete(project.id)
+          if (landed) {
+            // The queue the decision below reads was just filled, so that read is stale. Leave it
+            // to the next tick, and let the backlog loop have the work in the meantime.
+            deps.log(`[framework] auto PM: landed the queue from ${landed} run(s) in ${project.path}`)
+            continue
+          }
+        }
         const since = lastStart.get(project.id)
         const decision = autoPmDecision({
           enabled: true,
@@ -256,9 +296,12 @@ export function startAutoPm(deps: AutoPmDeps): AutoPmLoop {
         // spawn would otherwise see no live run yet and start a second one.
         lastStart.set(project.id, now())
         deps.log(`[framework] auto PM: ${job.describe} in ${project.path}`)
-        if (await deps.start(project, job).catch(() => false)) {
+        const runId = await deps.start(project, job).catch(() => undefined)
+        if (runId) {
           // Advanced only on a start that took, so a refused job is retried rather than skipped.
           nextJob.set(project.id, index + 1)
+          // Its queue lives on the run's branch until a later tick promotes it.
+          pending.set(project.id, [...(pending.get(project.id) ?? []), runId])
         } else {
           lastStart.delete(project.id)
           deps.log(`[framework] auto PM: could not start a run in ${project.path}`)
