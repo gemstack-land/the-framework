@@ -27,6 +27,8 @@ import {
   withBrowser,
   BROWSER_MCP_SERVERS,
   type CliIO,
+  isSteerable,
+  isInteractive,
 } from './cli.js'
 import { readLogs } from './logs.js'
 import { createDriver } from './agent.js'
@@ -876,4 +878,39 @@ test('a run that never asked for the post-merge cleanup stays quiet about it (#8
   } finally {
     await rm(dir, { recursive: true, force: true })
   }
+})
+
+// #905: which runs may be steered, and which stay open for chat. Both used to be the same
+// question answered by "is a daemon alive on this machine", which is not about this run at all.
+
+test('a daemon-spawned run is steerable even with no daemon state file (#905)', () => {
+  // The daemon spawns with --no-dashboard and passes --run-id, and its state file can go missing
+  // while it is very much alive (#922). This is the case where every Stop press was dropped in
+  // silence: written to control.jsonl, tailed by nobody.
+  assert.equal(isSteerable({ persist: true, runId: '2026-07-20T20-20-14-026Z' }, false, false), true)
+})
+
+test('a live daemon still steers a run it did not spawn (#393)', () => {
+  // Its dashboard lists and steers any project's run, so Stop must keep working for a run
+  // started by hand in a terminal.
+  assert.equal(isSteerable({ persist: true }, false, true), true)
+})
+
+test('with no dashboard, no run id and no daemon, nothing can reach the run', () => {
+  assert.equal(isSteerable({ persist: true }, false, false), false)
+})
+
+test('--no-persist is never steerable: there is no control file to tail', () => {
+  assert.equal(isSteerable({ persist: false, runId: 'r1' }, true, true), false)
+})
+
+test('a terminal --no-dashboard run does not stay open for chat, daemon or not (#905/#714)', () => {
+  // The other half of #905: it is reachable, but nobody is waiting in that terminal, so handing
+  // it the live-chat queue parked it forever. #714: "headless / CI runs end when done".
+  assert.equal(isInteractive({}, false), false)
+})
+
+test('a run with a dashboard, or one the daemon started, stays open for chat (#714)', () => {
+  assert.equal(isInteractive({}, true), true)
+  assert.equal(isInteractive({ runId: 'r1' }, false), true)
 })

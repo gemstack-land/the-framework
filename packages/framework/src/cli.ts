@@ -919,6 +919,44 @@ async function resolvePromptConfig(
  * over a live dashboard + terminal narration, and resolves with an exit code.
  * Returns 0 on success, 1 on a run error, 2 on a usage error.
  */
+/**
+ * Whether this run can be steered over `.the-framework/control.jsonl` (#344): Stop, a choice pick,
+ * a live message. True when its own dashboard is up (#427), when the machine's daemon is live
+ * (#393, whose dashboard lists and steers any project's run), or when whoever spawned it handed it
+ * a run id.
+ *
+ * That last clause is the #905 fix. The daemon spawns runs with `--no-dashboard`, so `daemonAlive`
+ * was the only thing wiring their control channel, and it is a machine-global file that goes
+ * missing while the daemon is very much alive: `daemonStatus()` deletes it on a stale pid and
+ * nothing rewrites it (#922). Every Stop press then landed in control.jsonl and was read by
+ * nobody, with no error anywhere. A run id is a fact about this run, so it holds when the file
+ * does not.
+ */
+export function isSteerable(
+  opts: { persist: boolean; runId?: string | undefined },
+  hasDashboard: boolean,
+  daemonAlive: boolean,
+): boolean {
+  return opts.persist && (hasDashboard || opts.runId !== undefined || daemonAlive)
+}
+
+/**
+ * Whether this run should stay open for the user's own messages once it settles (#714).
+ *
+ * Narrower than {@link isSteerable} on purpose, and this is the other half of #905. Being
+ * steerable only means someone *could* reach it; staying open means a human is expected to keep
+ * talking to it. A run typed into a terminal with `--no-dashboard` is neither, but it used to
+ * inherit the chat queue purely because a daemon happened to be alive elsewhere on the machine,
+ * and then parked forever on a message that terminal could never send. #714 said as much:
+ * "headless / CI runs end when done, exactly as today."
+ *
+ * So: this run's own dashboard, or the daemon started it (a run id) and therefore has a UI to
+ * carry on the conversation in. Stop and gate picks keep working either way.
+ */
+export function isInteractive(opts: { runId?: string | undefined }, hasDashboard: boolean): boolean {
+  return hasDashboard || opts.runId !== undefined
+}
+
 export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<number> {
   const opts = parseArgs(argv)
   if (opts.error) {
@@ -1134,11 +1172,17 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
   // Steer this run through .the-framework/control.jsonl (#344): a Stop button or choice
   // pick appends an entry, we tail the file and abort / resolve the parked gate. Reset
   // first so a previous run's picks can never fire into this one (gate ids repeat across
-  // runs). Wired when the machine's daemon is live (#393, it steers any project's run) or
-  // when this run's own new dashboard is up (#427, it too steers over control.jsonl).
-  // Otherwise headless behavior is identical.
+  // runs).
+  //
+  // Wired when this run's own dashboard is up (#427), or when whoever spawned it said it is
+  // steerable. That second half used to ask `daemonStatus()`, a machine-global file this run has
+  // nothing to do with, and it was wrong in both directions (#905): absent while a daemon is live,
+  // so a daemon-spawned run ignored Stop completely (the daemon spawns with --no-dashboard, so the
+  // file was the only thing wiring it); and present while unrelated to this run, so a headless run
+  // parked in the #714 chat loop forever. The daemon passes --run-id when it spawns, which is a
+  // fact about *this* run rather than about the machine, so that is the signal now.
   let control: ControlWatcher | undefined
-  if (opts.persist && (newDashboard || (await daemonStatus()))) {
+  if (isSteerable(opts, newDashboard, await daemonStatus() !== undefined)) {
     try {
       await resetControl(cwd)
       control = watchControl(cwd, entry => {
@@ -1182,6 +1226,11 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
     (dashboard || control) && !opts.unattended
       ? (req: ChoiceRequest): Promise<ChoicePick> => new Promise(resolve => pendingChoices.set(req.id, resolve))
       : undefined
+
+  // Whether to hand the run the live-chat queue (#714) once it settles. Steerable is not enough
+  // (#905): a terminal run with --no-dashboard could be reached by a daemon's dashboard, but
+  // nobody is waiting in it, and it used to park forever on a message that never came.
+  const chatQueue = isInteractive(opts, newDashboard) && requestChoice ? { messages } : {}
 
   // Persist the chat into the committed conversation (#908/#857), so a clone carries what was
   // said and not just the fact a run happened. Keyed by the same run id LOGS.md records, which
@@ -1423,7 +1472,7 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
         onEvent,
         signal: controller.signal,
         ...(requestChoice ? { requestChoice } : {}),
-        ...(requestChoice ? { messages } : {}),
+        ...chatQueue,
         ...(recordMessage ? { recordMessage } : {}),
         ...(opts.model ? { model: opts.model } : {}),
         ...(opts.maxCost ? { budgetUsd: opts.maxCost } : {}),
@@ -1492,7 +1541,7 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
     signals,
     signal: controller.signal,
     ...(requestChoice ? { requestChoice } : {}),
-    ...(requestChoice ? { messages } : {}),
+    ...chatQueue,
     ...(recordMessage ? { recordMessage } : {}),
     ...(opts.model ? { model: opts.model } : {}),
     ...(opts.maxPasses ? { maxPasses: opts.maxPasses } : {}),
