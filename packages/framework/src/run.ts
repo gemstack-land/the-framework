@@ -216,6 +216,8 @@ export interface RunFrameworkOptions {
    * headless run leaves it unset and ends when the build is done, exactly as before.
    */
   messages?: RunMessages
+  /** Record each chat turn to the committed conversation (#908). Best-effort; unset = not recorded. */
+  recordMessage?: RecordMessage
   /** Observe the unified event stream. */
   onEvent?: (event: FrameworkEvent) => void
 }
@@ -430,6 +432,7 @@ export async function runFramework(opts: RunFrameworkOptions): Promise<RunFramew
         emit,
         emitTurnSignals: createTurnSignalEmitter(emit),
         signal: runSignal,
+        ...(opts.recordMessage ? { recordMessage: opts.recordMessage } : {}),
       })
     }
     emit({ kind: 'end', ok: true })
@@ -686,7 +689,15 @@ export interface AwaitRoundsOptions {
    * conversation (full prior context) instead of starting fresh. Default off.
    */
   resume?: boolean | undefined
+  /**
+   * Record a chat turn to the committed conversation (#908). Best-effort and fire-and-forget:
+   * persisting must never stall or fail a run. Unset for a headless run, which has no chat.
+   */
+  recordMessage?: RecordMessage | undefined
 }
+
+/** Persist one chat turn. See {@link AwaitRoundsOptions.recordMessage}. */
+export type RecordMessage = (role: 'user' | 'agent', text: string) => void
 
 /** The shared deps of a turn that may hit an await gate or a chat message. */
 interface AwaitTurnDeps {
@@ -694,6 +705,7 @@ interface AwaitTurnDeps {
   emit: (event: FrameworkEvent) => void
   emitTurnSignals: (text: string) => void
   signal?: AbortSignal | undefined
+  recordMessage?: RecordMessage | undefined
 }
 
 /**
@@ -741,11 +753,14 @@ export async function runChatPhase(session: DriverSession, messages: RunMessages
     const message = await messages.next(deps.signal)
     if (message === undefined) return { turn, exhausted } // Stop / budget cap: end the conversation.
     deps.emit({ kind: 'log', message: `You: ${message}` })
+    deps.recordMessage?.('user', message)
     turn = await session.prompt(message, { ...signalOpt, resume: true })
     deps.emitTurnSignals(turn.text)
     const drained = await drainGates(session, turn, deps)
     turn = drained.turn
     exhausted = drained.exhausted
+    // The settled text, so the recorded reply is what the user actually read (#908).
+    deps.recordMessage?.('agent', turn.text)
     if (drained.declined) return { turn, exhausted }
   }
 }
@@ -766,14 +781,23 @@ export async function runChatPhase(session: DriverSession, messages: RunMessages
  */
 export async function runAwaitRounds(opts: AwaitRoundsOptions): Promise<AwaitRoundsResult> {
   const { session, emit, emitTurnSignals, messages } = opts
-  const deps: AwaitTurnDeps = { requestChoice: opts.requestChoice, emit, emitTurnSignals, signal: opts.signal }
+  const deps: AwaitTurnDeps = {
+    requestChoice: opts.requestChoice,
+    emit,
+    emitTurnSignals,
+    signal: opts.signal,
+    recordMessage: opts.recordMessage,
+  }
   const signalOpt = opts.signal ? { signal: opts.signal } : {}
 
   // Resuming a finished run (#720): the opening message continues the seeded session, so the
   // agent replies with full prior context. A fresh run leaves `resume` unset — unchanged.
+  // The opening exchange opens the conversation too, so it is recorded like any other turn (#908).
+  opts.recordMessage?.('user', opts.prompt)
   const opening = await session.prompt(opts.prompt, { ...signalOpt, ...(opts.resume ? { resume: true } : {}) })
   emitTurnSignals(opening.text)
   const drained = await drainGates(session, opening, deps)
+  opts.recordMessage?.('agent', drained.turn.text)
   if (drained.declined) return { text: drained.turn.text, declined: true, exhausted: false }
 
   // Live chat (#714): stay open for the user's messages until Stop. Headless leaves it unset,
