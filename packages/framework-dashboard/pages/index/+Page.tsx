@@ -2,10 +2,11 @@ import { useEffect, useState } from 'react'
 import type { Intervention, Activity, ProjectSummary } from '@gemstack/framework'
 import { onProjectFiles, onInterventions, onActivity } from '../../server/reads.telefunc.js'
 import { onProjects } from '../../server/projects.telefunc.js'
-import { ProjectsSidebar } from '../../components/ProjectsSidebar.js'
+import { ProjectPicker } from '../../components/ProjectPicker.js'
 import { Logo } from '../../components/Logo.js'
 import { ThemeToggle } from '../../components/ThemeToggle.js'
 import { NotificationsMenu } from '../../components/NotificationsMenu.js'
+import { Button } from '../../components/ui/button.js'
 import { RunHistory } from '../../components/RunHistory.js'
 import { ProjectHome } from '../../components/ProjectHome.js'
 import { DashboardPage } from '../../components/DashboardPage.js'
@@ -37,7 +38,8 @@ const EMPTY_INTERVENTIONS: Intervention[] = []
 /** Stable initial for the activity poll (#627), so it does not churn on every render. */
 const EMPTY_ACTIVITY: Activity[] = []
 
-// The dashboard shell (#405 phase 2): Projects | Sessions | main | Docs/Log rail. The main pane
+// The dashboard shell (#405 phase 2): Sessions | main | Docs/Log rail, with the project
+// selection in the top nav as a dropdown since #772 (it used to be a rail of its own). The main pane
 // is one of three views chosen by the selection: the project home/launcher (Live, the default —
 // Start form + cards), a running run's own live output (RunLive), or a finished run's replay
 // (RunReplay). Everything over the wire is Telefunc. A projection of the same .the-framework
@@ -156,6 +158,14 @@ export default function Page() {
     go({ projectId: id, runId: null }) // switching projects always returns to the home launcher
   }
 
+  // "New session" (#772): back to the selected project's launcher — the Live home row — with a
+  // fresh Context, so the navbar button starts a run the same way the rail's Live row does. The
+  // de-facto standard button rather than a second textarea in the nav.
+  const newSession = () => {
+    selectRun(null)
+    resetContext()
+  }
+
   // The Overview dashboard (#471): no project selected.
   const showDashboard = () => {
     setAdopting(false)
@@ -233,8 +243,25 @@ export default function Page() {
       <header className="flex items-center gap-3 border-b border-border px-4 py-3">
         <Logo className="h-5 w-auto shrink-0" />
         <span className="shrink-0 font-semibold">The Framework</span>
+        {/* The project selection lives in the nav now (#772), not in a rail of its own: always
+            shown, on every page including the Overview. */}
+        <ProjectPicker
+          selectedId={projectId}
+          onSelect={selectProject}
+          onDashboard={showDashboard}
+          interventionCount={interventions.length}
+        />
         <div className="min-w-0 flex-1" />
         <div className="flex shrink-0 items-center gap-1">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={newSession}
+            disabled={!projectId}
+            title={projectId ? undefined : 'Select a project first'}
+          >
+            New session
+          </Button>
           <ThemeToggle />
           <NotificationsMenu />
         </div>
@@ -242,12 +269,6 @@ export default function Page() {
       {/* The workspace row is fixed-height: each column scrolls internally, so the row itself
           must never scroll. overflow-hidden clips any stray horizontal bleed (no page X-scroll). */}
       <div className="flex min-h-0 flex-1 overflow-hidden">
-        <ProjectsSidebar
-          selectedId={projectId}
-          onSelect={selectProject}
-          onDashboard={showDashboard}
-          interventionCount={interventions.length}
-        />
         <RunHistory
           projectId={projectId}
           runs={runs}
