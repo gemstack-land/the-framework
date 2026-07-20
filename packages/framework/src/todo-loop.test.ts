@@ -34,6 +34,28 @@ test('parseTodoEntries reads open list items and skips checked/blank/prose lines
   ])
 })
 
+test('the #880 priority sections need no parser support: headings are skipped, so a sorted file drains in priority order', () => {
+  const md = [
+    '## URGENT',
+    '- restore checkout',
+    '',
+    '## High priority',
+    '- flaky auth test',
+    '',
+    '## Medium priority',
+    '- tidy the config loader',
+    '',
+    '## Low priority',
+    '- rename the legacy flag',
+  ].join('\n')
+  assert.deepEqual(parseTodoEntries(md), [
+    'restore checkout',
+    'flaky auth test',
+    'tidy the config loader',
+    'rename the legacy flag',
+  ])
+})
+
 test('findTodoBacklog prefers the newest session-scoped file, falls back to flat TODO.md', async () => {
   const cwd = await tmpWorkspace()
   try {

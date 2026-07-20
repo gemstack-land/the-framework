@@ -273,6 +273,7 @@ export {
   LEGACY_TODO_FILE,
   TICKETS_DIR,
   TICKETING_FORMAT_FILE,
+  TODO_FORMAT_FILE,
   DEFAULT_MAX_TODO_ITEMS,
   type TodoBacklog,
   type TodoLoopOptions,

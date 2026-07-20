@@ -29,6 +29,15 @@ export const TICKETING_FORMAT_FILE = 'node_modules/@gemstack/framework/prompts/t
  */
 export const FLAT_TODO_FILE = 'TODO_AGENTS.md'
 
+/**
+ * The backlog-format spec (#880): the static reference an agent opens to learn how
+ * {@link FLAT_TODO_FILE} is laid out — priority sections, URGENT first. Ships inside the
+ * installed package for the same reason as {@link TICKETING_FORMAT_FILE}, and the #683 context
+ * fragment points here. The priority sections need no parser support: `parseTodoEntries` skips
+ * headings and returns entries in file order, so a priority-sorted file drains in priority order.
+ */
+export const TODO_FORMAT_FILE = 'node_modules/@gemstack/framework/prompts/todo_format.md'
+
 /** The brief hyphen spelling from #682, read as a fallback after #674 settled on the underscore. */
 export const LEGACY_HYPHEN_TODO_FILE = 'TODO-AGENTS.md'
 

@@ -10,9 +10,10 @@ import {
   LEGACY_TODO_FILE,
   TICKETS_DIR,
   TICKETING_FORMAT_FILE,
+  TODO_FORMAT_FILE,
   findFlatTodo,
 } from './tickets.js'
-import { TICKETING_FORMAT } from './prompts.generated.js'
+import { TICKETING_FORMAT, TODO_FORMAT } from './prompts.generated.js'
 
 test('the flat backlog lives at the root TODO_AGENTS.md, with the legacy locations named (#674/#682)', () => {
   assert.equal(TICKETS_DIR, 'tickets')
@@ -31,6 +32,18 @@ test('the ticket-format spec ships in the package (not materialized), with prior
   assert.ok(TICKETING_FORMAT.includes('tickets/<DATE>_<SLUG>.spike.md'))
   assert.ok(TICKETING_FORMAT.includes('priority: low/medium/high/urgent'))
   assert.ok(TICKETING_FORMAT.includes('topics:'))
+})
+
+test('the backlog-format spec ships in the package and teaches the priority sections (#880)', () => {
+  // Ships inside the package like the ticket format, so the layout versions with the package.
+  assert.equal(TODO_FORMAT_FILE, 'node_modules/@gemstack/framework/prompts/todo_format.md')
+  assert.ok(TODO_FORMAT.includes(FLAT_TODO_FILE))
+  for (const section of ['## URGENT', '## High priority', '## Medium priority', '## Low priority']) {
+    assert.ok(TODO_FORMAT.includes(section), `expected the ${section} section`)
+  }
+  // URGENT is the exception, not the default, and the file is priority-sorted.
+  assert.ok(TODO_FORMAT.includes('rarely used'))
+  assert.ok(TODO_FORMAT.includes('sorted by priority'))
 })
 
 test('findFlatTodo prefers TODO_AGENTS.md, then legacy tickets/TODO.md, then root TODO.md, else undefined (#682)', async () => {

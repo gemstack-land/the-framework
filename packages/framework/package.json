@@ -29,7 +29,8 @@
   },
   "files": [
     "dist",
-    "prompts/ticketing_format.md"
+    "prompts/ticketing_format.md",
+    "prompts/todo_format.md"
   ],
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

@@ -118,7 +118,8 @@ export const BUSINESS_KNOWLEDGE_DOCS: readonly ContextDoc[] = [DECISIONS_DOC, KN
  * task queue. Repo-root paths, because that is the agent's cwd. README is left out: a repo's
  * own `README.md` already covers the overview. The ticket-format path is inlined rather than
  * imported from `tickets.ts`: this module must stay free of `node:fs` (it renders in the
- * browser, #520), and a test pins the literal to `TICKETING_FORMAT_FILE`.
+ * browser, #520), and a test pins the literal to `TICKETING_FORMAT_FILE`. The `TODO_AGENTS.md`
+ * format pointer (#880) is inlined for the same reason and pinned to `TODO_FORMAT_FILE`.
  */
 export const CONTEXT_DOCS: readonly ContextDoc[] = [
   DECISIONS_DOC,
@@ -129,7 +130,7 @@ export const CONTEXT_DOCS: readonly ContextDoc[] = [
   // back into, so it stays out of BUSINESS_KNOWLEDGE_DOCS.
   { path: 'MARKET_RESEARCH.md', comment: 'the market the project competes in' },
   { path: 'tickets/**.md', comment: 'things to potentially work on; format: node_modules/@gemstack/framework/prompts/ticketing_format.md' },
-  { path: 'TODO_AGENTS.md', comment: 'the AI task queue' },
+  { path: 'TODO_AGENTS.md', comment: 'the AI task queue; format: node_modules/@gemstack/framework/prompts/todo_format.md' },
 ]
 
 /** The two halves of the rendered {@link SYSTEM_PROMPT_TEMPLATE}. */

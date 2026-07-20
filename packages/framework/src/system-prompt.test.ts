@@ -11,7 +11,7 @@ import {
   systemPromptBlock,
   SYSTEM_PROMPT_TEMPLATE,
 } from './system-prompt.js'
-import { TICKETING_FORMAT_FILE } from './tickets.js'
+import { FLAT_TODO_FILE, TICKETING_FORMAT_FILE, TODO_FORMAT_FILE } from './tickets.js'
 import { loadUserSystemPrompt, SYSTEM_PROMPT_FILE } from './system-prompt-file.js'
 
 /** The context docs as the commented bullets they render to (#559/#683). */
@@ -41,6 +41,9 @@ test('CONTEXT_DOCS is the #683 fragment: business knowledge plus the roadmap/que
   // canonical constant in tickets.ts (#684) — they must never drift.
   const tickets = CONTEXT_DOCS.find(d => d.path === 'tickets/**.md')
   assert.ok(tickets?.comment.includes(TICKETING_FORMAT_FILE), `expected the ${TICKETING_FORMAT_FILE} pointer`)
+  // Same for the #880 backlog-format pointer.
+  const todo = CONTEXT_DOCS.find(d => d.path === FLAT_TODO_FILE)
+  assert.ok(todo?.comment.includes(TODO_FORMAT_FILE), `expected the ${TODO_FORMAT_FILE} pointer`)
 })
 import { AWAIT_PROTOCOL, BROWSER_PROTOCOL, SIGNAL_PROTOCOL } from './turn-gate.js'
 
