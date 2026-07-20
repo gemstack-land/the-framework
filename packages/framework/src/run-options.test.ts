@@ -1,6 +1,6 @@
 import { strict as assert } from 'node:assert'
 import { test } from 'node:test'
-import { runOptionsFromPreferences, autopilotEnabled } from './run-options.js'
+import { runOptionsFromPreferences, autopilotEnabled, preferencesFromFileConfig } from './run-options.js'
 import { resolvePreferences } from './registry.js'
 
 test('autopilot defaults on when nothing is set (#858)', () => {
@@ -9,7 +9,48 @@ test('autopilot defaults on when nothing is set (#858)', () => {
 })
 
 test('an empty preference set still starts a run in autopilot (#858)', () => {
-  assert.deepEqual(runOptionsFromPreferences({}), { autopilot: true })
+  // The four yml-owned toggles travel explicitly since #842, so the run states the settled answer
+  // rather than letting the repo file fill the silence.
+  assert.deepEqual(runOptionsFromPreferences({}), {
+    autopilot: true,
+    technical: false,
+    vanilla: false,
+    transparent: false,
+  })
+})
+
+test('the yml-owned toggles travel as explicit booleans (#842)', () => {
+  const off = runOptionsFromPreferences({ autopilot: false })
+  assert.equal(off.autopilot, false)
+  const on = runOptionsFromPreferences({ technical: true, vanilla: true, transparent: true })
+  assert.deepEqual(
+    { technical: on.technical, vanilla: on.vanilla, transparent: on.transparent },
+    { technical: true, vanilla: true, transparent: true },
+  )
+})
+
+test('preferencesFromFileConfig maps the repo yml onto the preference keys (#842)', () => {
+  assert.deepEqual(preferencesFromFileConfig({}), {})
+  assert.deepEqual(preferencesFromFileConfig({ autopilot: true, technical: false }), {
+    autopilot: true,
+    technical: false,
+  })
+  // antiLazyPill is the file's name for the inverse of Vanilla.
+  assert.deepEqual(preferencesFromFileConfig({ antiLazyPill: false }), { vanilla: true })
+  assert.deepEqual(preferencesFromFileConfig({ antiLazyPill: true }), { vanilla: false })
+  assert.deepEqual(preferencesFromFileConfig({ transparent: true }), { transparent: true })
+  // preset and event have no preference counterpart, so they are not mapped.
+  assert.deepEqual(preferencesFromFileConfig({ preset: 'software-development', event: 'bug-fix' }), {})
+})
+
+test('a repo yml sits under the project overrides and over the global tier (#842)', () => {
+  const global = { autopilot: true, technical: true }
+  const repo = preferencesFromFileConfig({ technical: false, antiLazyPill: false })
+  // The layer order the daemon and the launcher both use: global, repo, then the project's own.
+  const resolved = resolvePreferences({ ...global, ...repo }, { vanilla: false })
+  assert.equal(resolved.autopilot, true) // nobody nearer set it
+  assert.equal(resolved.technical, false) // the repo turned it off
+  assert.equal(resolved.vanilla, false) // the project overrode the repo's antiLazyPill:false
 })
 
 test('the agent is sent only when it is not the default (#858)', () => {

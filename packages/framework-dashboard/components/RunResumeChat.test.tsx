@@ -9,6 +9,9 @@ vi.mock('../lib/preferences.js', () => ({
   updatePreferences: vi.fn(),
   autopilotEnabled: (p: Preferences) => p.autopilot ?? true,
   themePreference: (p: Preferences) => p.theme ?? 'system',
+  // #842: the launcher strip reads the resolved layers; nothing here sets a repo tier.
+  usePreferenceSources: () => ({}),
+  useProjectFileConfig: () => ({}),
 }))
 const sendStart = vi.hoisted(() => vi.fn())
 vi.mock('../server/control.telefunc.js', () => ({ sendStart }))

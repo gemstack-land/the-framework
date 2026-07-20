@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import type { Preferences } from '@gemstack/framework'
 
 // Preferences are the shared daemon store; stub them so the composer reads a fixed value.
@@ -10,6 +10,9 @@ vi.mock('../lib/preferences.js', () => ({
   updatePreferences,
   autopilotEnabled: (p: Preferences) => p.autopilot ?? true,
   themePreference: (p: Preferences) => p.theme ?? 'system',
+  // #842: the launcher strip reads the resolved layers; nothing here sets a repo tier.
+  usePreferenceSources: () => ({}),
+  useProjectFileConfig: () => ({}),
 }))
 // The editor picker (#727) detects installed editors over Telefunc; stub it to none in the test.
 vi.mock('../lib/editors.js', () => ({ useDetectedEditors: () => [] }))
@@ -96,8 +99,10 @@ describe('Composer (#721)', () => {
     renderComposer()
     fireEvent.click(screen.getByRole('button', { name: 'Session options' }))
     // Autopilot no longer claims to relax the maintenance stance: #556 took that section out of the
-    // prompt, leaving the countdown as the whole feature.
-    const autopilot = screen.getByText('Autopilot').closest('[title]')
+    // prompt, leaving the countdown as the whole feature. Scoped to the menu: the same label is on
+    // the resolved-options strip (#842), which carries its own "where it came from" title.
+    const menu = screen.getByRole('menu')
+    const autopilot = within(menu).getByText('Autopilot').closest('[title]')
     expect(autopilot?.getAttribute('title')).not.toMatch(/maintenance/i)
     expect(autopilot?.getAttribute('title')).toMatch(/countdown/i)
   })

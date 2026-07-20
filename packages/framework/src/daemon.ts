@@ -35,7 +35,8 @@ import { startPreview, detectServeTargets, type PreviewHandle, type ServeTarget 
 import { resolveDashboardBundle } from './dashboard/bundle.js'
 import { isActivated } from './project.js'
 import { addProject, listProjects, projectId, readPreferences, readProjectPreferences, resolvePreferences } from './registry.js'
-import { runOptionsFromPreferences } from './run-options.js'
+import { runOptionsFromPreferences, preferencesFromFileConfig } from './run-options.js'
+import { loadFrameworkConfig } from './config.js'
 import { installProject, enumerateGitRepos } from './install.js'
 import { JsonlTailer } from './jsonl-tail.js'
 
@@ -134,10 +135,19 @@ export async function registerHomeProject(cwd: string, env: NodeJS.ProcessEnv = 
  */
 export function startOptionFlags(options: StartRunOptions): string[] {
   const flags: string[] = []
-  if (options.autopilot) flags.push('--autopilot')
-  if (options.technical) flags.push('--technical')
-  if (options.vanilla) flags.push('--vanilla')
-  if (options.transparent) flags.push('--transparent')
+  // The four toggles the repo's the-framework.yml also owns are tri-state (#842): an explicit
+  // `false` emits the `--no-*` form (#841) so a start from the launcher can turn off what the
+  // repo file turned on. Absent still emits nothing, leaving the file to decide.
+  for (const [key, flag] of [
+    ['autopilot', '--autopilot'],
+    ['technical', '--technical'],
+    ['vanilla', '--vanilla'],
+    ['transparent', '--transparent'],
+  ] as const) {
+    const value = options[key]
+    if (value === true) flags.push(flag)
+    else if (value === false) flags.push(`--no-${flag.slice(2)}`)
+  }
   if (options.eco?.autoPlanning) flags.push('--eco-auto-planning')
   if (options.eco?.autoResearch) flags.push('--eco-auto-research')
   if (options.eco?.autoMaintenance) flags.push('--eco-auto-maintenance')
@@ -418,15 +428,20 @@ export async function runDaemon(cwd: string, opts: RunDaemonOptions = {}): Promi
   const readPrefs = () =>
     readPreferences(undefined, env).catch(() => ({}) as Awaited<ReturnType<typeof readPreferences>>)
   /**
-   * The run options a project's settings imply (#858), global tier overlaid with its own (#840).
-   * The same mapping the launcher uses, so a run started by the daemon and a run started by hand
-   * differ only in who asked for it. An unreadable tier falls back to empty rather than failing
-   * the start: the defaults are what the run would have used anyway.
+   * The run options a project's settings imply (#858): the global tier, then the repo's committed
+   * `the-framework.yml` (#842), then the project's own overrides (#840) on top. The same mapping
+   * and the same layer order the launcher uses, so a run started by the daemon and a run started
+   * by hand differ only in who asked for it. An unreadable tier falls back to empty rather than
+   * failing the start: the defaults are what the run would have used anyway.
    */
   const resolvedRunOptions = async (id: string) => {
     const global = await readPrefs()
     const project = await readProjectPreferences(id, undefined, env).catch(() => undefined)
-    return runOptionsFromPreferences(resolvePreferences(global, project))
+    const path = (await listProjects(undefined, env).catch(() => [])).find(p => p.id === id)?.path
+    const file = path ? await loadFrameworkConfig(path).catch(() => ({})) : {}
+    return runOptionsFromPreferences(
+      resolvePreferences({ ...global, ...preferencesFromFileConfig(file) }, project),
+    )
   }
   let watcher: InterventionWatcher | undefined
   let activityWatcher: ActivityWatcher | undefined

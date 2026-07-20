@@ -8,7 +8,13 @@ import { RUN_META_VERSION, type RunMeta } from '../store/index.js'
 const RECORD: ProjectRecord = { id: 'app-a-1', path: '/repos/app-a', addedAt: '2026-07-11T00:00:00.000Z' }
 
 function deps(over: SummarizeDeps): SummarizeDeps {
-  return { isActivated: async () => true, readLogs: async () => [], readRuns: async () => [], ...over }
+  return {
+    isActivated: async () => true,
+    readLogs: async () => [],
+    readRuns: async () => [],
+    readFileConfig: async () => ({}),
+    ...over,
+  }
 }
 
 const run = (id: string, updatedAt: string): RunMeta => ({
@@ -104,4 +110,32 @@ test('singleProjectProvider honors a custom id', async () => {
   assert.equal((await provider.list())[0]?.id, 'run-1')
   assert.equal(await provider.resolvePath('run-1'), '/repos/scratch')
   assert.equal(await provider.resolvePath('home'), undefined)
+})
+
+test('the summary carries the repo the-framework.yml so the launcher can resolve (#842)', async () => {
+  const summary = await summarizeProject(
+    RECORD,
+    deps({ readFileConfig: async () => ({ preset: 'software-development', autopilot: true }) }),
+  )
+  assert.deepEqual(summary.fileConfig, { preset: 'software-development', autopilot: true })
+})
+
+test('a repo that sets nothing carries no fileConfig key at all (#842)', async () => {
+  const summary = await summarizeProject(RECORD, deps({ readFileConfig: async () => ({}) }))
+  assert.equal('fileConfig' in summary, false)
+})
+
+test('an unreadable yml leaves the summary intact (#842)', async () => {
+  // loadFrameworkConfig already downgrades a malformed file to {}; this covers the read itself
+  // failing, which must not take the whole project summary down with it.
+  const summary = await summarizeProject(
+    RECORD,
+    deps({
+      readFileConfig: async () => {
+        throw new Error('EACCES')
+      },
+    }),
+  )
+  assert.equal(summary.name, 'app-a')
+  assert.equal(summary.fileConfig, undefined)
 })

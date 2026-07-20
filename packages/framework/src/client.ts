@@ -47,5 +47,5 @@ export { renderMaintenancePrompt } from './maintenance-preset.js'
 export { renderTriageQuickPrompt, renderTriageConsensualPrompt } from './triage-presets.js'
 // The preferences -> run options mapping (#858), shared with the daemon so an unattended run
 // starts with the same settings a launcher-started one would. Pure field logic, no Node imports.
-export { runOptionsFromPreferences, autopilotEnabled } from './run-options.js'
+export { runOptionsFromPreferences, autopilotEnabled, preferencesFromFileConfig } from './run-options.js'
 export { renderMarketResearchPrompt } from './market-research-preset.js'

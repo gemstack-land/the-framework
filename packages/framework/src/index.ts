@@ -371,7 +371,7 @@ export {
   MARKET_RESEARCH_PROMPT_TEMPLATE,
   MARKET_RESEARCH_PARAMS,
 } from './market-research-preset.js'
-export { runOptionsFromPreferences, autopilotEnabled } from './run-options.js'
+export { runOptionsFromPreferences, autopilotEnabled, preferencesFromFileConfig } from './run-options.js'
 export {
   startAutoPm,
   AUTO_PM_JOBS,

@@ -1,5 +1,6 @@
 import type { Preferences } from './registry.js'
 import type { StartRunOptions } from './dashboard/types.js'
+import type { FrameworkFileConfig } from './config.js'
 
 /**
  * Turning the user's preferences into the options a run starts with (#858).
@@ -15,6 +16,24 @@ import type { StartRunOptions } from './dashboard/types.js'
  * preferences collapse into one object. Re-exported from the browser-safe `./client` entry (#431)
  * so the dashboard can go on importing it at runtime.
  */
+
+/**
+ * A repo's committed `the-framework.yml` as the preference keys it speaks for (#842), so the
+ * launcher and the daemon can layer it under the user's own options the same way. Only the keys
+ * the file set come back, since an unset key must leave the tier below it alone.
+ *
+ * `antiLazyPill` is the file's name for the inverse of Vanilla: removing the built-in prompt.
+ * `preset` and `event` have no preference counterpart (there is no preset picker) and stay on the
+ * raw file config for display.
+ */
+export function preferencesFromFileConfig(file: FrameworkFileConfig): Preferences {
+  return {
+    ...(file.autopilot !== undefined ? { autopilot: file.autopilot } : {}),
+    ...(file.technical !== undefined ? { technical: file.technical } : {}),
+    ...(file.transparent !== undefined ? { transparent: file.transparent } : {}),
+    ...(file.antiLazyPill !== undefined ? { vanilla: !file.antiLazyPill } : {}),
+  }
+}
 
 /** Autopilot defaults on (the demo default), matching the old localStorage semantics. */
 export function autopilotEnabled(preferences: Preferences): boolean {
@@ -43,10 +62,14 @@ export function runOptionsFromPreferences(preferences: Preferences, context: str
     ...(preferences.ecoMaintenance ? { autoMaintenance: true } : {}),
   }
   return {
-    ...(autopilot ? { autopilot: true } : {}),
-    ...(technical ? { technical: true } : {}),
-    ...(vanilla ? { vanilla: true } : {}),
-    ...(transparent ? { transparent: true } : {}),
+    // The four toggles `the-framework.yml` also owns go out explicitly, `false` included (#842):
+    // the caller has already resolved every layer it can see, so the run states the settled answer
+    // and the CLI's own resolve (#841) takes it as the nearest layer. Sending nothing would let the
+    // repo file turn back on what the launcher just showed as off.
+    autopilot,
+    technical,
+    vanilla,
+    transparent,
     ...(eco && !vanilla && !transparent && Object.keys(ecoDrops).length ? { eco: ecoDrops } : {}),
     ...(onBeforeMergeableQuality ? { onBeforeMergeable: true } : {}),
     // Claude-only (#801): another agent's driver takes no MCP servers, so sending it would only earn

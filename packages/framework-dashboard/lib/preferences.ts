@@ -1,11 +1,13 @@
 import { useEffect, useSyncExternalStore } from 'react'
-import type { Preferences, ProjectPreferences } from '@gemstack/framework'
+import type { FrameworkFileConfig, Preferences, ProjectPreferences, ProjectSummary } from '@gemstack/framework'
+import { preferencesFromFileConfig } from '@gemstack/framework/client'
 import {
   onPreferences,
   savePreferences,
   onProjectPreferences,
   saveProjectPreferences,
 } from '../server/preferences.telefunc.js'
+import { onProjects } from '../server/projects.telefunc.js'
 import { parseRoute } from './route.js'
 
 // The dashboard's Global options (#410), owned by the daemon and persisted in the same
@@ -38,17 +40,24 @@ const PROJECT_KEYS = new Set<string>([
 ])
 
 const EMPTY: Preferences = {}
+const EMPTY_FILE: FrameworkFileConfig = {}
 let cache: Preferences | null = null
 let loading: Promise<void> | null = null
 const projects = new Map<string, ProjectPreferences>()
 const projectLoads = new Set<string>()
+/** Each project's committed `the-framework.yml`, as served on the project payload (#842). */
+const files = new Map<string, FrameworkFileConfig>()
+let filesLoading: Promise<void> | null = null
+let filesLoaded = false
 /** Resolved snapshots, one per project, cleared on every notify. `useSyncExternalStore` compares
  * snapshots by identity, so resolving fresh on each read would re-render forever. */
 let resolved = new Map<string, Preferences>()
+let sources = new Map<string, PreferenceSources>()
 const listeners = new Set<() => void>()
 
 function notify(): void {
   resolved = new Map()
+  sources = new Map()
   for (const listener of listeners) listener()
 }
 
@@ -57,13 +66,48 @@ function subscribe(listener: () => void): () => void {
   return () => listeners.delete(listener)
 }
 
+/** Which layer a resolved preference came from (#842). Absent = nobody set it. */
+export type PreferenceSource = 'project' | 'repo' | 'global'
+
+/** The winning layer per key, for showing what is inherited rather than yours. */
+export type PreferenceSources = Partial<Record<keyof Preferences, PreferenceSource>>
+
+/** The repo tier as preference keys: `the-framework.yml`, committed, shared by everyone who clones. */
+function fileTier(projectId: string | null): Preferences {
+  const file = projectId ? files.get(projectId) : undefined
+  return file ? preferencesFromFileConfig(file) : EMPTY
+}
+
 function snapshot(projectId: string | null): Preferences {
   const key = projectId ?? ''
   const hit = resolved.get(key)
   if (hit) return hit
   const project = projectId ? projects.get(projectId) : undefined
-  const value = project ? { ...(cache ?? EMPTY), ...project } : (cache ?? EMPTY)
+  const repo = fileTier(projectId)
+  // Nearest wins (#800/#841): your project options, then the repo's committed file, then global.
+  const value =
+    project || repo !== EMPTY ? { ...(cache ?? EMPTY), ...repo, ...project } : (cache ?? EMPTY)
   resolved.set(key, value)
+  return value
+}
+
+function sourceSnapshot(projectId: string | null): PreferenceSources {
+  const key = projectId ?? ''
+  const hit = sources.get(key)
+  if (hit) return hit
+  const value: PreferenceSources = {}
+  const tiers: [PreferenceSource, Preferences][] = [
+    ['global', cache ?? EMPTY],
+    ['repo', fileTier(projectId)],
+    ['project', (projectId ? projects.get(projectId) : undefined) ?? EMPTY],
+  ]
+  // Later tiers are nearer, so each one that set a key overwrites the recorded source.
+  for (const [name, values] of tiers) {
+    for (const [k, v] of Object.entries(values)) {
+      if (v !== undefined) value[k as keyof Preferences] = name
+    }
+  }
+  sources.set(key, value)
   return value
 }
 
@@ -83,6 +127,7 @@ function ensureLoaded(projectId: string | null): void {
         notify()
       })
   }
+  if (!filesLoaded) loadFileConfigs()
   if (!projectId || projects.has(projectId) || projectLoads.has(projectId)) return
   projectLoads.add(projectId)
   void onProjectPreferences(projectId)
@@ -98,6 +143,36 @@ function ensureLoaded(projectId: string | null): void {
       notify()
     })
 }
+
+/**
+ * Load every project's `the-framework.yml` off the project payload (#842). One call covers all
+ * projects, since that is what the RPC returns; the daemon re-reads the file on each request, so
+ * refetching is how the launcher stops showing a stale answer after someone edits the yml.
+ */
+function loadFileConfigs(): void {
+  if (filesLoading) return
+  filesLoading = onProjects()
+    .then((list: ProjectSummary[]) => {
+      files.clear()
+      for (const project of list) if (project.fileConfig) files.set(project.id, project.fileConfig)
+    })
+    .catch(() => {})
+    .finally(() => {
+      filesLoading = null
+      filesLoaded = true
+      notify()
+    })
+}
+
+/**
+ * Re-read the repo tier. Wired to the window regaining focus, which is when an edit made in an
+ * editor becomes visible to someone looking at the launcher again.
+ */
+export function refreshFileConfigs(): void {
+  loadFileConfigs()
+}
+
+if (typeof window !== 'undefined') window.addEventListener('focus', refreshFileConfigs)
 
 /**
  * The project a write belongs to, read straight off the URL (#784 makes it the selection).
@@ -137,8 +212,9 @@ export function updatePreferences(patch: Partial<Preferences>): void {
 }
 
 /**
- * The user preferences in force: the global object, with the open project's own run options
- * on top (#840). Loaded once from the daemon per tier and kept in sync across components.
+ * The user preferences in force: the global object, the open project's committed
+ * `the-framework.yml` (#842), then its own run options on top (#840). Loaded once from the daemon
+ * per tier and kept in sync across components.
  */
 export function usePreferences(): Preferences {
   const projectId = typeof window === 'undefined' ? null : parseRoute(window.location.pathname).projectId
@@ -150,6 +226,38 @@ export function usePreferences(): Preferences {
   useEffect(() => ensureLoaded(projectId), [projectId])
   return preferences
 }
+
+/**
+ * Where each resolved preference came from (#842), so the launcher can show a repo-inherited
+ * value as not-yours rather than implying you chose it.
+ */
+export function usePreferenceSources(): PreferenceSources {
+  const projectId = typeof window === 'undefined' ? null : parseRoute(window.location.pathname).projectId
+  const value = useSyncExternalStore(
+    subscribe,
+    () => sourceSnapshot(projectId),
+    () => EMPTY_SOURCES,
+  )
+  useEffect(() => ensureLoaded(projectId), [projectId])
+  return value
+}
+
+/**
+ * The open project's raw `the-framework.yml` (#842). The launcher shows `preset` and `event` from
+ * it directly: they steer the run but have no preference counterpart, so the gear cannot set them.
+ */
+export function useProjectFileConfig(): FrameworkFileConfig {
+  const projectId = typeof window === 'undefined' ? null : parseRoute(window.location.pathname).projectId
+  const value = useSyncExternalStore(
+    subscribe,
+    () => (projectId ? (files.get(projectId) ?? EMPTY_FILE) : EMPTY_FILE),
+    () => EMPTY_FILE,
+  )
+  useEffect(() => ensureLoaded(projectId), [projectId])
+  return value
+}
+
+const EMPTY_SOURCES: PreferenceSources = {}
 
 // Autopilot's default-on moved into @gemstack/framework with the rest of the preferences ->
 // run options mapping (#858), so the daemon resolves it the same way. Re-exported here because

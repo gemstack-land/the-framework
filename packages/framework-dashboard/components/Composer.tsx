@@ -16,7 +16,14 @@ import {
   renderTriageQuickPrompt,
   renderTriageConsensualPrompt,
 } from '@gemstack/framework/client'
-import { usePreferences, updatePreferences, autopilotEnabled, themePreference } from '../lib/preferences.js'
+import {
+  usePreferences,
+  updatePreferences,
+  autopilotEnabled,
+  themePreference,
+  usePreferenceSources,
+  useProjectFileConfig,
+} from '../lib/preferences.js'
 import { useDetectedEditors } from '../lib/editors.js'
 import { useLoaded } from '../lib/use-async.js'
 import { onProjects } from '../server/projects.telefunc.js'
@@ -24,6 +31,7 @@ import { PromptEditor, type PromptEditorHandle } from './PromptEditor.js'
 import { PresetCreatePanel } from './PresetCreatePanel.js'
 import { AgentModelMenu, type AgentOption } from './AgentModelMenu.js'
 import { OptionsMenu, type OptionRow } from './OptionsMenu.js'
+import { ResolvedOptions } from './ResolvedOptions.js'
 import { ClaudeLogo, CodexLogo } from './agent-logos.js'
 import { Button } from './ui/button.js'
 
@@ -146,6 +154,8 @@ export const Composer = forwardRef<ComposerHandle, {
   const projects = useLoaded<ProjectSummary[]>(onProjects, [], [])
 
   const preferences = usePreferences()
+  const sources = usePreferenceSources() // #842: which layer won each option
+  const fileConfig = useProjectFileConfig() // #842: the repo's committed the-framework.yml
   const autopilot = autopilotEnabled(preferences)
   const technical = preferences.technical ?? false
   const vanilla = preferences.vanilla ?? false
@@ -337,6 +347,10 @@ export const Composer = forwardRef<ComposerHandle, {
           )}
         </Button>
       </div>
+
+      {/* What the session resolves to, without opening the gear (#842). Off in the compact row
+          above, which is one line on purpose. */}
+      <ResolvedOptions options={mainOptions} sources={sources} fileConfig={fileConfig} />
 
       {addingPreset && (
         <PresetCreatePanel

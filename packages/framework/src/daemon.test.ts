@@ -65,6 +65,16 @@ test('startOptionFlags maps only enabled Global options to CLI flags (#314)', ()
   assert.deepEqual(startOptionFlags({ browser: true }), ['--browser'])
   // Transparent (#625): the master off-switch maps to --transparent.
   assert.deepEqual(startOptionFlags({ transparent: true }), ['--transparent'])
+})
+
+test('startOptionFlags spells an explicit off as the --no-* form (#842)', () => {
+  // The launcher resolves the repo yml itself now, so a toggle it shows as off has to travel as
+  // one: without --no-autopilot the file would turn it back on inside the run (#841).
+  assert.deepEqual(startOptionFlags({ autopilot: false, technical: false }), ['--no-autopilot', '--no-technical'])
+  assert.deepEqual(startOptionFlags({ vanilla: false, transparent: false }), ['--no-vanilla', '--no-transparent'])
+  // Absent still says nothing, so the repo file keeps deciding.
+  assert.deepEqual(startOptionFlags({}), [])
+  assert.deepEqual(startOptionFlags({ autopilot: true, technical: false }), ['--autopilot', '--no-technical'])
   // Model (#628): maps to --model, trimmed; blank/whitespace is no choice -> no flag.
   assert.deepEqual(startOptionFlags({ model: 'opus' }), ['--model', 'opus'])
   assert.deepEqual(startOptionFlags({ model: '  sonnet  ' }), ['--model', 'sonnet'])

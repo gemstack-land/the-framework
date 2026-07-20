@@ -238,6 +238,13 @@ When any layer contributes something, the run narrates what won and where it cam
 from (`◆ config: preset=software-development (the-framework.yml), autopilot=off (flag)`).
 A malformed file is a warning, never a failed run.
 
+The dashboard reads the file too (#842): it rides on the project payload, so the
+launcher lists what a session will actually run with and marks the values that come
+from the repo rather than from your own options gear. The layers there are the same
+order, nearest first: this run's options, your project options, the repo's
+`the-framework.yml`, then your global preferences. The daemon re-reads the file on
+every request, so an edit shows up when the dashboard next asks.
+
 ### System prompt: the built-in working agreement + `SYSTEM.md`
 
 Every prompt is framed with the built-in system prompt (#326, the successor of the
