@@ -1,0 +1,48 @@
+import { afterEach, describe, expect, test, vi } from 'vitest'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { BrandLink } from './BrandLink.js'
+
+afterEach(cleanup)
+
+const brand = () => screen.getByRole('link', { name: /The Framework/ })
+
+// #909: the mark is the way home. These pin both halves of that — the client-side navigation on a
+// plain click, and that it is still a real link, which is what cmd-click and "copy link address"
+// need. A button could not have the second half.
+describe('BrandLink', () => {
+  test('is a link to the Overview', () => {
+    render(<BrandLink working={false} onNavigate={vi.fn()} />)
+    expect(brand().getAttribute('href')).toBe('/')
+  })
+
+  test('a plain click navigates in-app rather than reloading', () => {
+    const onNavigate = vi.fn()
+    render(<BrandLink working={false} onNavigate={onNavigate} />)
+    const event = new MouseEvent('click', { bubbles: true, cancelable: true })
+    fireEvent(brand(), event)
+    expect(onNavigate).toHaveBeenCalledOnce()
+    expect(event.defaultPrevented).toBe(true)
+  })
+
+  test('leaves a modified click to the browser, so it can open a second Overview', () => {
+    const onNavigate = vi.fn()
+    render(<BrandLink working={false} onNavigate={onNavigate} />)
+    for (const modifier of ['metaKey', 'ctrlKey', 'shiftKey', 'altKey']) {
+      const event = new MouseEvent('click', { bubbles: true, cancelable: true, [modifier]: true })
+      fireEvent(brand(), event)
+      expect(event.defaultPrevented, modifier).toBe(false)
+    }
+    // The middle click a new tab is usually opened with.
+    const middle = new MouseEvent('click', { bubbles: true, cancelable: true, button: 1 })
+    fireEvent(brand(), middle)
+    expect(middle.defaultPrevented).toBe(false)
+    expect(onNavigate).not.toHaveBeenCalled()
+  })
+
+  test('carries the working state through to the mark', () => {
+    const { container, rerender } = render(<BrandLink working onNavigate={vi.fn()} />)
+    expect(container.querySelector('path')?.getAttribute('fill')).toBe('url(#hexknot-0)')
+    rerender(<BrandLink working={false} onNavigate={vi.fn()} />)
+    expect(container.querySelector('path')?.getAttribute('fill')).toBe('var(--logo-1)')
+  })
+})

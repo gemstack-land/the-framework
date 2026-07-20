@@ -3,7 +3,7 @@ import type { Intervention, Activity, ProjectSummary } from '@gemstack/framework
 import { onProjectFiles, onInterventions, onActivity } from '../../server/reads.telefunc.js'
 import { onProjects } from '../../server/projects.telefunc.js'
 import { ProjectPicker } from '../../components/ProjectPicker.js'
-import { Logo } from '../../components/Logo.js'
+import { BrandLink } from '../../components/BrandLink.js'
 import { ThemeToggle } from '../../components/ThemeToggle.js'
 import { NotificationsMenu } from '../../components/NotificationsMenu.js'
 import { Button } from '../../components/ui/button.js'
@@ -255,8 +255,7 @@ export default function Page() {
   return (
     <div className="flex h-screen flex-col">
       <header className="flex items-center gap-3 border-b border-border px-4 py-3">
-        <Logo className="h-5 w-auto shrink-0" working={working} />
-        <span className="shrink-0 font-semibold">The Framework</span>
+        <BrandLink working={working} onNavigate={showDashboard} />
         {/* The project selection lives in the nav now (#772), not in a rail of its own: always
             shown, on every page including the Overview. */}
         <ProjectPicker
