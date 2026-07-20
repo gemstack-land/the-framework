@@ -4,6 +4,7 @@ import {
   PRESETS_SECURITY_AUDIT,
   PRESETS_RESEARCH,
   PRESETS_UX,
+  PRESETS_MAINTENANCE,
 } from './prompts.generated.js'
 import { THE_FRAMEWORK_DIR } from './framework-dir.js'
 
@@ -25,6 +26,7 @@ export const PRESETS: Readonly<Record<string, string>> = {
   security_audit: PRESETS_SECURITY_AUDIT,
   research: PRESETS_RESEARCH,
   ux: PRESETS_UX,
+  maintenance: PRESETS_MAINTENANCE,
 }
 
 /** Where the materialized presets live under a repo's `.the-framework/` (#326). */
