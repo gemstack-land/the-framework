@@ -15,5 +15,10 @@ export default defineConfig({
     globals: true,
     include: ['**/*.test.ts', '**/*.test.tsx'],
     exclude: ['node_modules/**', 'dist/**'],
+    setupFiles: ['./vitest.setup.ts'],
+    // Comfortably above the setup file's 5s query ceiling (#886), so a test that does hit the
+    // ceiling reports the element it was actually waiting for instead of dying on vitest's own
+    // 5s limit first and naming nothing.
+    testTimeout: 20_000,
   },
 })
