@@ -15,11 +15,11 @@ test('the Readability template carries the #360 flow: seams, altitude pass, rati
   assert.deepEqual(READABILITY_PARAMS.map(p => p.name), ['what'])
 })
 
-test('renderReadabilityPrompt defaults the blank to "this PR" and takes an override', () => {
+test('renderReadabilityPrompt defaults the blank to the session, else the whole codebase (#874)', () => {
   const byDefault = renderReadabilityPrompt()
-  assert.match(byDefault, /^Refactor this PR to make it/)
+  assert.match(byDefault, /^Refactor entire codebase to make it/)
   const blank = renderReadabilityPrompt('   ')
-  assert.match(blank, /^Refactor this PR to make it/) // blank falls back, not erased
+  assert.match(blank, /^Refactor entire codebase to make it/) // blank falls back, not erased
   const custom = renderReadabilityPrompt('the dashboard package')
   assert.match(custom, /^Refactor the dashboard package to make it/)
   // No raw placeholder survives a render; <FUNCTION> is not a param and stays.

@@ -16,11 +16,11 @@ test('the Security audit template carries the #461 prompt: exhaustive, per-aspec
   assert.deepEqual(SECURITY_AUDIT_PARAMS.map(p => p.name), ['what'])
 })
 
-test('renderSecurityAuditPrompt defaults the blank to "this PR" and takes an override', () => {
+test('renderSecurityAuditPrompt defaults the blank to the session, else the whole codebase (#874)', () => {
   const byDefault = renderSecurityAuditPrompt()
-  assert.match(byDefault, /^Security audit this PR/)
+  assert.match(byDefault, /^Security audit entire codebase/)
   const blank = renderSecurityAuditPrompt('   ')
-  assert.match(blank, /^Security audit this PR/) // blank falls back, not erased
+  assert.match(blank, /^Security audit entire codebase/) // blank falls back, not erased
   const custom = renderSecurityAuditPrompt('the auth package')
   assert.match(custom, /^Security audit the auth package/)
   // No raw placeholder survives a render.

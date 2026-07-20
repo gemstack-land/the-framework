@@ -1,5 +1,5 @@
 import type { FrameworkEvent } from '@gemstack/framework'
-import { sessionInfo } from '@gemstack/framework/client'
+import { runProgress, sessionInfo } from '@gemstack/framework/client'
 import { useCallback, useState } from 'react'
 import { onRun, onRetainedWorktrees } from '../server/reads.telefunc.js'
 import { EventList } from './EventList.js'
@@ -41,6 +41,8 @@ export function RunReplay({
   // agent reported it, so a run that never got that far simply can't be resumed.
   const session = sessionInfo(events)
   const sessionId = session?.sessionId
+  // Presets in the resume composer default to this session (#874).
+  const sessionName = runProgress(events).sessionName
   return (
     <>
       <RunActionBar
@@ -60,7 +62,7 @@ export function RunReplay({
         <EventList events={events} stick={false} />
       )}
       {sessionId && (
-        <RunResumeChat projectId={projectId} runId={runId} sessionId={sessionId} driver={session?.driver} files={files} addContext={addContext} onRunStarted={onRunStarted} />
+        <RunResumeChat projectId={projectId} runId={runId} sessionId={sessionId} driver={session?.driver} files={files} addContext={addContext} onRunStarted={onRunStarted} sessionName={sessionName} />
       )}
     </>
   )

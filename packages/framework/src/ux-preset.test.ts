@@ -13,11 +13,11 @@ test('the UX template carries the #472 flow: usability review, showChoices gate,
   assert.deepEqual(UX_PARAMS.map(p => p.name), ['what'])
 })
 
-test('renderUxPrompt defaults the blank to "this PR" and takes an override', () => {
+test('renderUxPrompt defaults the blank to the session, else the whole codebase (#874)', () => {
   const byDefault = renderUxPrompt()
-  assert.match(byDefault, /^Thoroughly review UX of this PR/)
+  assert.match(byDefault, /^Thoroughly review UX of entire codebase/)
   const blank = renderUxPrompt('   ')
-  assert.match(blank, /^Thoroughly review UX of this PR/) // blank falls back, not erased
+  assert.match(blank, /^Thoroughly review UX of entire codebase/) // blank falls back, not erased
   const custom = renderUxPrompt('the settings page')
   assert.match(custom, /^Thoroughly review UX of the settings page/)
   // No raw placeholder survives a render.
