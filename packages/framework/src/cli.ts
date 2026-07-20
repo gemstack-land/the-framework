@@ -64,6 +64,12 @@ import {
   short,
   type RepoReview,
 } from './maintenance.js'
+import {
+  listProjectWorktrees,
+  removeProjectWorktree,
+  pruneProjectWorktrees,
+  formatWorktreeList,
+} from './worktrees.js'
 import { defaultWhat } from './preset-prompt.js'
 import { renderMaintainabilityPrompt } from './maintainability-preset.js'
 import { renderOnBeforeMergeablePrompt, type OnBeforeMergeableContext } from './on-before-mergeable-prompt.js'
@@ -140,6 +146,9 @@ Usage:
   framework maintain              Sweep the registered repos: run the maintainability
                                  loop on any that grew un-reviewed commits (#298).
                                  --dry-run to preview; --max-repos / --max-cost to bound.
+  framework worktrees             List the checkouts this project's sessions kept.
+                                 rm <sessionId> removes one; prune removes every one
+                                 whose session is no longer running.
   framework --fake                Run the offline demo (no CLI, no model, deterministic).
   framework doctor                Check prerequisites (Claude Code installed, etc.).
   framework relay                 Host a session relay so teammates can watch a session (#230).
@@ -323,6 +332,8 @@ export interface CliOptions {
   directPrompt: boolean
   /** `framework maintain`: sweep the registered repos, running the maintenance loop on un-reviewed commits (#298). */
   maintain: boolean
+  /** `framework worktrees [rm <id> | prune]`: the retained-worktree cleanup the dashboard has (#752). */
+  worktrees?: WorktreesCommand
   /** `--dry-run`: for `maintain`, list what would be reviewed without running anything. */
   dryRun: boolean
   /** `--max-repos <n>`: cap how many repos one maintenance sweep reviews. */
@@ -591,6 +602,18 @@ export function parseArgs(argv: string[]): CliOptions {
   } else if (words[0] === 'maintain') {
     opts.maintain = true
     words.shift() // maintain takes no positional args; the target is the registry
+  } else if (words[0] === 'worktrees') {
+    // `worktrees` / `worktrees prune` / `worktrees rm <sessionId>` (#752). Bare = list; an
+    // unknown sub-verb is a usage error rather than a silent list of something else.
+    words.shift()
+    const sub = words.shift()
+    if (sub === undefined || sub === 'list') opts.worktrees = { action: 'list' }
+    else if (sub === 'prune') opts.worktrees = { action: 'prune' }
+    else if (sub === 'rm') {
+      const runId = words.shift()
+      opts.worktrees = { action: 'rm', ...(runId ? { runId } : {}) }
+    }
+    else opts.error = `unknown worktrees command: ${sub}`
   }
   opts.intent = words.join(' ').trim()
   return opts
@@ -1005,6 +1028,9 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
   // `framework maintain` sweeps the registered repos, running the maintenance loop on
   // any that grew un-reviewed commits (#298). No dashboard, no intent.
   if (opts.maintain) return maintainCmd(opts, io)
+
+  // `framework worktrees` is the CLI half of the dashboard's retained-worktree cleanup (#752).
+  if (opts.worktrees) return worktreesCmd(opts.worktrees, opts.cwd ?? process.cwd(), io)
 
   const fake = opts.fake
   const intent = opts.intent || (fake ? FAKE_INTENT : '')
@@ -1640,6 +1666,46 @@ async function ensureDaemonCmd(opts: CliOptions, io: CliIO): Promise<number> {
   const line = formatUpdateStatus(status)
   if (line) io.out(line)
   return 0
+}
+
+/** What `framework worktrees` was asked to do (#752). */
+export type WorktreesCommand = { action: 'list' } | { action: 'rm'; runId?: string } | { action: 'prune' }
+
+/**
+ * `framework worktrees` (#752): the retained-worktree cleanup the dashboard already has (#737),
+ * from the terminal, so it is scriptable and available without opening a browser.
+ *
+ * Scoped to the cwd's project, like the rest of the CLI. A run that failed or was stopped keeps
+ * its checkout so you can look at what it was holding, and nothing removes those on a timer — so
+ * without this the only way to clear them was the dashboard, one click at a time.
+ */
+async function worktreesCmd(command: WorktreesCommand, cwd: string, io: CliIO): Promise<number> {
+  if (command.action === 'list') {
+    for (const line of formatWorktreeList(await listProjectWorktrees(cwd))) io.out(line)
+    return 0
+  }
+  if (command.action === 'rm') {
+    if (!command.runId) {
+      io.err('usage: framework worktrees rm <sessionId>')
+      return 2
+    }
+    const result = await removeProjectWorktree(cwd, command.runId)
+    if (!result.ok) {
+      io.err(result.error)
+      return 1
+    }
+    io.out(`◆ removed the worktree for session ${command.runId}.`)
+    return 0
+  }
+  const { removed, skipped } = await pruneProjectWorktrees(cwd)
+  for (const skip of skipped) io.out(`  kept ${skip.runId}: ${skip.reason}`)
+  io.out(
+    removed.length === 0
+      ? 'Nothing to prune.'
+      : `◆ removed ${removed.length} worktree${removed.length === 1 ? '' : 's'}.`,
+  )
+  // A worktree that could not be removed is a failure to report, not a silent partial success.
+  return skipped.some(skip => skip.reason !== 'still running') ? 1 : 0
 }
 
 /** `framework stop`: stop the machine's background dashboard, if any (#393). */
