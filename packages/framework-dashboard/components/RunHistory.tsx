@@ -4,6 +4,7 @@ import { Button } from './ui/button.js'
 import { Badge } from './ui/badge.js'
 import { cn } from '../lib/utils.js'
 import { formatDateTime } from '../lib/format-date.js'
+import { ScrollArea } from './ui/scroll-area.js'
 
 const STATUS_TONE: Record<string, string> = {
   running: 'text-primary',
@@ -94,7 +95,8 @@ export function RunHistory({
       <div className={cn('whitespace-nowrap px-4 py-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground', label)}>
         Sessions
       </div>
-      <div className="flex-1 overflow-y-auto px-2">
+      <ScrollArea className="min-h-0 flex-1">
+        <div className="px-2">
         {/* Permanent home / launcher — always present, never a run. */}
         <Button
           variant="ghost"
@@ -128,7 +130,8 @@ export function RunHistory({
             onClick={() => onSelect(run.id)}
           />
         ))}
-      </div>
+        </div>
+      </ScrollArea>
       </div>
     </aside>
   )

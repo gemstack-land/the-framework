@@ -1,6 +1,7 @@
 import { useRef } from 'react'
 import type { ChoiceRequest } from '@gemstack/framework'
 import { ChoicePanel } from './ChoicePanel.js'
+import { ScrollArea } from './ui/scroll-area.js'
 
 // The choice-gates rail (#440, part of #314): every gate the run is currently parked on,
 // shown at once in the right rail as a long scroll instead of one inline gate. A sticky
@@ -43,7 +44,7 @@ export function ChoicesRail({
           ))}
         </nav>
       )}
-      <div ref={scroller} className="min-h-0 flex-1 overflow-y-auto">
+      <ScrollArea viewportRef={scroller} className="min-h-0 flex-1">
         {choices.map((c, i) => (
           <div
             key={c.id}
@@ -55,7 +56,7 @@ export function ChoicesRail({
             <ChoicePanel projectId={projectId} runId={runId} choice={c} active={i === 0} />
           </div>
         ))}
-      </div>
+      </ScrollArea>
     </div>
   )
 }

@@ -8,6 +8,7 @@ import { Badge } from './ui/badge.js'
 import { usePolled } from '../lib/use-async.js'
 import { useAction } from '../lib/use-action.js'
 import { cn } from '../lib/utils.js'
+import { ScrollArea } from './ui/scroll-area.js'
 
 /**
  * The prompt behind "Import tickets from GitHub" (#697). Deliberately short: the agent has
@@ -70,7 +71,8 @@ export function TicketsPanel({ projectId }: { projectId: string | null }) {
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       {error && <p className="border-b border-border p-2 text-xs text-red-500">{error}</p>}
-      <div className="flex-1 overflow-y-auto p-2">
+      <ScrollArea className="min-h-0 flex-1">
+        <div className="p-2">
         {tickets.map(ticket => (
           <div key={ticket.file} className="mb-1 rounded border border-border p-2">
             <div className="flex items-start gap-2">
@@ -112,7 +114,8 @@ export function TicketsPanel({ projectId }: { projectId: string | null }) {
             </div>
           </div>
         ))}
-      </div>
+        </div>
+      </ScrollArea>
     </div>
   )
 }

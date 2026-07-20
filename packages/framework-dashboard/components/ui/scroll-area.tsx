@@ -1,0 +1,59 @@
+import type { ComponentProps, Ref } from 'react'
+import { ScrollArea as ScrollAreaPrimitive } from '@base-ui-components/react/scroll-area'
+import { cn } from '../../lib/utils.js'
+
+// shadcn's Base UI `scroll-area`, ported (#913) the same way `message-scroller` was (#712): there is
+// no components.json here, so upstream's `cn-scroll-area-*` classes — a stylesheet of `@apply` in
+// their registry — are inlined on the parts instead, and the focus ring uses our own token.
+//
+// Why a component rather than styling the native bar: the OS paints an overlay scrollbar that hides
+// itself, so a rail gives no hint that it holds more than it shows. This one belongs to the layout —
+// always there while the content overflows, darkening under the pointer. Its tone is
+// `muted-foreground`, not `border`: a border-toned thumb disappears into the dark canvas.
+//
+// #710 still stands for everything not converted: no `::-webkit-scrollbar` rule comes back.
+//
+// The scrollbar unmounts when the content fits, so a short list has no bar at all.
+//
+// Vertical only: nothing here scrolls sideways, and upstream's horizontal branch would ship
+// untested. Add it with its first use.
+
+export function ScrollArea({
+  className,
+  children,
+  viewportRef,
+  ...props
+}: ScrollAreaPrimitive.Root.Props & {
+  /** The scrolled element, for a rail that scrolls itself (ViewsRail, ChoicesRail). */
+  viewportRef?: Ref<HTMLDivElement>
+}) {
+  return (
+    <ScrollAreaPrimitive.Root data-slot="scroll-area" className={cn('relative', className)} {...props}>
+      <ScrollAreaPrimitive.Viewport
+        ref={viewportRef}
+        data-slot="scroll-area-viewport"
+        className="size-full rounded-[inherit] outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)]"
+      >
+        {children}
+      </ScrollAreaPrimitive.Viewport>
+      <ScrollBar />
+      <ScrollAreaPrimitive.Corner />
+    </ScrollAreaPrimitive.Root>
+  )
+}
+
+export function ScrollBar({ className, ...props }: ComponentProps<typeof ScrollAreaPrimitive.Scrollbar>) {
+  return (
+    <ScrollAreaPrimitive.Scrollbar
+      data-slot="scroll-area-scrollbar"
+      orientation="vertical"
+      className={cn('flex h-full w-2.5 touch-none select-none border-l border-l-transparent p-px', className)}
+      {...props}
+    >
+      <ScrollAreaPrimitive.Thumb
+        data-slot="scroll-area-thumb"
+        className="relative flex-1 rounded-full bg-muted-foreground/40 transition-colors hover:bg-muted-foreground/70"
+      />
+    </ScrollAreaPrimitive.Scrollbar>
+  )
+}

@@ -4,6 +4,7 @@ import { Badge } from './ui/badge.js'
 import { usePolled } from '../lib/use-async.js'
 import { cn } from '../lib/utils.js'
 import { formatDateTime } from '../lib/format-date.js'
+import { ScrollArea } from './ui/scroll-area.js'
 
 const STATUS_TONE: Record<string, string> = {
   running: 'text-primary',
@@ -23,7 +24,8 @@ export function ProjectLogPanel({ projectId }: { projectId: string | null }) {
   if (logs.length === 0) return <p className="p-4 text-sm text-muted-foreground">No committed log entries yet.</p>
 
   return (
-    <ul className="flex-1 divide-y divide-border overflow-y-auto">
+    <ScrollArea className="min-h-0 flex-1">
+      <ul className="divide-y divide-border">
       {logs.map((log, i) => (
         <li key={i} className="px-4 py-2">
           <div className="flex items-center gap-2">
@@ -34,6 +36,7 @@ export function ProjectLogPanel({ projectId }: { projectId: string | null }) {
           <p className="mt-1 text-sm">{log.title}</p>
         </li>
       ))}
-    </ul>
+      </ul>
+    </ScrollArea>
   )
 }

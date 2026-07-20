@@ -2,6 +2,7 @@ import { useRef, useState } from 'react'
 import type { AgentView } from '../lib/live-state.js'
 import { Markdown } from './Markdown.js'
 import { cn } from '../lib/utils.js'
+import { ScrollArea } from './ui/scroll-area.js'
 
 // The agent-views rail (#441, part of #314): the ad-hoc markdown the agent pushed to the
 // side panel via showMarkdown() (a plan, a summary, a writeup), each a first-class view
@@ -36,10 +37,12 @@ export function ViewsRail({ views }: { views: AgentView[] }) {
           ))}
         </nav>
       )}
-      <div ref={scroller} className="min-h-0 flex-1 overflow-y-auto p-4">
-        <h2 className="mb-2 text-sm font-semibold">{current.title}</h2>
-        <Markdown text={current.markdown} />
-      </div>
+      <ScrollArea viewportRef={scroller} className="min-h-0 flex-1">
+        <div className="p-4">
+          <h2 className="mb-2 text-sm font-semibold">{current.title}</h2>
+          <Markdown text={current.markdown} />
+        </div>
+      </ScrollArea>
     </div>
   )
 }

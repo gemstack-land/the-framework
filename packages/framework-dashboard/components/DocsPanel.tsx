@@ -5,6 +5,7 @@ import { Button } from './ui/button.js'
 import { Markdown } from './Markdown.js'
 import { usePolled } from '../lib/use-async.js'
 import { cn } from '../lib/utils.js'
+import { ScrollArea } from './ui/scroll-area.js'
 
 // The surfaced documents (#319/#328): the PLAN/TODO the agent writes, rendered beside
 // the run. Telefunc RPC (server/reads.telefunc.ts), polled so edits mid-run show up.
@@ -31,9 +32,11 @@ export function DocsPanel({ projectId }: { projectId: string | null }) {
           </Button>
         ))}
       </div>
-      <div className="flex-1 overflow-y-auto p-4">
-        <Markdown text={current.content} />
-      </div>
+      <ScrollArea className="min-h-0 flex-1">
+        <div className="p-4">
+          <Markdown text={current.content} />
+        </div>
+      </ScrollArea>
     </div>
   )
 }

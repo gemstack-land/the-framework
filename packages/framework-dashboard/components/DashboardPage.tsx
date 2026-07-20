@@ -10,6 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from './ui/card.js'
 import { usePolled } from '../lib/use-async.js'
 import { cn } from '../lib/utils.js'
 import { formatDate } from '../lib/format-date.js'
+import { ScrollArea } from './ui/scroll-area.js'
 
 // The Overview dashboard page (#471). What used to be a cramped, collapsible section in the
 // first sidebar is now a proper at-a-glance landing: KPI tiles, a two-week activity chart,
@@ -26,7 +27,7 @@ export function DashboardPage({
   const { value: data } = usePolled<DashboardData | null>(onDashboard, null, 5000, [])
 
   return (
-    <div className="min-h-0 flex-1 overflow-y-auto">
+    <ScrollArea className="min-h-0 flex-1">
       <div className="mx-auto max-w-6xl space-y-6 p-6">
         <div>
           <h1 className="text-xl font-semibold">Overview</h1>
@@ -102,7 +103,7 @@ export function DashboardPage({
           </>
         )}
       </div>
-    </div>
+    </ScrollArea>
   )
 }
 
