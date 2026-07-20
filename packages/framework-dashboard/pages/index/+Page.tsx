@@ -281,8 +281,13 @@ export default function Page() {
         </div>
       </header>
       {/* The workspace row is fixed-height: each column scrolls internally, so the row itself
-          must never scroll. overflow-hidden clips any stray horizontal bleed (no page X-scroll). */}
-      <div className="flex min-h-0 flex-1 overflow-hidden">
+          must never scroll. overflow-hidden clips any stray horizontal bleed (no page X-scroll).
+          `relative` is load-bearing (#904): overflow only clips a descendant this box is the
+          containing block for, and Tailwind's `.sr-only` is position:absolute. Without it those
+          labels resolve against the initial containing block, keep their static position deep in
+          the scrolled content, and give the document a phantom scrollbar that slides the whole
+          app off-screen. */}
+      <div className="relative flex min-h-0 flex-1 overflow-hidden">
         <RunHistory
           projectId={projectId}
           runs={runs}
