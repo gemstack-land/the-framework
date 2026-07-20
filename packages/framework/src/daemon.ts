@@ -21,6 +21,10 @@ import {
   pruneWorktrees,
   readLiveMetas,
   isSafeRunId,
+  readSuspendedRuns,
+  writeSuspendedRuns,
+  resumableRuns,
+  type SuspendedRun,
 } from './store/index.js'
 import { startDashboard, type Dashboard, type StartRunKind, type StartRunOptions, type StartRunResult, type AddProjectResult, type PreviewResult, type PreviewStatus } from './dashboard/index.js'
 import { startInterventionWatcher, postDiscord, type InterventionWatcher } from './dashboard/intervention-watcher.js'
@@ -68,6 +72,13 @@ export const DAEMON_STATE_FILE = 'the-framework-daemon.json'
 
 /** The default dashboard port the daemon binds. Matches the per-run dashboard. */
 export const DEFAULT_DAEMON_PORT = 4200
+
+/**
+ * What a resumed run is asked to do (#923). The agent comes back with its own session, so it has
+ * the whole conversation: the only thing it is missing is why it suddenly stopped mid-task.
+ */
+export const RESUME_PROMPT =
+  'This session was interrupted when The Framework restarted, not by anyone asking you to stop. Look at what you had already done, then carry on from there.'
 
 /** What a running daemon writes so a later `framework` invocation can find it. */
 export interface DaemonState {
@@ -518,6 +529,42 @@ export async function runDaemon(cwd: string, opts: RunDaemonOptions = {}): Promi
       resolvePreferences({ ...global, ...preferencesFromFileConfig(file) }, project),
     )
   }
+  // Resume what the last daemon suspended (#923). A run does not outlive its daemon: it is stopped
+  // at shutdown and its id + agent session recorded, so a restart continues the same conversation
+  // in the same worktree instead of leaving an orphan behind. The state survives the process, which
+  // is the #857 direction; the process does not. Capped by age (SUSPEND_MAX_AGE_MS) so a machine
+  // that has been off for a week does not wake up spending a day's quota on stale work, and cleared
+  // as it is read, so a run that fails to resume is not retried on every boot.
+  void (async () => {
+    for (const record of await listProjects(undefined, env).catch(() => [])) {
+      const suspended = await readSuspendedRuns(record.path).catch(() => [])
+      if (suspended.length === 0) continue
+      await writeSuspendedRuns(record.path, []).catch(() => {})
+      const resumable = resumableRuns(suspended, Date.now())
+      const dropped = suspended.length - resumable.length
+      if (dropped > 0) console.log(`[framework] ${dropped} suspended session(s) in ${basename(record.path)} are too old to resume`)
+      for (const run of resumable) {
+        const options = await resolvedRunOptions(record.id)
+        const result = await runtime.onStart(
+          RESUME_PROMPT,
+          'prompt',
+          {
+            ...options,
+            unattended: true,
+            continueRunId: run.runId,
+            ...(run.sessionId ? { resumeSession: run.sessionId } : {}),
+          },
+          record.id,
+        )
+        console.log(
+          result.ok
+            ? `[framework] resumed session ${run.runId} in ${basename(record.path)}`
+            : `[framework] could not resume session ${run.runId}: ${result.error}`,
+        )
+      }
+    }
+  })()
+
   let watcher: InterventionWatcher | undefined
   let activityWatcher: ActivityWatcher | undefined
   if (webhook) {
@@ -638,6 +685,11 @@ export async function runDaemon(cwd: string, opts: RunDaemonOptions = {}): Promi
   // would otherwise hold the event loop open on its own.
   discordBot?.stop()
   autoPm.stop()
+  // Stop the runs this daemon spawned (#923), before the previews they may be serving. Left
+  // running they are orphans nothing tracks; stopped here they are recorded and resumed on the
+  // next boot. Auto PM is stopped first so nothing starts a run while we are stopping them.
+  const suspended = await runtime.suspendRuns().catch(() => 0)
+  if (suspended > 0) console.log(`[framework] suspended ${suspended} session(s); they resume when the daemon starts again`)
   // Stopped here as well as by the dashboard: a broken install serves 503s without ever taking
   // ownership of the source we handed in, and that poller would go on reading by itself.
   quota.stop()
@@ -670,6 +722,11 @@ interface ProjectRuntime {
   onPreviewStatus: (targetProjectId?: string) => PreviewStatus
   /** Live runs on a project (#685), so a background job can tell an idle project from a busy one. */
   activeRunCount: (targetProjectId: string) => number
+  /**
+   * Stop the runs this daemon spawned and record each as resumable (#923). Returns how many
+   * were suspended. Called on shutdown, before the previews go.
+   */
+  suspendRuns: (graceMs?: number) => Promise<number>
   /** Stop every live preview so their dev servers do not outlive the daemon (#475). */
   dispose: () => Promise<void>
 }
@@ -986,12 +1043,68 @@ function createProjectRuntime({ cwd, env, binPath }: ProjectRuntimeOptions): Pro
     return live + [...starting].filter(key => key === targetProjectId || key.startsWith(`${targetProjectId}::`)).length
   }
 
+  /**
+   * Stop the runs this daemon spawned, and record them as resumable (#923).
+   *
+   * A spawned run is detached so it survives the CLI that asked for it, not so it survives the
+   * daemon that owns it: left alone it becomes an orphan on `ppid 1`, holding a worktree and a
+   * headless browser, with no daemon left that knows about it. So each gets a SIGTERM, which the
+   * run already handles by aborting cleanly and group-killing its agent, and a SIGKILL if it will
+   * not go. Only runs in `activeRuns` — a run this daemon merely steers (#393) is not its to stop.
+   *
+   * What is stopped here is not lost: the run keeps its worktree and branch (a run that ends
+   * `stopped` is retained, see tearDownWorktree), and its id + agent session are written to the
+   * project so the next daemon can continue the same conversation in the same checkout. A run that
+   * managed to finish while we were asking is left out — there is nothing to resume.
+   */
+  const suspendRuns = async (graceMs = 5000): Promise<number> => {
+    const byProject = new Map<string, SuspendedRun[]>()
+    const stopping = [...activeRuns.entries()]
+    activeRuns.clear()
+    for (const [key, pid] of stopping) {
+      const separator = key.indexOf('::')
+      const projectKey = separator === -1 ? key : key.slice(0, separator)
+      const runId = separator === -1 ? undefined : key.slice(separator + 2)
+      const projectCwd = await resolveProject(projectKey)
+      if (!isProcessAlive(pid)) continue
+      try {
+        process.kill(pid, 'SIGTERM')
+      } catch {
+        // exited between the check and the signal
+      }
+      if (!(await waitForExit(pid, graceMs))) {
+        try {
+          process.kill(pid, 'SIGKILL')
+        } catch {
+          // raced us to exit
+        }
+        await waitForExit(pid, 1000)
+      }
+      // A fallback run (no worktree, no run id) cannot be continued, so it is stopped and no more.
+      if (!runId || !projectCwd) continue
+      const meta = (await readLiveMetas(projectCwd).catch(() => [])).find(run => run.id === runId)
+      if (meta?.status === 'done') continue
+      const entry: SuspendedRun = {
+        runId,
+        suspendedAt: new Date().toISOString(),
+        ...(meta?.sessionId ? { sessionId: meta.sessionId } : {}),
+      }
+      byProject.set(projectCwd, [...(byProject.get(projectCwd) ?? []), entry])
+    }
+    let suspended = 0
+    for (const [projectCwd, runs] of byProject) {
+      await writeSuspendedRuns(projectCwd, runs).catch(() => {})
+      suspended += runs.length
+    }
+    return suspended
+  }
+
   const dispose = async (): Promise<void> => {
     await Promise.all([...activePreviews.values()].map(p => p.stop().catch(() => {})))
     activePreviews.clear()
   }
 
-  return { onStart, onAddProject, onPreview, onServeTargets, onStopPreview, onPreviewStatus, activeRunCount, dispose }
+  return { onStart, onAddProject, onPreview, onServeTargets, onStopPreview, onPreviewStatus, activeRunCount, suspendRuns, dispose }
 }
 
 /** Resolve on SIGINT/SIGTERM, or when the optional abort signal fires. */

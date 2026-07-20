@@ -51,3 +51,11 @@ export {
   nodeLinkFs,
   type LinkFs,
 } from './worktree-deps.js'
+export {
+  readSuspendedRuns,
+  writeSuspendedRuns,
+  resumableRuns,
+  SUSPENDED_FILE,
+  SUSPEND_MAX_AGE_MS,
+  type SuspendedRun,
+} from './suspend.js'
