@@ -94,6 +94,13 @@ export interface Preferences {
    */
   notifyDiscord?: boolean
   /**
+   * Run the Discord chatbot (#680): take messages from Discord and drive runs with them, rather
+   * than only posting notifications outward. Absent = off, like {@link notifyDiscord}, and for a
+   * stronger reason — this one *acts* on what it reads. Gates the daemon's bot on top of a
+   * `DISCORD_BOT_TOKEN` being set (the token is how to connect; this is whether to).
+   */
+  discordBot?: boolean
+  /**
    * Auto PM (#685): let the daemon start a PM run by itself when the agent queue has run dry
    * and there is plenty of budget left, so leftover subscription quota goes on the roadmap
    * instead of expiring. **Absent = off**: it spends the user's allowance without being asked,
@@ -232,6 +239,7 @@ const PREFERENCE_KEYS = [
   'transparent',
   'notifyBrowser',
   'notifyDiscord',
+  'discordBot',
   'notifyNewActivity',
   'notifyHumanIntervention',
   'autoPm',

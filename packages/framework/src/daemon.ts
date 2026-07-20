@@ -39,6 +39,9 @@ import { runOptionsFromPreferences, preferencesFromFileConfig } from './run-opti
 import { loadFrameworkConfig } from './config.js'
 import { installProject, enumerateGitRepos } from './install.js'
 import { JsonlTailer } from './jsonl-tail.js'
+import { startDiscordBot } from './discord/bot.js'
+import { snapshotLiveRun } from './discord/live-run.js'
+import { sendChoice, sendMessage, sendStop } from './dashboard-rpc/control.telefunc.js'
 
 /**
  * The persistent background dashboard (#302). Today the dashboard dies with the
@@ -514,8 +517,54 @@ export async function runDaemon(cwd: string, opts: RunDaemonOptions = {}): Promi
     log: message => console.log(message),
   })
 
+  // The Discord chatbot (#680): chat to The Framework from Discord. Two gates, mirroring the
+  // notification watchers above — a `DISCORD_BOT_TOKEN` (a bot can read replies; the #627 webhook
+  // cannot) and the per-user `discordBot` preference, read per message so the toggle takes effect
+  // without a daemon restart. Unset token means no bot, exactly as before.
+  const botToken = env.DISCORD_BOT_TOKEN
+  // Say so when the token is set but the toggle is not: the bot would otherwise connect and then
+  // ignore every message, which reads as broken rather than as off.
+  if (botToken) {
+    void readPrefs().then(prefs => {
+      if (prefs.discordBot !== true) {
+        console.log('[framework] Discord bot: DISCORD_BOT_TOKEN is set but the `discordBot` preference is off, so it will not answer.')
+      }
+    })
+  }
+  // The daemon's own project, resolved the same way the runtime resolves it. Chat has no project
+  // picker, so a message with no run to join starts one here.
+  const botHomeId = projectId(resolve(cwd))
+  const botProjectPath = async (id: string) => (await listSummaries()).find(p => p.id === id)?.path ?? cwd
+  const discordBot = botToken
+    ? startDiscordBot({
+        token: botToken,
+        target: async () => {
+          const home = (await listSummaries()).find(p => p.id === botHomeId)
+          return home ? { id: home.id, name: home.name } : { id: botHomeId, name: basename(cwd) }
+        },
+        liveRun: async id => snapshotLiveRun(id, await botProjectPath(id)),
+        start: async (id, text) => {
+          // Same resolution and the same forced `unattended` as auto PM (#846/#858): nobody is
+          // watching a chat-started run either, so a parked gate would hang it. The gate is then
+          // answered from Discord by number instead.
+          const options = await resolvedRunOptions(id)
+          const result = await runtime.onStart(text, 'prompt', { ...options, unattended: true }, id)
+          return result.ok ? result.runId : undefined
+        },
+        sendMessage: (id, text, runId) => sendMessage(id, text, runId),
+        sendChoice: (id, gateId, pick, runId) => sendChoice(id, gateId, pick, 'user', runId),
+        sendStop: (id, runId) => sendStop(id, runId),
+        enabled: async () => (await readPrefs()).discordBot === true,
+        ...(env.DISCORD_CHANNEL_ID ? { channelId: env.DISCORD_CHANNEL_ID } : {}),
+        onLog: message => console.log(`[framework] ${message}`),
+      })
+    : undefined
+
   await waitForShutdown(opts.signal)
 
+  // Ctrl+C takes the bot offline (#680). Its gateway socket is the one connection here that
+  // would otherwise hold the event loop open on its own.
+  discordBot?.stop()
   autoPm.stop()
   // Stopped here as well as by the dashboard: a broken install serves 503s without ever taking
   // ownership of the source we handed in, and that poller would go on reading by itself.
