@@ -3,7 +3,7 @@ import { onRuns, onRun, onDocs, onProjectLog, onQueue, onOverview, onInterventio
 import { sendStop, sendChoice, sendMessage, sendStart, sendPreview, onServeTargets, sendStopPreview, onPreviewStatus, sendOpenInApp, sendRemoveWorktree, sendPushBranch, sendOpenPullRequest } from './control.telefunc.js'
 import { onEvents } from './events.telefunc.js'
 import { onProjects, sendAddProject } from './projects.telefunc.js'
-import { onPreferences, savePreferences, onEditors } from './preferences.telefunc.js'
+import { onPreferences, savePreferences, onProjectPreferences, saveProjectPreferences, onEditors } from './preferences.telefunc.js'
 import { onQuota } from './quota.telefunc.js'
 
 // The client bakes each RPC key from the dashboard's source path (relative to its Vite
@@ -23,6 +23,19 @@ export const DASHBOARD_TELEFUNC_KEYS = {
 let registered = false
 
 /**
+ * What {@link registerDashboardTelefunctions} actually registered, so a test can hold this
+ * list against the telefunc modules' own exports. A telefunction that is exported, re-exported
+ * by the dashboard's shim, and simply never registered here fails at runtime with a 400 and
+ * nothing else: that is how per-project preferences shipped broken (#866).
+ */
+const registeredNames = new Set<string>()
+
+/** The registered telefunction names. Empty until `registerDashboardTelefunctions` runs. */
+export function registeredTelefunctionNames(): ReadonlySet<string> {
+  return registeredNames
+}
+
+/**
  * Register the dashboard telefunctions under the client-baked keys (idempotent). The
  * `appRootDir` is cosmetic here — it is not part of the match key and shields are off
  * on the mount (see dashboard/telefunc-serve.ts).
@@ -30,8 +43,10 @@ let registered = false
 export function registerDashboardTelefunctions(appRootDir: string = process.cwd()): void {
   if (registered) return
   registered = true
-  const reg = (fn: (...args: never[]) => unknown, name: string, key: string): void =>
+  const reg = (fn: (...args: never[]) => unknown, name: string, key: string): void => {
+    registeredNames.add(name)
     __decorateTelefunction(fn as never, name, key, appRootDir)
+  }
   const { reads, control, events, projects, preferences, quota } = DASHBOARD_TELEFUNC_KEYS
   reg(onRuns, 'onRuns', reads)
   reg(onRun, 'onRun', reads)
@@ -69,6 +84,8 @@ export function registerDashboardTelefunctions(appRootDir: string = process.cwd(
   reg(sendAddProject, 'sendAddProject', projects)
   reg(onPreferences, 'onPreferences', preferences)
   reg(savePreferences, 'savePreferences', preferences)
+  reg(onProjectPreferences, 'onProjectPreferences', preferences)
+  reg(saveProjectPreferences, 'saveProjectPreferences', preferences)
   reg(onEditors, 'onEditors', preferences)
   reg(onQuota, 'onQuota', quota)
 }
