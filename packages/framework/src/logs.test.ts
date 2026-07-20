@@ -164,6 +164,35 @@ test('a multi-line prompt bullet stays on one line and round-trips (#897)', () =
   assert.deepEqual(parseLogs(renderLogEntry(entry)), [entry])
 })
 
+test('the run id, session name and branch round-trip (#898)', () => {
+  const entry: LogEntry = {
+    ...PROMPT,
+    id: '2026-07-10T09-00-00-000Z',
+    sessionName: 'login-page',
+    branch: 'the-framework/login-page',
+  }
+  assert.equal(
+    renderLogEntry(entry),
+    [
+      '## 2026-07-10T09:00:00.000Z · prompt · Add a login page',
+      '',
+      '- status: done',
+      '- run: 2026-07-10T09-00-00-000Z',
+      '- session: [sess-1](https://claude.ai/code/sess-1)',
+      '- name: login-page',
+      '- branch: the-framework/login-page',
+    ].join('\n'),
+  )
+  assert.deepEqual(parseLogs(renderLogEntry(entry)), [entry])
+})
+
+test('an entry written before #898 parses without the new fields', () => {
+  const parsed = parseLogs(renderLogEntry(PROMPT))
+  assert.deepEqual(parsed, [PROMPT])
+  assert.equal('id' in parsed[0]!, false)
+  assert.equal('branch' in parsed[0]!, false)
+})
+
 test('an entry written before #897 still parses', () => {
   const md = ['## 2026-07-10T12:00:00.000Z · build · A blog', '', '- status: failed'].join('\n')
   assert.deepEqual(parseLogs(md), [MINIMAL])

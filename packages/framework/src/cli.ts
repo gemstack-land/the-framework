@@ -47,7 +47,7 @@ import { loadUserSystemPrompt, SYSTEM_PROMPT_FILE } from './system-prompt-file.j
 import { checkForUpdate, formatUpdateStatus, nodeVersionFetcher } from './update-check.js'
 import { appendLog, type LogEntry } from './logs.js'
 import { preflight } from './preflight.js'
-import { RunStore, nodeStoreFs, renameRunBranch, runBranchName, type StoreFs } from './store/index.js'
+import { RunStore, currentBranch, nodeStoreFs, renameRunBranch, runBranchName, type StoreFs } from './store/index.js'
 import { materializePresets } from './presets.js'
 import { daemonStatus, ensureDaemon, registerHomeProject, runDaemon, stopDaemon, DEFAULT_DAEMON_PORT } from './daemon.js'
 import { resetControl, watchControl, type ControlWatcher } from './control.js'
@@ -689,23 +689,42 @@ export function runLogKind(opts: Pick<CliOptions, 'directPrompt' | 'research'>, 
  * Build the project-log entry (#379) for a finished run from its `end` event and
  * the session captured along the way. Pure, so the status mapping is unit-testable
  * without a live run.
+ *
+ * A run that never emitted `end` still gets an entry (#898) — it was stopped, or it died
+ * mid-flight, and either way it happened and belongs in the committed log. `stopped` then
+ * decides between the two, since there is no event left to ask.
  */
 export function runLogEntry(input: {
   at: string
   kind: LogEntry['kind']
   title: string
-  end: Extract<FrameworkEvent, { kind: 'end' }>
+  end?: Extract<FrameworkEvent, { kind: 'end' }> | undefined
+  stopped?: boolean | undefined
+  id?: string | undefined
   sessionId?: string | undefined
   sessionLink?: string | undefined
+  sessionName?: string | undefined
+  branch?: string | undefined
 }): LogEntry {
-  const status: LogEntry['status'] = input.end.ok ? 'done' : input.end.stopped ? 'stopped' : 'failed'
+  const status: LogEntry['status'] = input.end
+    ? input.end.ok
+      ? 'done'
+      : input.end.stopped
+        ? 'stopped'
+        : 'failed'
+    : input.stopped
+      ? 'stopped'
+      : 'failed'
   return {
     at: input.at,
     kind: input.kind,
     title: input.title,
     status,
+    ...(input.id ? { id: input.id } : {}),
     ...(input.sessionId ? { sessionId: input.sessionId } : {}),
     ...(input.sessionLink ? { sessionLink: input.sessionLink } : {}),
+    ...(input.sessionName ? { sessionName: input.sessionName } : {}),
+    ...(input.branch ? { branch: input.branch } : {}),
   }
 }
 
@@ -769,6 +788,8 @@ interface RunEpilogue {
   browserStream: BrowserStream | undefined
   clearInterrupt: () => void
   maybeFireOnBeforeMergeable: () => Promise<void>
+  /** Write the run's `.the-framework/LOGS.md` entry (#898). Idempotent: called on every exit path. */
+  finishLog: () => Promise<void>
   /** True once the run stopped cleanly (interrupt / budget cap) rather than failed. */
   isStopped: () => boolean
   /** How a real failure is labelled: "run", "research", or "prompt run". */
@@ -797,6 +818,7 @@ async function settleRun(
     // Before the close, not after (#835): close() archives the log into `runs/`, so an
     // outcome appended afterwards would miss the copy the dashboard's history reads.
     await ctx.maybeFireOnBeforeMergeable()
+    await ctx.finishLog()
     await ctx.store?.close() // flush the event log; best-effort
     // Stay up while the dashboard and/or the app are live, then tear both down.
     if (dashboard || preview) {
@@ -809,6 +831,9 @@ async function settleRun(
     return 0
   } catch (err) {
     ctx.clearInterrupt()
+    // Before the close, like the success path: a run that stopped or blew up is still a session,
+    // and this is the only place the failing path can record it (#898).
+    await ctx.finishLog()
     await ctx.store?.close()
     // A clean stop (Stop button, Ctrl+C, or a budget cap #322) is not a failure: report it,
     // keep the dashboard up so the stopped state stays visible, and exit 0.
@@ -1172,12 +1197,13 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
   let sessionName: string | undefined
   // Record the finished run in the project log `.the-framework/LOGS.md` (#379). The
   // kind + title are known up front; the session id/link arrive mid-run, and the
-  // `end` event (fired once by both run paths) closes the entry. Best-effort: the
-  // project DB is committed history, so it must never break a run.
+  // `end` event holds the outcome. Best-effort: the project DB is committed history,
+  // so it must never break a run.
   const logKind = runLogKind(opts, transparent)
   const logTitle = intent || (opts.research ? defaultWhat() : '')
   let logSessionId: string | undefined
   let logSessionLink: string | undefined
+  let logEnd: Extract<FrameworkEvent, { kind: 'end' }> | undefined
   // The browser preview's port, announced on the first `session` event rather than when the
   // bridge opens (#829). The dashboard renders only the tail from the last `session` event, so
   // anything emitted ahead of it is dropped from the run's view.
@@ -1197,15 +1223,10 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
     }
     if (event.kind === 'end') {
       if (event.stopped) stoppedCleanly = true
-      const entry = runLogEntry({
-        at: new Date().toISOString(),
-        kind: logKind,
-        title: logTitle,
-        end: event,
-        sessionId: logSessionId,
-        sessionLink: logSessionLink,
-      })
-      void appendLog(cwd, entry).catch(() => {})
+      // Held, not logged here (#898): the entry is written as the run settles, which is both
+      // after every run reaches it (an `end` is not guaranteed) and the last moment the branch
+      // can still be read off the checkout.
+      logEnd = event
     }
     io.out(formatFrameworkEvent(event))
     void store?.append(event)
@@ -1249,6 +1270,30 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
       opts.eco,
     )
     onEvent({ kind: 'on-before-mergeable', outcome })
+  }
+
+  // Write the run's entry into `.the-framework/LOGS.md` as it settles (#898). Once per run, and
+  // on every path out — a stopped or crashed run is still a session that happened, and leaving it
+  // out is what made the committed log an incomplete record of the transient `runs/` archive.
+  let logged = false
+  const finishLog = async (): Promise<void> => {
+    if (logged) return
+    logged = true
+    const entry = runLogEntry({
+      at: new Date().toISOString(),
+      kind: logKind,
+      title: logTitle,
+      end: logEnd,
+      stopped: stoppedCleanly,
+      id: opts.runId,
+      sessionId: logSessionId,
+      sessionLink: logSessionLink,
+      sessionName,
+      // The last moment it can be observed (#799): a run worktree is torn down after this
+      // process exits, and the agent may have branched itself, so neither name is derivable later.
+      branch: await currentBranch(cwd),
+    })
+    await appendLog(cwd, entry).catch(() => {})
   }
 
   // A mode/kind given with no preset in effect has nothing to act on: note it.
@@ -1331,6 +1376,7 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
     browserStream,
     clearInterrupt,
     maybeFireOnBeforeMergeable,
+    finishLog,
     isStopped: () => controller.signal.aborted || stoppedCleanly,
     failLabel,
   })

@@ -33,10 +33,23 @@ export interface LogEntry {
   /** The run's intent/prompt. Escaped to one line on write (#897), so it may hold a whole prompt. */
   title: string
   status: 'done' | 'stopped' | 'failed' | 'running'
+  /**
+   * The run's id (#898): the join key from this committed entry to the rest of the run, whose
+   * `runs/<id>.json` meta and `runs/<id>.jsonl` events are transient and stay out of git.
+   */
+  id?: string
   /** Claude Code session id. */
   sessionId?: string
   /** e.g. `https://claude.ai/code/<id>` */
   sessionLink?: string
+  /** The name the agent gave the session (#326), also its `the-framework/<name>` branch. */
+  sessionName?: string
+  /**
+   * The branch the run's work landed on (#799). Read from the checkout as the run settles,
+   * because it is not derivable later: a clean run loses its worktree, and the agent may have
+   * branched itself.
+   */
+  branch?: string
   /** For a loop: constituent prompt summaries. */
   prompts?: string[]
 }
@@ -83,6 +96,7 @@ export function renderLogEntry(entry: LogEntry): string {
     '',
     `- status: ${entry.status}`,
   ]
+  if (entry.id) lines.push(`- run: ${encodeField(entry.id)}`)
   if (entry.sessionId) {
     lines.push(
       entry.sessionLink
@@ -90,6 +104,8 @@ export function renderLogEntry(entry: LogEntry): string {
         : `- session: ${entry.sessionId}`,
     )
   }
+  if (entry.sessionName) lines.push(`- name: ${encodeField(entry.sessionName)}`)
+  if (entry.branch) lines.push(`- branch: ${encodeField(entry.branch)}`)
   if (entry.prompts && entry.prompts.length > 0) {
     lines.push('- prompts:')
     for (const prompt of entry.prompts) lines.push(`  - ${encodeField(prompt)}`)
@@ -133,8 +149,11 @@ function parseEntry(lines: string[]): LogEntry | undefined {
   if (!at || !kind || !title || !KINDS.includes(kind)) return undefined
 
   let status: string | undefined
+  let id: string | undefined
   let sessionId: string | undefined
   let sessionLink: string | undefined
+  let sessionName: string | undefined
+  let branch: string | undefined
   let prompts: string[] | undefined
   let inPrompts = false
   for (const line of lines.slice(1)) {
@@ -145,6 +164,12 @@ function parseEntry(lines: string[]): LogEntry | undefined {
     inPrompts = false
     if (line.startsWith('- status: ')) {
       status = line.slice('- status: '.length).trim()
+    } else if (line.startsWith('- run: ')) {
+      id = decodeField(line.slice('- run: '.length).trim())
+    } else if (line.startsWith('- name: ')) {
+      sessionName = decodeField(line.slice('- name: '.length).trim())
+    } else if (line.startsWith('- branch: ')) {
+      branch = decodeField(line.slice('- branch: '.length).trim())
     } else if (line.startsWith('- session: ')) {
       const value = line.slice('- session: '.length).trim()
       const linked = /^\[(.+)\]\((.+)\)$/.exec(value)
@@ -167,8 +192,11 @@ function parseEntry(lines: string[]): LogEntry | undefined {
     title,
     status: status as LogEntry['status'],
   }
+  if (id) entry.id = id
   if (sessionId) entry.sessionId = sessionId
   if (sessionLink) entry.sessionLink = sessionLink
+  if (sessionName) entry.sessionName = sessionName
+  if (branch) entry.branch = branch
   if (prompts && prompts.length > 0) entry.prompts = prompts
   return entry
 }

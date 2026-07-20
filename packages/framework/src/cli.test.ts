@@ -6,6 +6,7 @@ import { join, dirname } from 'node:path'
 import { appendControl } from './control.js'
 import { daemonStatePath } from './daemon.js'
 import { EVENTS_FILE, FRAMEWORK_DIR, RUNS_DIR, type StoreFs } from './store/index.js'
+import { nodeGitRunner } from './project.js'
 import {
   activeModes,
   buildDeployTarget,
@@ -242,6 +243,57 @@ test('runLogEntry maps the end event to a status and carries the session (#379)'
   assert.equal(withSession.sessionLink, 'http://x/s1')
   // No session captured -> the fields are omitted, not set to undefined.
   assert.equal('sessionId' in runLogEntry({ ...base, end: { kind: 'end', ok: true } }), false)
+})
+
+test('runLogEntry records a run that never reached its end event (#898)', () => {
+  const base = { at: '2026-07-11T00:00:00.000Z', kind: 'build' as const, title: 'a blog' }
+  // No `end` to read the outcome from: the run was stopped, or it died.
+  assert.equal(runLogEntry({ ...base, stopped: true }).status, 'stopped')
+  assert.equal(runLogEntry({ ...base }).status, 'failed')
+  // An `end` still wins over the fallback, so a stopped-then-ended run is not double-guessed.
+  assert.equal(runLogEntry({ ...base, end: { kind: 'end', ok: true }, stopped: true }).status, 'done')
+})
+
+test('runLogEntry carries the run id, session name and branch (#898)', () => {
+  const entry = runLogEntry({
+    at: '2026-07-11T00:00:00.000Z',
+    kind: 'build',
+    title: 'a blog',
+    end: { kind: 'end', ok: true },
+    id: '2026-07-11T00-00-00-000Z',
+    sessionName: 'a-blog',
+    branch: 'the-framework/a-blog',
+  })
+  assert.equal(entry.id, '2026-07-11T00-00-00-000Z')
+  assert.equal(entry.sessionName, 'a-blog')
+  assert.equal(entry.branch, 'the-framework/a-blog')
+  // Absent -> omitted, not set to undefined.
+  const bare = runLogEntry({ at: entry.at, kind: 'build', title: 'a blog', end: { kind: 'end', ok: true } })
+  assert.deepEqual(Object.keys(bare).sort(), ['at', 'kind', 'status', 'title'])
+})
+
+test('a run in a git repo records the branch its work landed on (#898)', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'framework-logs-branch-'))
+  const git = nodeGitRunner()
+  try {
+    await git(['init'], dir)
+    await git(['config', 'user.email', 'test@example.com'], dir)
+    await git(['config', 'user.name', 'Test'], dir)
+    await writeFile(join(dir, 'README.md'), '# app\n')
+    await git(['add', '-A'], dir)
+    await git(['commit', '-m', 'init'], dir)
+    await git(['checkout', '-b', 'the-framework/auth-flow'], dir)
+
+    // --unattended so the run settles and exits: inside a git repo it otherwise stays open for
+    // live chat (#714), which has nothing to do with what this asserts.
+    const { io } = capture()
+    const args = ['prompt', 'review the auth flow', '--fake', '--no-dashboard', '--unattended', '--cwd', dir]
+    assert.equal(await runCli(args, io), 0)
+    const logs = await readLogs(dir)
+    assert.equal(logs[0]!.branch, 'the-framework/auth-flow')
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
 })
 
 test('a finished run records itself in .the-framework/LOGS.md (#379)', async () => {
