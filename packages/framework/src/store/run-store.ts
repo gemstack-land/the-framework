@@ -548,16 +548,32 @@ export async function listRuns(cwd: string, fs: StoreFs = nodeStoreFs()): Promis
 }
 
 /**
- * Reconcile runs a dead process left marked `running`. A freshly started daemon
- * drives no in-flight run, so at boot any run still at `running` in this workspace
- * — the live `run.json` or an archived `runs/*.json` — is orphaned: its owning
- * process is gone (a crash, kill, or daemon restart), yet it shows as active and
- * its Stop is a no-op (nothing is left to read `control.jsonl`). Each is flipped to
- * `stopped`; the live run is archived first (idempotent) so its history is kept.
- * Returns how many were reconciled. Best-effort: a read/write error skips that run,
- * never throws.
+ * A `running` meta whose owning process is provably still there: same host, live pid (#926).
+ * The inverse of {@link isDeadRun} rather than its negation — a meta with no `pid` (it predates
+ * the field) is neither, and the boot reconcile is what catches those.
  */
-export async function reconcileOrphanedRuns(cwd: string, fs: StoreFs = nodeStoreFs()): Promise<number> {
+function isLiveRun(meta: RunMeta, isAlive: (pid: number) => boolean): boolean {
+  return meta.status === 'running' && meta.pid !== undefined && meta.host === hostname() && isAlive(meta.pid)
+}
+
+/**
+ * Reconcile runs a dead process left marked `running` — the live `run.json`, an archived
+ * `runs/*.json`, or a run inside a worktree. Such a run shows as active while nothing is left
+ * to read its `control.jsonl`, so its Stop is a no-op. Each is flipped to `stopped`; the live
+ * run is archived first (idempotent) so its history is kept. Returns how many were reconciled.
+ * Best-effort: a read/write error skips that run, never throws.
+ *
+ * A run whose pid is alive on this host is left alone (#926). This used to flip every `running`
+ * meta on the assumption that a fresh daemon drives no in-flight run, which holds only while
+ * exactly one daemon ever boots: a second one (and before #922, every failed `framework --daemon`
+ * spawned one) marked genuinely live runs as finished, giving them a no-op Stop in the dashboard.
+ * A meta with no `pid` keeps the old behaviour, since there is nothing better to go on.
+ */
+export async function reconcileOrphanedRuns(
+  cwd: string,
+  fs: StoreFs = nodeStoreFs(),
+  isAlive: (pid: number) => boolean = isPidAlive,
+): Promise<number> {
   const dir = join(cwd, FRAMEWORK_DIR)
   let fixed = 0
   // Archived runs stuck at `running` (e.g. a prior live run the next run never
@@ -567,7 +583,7 @@ export async function reconcileOrphanedRuns(cwd: string, fs: StoreFs = nodeStore
     const path = join(dir, RUNS_DIR, name)
     try {
       const meta = JSON.parse(await fs.read(path)) as RunMeta
-      if (meta.status !== 'running') continue
+      if (meta.status !== 'running' || isLiveRun(meta, isAlive)) continue
       await fs.write(path, JSON.stringify({ ...meta, status: 'stopped' }, null, 2) + '\n')
       fixed++
     } catch {
@@ -577,7 +593,7 @@ export async function reconcileOrphanedRuns(cwd: string, fs: StoreFs = nodeStore
   // The live run: flip it, then archive so a crash that skipped close() still
   // leaves the stopped run in the history list.
   const live = await readMetaFile(fs, join(dir, META_FILE))
-  if (live?.status === 'running') {
+  if (live?.status === 'running' && !isLiveRun(live, isAlive)) {
     const stopped: RunMeta = { ...live, status: 'stopped' }
     await fs.write(join(dir, META_FILE), JSON.stringify(stopped, null, 2) + '\n').catch(() => {})
     await archivePriorRun(fs, dir).catch(() => {})
@@ -593,7 +609,7 @@ export async function reconcileOrphanedRuns(cwd: string, fs: StoreFs = nodeStore
     if (!isSafeRunId(name)) continue
     const worktreeDir = join(dir, WORKTREES_DIR, name, FRAMEWORK_DIR)
     const meta = await readMetaFile(fs, join(worktreeDir, META_FILE))
-    if (meta?.status !== 'running') continue
+    if (meta?.status !== 'running' || isLiveRun(meta, isAlive)) continue
     await fs.write(join(worktreeDir, META_FILE), JSON.stringify({ ...meta, status: 'stopped' }, null, 2) + '\n').catch(() => {})
     await archiveWorktreeRun(join(dir, WORKTREES_DIR, name), cwd, fs).catch(() => undefined)
     fixed++

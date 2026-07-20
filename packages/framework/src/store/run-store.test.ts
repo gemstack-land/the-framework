@@ -314,6 +314,31 @@ test('reconcileOrphanedRuns flips a live run and archives it, counting it once (
   assert.deepEqual(runs.map(r => [r.id, r.status]), [['2026-live', 'stopped']])
 })
 
+// #926: it used to flip every `running` meta, on the assumption that a fresh daemon drives no
+// in-flight run. A second daemon boot then marked genuinely live runs as finished.
+test('reconcileOrphanedRuns leaves a run whose pid is alive on this host (#926)', async () => {
+  const owned = (id: string, over: Record<string, unknown> = {}): string =>
+    JSON.stringify({ version: RUN_META_VERSION, status: 'running', id, startedAt: AT, updatedAt: AT, passes: 0, pid: 42, host: hostname(), ...over })
+  const fs = memFs({
+    [META]: owned('live'),
+    [join(RUNS, 'alive.json')]: owned('alive'),
+    [join(RUNS, 'dead.json')]: owned('dead', { pid: 43 }),
+    [join(RUNS, 'elsewhere.json')]: owned('elsewhere', { host: 'another-machine' }),
+    ...worktreeFiles('wt', JSON.parse(owned('wt')) as Record<string, unknown>),
+  })
+  // Only pid 42 is running; 43 is gone, and a pid on another host is unknowable so it is flipped.
+  const fixed = await reconcileOrphanedRuns(CWD, fs, pid => pid === 42)
+  assert.equal(fixed, 2, 'only the two that are not provably alive')
+  // Read the files, not `readLiveMeta`/`listRuns`: those run their own #716 probe against the
+  // real process table, and pid 42 is not alive here.
+  const statusOf = (path: string): string => (JSON.parse(fs.files.get(path)!) as RunMeta).status
+  assert.equal(statusOf(META), 'running', 'the live run is still running')
+  assert.equal(statusOf(join(worktreeAt('wt'), '.the-framework', 'run.json')), 'running', 'and so is the one in a worktree')
+  assert.equal(statusOf(join(RUNS, 'alive.json')), 'running')
+  assert.equal(statusOf(join(RUNS, 'dead.json')), 'stopped')
+  assert.equal(statusOf(join(RUNS, 'elsewhere.json')), 'stopped', 'a pid on another host is unknowable, so it is still flipped')
+})
+
 test('reconcileOrphanedRuns is a no-op on a clean or empty workspace (#642)', async () => {
   assert.equal(await reconcileOrphanedRuns(CWD, memFs()), 0)
   const done = memFs({ [META]: JSON.stringify({ version: RUN_META_VERSION, status: 'done', id: 'd', startedAt: AT, updatedAt: AT, passes: 0 }) })
