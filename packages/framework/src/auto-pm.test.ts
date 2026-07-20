@@ -6,6 +6,7 @@ import {
   startAutoPm,
   DEFAULT_MIN_FREE_PERCENT,
   AUTO_PM_JOBS,
+  AUTO_PM_DRAIN_JOB,
   type AutoPmDeps,
   type AutoPmJob,
   type AutoPmProject,
@@ -36,7 +37,7 @@ function status(weekPercent: number | undefined, accountWeek: number | undefined
 const IDLE = { enabled: true, backlogEmpty: true, activeRuns: 0, quota: status(1) } as const
 
 test('autoPmDecision starts when the queue is dry and the budget is barely touched (#685)', () => {
-  assert.deepEqual(autoPmDecision(IDLE), { start: true })
+  assert.deepEqual(autoPmDecision(IDLE), { start: true, mode: 'pm' })
 })
 
 test('autoPmDecision does nothing while the preference is off (#685)', () => {
@@ -51,18 +52,25 @@ test('autoPmDecision leaves a busy project alone (#685)', () => {
   assert.match(decision.start === false ? decision.reason : '', /already going/)
 })
 
-test('autoPmDecision waits while the queue still has entries (#685)', () => {
-  // #685 is only about the dry-queue case: with work queued, the backlog loop has it.
-  const decision = autoPmDecision({ ...IDLE, backlogEmpty: false })
+test('autoPmDecision drains the queue before filling it again (#855)', () => {
+  // It used to refuse here, on the reasoning that the backlog loop would drain it. That loop
+  // only runs inside a run a human started, so unattended nothing ever emptied the queue.
+  assert.deepEqual(autoPmDecision({ ...IDLE, backlogEmpty: false }), { start: true, mode: 'drain' })
+})
+
+test('autoPmDecision refuses when the queue cannot be read at all (#855)', () => {
+  // Empty and non-empty both start something now, so "could not tell" has to be its own answer
+  // rather than falling back to either.
+  const decision = autoPmDecision({ ...IDLE, backlogEmpty: undefined })
   assert.equal(decision.start, false)
-  assert.match(decision.start === false ? decision.reason : '', /still has open entries/)
+  assert.match(decision.start === false ? decision.reason : '', /queue could not be read/)
 })
 
 test('autoPmDecision holds off during the cooldown after a start (#685)', () => {
   const decision = autoPmDecision({ ...IDLE, sinceLastStartMs: 60_000 })
   assert.equal(decision.start, false)
   const later = autoPmDecision({ ...IDLE, sinceLastStartMs: 60 * 60_000 })
-  assert.deepEqual(later, { start: true })
+  assert.deepEqual(later, { start: true, mode: 'pm' })
 })
 
 test('quotaHeadroom refuses to start when the quota cannot be read (#685)', () => {
@@ -293,4 +301,64 @@ test('a run still going is left pending, and the sweep starts nothing new (#852)
   // The second tick reaches the decision and starts the next job: the cooldown is what normally
   // spaces these, and it is zeroed here. What matters is run-1 is still tracked, not dropped.
   assert.ok(ran.length >= 1)
+})
+
+test('startAutoPm drains a standing queue, then goes back to filling it (#855)', async () => {
+  // The deadlock this fixes: a PM job filled the queue, nothing unattended drained it, and every
+  // later tick refused because it was no longer empty. The cycle has to come back round.
+  let open = 1
+  const ran: string[] = []
+  const { loop } = harness({
+    cooldownMs: 0,
+    backlogEmpty: async () => open === 0,
+    // A drain run works one entry off; a PM run puts one there.
+    start: async (_project, job) => {
+      ran.push(job.name)
+      open += job.name === AUTO_PM_DRAIN_JOB.name ? -1 : 1
+      return `run-${ran.length}`
+    },
+  })
+  await loop.tick() // an entry is standing -> work it off
+  await loop.tick() // dry now -> refill
+  await loop.tick() // standing again -> work it off
+  loop.stop()
+  assert.deepEqual(ran, [AUTO_PM_DRAIN_JOB.name, 'first', AUTO_PM_DRAIN_JOB.name])
+})
+
+test('draining does not advance the PM rotation (#855)', async () => {
+  // The rotation is about what to make when there is nothing to do. A queue worked off over
+  // several ticks must not push it forward once per entry and skip a job.
+  let open = 2
+  const ran: string[] = []
+  const { loop } = harness({
+    cooldownMs: 0,
+    backlogEmpty: async () => open === 0,
+    start: async (_project, job) => {
+      ran.push(job.name)
+      open += job.name === AUTO_PM_DRAIN_JOB.name ? -1 : 1
+      return `run-${ran.length}`
+    },
+  })
+  await loop.tick()
+  await loop.tick()
+  await loop.tick() // dry -> the rotation resumes at its first job, not its second
+  loop.stop()
+  assert.deepEqual(ran, [AUTO_PM_DRAIN_JOB.name, AUTO_PM_DRAIN_JOB.name, 'first'])
+})
+
+test('an unreadable queue starts nothing at all (#855)', async () => {
+  const ran: string[] = []
+  const { loop } = harness({
+    cooldownMs: 0,
+    backlogEmpty: async () => {
+      throw new Error('no such file')
+    },
+    start: async (_project, job) => {
+      ran.push(job.name)
+      return 'run-1'
+    },
+  })
+  await loop.tick()
+  loop.stop()
+  assert.deepEqual(ran, [])
 })
