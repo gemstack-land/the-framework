@@ -220,6 +220,17 @@ export {
   type FrameworkFileConfig,
 } from './config.js'
 export {
+  resolveConfigKey,
+  resolveRunConfig,
+  resolvedModes,
+  fileConfigLayer,
+  describeResolvedConfig,
+  RUN_CONFIG_DEFAULTS,
+  type ConfigLayer,
+  type RunConfigValues,
+  type ResolvedRunConfig,
+} from './config-layers.js'
+export {
   systemPromptBlock,
   composeRunSystem,
   renderSystemPrompt,

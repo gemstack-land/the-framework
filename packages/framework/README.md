@@ -224,13 +224,18 @@ event: bug-fix        # the build event kind its review loop fires for
 antiLazyPill: false   # remove the built-in system prompt (default: on)
 ```
 
-Every field is optional. CLI flags override the file, so the precedence is:
+Every field is optional. Config resolves layer by layer, and the nearest layer that
+*set* a key wins (#841). A layer that says nothing about a key does not participate:
 
 - **preset**: `--preset` > `the-framework.yml` `preset`
-- **modes**: a flag and the file OR together (a flag can only *enable* a mode)
+- **modes**: `--autopilot` / `--no-autopilot` (and the `--technical`, `--vanilla`,
+  `--transparent` pairs) > the file's boolean > off. Without either flag the file
+  decides, so a repo that turns a mode on can be turned back off for one run with
+  `--no-<mode>`.
 - **event**: `--kind` > `the-framework.yml` `event` > the preset's own default > `major-change`
 
-When the file contributes anything, the run narrates it (`◆ the-framework.yml: ...`).
+When any layer contributes something, the run narrates what won and where it came
+from (`◆ config: preset=software-development (the-framework.yml), autopilot=off (flag)`).
 A malformed file is a warning, never a failed run.
 
 ### System prompt: the built-in working agreement + `SYSTEM.md`
