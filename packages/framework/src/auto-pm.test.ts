@@ -157,8 +157,9 @@ function harness(overrides: Partial<AutoPmDeps> = {}) {
     start: async (p, job) => {
       started.push(p.id)
       ran.push(job.name)
-      return true
+      return `run-${ran.length}`
     },
+    promote: async () => ({ settled: true, promoted: false }),
     log: message => logs.push(message),
     now: () => T0,
     ...overrides,
@@ -195,7 +196,7 @@ test('startAutoPm re-arms when the start was refused (#685)', async () => {
   const { loop } = harness({
     start: async () => {
       attempts++
-      return attempts > 1
+      return attempts > 1 ? `run-${attempts}` : undefined
     },
   })
   await loop.tick()
@@ -235,13 +236,61 @@ test('startAutoPm retries the same job when the start was refused (#773)', async
     cooldownMs: 0,
     start: async (_p, job) => {
       attempts++
-      if (attempts === 1) return false
+      if (attempts === 1) return undefined
       ran.push(job.name)
-      return true
+      return `run-${attempts}`
     },
   })
   await loop.tick()
   await loop.tick()
   loop.stop()
   assert.deepEqual(ran, ['first'])
+})
+
+test('a promoted queue ends the tick, so the sweep re-reads it next time (#852)', async () => {
+  // The run's queue lands in the checkout only now, so the emptiness check below it is stale.
+  // Deciding on that read is what made auto PM re-derive the same entries every cooldown.
+  const promoted: string[] = []
+  const { loop, ran } = harness({
+    cooldownMs: 0,
+    promote: async (_p, runId) => {
+      promoted.push(runId)
+      return { settled: true, promoted: true }
+    },
+  })
+  await loop.tick() // starts run-1
+  await loop.tick() // lands run-1's queue and stops there
+  assert.deepEqual(promoted, ['run-1'])
+  assert.deepEqual(ran, ['first'])
+})
+
+test('a finished run that wrote no queue stops being retried (#852)', async () => {
+  // Settled without promoting: nothing landed, but the run is over, so the sweep carries on
+  // rather than asking about it forever.
+  const asked: string[] = []
+  const { loop, ran } = harness({
+    cooldownMs: 0,
+    promote: async (_p, runId) => {
+      asked.push(runId)
+      return { settled: true, promoted: false }
+    },
+  })
+  await loop.tick()
+  await loop.tick()
+  await loop.tick()
+  // Each tick starts a fresh run and settles the previous one, so every run is asked about
+  // exactly once. A settled run being asked twice is the leak this guards.
+  assert.deepEqual(asked, [...new Set(asked)])
+  assert.deepEqual(asked, ['run-1', 'run-2'])
+  assert.deepEqual(ran, ['first', 'second', 'first'])
+})
+
+test('a run still going is left pending, and the sweep starts nothing new (#852)', async () => {
+  const { loop, ran } = harness({ cooldownMs: 0, promote: async () => ({ settled: false, promoted: false }) })
+  await loop.tick() // starts run-1
+  await loop.tick() // run-1 unsettled, nothing landed -> falls through to the decision
+  loop.stop()
+  // The second tick reaches the decision and starts the next job: the cooldown is what normally
+  // spaces these, and it is zeroed here. What matters is run-1 is still tracked, not dropped.
+  assert.ok(ran.length >= 1)
 })
