@@ -31,6 +31,23 @@ export interface PresetRenderContext {
   presets?: Record<string, { filePath: string }> | undefined
 }
 
+/** The `tf` a preset renders against. `settings`/`presets` default so a template never throws. */
+function tfFrom(ctx: PresetRenderContext): Record<string, unknown> {
+  return {
+    session_name: ctx.session_name,
+    settings: ctx.settings ?? {},
+    presets: ctx.presets ?? presetContext(),
+  }
+}
+
+/**
+ * {@link DEFAULT_WHAT}, rendered. Exported so a caller that *labels* a run (the CLI's log title)
+ * says the same thing the prompt targets, instead of keeping its own copy of the default.
+ */
+export function defaultWhat(ctx: PresetRenderContext = {}): string {
+  return renderTemplate(DEFAULT_WHAT, { tf: { ...tfFrom(ctx), params: {} } })
+}
+
 /** A quality preset's public shape: its run-kind name, the `what` param, its template, and a renderer. */
 export interface PresetDef {
   name: string
@@ -60,14 +77,9 @@ export function definePreset(name: string, template: string, whatDescription: st
     params,
     template,
     render: (what, ctx = {}) => {
-      const tf = {
-        session_name: ctx.session_name,
-        settings: ctx.settings ?? {},
-        presets: ctx.presets ?? presetContext(),
-      }
       // The default renders with an empty `params`: it can read the session, but not itself.
-      const target = what?.trim() || renderTemplate(params[0].default, { tf: { ...tf, params: {} } })
-      return renderTemplate(template, { tf: { ...tf, params: { what: target } } })
+      const target = what?.trim() || defaultWhat(ctx)
+      return renderTemplate(template, { tf: { ...tfFrom(ctx), params: { what: target } } })
     },
   }
 }

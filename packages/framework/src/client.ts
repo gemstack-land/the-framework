@@ -33,7 +33,7 @@ export {
 } from './system-prompt.js'
 // What a preset can read beyond its params (#874), so the dashboard can render a preset against
 // the session it was launched from. Pure string work, like the renderers below.
-export type { PresetRenderContext } from './preset-prompt.js'
+export { defaultWhat, DEFAULT_WHAT, type PresetRenderContext } from './preset-prompt.js'
 export { renderResearchPrompt } from './research-preset.js'
 export { renderReadabilityPrompt } from './readability-preset.js'
 export { renderMaintainabilityPrompt } from './maintainability-preset.js'

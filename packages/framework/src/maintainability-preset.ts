@@ -11,9 +11,9 @@ const maintainability = definePreset('maintainability', PRESETS_MAINTAINABILITY,
 
 /** The preset's name, as the dashboard button uses it. */
 export const MAINTAINABILITY_PRESET_NAME = maintainability.name
-/** The one user param: what to refactor. Defaults to `this PR`, like the others. */
+/** The one user param: what to refactor. Defaults to the launching session, else the whole codebase (#874). */
 export const MAINTAINABILITY_PARAMS = maintainability.params
 /** The prompt template, verbatim from #361, in `prompts/presets/maintainability.md` (#551). */
 export const MAINTAINABILITY_PROMPT_TEMPLATE = maintainability.template
-/** Render the Maintainability prompt, filling its `${{ tf.params.what }}` blank (defaults to `this PR`). */
+/** Render the Maintainability prompt, filling its `${{ tf.params.what }}` blank (defaults to the launching session, else the whole codebase). */
 export const renderMaintainabilityPrompt = maintainability.render

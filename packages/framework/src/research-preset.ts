@@ -14,9 +14,9 @@ const research = definePreset('research', PRESETS_RESEARCH, 'What to measure pro
 
 /** The preset's name, as the CLI subcommand and the dashboard button use it. */
 export const RESEARCH_PRESET_NAME = research.name
-/** The one user param: what to measure. Defaults to `this PR`, per the issue. */
+/** The one user param: what to measure. Defaults to the launching session, else the whole codebase (#874). */
 export const RESEARCH_PARAMS = research.params
 /** The prompt template, verbatim from #331 (with `${{ tf.params.what }}` as the blank). */
 export const RESEARCH_PROMPT_TEMPLATE = research.template
-/** Render the Research prompt, filling its `${{ tf.params.what }}` blank (defaults to `this PR`). */
+/** Render the Research prompt, filling its `${{ tf.params.what }}` blank (defaults to the launching session, else the whole codebase). */
 export const renderResearchPrompt = research.render
