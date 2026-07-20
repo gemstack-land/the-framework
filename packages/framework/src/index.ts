@@ -354,7 +354,6 @@ export {
   AUTO_PM_JOBS,
   autoPmDecision,
   quotaHeadroom,
-  DEFAULT_MIN_FREE_PERCENT,
   DEFAULT_AUTO_PM_INTERVAL_MS,
   DEFAULT_AUTO_PM_COOLDOWN_MS,
   type AutoPmInputs,

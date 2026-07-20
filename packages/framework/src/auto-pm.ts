@@ -1,12 +1,12 @@
-import type { ConsumptionStatus, LimitStatus } from './consumption.js'
+import type { ConsumptionStatus } from './consumption.js'
 import { renderSpikeAndPlanPrompt, SPIKE_AND_PLAN_PRESET_NAME } from './spike-and-plan-preset.js'
 import { renderQuickWinsPrompt, QUICK_WINS_PRESET_NAME } from './quick-wins-preset.js'
 import { renderDrainQueuePrompt, DRAIN_QUEUE_PRESET_NAME } from './drain-queue-preset.js'
 
 /**
  * Auto PM (#685): spend leftover subscription quota on product management instead of
- * letting it expire. While there is plenty of budget left and nobody is at the keyboard,
- * the daemon runs the cycle by itself: it works the agent queue down entry by entry (#855),
+ * letting it expire. While the configured usage limits are not met and nobody is at the
+ * keyboard, the daemon runs the cycle by itself: it works the agent queue down entry by entry (#855),
  * and once that is empty it refills it — harvesting quick-wins, then spiking and planning
  * the tickets that have neither yet.
  *
@@ -15,9 +15,6 @@ import { renderDrainQueuePrompt, DRAIN_QUEUE_PRESET_NAME } from './drain-queue-p
  * supplies the readings. #298 is the parent idea (background jobs / "max out the usage"),
  * and #519 already built the meter this reads.
  */
-
-/** How much of every enabled budget must still be free before a run starts unasked. */
-export const DEFAULT_MIN_FREE_PERCENT = 50
 
 /** How often the daemon re-asks {@link autoPmDecision}. */
 export const DEFAULT_AUTO_PM_INTERVAL_MS = 10 * 60 * 1000
@@ -45,8 +42,6 @@ export interface AutoPmInputs {
   quota: AutoPmQuota | undefined
   /** Milliseconds since this project was last auto-started, or `undefined` if it never was. */
   sinceLastStartMs?: number
-  /** Override {@link DEFAULT_MIN_FREE_PERCENT}. */
-  minFreePercent?: number
   /** Override {@link DEFAULT_AUTO_PM_COOLDOWN_MS}. */
   cooldownMs?: number
 }
@@ -67,71 +62,43 @@ export type QuotaDecision = { start: true } | AutoPmRefusal
 export type AutoPmDecision = { start: true; mode: AutoPmMode } | AutoPmRefusal
 
 /**
- * What one tick knows about the budget: the rolling windows, and the account's own weekly
- * figure (#848).
+ * What one tick knows about the budget: where the user's configured limits stand.
  *
- * Both, because they fail in opposite directions. The rolling windows come from
- * {@link ConsumptionMeter}, which measures how much usage has gone *up* since it started
- * watching — so a restarted daemon has nothing to compare against and honestly reports zero
- * consumed, whatever the account has actually spent. `weekPercentUsed` is the account's own
- * absolute number, which survives a restart but says nothing about the last five hours.
+ * It used to carry the account's own absolute weekly figure as well (#848), to cover the
+ * rolling meter reading zero after a restart. That was only meaningful next to a percentage
+ * threshold, and #870 removed the threshold, so it went with it rather than sitting here unread.
  */
 export interface AutoPmQuota {
   /** Where the user's configured limits stand, from the rolling meter. */
   status: ConsumptionStatus
-  /**
-   * The account's weekly allowance consumed so far, 0-100, straight from the agent's own
-   * readout (`kind: 'week'`). `undefined` when there is no reading to take it from.
-   */
-  weekPercentUsed: number | undefined
 }
 
 /**
- * Whether there is enough headroom to spend unasked.
+ * Whether the budget allows spending unasked.
  *
- * **This gate fails closed, and that is the opposite of the per-run guard.** #519 settled
- * that an unreadable quota must never *stop* the user's own work, so `startConsumptionGuard`
- * fails open. Work nobody asked for is the other way round: if we cannot see the meter we
- * cannot promise we are spending a surplus, and quietly burning a subscription is a far worse
- * failure than skipping a tick.
+ * The gate is the user's own configured limits (#870): auto PM starts while they are not met
+ * and stands down once one is. It used to require half of every budget still free, which was a
+ * second budget notion nobody had asked for — and two sets of limits to reason about is worse
+ * than one, even when the extra one is stricter.
  *
- * Two independent checks, because either alone has a blind spot (#848):
+ * `status.reached` is that question already answered: "the limit to pause for, or null",
+ * widest-first, so the window it names is the one that takes longest to recover.
  *
- * 1. The account's own weekly figure, which is absolute and survives a daemon restart. This
- *    is the one that matters most, and its absence is itself a refusal.
- * 2. The rolling day and 5h windows, which catch a burst the weekly figure is too coarse to
- *    see. The session window is ignored: this only runs when nothing is running.
+ * **It still fails closed on a quota it cannot read at all, and that is the opposite of the
+ * per-run guard.** #519 settled that an unreadable quota must never *stop* the user's own work,
+ * so `startConsumptionGuard` fails open. Work nobody asked for is the other way round: quietly
+ * burning a subscription is a far worse failure than skipping a tick. That is a separate
+ * property from the threshold, so dropping the threshold left it alone.
  *
- * The rolling windows cannot carry the decision on their own. They come from a delta meter,
- * so an empty one reports **0 consumed** rather than "unknown" — indistinguishable from a
- * genuinely untouched budget, and true every time the daemon restarts, which is usually right
- * after a long session. `usedPercent === undefined` is kept as a guard but effectively never
- * fires; `complete` is what says the figure does not yet cover its window, and an incomplete
- * window is trusted only because check 1 is standing behind it.
+ * Note what this no longer covers. `reached` reads the rolling meter, which is delta-based: a
+ * restarted daemon has nothing to diff and honestly reports zero consumed however much the
+ * account has spent (#848). With no configured limit to trip, nothing then stands between a
+ * fresh daemon and work nobody asked for. Raised on #870 as a decision rather than fixed here,
+ * since the answer is a limit that stops unattended work specifically.
  */
-export function quotaHeadroom(quota: AutoPmQuota | undefined, minFreePercent: number): QuotaDecision {
+export function quotaHeadroom(quota: AutoPmQuota | undefined): QuotaDecision {
   if (!quota) return { start: false, reason: 'the quota could not be read, so there is no way to tell what is spare' }
-
-  // The absolute check first: it is the only one a restarted daemon can trust.
-  if (quota.weekPercentUsed === undefined) {
-    return { start: false, reason: "the account's weekly usage could not be read, so there is no way to tell what is spare" }
-  }
-  if (quota.weekPercentUsed > 100 - minFreePercent) {
-    return { start: false, reason: `the account's week is ${Math.round(quota.weekPercentUsed)}% used` }
-  }
-
-  const windows: [string, LimitStatus][] = [
-    ['the daily budget', quota.status.daily],
-    ['the 5h budget', quota.status.fiveHour],
-  ]
-  for (const [label, limit] of windows.filter(([, limit]) => limit.enabled)) {
-    if (limit.usedPercent === undefined) {
-      return { start: false, reason: `${label} has no reading yet` }
-    }
-    if (limit.usedPercent > 100 - minFreePercent) {
-      return { start: false, reason: `${label} is ${Math.round(limit.usedPercent)}% used` }
-    }
-  }
+  if (quota.status.reached) return { start: false, reason: `the ${quota.status.reached} limit is reached` }
   return { start: true }
 }
 
@@ -152,7 +119,7 @@ export function autoPmDecision(input: AutoPmInputs): AutoPmDecision {
   if (input.backlogEmpty === undefined) {
     return { start: false, reason: 'the agent queue could not be read, so there is no way to tell what to do' }
   }
-  const headroom = quotaHeadroom(input.quota, input.minFreePercent ?? DEFAULT_MIN_FREE_PERCENT)
+  const headroom = quotaHeadroom(input.quota)
   if (!headroom.start) return headroom
   // The queue picks the job, and a non-empty one wins (#855). It used to be a refusal, on the
   // reasoning that the backlog loop would drain it — but that loop only exists inside a run a
@@ -248,8 +215,6 @@ export interface AutoPmDeps {
   intervalMs?: number
   /** Override the per-project cooldown. */
   cooldownMs?: number
-  /** Override the headroom threshold. */
-  minFreePercent?: number
   /** Clock, injectable for tests. */
   now?: () => number
 }
@@ -321,7 +286,6 @@ export function startAutoPm(deps: AutoPmDeps): AutoPmLoop {
           activeRuns: deps.activeRuns(project),
           quota,
           ...(since !== undefined ? { sinceLastStartMs: now() - since } : {}),
-          ...(deps.minFreePercent !== undefined ? { minFreePercent: deps.minFreePercent } : {}),
           ...(deps.cooldownMs !== undefined ? { cooldownMs: deps.cooldownMs } : {}),
         })
         if (!decision.start) {

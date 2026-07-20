@@ -466,13 +466,8 @@ export async function runDaemon(cwd: string, opts: RunDaemonOptions = {}): Promi
     enabled: async () => (await readPrefs()).autoPm === true,
     backlogEmpty: async project => (await findTodoBacklog(project.path)) === undefined,
     activeRuns: project => runtime.activeRunCount(project.id),
-    quota: async () => {
-      const view = await quota.read()
-      // The account's own week (#848): absolute, so it still means something after a restart
-      // emptied the rolling meter. `percentUsed` of the `week` window, or nothing.
-      const week = view.windows.find(w => w.kind === 'week')?.percentUsed
-      return { status: view.limits, weekPercentUsed: typeof week === 'number' ? week : undefined }
-    },
+    // The user's own configured limits are the gate (#870): auto PM has no budget notion of its own.
+    quota: async () => ({ status: (await quota.read()).limits }),
     start: async (project, job) => {
       // The settings a launcher-started run would have used (#858). `onStart` does not resolve
       // these itself, so passing nothing meant an unattended run silently ignored the project's
