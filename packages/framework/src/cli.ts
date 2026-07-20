@@ -926,9 +926,9 @@ async function resolvePromptConfig(
  * a run id.
  *
  * That last clause is the #905 fix. The daemon spawns runs with `--no-dashboard`, so `daemonAlive`
- * was the only thing wiring their control channel, and it is a machine-global file that goes
- * missing while the daemon is very much alive: `daemonStatus()` deletes it on a stale pid and
- * nothing rewrites it (#922). Every Stop press then landed in control.jsonl and was read by
+ * was the only thing wiring their control channel, and it is a machine-global file that went
+ * missing while the daemon was very much alive: `daemonStatus()` deleted it on a stale pid and
+ * nothing rewrote it (#922, since fixed). Every Stop press then landed in control.jsonl and was read by
  * nobody, with no error anywhere. A run id is a fact about this run, so it holds when the file
  * does not.
  */
