@@ -6,7 +6,7 @@
   "description": "GemStack: a collection of high-quality, framework-agnostic tools. Home of @gemstack/ai-sdk.",
   "packageManager": "pnpm@11.5.3",
   "scripts": {
-    "build": "turbo run build",
+    "build": "turbo run build bundle:dashboard",
     "dev": "turbo run dev",
     "typecheck": "turbo run typecheck",
     "clean": "turbo run clean",
