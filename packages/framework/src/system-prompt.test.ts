@@ -21,12 +21,22 @@ const KNOWLEDGE_CONTEXT = `Context:\n${KNOWLEDGE_LINES}`
 
 test('CONTEXT_DOCS is the #683 fragment: business knowledge plus the roadmap/queue pointers', () => {
   const paths = CONTEXT_DOCS.map(d => d.path)
-  assert.deepEqual(paths, ['DECISIONS.md', 'GOAL.md', 'KNOWLEDGE-BASE.md', 'tickets/**.md', 'TODO_AGENTS.md'])
+  assert.deepEqual(paths, [
+    'DECISIONS.md',
+    'GOAL.md',
+    'KNOWLEDGE-BASE.md',
+    'MARKET_RESEARCH.md',
+    'tickets/**.md',
+    'TODO_AGENTS.md',
+  ])
   // The business-knowledge docs are a subset the agent also updates at merge.
   for (const doc of BUSINESS_KNOWLEDGE_DOCS) assert.ok(paths.includes(doc.path), `missing ${doc.path}`)
-  // GOAL / tickets / TODO_AGENTS are read-only context, so they are not in the merge-update set.
+  // GOAL / market research / tickets / TODO_AGENTS are read-only context, so they are not in the
+  // merge-update set.
   const businessPaths = BUSINESS_KNOWLEDGE_DOCS.map(d => d.path)
-  for (const p of ['GOAL.md', 'tickets/**.md', 'TODO_AGENTS.md']) assert.ok(!businessPaths.includes(p))
+  for (const p of ['GOAL.md', 'MARKET_RESEARCH.md', 'tickets/**.md', 'TODO_AGENTS.md']) {
+    assert.ok(!businessPaths.includes(p))
+  }
   // The ticket-format pointer is inlined here (this module stays node-free), so pin it to the
   // canonical constant in tickets.ts (#684) — they must never drift.
   const tickets = CONTEXT_DOCS.find(d => d.path === 'tickets/**.md')

@@ -124,6 +124,10 @@ export const CONTEXT_DOCS: readonly ContextDoc[] = [
   DECISIONS_DOC,
   { path: 'GOAL.md', comment: 'the goal of the project (long-term direction, scope, non-scope, ...)' },
   KNOWLEDGE_BASE_DOC,
+  // What the market looks like (#694): written by the [Market research] preset and read by the
+  // follow-up that turns it into tickets. A pointer the agent reads, not a doc it folds knowledge
+  // back into, so it stays out of BUSINESS_KNOWLEDGE_DOCS.
+  { path: 'MARKET_RESEARCH.md', comment: 'the market the project competes in' },
   { path: 'tickets/**.md', comment: 'things to potentially work on; format: node_modules/@gemstack/framework/prompts/ticketing_format.md' },
   { path: 'TODO_AGENTS.md', comment: 'the AI task queue' },
 ]

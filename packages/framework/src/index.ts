@@ -342,6 +342,12 @@ export {
   QUICK_WINS_PROMPT_TEMPLATE,
   QUICK_WINS_PARAMS,
 } from './quick-wins-preset.js'
+export {
+  renderMarketResearchPrompt,
+  MARKET_RESEARCH_PRESET_NAME,
+  MARKET_RESEARCH_PROMPT_TEMPLATE,
+  MARKET_RESEARCH_PARAMS,
+} from './market-research-preset.js'
 export { runOptionsFromPreferences, autopilotEnabled } from './run-options.js'
 export {
   startAutoPm,
