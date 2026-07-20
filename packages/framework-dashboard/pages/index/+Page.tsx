@@ -25,6 +25,8 @@ import { useActivityNotifications } from '../../lib/use-activity-notifications.j
 import { usePreferences, notificationsEnabled, newActivityEnabled, humanInterventionEnabled } from '../../lib/preferences.js'
 import { pendingChoices, agentViews } from '../../lib/live-state.js'
 import { useDocumentTitle } from '../../lib/document-title.js'
+import { useWorking } from '../../lib/use-working.js'
+import { useFavicon } from '../../lib/favicon.js'
 
 /** Stable, so `files` keeps one identity while no project is selected. */
 const EMPTY_FILES: string[] = []
@@ -186,9 +188,17 @@ export default function Page() {
 
   // On the relay (#426), the URL carries `?run=<id>` and there is no local registry or
   // files — show that one run read-only. `window` is absent during prerender (ssr:false),
-  // so this resolves to the full shell at build time and only flips in the browser. Hooks
-  // above run unconditionally (rules of hooks); this early return is safe after them.
+  // so this resolves to the full shell at build time and only flips in the browser.
   const relayRun = typeof window === 'undefined' ? null : new URLSearchParams(window.location.search).get('run')
+
+  // Is an agent working (#875)? Drives the mark and the tab icon. Both off on the relay: there is
+  // no project registry behind it, so the cross-project read cannot answer, and RelayView owns
+  // both from its one run's feed instead.
+  const local = relayRun === null
+  const working = useWorking(local)
+  useFavicon(working, local)
+
+  // Hooks above run unconditionally (rules of hooks); this early return is safe after them.
   if (relayRun) return <RelayView runId={relayRun} />
 
   // Route the main pane: the Overview dashboard when no project is selected (#471); else the
@@ -245,7 +255,7 @@ export default function Page() {
   return (
     <div className="flex h-screen flex-col">
       <header className="flex items-center gap-3 border-b border-border px-4 py-3">
-        <Logo className="h-5 w-auto shrink-0" />
+        <Logo className="h-5 w-auto shrink-0" working={working} />
         <span className="shrink-0 font-semibold">The Framework</span>
         {/* The project selection lives in the nav now (#772), not in a rail of its own: always
             shown, on every page including the Overview. */}
