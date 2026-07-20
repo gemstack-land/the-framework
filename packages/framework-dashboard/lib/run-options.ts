@@ -1,38 +1,14 @@
 import type { Preferences } from '@gemstack/framework'
-import { autopilotEnabled } from './preferences.js'
+import { runOptionsFromPreferences } from '@gemstack/framework/client'
 
 // The Global run options for `sendStart`, derived from the shared preferences (#410) plus the run
 // Context set. Shared by the launcher (StartRunForm) and the navbar quick-launch (#723) so a run
 // starts the same way from either surface. Mirrors the toggles the OptionsMenu + AgentModelMenu
-// write. Returned as an inferred literal, not annotated: `StartRunOptions` isn't re-exported to the
-// client bundle, and `sendStart` type-checks the shape at the call site (as the inline version did).
+// write.
+//
+// The mapping itself moved into @gemstack/framework (#858) so the daemon can use it too: auto PM
+// starts runs with nobody watching and passed no options at all, which silently ignored the
+// project's agent and model. This stays as the client's name for it.
 export function collectRunOptions(preferences: Preferences, context: string[] = []) {
-  const autopilot = autopilotEnabled(preferences)
-  const vanilla = preferences.vanilla ?? false
-  const transparent = preferences.transparent ?? false
-  const eco = preferences.eco ?? false
-  const technical = preferences.technical ?? false
-  const onBeforeMergeableQuality = preferences.onBeforeMergeableQuality ?? false
-  const browser = preferences.browser ?? false
-  const model = preferences.model ?? ''
-  const agent = preferences.agent ?? 'claude'
-  const ecoDrops = {
-    ...(preferences.ecoPlanning ? { autoPlanning: true } : {}),
-    ...(preferences.ecoResearch ? { autoResearch: true } : {}),
-    ...(preferences.ecoMaintenance ? { autoMaintenance: true } : {}),
-  }
-  return {
-    ...(autopilot ? { autopilot: true } : {}),
-    ...(technical ? { technical: true } : {}),
-    ...(vanilla ? { vanilla: true } : {}),
-    ...(transparent ? { transparent: true } : {}),
-    ...(eco && !vanilla && !transparent && Object.keys(ecoDrops).length ? { eco: ecoDrops } : {}),
-    ...(onBeforeMergeableQuality ? { onBeforeMergeable: true } : {}),
-    // Claude-only (#801): another agent's driver takes no MCP servers, so sending it would only earn
-    // the CLI's "no effect" notice. Matches the box being disabled off Claude Code.
-    ...(browser && agent === 'claude' ? { browser: true } : {}),
-    ...(model ? { model } : {}),
-    ...(agent !== 'claude' ? { agent } : {}),
-    ...(context.length ? { context } : {}),
-  }
+  return runOptionsFromPreferences(preferences, context)
 }
