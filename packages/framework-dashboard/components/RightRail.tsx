@@ -27,6 +27,7 @@ export function RightRail({
   context,
   toggleContext,
   hasBrowser = false,
+  onWideChange,
 }: {
   projectId: string | null
   /** The selected run: resolves a choice pick's gate (#749) and scopes the tree to its worktree (#815). */
@@ -41,6 +42,8 @@ export function RightRail({
   toggleContext: (path: string) => void
   /** Whether the selected run is serving a browser preview (#813), i.e. it was started with Browser on. */
   hasBrowser?: boolean
+  /** Told when the rail takes its wide form (#862), so the shell can free the room for it. */
+  onWideChange?: (wide: boolean) => void
 }) {
   const [tab, setTab] = useState<Tab>('docs')
   // Once the user picks a tab, stop auto-defaulting (#695/U22) — only a genuinely new choice
@@ -69,6 +72,16 @@ export function RightRail({
     else if (firstView) setTab('views')
     else if (!touched.current && !hasChoices && !hasViews) setTab(hasFiles ? 'files' : 'docs')
   }, [choices, hasChoices, hasViews, hasFiles])
+
+  // The rail's own content decides when it needs the room (#862): a pushed view, the agent's
+  // browser, and a choice gate are the surfaces worth reading wide. Files/docs/log are lists and
+  // read fine narrow. Reported up rather than decided there, since only the rail knows its tab.
+  const wide = projectId !== null && (tab === 'views' || tab === 'browser' || tab === 'choices')
+  useEffect(() => {
+    onWideChange?.(wide)
+    // `onWideChange` is a fresh closure each render; the state it reports is the trigger.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wide])
 
   if (!projectId) return null
 
@@ -100,7 +113,12 @@ export function RightRail({
   const count = (t: Tab) => (t === 'choices' ? choices.length : t === 'views' ? views.length : t === 'files' ? selectedFiles : 0)
 
   return (
-    <aside className="flex w-80 shrink-0 flex-col border-l border-border">
+    <aside
+      className={cn(
+        'flex shrink-0 flex-col border-l border-border transition-[width] duration-150',
+        wide ? 'w-[32rem]' : 'w-80',
+      )}
+    >
       <div className="flex gap-1 border-b border-border p-2">
         {tabs.map(t => (
           <Button
