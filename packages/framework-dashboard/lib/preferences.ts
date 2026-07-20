@@ -287,6 +287,13 @@ export function discordEnabled(preferences: Preferences): boolean {
   return preferences.notifyDiscord ?? false
 }
 
+/** The Discord chatbot (#680) defaults off, and for a stronger reason than the toggles around it:
+ * those post outward, this one takes in messages that start and steer sessions. The daemon's
+ * `DISCORD_BOT_TOKEN` is the other gate (how to connect; this is whether to). */
+export function discordBotEnabled(preferences: Preferences): boolean {
+  return preferences.discordBot ?? false
+}
+
 /** "New activity" notifications default off (#627): the category that pings on a run starting or
  * finishing, not just on things that need you. Composes with the method toggles above — activity
  * reaches the browser when {@link notificationsEnabled}, Discord when {@link discordEnabled}. */

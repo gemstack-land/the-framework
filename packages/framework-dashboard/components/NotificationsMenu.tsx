@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from 'react'
 import { Bell, BellOff } from 'lucide-react'
-import { usePreferences, updatePreferences, notificationsEnabled, discordEnabled, newActivityEnabled, humanInterventionEnabled } from '../lib/preferences.js'
+import { usePreferences, updatePreferences, notificationsEnabled, discordEnabled, discordBotEnabled, newActivityEnabled, humanInterventionEnabled } from '../lib/preferences.js'
 import { cn } from '../lib/utils.js'
 import {
   DropdownMenu,
@@ -17,7 +17,8 @@ import {
 // (where a notification goes), "New activity" is a *category* on top of the always-on "needs you"
 // pings. The trigger shows an active state + dot when a method is effectively on; the popover
 // groups and labels every toggle. The underlying prefs and hooks are unchanged — this is purely
-// the header control that writes them.
+// the header control that writes them. The Discord *bot* (#680) sits in its own "Chat" group
+// rather than under a delivery method: it is the one control here that takes messages in.
 
 /** Subscribe to `Notification.permission` changes where the browser supports it, else 'unsupported'. */
 function usePermission(): NotificationPermission | 'unsupported' {
@@ -51,6 +52,7 @@ export function NotificationsMenu() {
   const discord = discordEnabled(preferences)
   const activity = newActivityEnabled(preferences)
   const needsYou = humanInterventionEnabled(preferences)
+  const discordBot = discordBotEnabled(preferences)
   const permission = usePermission()
   const browserSupported = permission !== 'unsupported'
   const blocked = permission === 'denied'
@@ -130,6 +132,20 @@ export function NotificationsMenu() {
             className="items-start"
           >
             <NotifLabel label="New activity" hint="A session started or finished" />
+          </DropdownMenuCheckboxItem>
+        </DropdownMenuGroup>
+        <DropdownMenuSeparator />
+        <DropdownMenuGroup>
+          {/* Its own group, not a delivery method (#916): everything above posts outward, this
+              takes messages back in and lets them start and steer sessions (#680). */}
+          <DropdownMenuLabel>Chat</DropdownMenuLabel>
+          <DropdownMenuCheckboxItem
+            checked={discordBot}
+            onCheckedChange={next => updatePreferences({ discordBot: next })}
+            title="Lets Discord messages start and steer sessions (needs DISCORD_BOT_TOKEN on the daemon)"
+            className="items-start"
+          >
+            <NotifLabel label="Discord bot" hint="Start and steer sessions from Discord" />
           </DropdownMenuCheckboxItem>
         </DropdownMenuGroup>
       </DropdownMenuContent>

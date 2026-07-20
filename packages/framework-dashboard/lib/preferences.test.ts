@@ -273,3 +273,11 @@ describe('preferences', () => {
     expect(resolvedDark('system', false)).toBe(false)
   })
 })
+
+test('the Discord bot is off unless asked for (#916)', async () => {
+  // It acts on what it reads, so an absent preference must never mean on.
+  const { discordBotEnabled } = await import('./preferences.js')
+  expect(discordBotEnabled({})).toBe(false)
+  expect(discordBotEnabled({ discordBot: false })).toBe(false)
+  expect(discordBotEnabled({ discordBot: true })).toBe(true)
+})

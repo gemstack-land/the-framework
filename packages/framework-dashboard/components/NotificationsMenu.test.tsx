@@ -9,6 +9,7 @@ vi.mock('../lib/preferences.js', () => ({
   updatePreferences,
   notificationsEnabled: (p: Preferences) => p.notifyBrowser ?? true,
   discordEnabled: (p: Preferences) => p.notifyDiscord ?? false,
+  discordBotEnabled: (p: Preferences) => p.discordBot ?? false,
   newActivityEnabled: (p: Preferences) => p.notifyNewActivity ?? false,
   humanInterventionEnabled: (p: Preferences) => p.notifyHumanIntervention ?? true,
 }))
@@ -75,5 +76,30 @@ describe('NotificationsMenu (#676)', () => {
     render(<NotificationsMenu />)
     open()
     expect(screen.getByText('Blocked in your browser settings')).toBeTruthy()
+  })
+
+  test('the Discord bot is its own group, not a delivery method (#916)', () => {
+    render(<NotificationsMenu />)
+    open()
+    // Everything under "Deliver to" posts outward; the bot takes messages in and acts on them,
+    // so it is grouped apart rather than sitting next to the Discord notification toggle.
+    expect(screen.getByText('Chat')).toBeTruthy()
+    expect(screen.getByText('Discord bot')).toBeTruthy()
+  })
+
+  test('the Discord bot toggle is off by default and writes the preference (#916)', () => {
+    render(<NotificationsMenu />)
+    open()
+    const item = screen.getByText('Discord bot').closest('[role="menuitemcheckbox"]')
+    expect(item?.getAttribute('aria-checked')).toBe('false')
+
+    fireEvent.click(screen.getByText('Discord bot'))
+    expect(updatePreferences).toHaveBeenCalledWith({ discordBot: true })
+  })
+
+  test('turning the bot on does not light the bell, which is about notifications (#916)', () => {
+    prefs = { discordBot: true, notifyBrowser: false, notifyDiscord: false }
+    render(<NotificationsMenu />)
+    expect(screen.getByRole('button', { name: /notifications/i }).getAttribute('title')).toBe('Notifications')
   })
 })
