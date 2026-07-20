@@ -34,6 +34,12 @@ export interface DiscordBotOptions {
   sendChoice: (projectId: string, gateId: string, pick: string | string[], runId: string) => Promise<void>
   sendStop: (projectId: string, runId: string) => Promise<void>
   /**
+   * Bind a run to the channel this message came from (#932), so the session's answers are posted
+   * back where it was asked. Awaited *before* the run is handed the message: binding first is what
+   * makes the reply reliably count as new rather than being baselined away.
+   */
+  onRunBound?: (runId: string, channelId: string) => Promise<void>
+  /**
    * Whether the bot should act, read per message rather than at start, so turning it off takes
    * effect without restarting the daemon — the same contract the notification watchers follow.
    */
@@ -78,6 +84,8 @@ export function startDiscordBot(opts: DiscordBotOptions): DiscordBot {
           await opts.sendChoice(action.projectId, action.gateId, action.pick, action.runId)
           break
         case 'message':
+          // Bind before sending (#932): the answer to this message must land after the baseline.
+          await opts.onRunBound?.(action.runId, message.channelId).catch(() => {})
           await opts.sendMessage(action.projectId, action.text, action.runId)
           break
         case 'stop':
@@ -89,6 +97,9 @@ export function startDiscordBot(opts: DiscordBotOptions): DiscordBot {
             await reply(message, 'Could not start a session. It may already be busy.')
             return
           }
+          // A run that did not exist a moment ago has nothing to adopt, so binding after the start
+          // is still a clean baseline, and it is the first point its id is known.
+          await opts.onRunBound?.(runId, message.channelId).catch(() => {})
           break
         }
         case 'reply':

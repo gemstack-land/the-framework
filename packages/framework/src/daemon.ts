@@ -46,7 +46,10 @@ import { loadFrameworkConfig } from './config.js'
 import { installProject, enumerateGitRepos } from './install.js'
 import { JsonlTailer } from './jsonl-tail.js'
 import { startDiscordBot, DISCORD_VIA } from './discord/bot.js'
+import { startDiscordReplyMirror } from './discord/reply-mirror.js'
 import { snapshotLiveRun } from './discord/live-run.js'
+import { readConversation } from './conversations.js'
+import { postMessage } from './discord/rest.js'
 import { sendChoice, sendMessage, sendStop } from './dashboard-rpc/control.telefunc.js'
 
 /**
@@ -668,6 +671,26 @@ export async function runDaemon(cwd: string, opts: RunDaemonOptions = {}): Promi
   // picker, so a message with no run to join starts one here.
   const botHomeId = projectId(resolve(cwd))
   const botProjectPath = async (id: string) => (await listSummaries()).find(p => p.id === id)?.path ?? cwd
+  // Send a session's answers back to the channel that asked (#932). The conversation (#908) is the
+  // source: it holds the settled reply the user would have read, which is what belongs in chat.
+  // Bound per run by the bot, since the channel is only known when a message arrives.
+  const replyMirror = botToken
+    ? startDiscordReplyMirror({
+        readConversation: async runId => {
+          // A run's transcript lives in the checkout the run used, which for a daemon-spawned run
+          // is its own worktree rather than the project root.
+          for (const project of await listSummaries()) {
+            const meta = (await readLiveMetas(project.path).catch(() => [])).find(run => run.id === runId)
+            if (meta) return readConversation(meta.cwd, runId).catch(() => [])
+          }
+          return []
+        },
+        post: (channelId, text) => postMessage(botToken, channelId, text),
+        enabled: async () => (await readPrefs()).discordBot === true,
+        onLog: message => console.log(`[framework] ${message}`),
+      })
+    : undefined
+
   const discordBot = botToken
     ? startDiscordBot({
         token: botToken,
@@ -690,6 +713,7 @@ export async function runDaemon(cwd: string, opts: RunDaemonOptions = {}): Promi
         sendMessage: (id, text, runId) => sendMessage(id, text, runId, DISCORD_VIA),
         sendChoice: (id, gateId, pick, runId) => sendChoice(id, gateId, pick, 'user', runId),
         sendStop: (id, runId) => sendStop(id, runId),
+        ...(replyMirror ? { onRunBound: (runId, channelId) => replyMirror.bind(runId, channelId) } : {}),
         enabled: async () => (await readPrefs()).discordBot === true,
         ...(env.DISCORD_CHANNEL_ID ? { channelId: env.DISCORD_CHANNEL_ID } : {}),
         onLog: message => console.log(`[framework] ${message}`),
@@ -701,6 +725,7 @@ export async function runDaemon(cwd: string, opts: RunDaemonOptions = {}): Promi
   // Ctrl+C takes the bot offline (#680). Its gateway socket is the one connection here that
   // would otherwise hold the event loop open on its own.
   discordBot?.stop()
+  replyMirror?.stop()
   autoPm.stop()
   // Stop the runs this daemon spawned (#923), before the previews they may be serving. Left
   // running they are orphans nothing tracks; stopped here they are recorded and resumed on the
