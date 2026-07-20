@@ -86,6 +86,7 @@ Typical plan content:
   - Thorough analysis
   - Overview of code changes
   - ...
+- Plan broken down in multiple (sub)plans in case of variability
 - Hard problems
   - Exhaustive list of all aspects with low confidence regarding how to solve them (the hard problems), with explanation why
 - Variability

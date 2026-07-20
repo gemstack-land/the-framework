@@ -155,7 +155,7 @@ export function UsagePanel() {
             </label>
             <p className="text-xs text-muted-foreground">
               When nothing is running and the queue is empty, spike &amp; plan tickets rather than let the
-              budget expire. Only while every limit above still has half its budget free.
+              budget expire. Only while the limits above are not reached.
             </p>
           </div>
         ) : null}
