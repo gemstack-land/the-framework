@@ -131,6 +131,11 @@ export function StartRunForm({
         disabled={vanilla}
         onDisabledChange={value => updatePreferences({ vanilla: value })}
         transparent={transparent}
+        onTransparentChange={value => updatePreferences({ transparent: value })}
+        // Read off the options this form will really send, so the preview cannot claim a
+        // smaller prompt than the run gets (#863 asks for the entire one). The browser
+        // section is Claude-only, and that rule lives in there rather than here.
+        browser={collectRunOptions(preferences, [...context]).browser ?? false}
         autopilot={autopilot}
         eco={eco && !vanilla ? ecoDrops : undefined}
         context={[...context]}
