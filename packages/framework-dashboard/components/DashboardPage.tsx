@@ -1,6 +1,6 @@
 import { type ReactNode } from 'react'
 import type { DashboardData, ActiveRun, ProjectStat, ProjectQueue, Intervention } from '@gemstack/framework'
-import { FolderGit2, Zap, ListChecks, History, GitPullRequest, Inbox, MessageCircleQuestion } from 'lucide-react'
+import { FolderGit2, Zap, ListChecks, History, GitBranch, GitPullRequest, Inbox, MessageCircleQuestion } from 'lucide-react'
 import { onDashboard } from '../server/reads.telefunc.js'
 import { interventionKey } from '../lib/interventions.js'
 import { ActivityChart } from './ActivityChart.js'
@@ -142,6 +142,21 @@ function NeedsYou({ items, onSelectProject }: { items: Intervention[]; onSelectP
                     <MessageCircleQuestion className="h-4 w-4 shrink-0 text-amber-500" />
                     <span className="shrink-0 text-xs font-medium text-amber-500">Awaiting</span>
                     <span className="truncate font-medium">{item.title}</span>
+                    <span className="ml-auto shrink-0 text-xs text-muted-foreground">{item.projectName}</span>
+                  </button>
+                ) : item.kind === 'unpushed' ? (
+                  <button
+                    type="button"
+                    onClick={() => onSelectProject(item.projectId)}
+                    className="flex w-full items-center gap-2 py-2 text-left hover:opacity-80"
+                    title={`Open the session: work on ${item.branch ?? ''} was never pushed`}
+                  >
+                    <GitBranch className="h-4 w-4 shrink-0 text-sky-500" />
+                    <span className="shrink-0 text-xs font-medium text-sky-500">Unpushed</span>
+                    <span className="truncate font-medium">{item.title}</span>
+                    <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
+                      {item.commits === 1 ? '1 commit' : `${item.commits ?? 0} commits`}
+                    </span>
                     <span className="ml-auto shrink-0 text-xs text-muted-foreground">{item.projectName}</span>
                   </button>
                 ) : (

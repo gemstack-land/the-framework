@@ -6,12 +6,15 @@ import type { Intervention } from '@gemstack/framework'
 // the `Intervention` type is borrowed (types are erased), and that logic is a couple of lines.
 
 /**
- * The stable identity of an intervention. A PR is its url (survives title edits and re-sorts);
- * an awaiting run (#636) is its project + gate id, since its url is the shared dashboard URL and
- * would otherwise collide across projects. Mirrors the server's `interventionKey`.
+ * The stable identity of an intervention. A PR is its url (survives title edits and re-sorts); an
+ * awaiting run (#636) and a run with unpushed work (#860) are keyed on the project plus the thing
+ * waiting, since their url is the shared dashboard URL and would otherwise collide across
+ * projects. Mirrors the server's `interventionKey`.
  */
 export function interventionKey(item: Intervention): string {
-  return item.kind === 'awaiting' ? `awaiting:${item.projectId}:${item.awaitId ?? ''}` : item.url
+  if (item.kind === 'awaiting') return `awaiting:${item.projectId}:${item.awaitId ?? ''}`
+  if (item.kind === 'unpushed') return `unpushed:${item.projectId}:${item.runId ?? ''}`
+  return item.url
 }
 
 /**

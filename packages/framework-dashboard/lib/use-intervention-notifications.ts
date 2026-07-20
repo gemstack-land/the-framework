@@ -12,9 +12,16 @@ import { interventionKey, pickNewInterventions } from './interventions.js'
 /** Observations to treat as baseline before notifying: the initial `[]` plus the first fetch. */
 const WARMUP = 2
 
-/** How a single intervention reads in a notification body: a PR by number, a paused run by its question (#636). */
+/**
+ * How a single intervention reads in a notification body: a PR by number, a paused run by its
+ * question (#636), a finished run by what is sitting unpushed on its branch (#860).
+ */
 function label(item: Intervention): string {
-  return item.kind === 'awaiting' ? item.title : `#${item.number} ${item.title}`
+  if (item.kind === 'awaiting') return item.title
+  if (item.kind === 'unpushed') {
+    return `${item.title} — ${item.commits === 1 ? '1 commit' : `${item.commits ?? 0} commits`} not pushed`
+  }
+  return `#${item.number} ${item.title}`
 }
 
 function fire(items: Intervention[]): void {
@@ -26,9 +33,10 @@ function fire(items: Intervention[]): void {
   const body = single ? label(first) : items.map(label).join('\n')
   const notification = new Notification(title, { body })
   notification.onclick = () => {
-    // A PR opens on GitHub; a paused run lives in this dashboard, so just bring the tab forward
-    // (project selection is client state, not a URL) — the "needs you" card takes it from there.
-    if (first.kind === 'awaiting') window.focus()
+    // A PR opens on GitHub; a paused run and unpushed work both live in this dashboard, so just
+    // bring the tab forward (project selection is client state, not a URL) — the "needs you" card
+    // takes it from there.
+    if (first.kind === 'awaiting' || first.kind === 'unpushed') window.focus()
     else window.open(first.url, '_blank', 'noopener')
     notification.close()
   }
