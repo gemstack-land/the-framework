@@ -1,5 +1,11 @@
 @import 'tailwindcss';
 
+/* The theme is the `.dark` class LayoutDefault toggles, not the OS preference. Without this,
+   Tailwind v4 compiles `dark:` to `@media (prefers-color-scheme: dark)`, so the `dark:` utilities
+   disagreed with the tokens: picking Dark on a light OS applied the dark tokens but left
+   `dark:text-*-400` unapplied, and picking Light on a dark OS applied them when it should not. */
+@custom-variant dark (&:where(.dark, .dark *));
+
 /* shadcn-style design tokens (neutral slate), light + dark. The Framework's MVP page
    is dark-first; mirror that so the spike reads as the same product. */
 @theme {

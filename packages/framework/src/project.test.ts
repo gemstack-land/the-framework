@@ -134,3 +134,24 @@ test('gitTimeoutMs: leading flags do not hide the subcommand (#997)', () => {
   assert.equal(gitTimeoutMs(['--no-pager', 'status', '--porcelain']), GIT_READ_TIMEOUT_MS)
   assert.equal(gitTimeoutMs(['--no-pager', 'push', 'origin', 'b']), GIT_SLOW_TIMEOUT_MS)
 })
+
+test('gitTimeoutMs: the value of a global option is not mistaken for the subcommand', () => {
+  assert.equal(gitTimeoutMs(['-C', '/repo', 'push', 'origin', 'b']), GIT_SLOW_TIMEOUT_MS)
+  assert.equal(gitTimeoutMs(['-C', '/repo', 'status', '--porcelain']), GIT_READ_TIMEOUT_MS)
+  assert.equal(gitTimeoutMs(['-C', '/repo', 'commit', '-m', 'msg']), GIT_WRITE_TIMEOUT_MS)
+  assert.equal(gitTimeoutMs(['-c', 'user.name=x', 'fetch', 'origin']), GIT_SLOW_TIMEOUT_MS)
+  assert.equal(gitTimeoutMs(['--git-dir', '/repo/.git', 'clone', 'url', '/dest']), GIT_SLOW_TIMEOUT_MS)
+  assert.equal(gitTimeoutMs(['--work-tree', '/repo', 'pull']), GIT_SLOW_TIMEOUT_MS)
+  assert.equal(gitTimeoutMs(['--namespace', 'ns', 'log']), GIT_READ_TIMEOUT_MS)
+  assert.equal(gitTimeoutMs(['--exec-path', '/libexec', 'push']), GIT_SLOW_TIMEOUT_MS)
+})
+
+test('gitTimeoutMs: a global option before `worktree` does not hide `add`', () => {
+  assert.equal(gitTimeoutMs(['-C', '/repo', 'worktree', 'add', '-b', 'b', '/wt']), GIT_SLOW_TIMEOUT_MS)
+  assert.equal(gitTimeoutMs(['-C', '/repo', 'worktree', 'list', '--porcelain']), GIT_READ_TIMEOUT_MS)
+})
+
+test('gitTimeoutMs: an inline `--opt=value` global option carries its own value', () => {
+  assert.equal(gitTimeoutMs(['--git-dir=/repo/.git', 'push', 'origin', 'b']), GIT_SLOW_TIMEOUT_MS)
+  assert.equal(gitTimeoutMs(['--git-dir=/repo/.git', 'status']), GIT_READ_TIMEOUT_MS)
+})

@@ -255,6 +255,100 @@ test('a busy repo keeps its place, so the next window retries it (#912)', async 
   }
 })
 
+test('a failing commit logs its reason once, not once per poll', async () => {
+  const { git } = fakeGit({
+    'rev-parse': '/repo/.git\n',
+    status: '?? .the-framework/conversations/a.md',
+    commit: () => {
+      throw new Error('nothing added to commit')
+    },
+  })
+  const logs: string[] = []
+  const committer = startConversationCommitter({
+    projects: async () => [project('/repo')],
+    git,
+    exists: noLocks,
+    intervalMs: 1_000_000,
+    log: message => logs.push(message),
+  })
+  try {
+    await settle() // the baseline poll only opens the idle window
+    assert.deepEqual(logs, [], 'nothing has been attempted yet')
+
+    await committer.poll() // settled, so the commit is attempted and fails
+    assert.equal(logs.length, 1, `the first failure is announced, got ${JSON.stringify(logs)}`)
+    assert.match(logs[0] ?? '', /nothing added to commit/, 'the reason is in the message')
+    assert.match(logs[0] ?? '', /\/repo/, 'the project is named')
+
+    await committer.poll()
+    await committer.poll()
+    assert.equal(logs.length, 1, `an unchanged reason stays quiet, got ${JSON.stringify(logs)}`)
+  } finally {
+    committer.stop()
+  }
+})
+
+test('a changed failure reason is announced again', async () => {
+  let reason = 'first failure'
+  const { git } = fakeGit({
+    'rev-parse': '/repo/.git\n',
+    status: '?? .the-framework/conversations/a.md',
+    commit: () => {
+      throw new Error(reason)
+    },
+  })
+  const logs: string[] = []
+  const committer = startConversationCommitter({
+    projects: async () => [project('/repo')],
+    git,
+    exists: noLocks,
+    intervalMs: 1_000_000,
+    log: message => logs.push(message),
+  })
+  try {
+    await settle()
+    await committer.poll()
+    await committer.poll()
+    assert.equal(logs.length, 1, `one reason, one line, got ${JSON.stringify(logs)}`)
+
+    reason = 'second failure'
+    await committer.poll()
+    assert.equal(logs.length, 2, `a new reason is diagnosable, got ${JSON.stringify(logs)}`)
+    assert.match(logs[1] ?? '', /second failure/)
+  } finally {
+    committer.stop()
+  }
+})
+
+test('the ordinary idle case is not announced as a failure', async () => {
+  // The poll sees a pending file, but the commit's own re-read finds it already gone: an
+  // everyday race, not something to log.
+  const file = '?? .the-framework/conversations/a.md'
+  let reads = 0
+  const { git, commits } = fakeGit({
+    'rev-parse': '/repo/.git\n',
+    // Calls 1 and 2 are the poller's own reads; every later odd call is the commit's re-read.
+    status: () => (++reads <= 2 ? file : reads % 2 === 1 ? '' : file),
+  })
+  const logs: string[] = []
+  const committer = startConversationCommitter({
+    projects: async () => [project('/repo')],
+    git,
+    exists: noLocks,
+    intervalMs: 1_000_000,
+    log: message => logs.push(message),
+  })
+  try {
+    await settle()
+    await committer.poll()
+    await committer.poll()
+    assert.equal(commits(), 0, 'there was nothing to commit')
+    assert.deepEqual(logs, [], 'an empty batch is not a failure')
+  } finally {
+    committer.stop()
+  }
+})
+
 test('a project scan that throws costs one window rather than the committer (#912)', async () => {
   const { git } = fakeGit({ 'rev-parse': '/repo/.git\n', status: '?? .the-framework/conversations/a.md' })
   const committer = startConversationCommitter({

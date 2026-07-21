@@ -93,6 +93,24 @@ const GIT_READ_OPS = new Set([
 /** Subcommands bounded by the network rather than by this machine. */
 const GIT_SLOW_OPS = new Set(['clone', 'fetch', 'pull', 'push'])
 
+/** Global options whose value is the next word, so that word is not the subcommand. */
+const GIT_GLOBAL_VALUE_OPTIONS = new Set(['-C', '-c', '--git-dir', '--work-tree', '--namespace', '--exec-path'])
+
+/**
+ * The subcommand and its own words, with the leading global options dropped. A bare flag filter
+ * would read `git -C /repo push` as the subcommand `/repo`, costing `push` its slow budget.
+ */
+function gitWords(args: string[]): string[] {
+  let i = 0
+  while (i < args.length) {
+    const arg = args[i] ?? ''
+    if (!arg.startsWith('-')) break
+    // The `--opt=value` form carries its value inline; the separate form eats the next word.
+    i += GIT_GLOBAL_VALUE_OPTIONS.has(arg) ? 2 : 1
+  }
+  return args.slice(i).filter(arg => !arg.startsWith('-'))
+}
+
 /**
  * The timeout for one git invocation, chosen by subcommand (#997). One flat 10s budget covered
  * the repo's ~20 call sites, so the slowest two ran under what is really a read's budget: a
@@ -100,7 +118,7 @@ const GIT_SLOW_OPS = new Set(['clone', 'fetch', 'pull', 'push'])
  * have half-landed. Mirrors the read/write split `gh` already has (dashboard/gh.ts).
  */
 export function gitTimeoutMs(args: string[]): number {
-  const words = args.filter(arg => !arg.startsWith('-'))
+  const words = gitWords(args)
   const op = words[0] ?? ''
   if (GIT_SLOW_OPS.has(op)) return GIT_SLOW_TIMEOUT_MS
   if (op === 'worktree') {
