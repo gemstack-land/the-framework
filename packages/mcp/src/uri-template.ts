@@ -28,7 +28,13 @@ export function matchUriTemplate(template: string, uri: string): Record<string, 
   if (!match) return null
   const params: Record<string, string> = {}
   for (let i = 0; i < paramNames.length; i++) {
-    const value = decodeURIComponent(match[i + 1]!)
+    let value: string
+    try {
+      value = decodeURIComponent(match[i + 1]!)
+    } catch {
+      // A malformed escape like `%zz` is a non-match, not a crash out of the caller's template loop.
+      return null
+    }
     // The guard has to hold after decoding too, or `%2F` smuggles a traversal past `([^/]+)`.
     if (value.includes('/')) return null
     params[paramNames[i]!] = value

@@ -42,6 +42,14 @@ describe('matchUriTemplate', () => {
     assert.deepEqual(matchUriTemplate('file://docs/{name}', 'file://docs/a.b'), { name: 'a.b' })
   })
 
+  it('treats a malformed percent-escape as a non-match rather than throwing (#968)', () => {
+    assert.equal(matchUriTemplate('file://docs/{name}', 'file://docs/%'), null)
+    assert.equal(matchUriTemplate('file://docs/{name}', 'file://docs/%zz'), null)
+    assert.equal(matchUriTemplate('file://docs/{name}', 'file://docs/%E0%A4%A'), null)
+    // A well-formed URI still matches, so the guard did not swallow the good path with it.
+    assert.deepEqual(matchUriTemplate('file://docs/{name}', 'file://docs/ok'), { name: 'ok' })
+  })
+
   // ─── #968 defect 2: literal segments are regex-escaped ───
 
   it('treats regex metacharacters in the template as literals (#968)', () => {
