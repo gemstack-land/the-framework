@@ -290,9 +290,10 @@ export function startAutoPm(deps: AutoPmDeps): AutoPmLoop {
   // should each work through the rotation, not take alternate halves of it.
   const nextJob = new Map<string, number>()
   let sweeping = false
+  let stopped = false
 
   const tick = async (): Promise<void> => {
-    if (sweeping) return
+    if (stopped || sweeping) return
     sweeping = true
     try {
       // The preference is the cheapest gate and the one the user flips most, so it is read
@@ -349,6 +350,10 @@ export function startAutoPm(deps: AutoPmDeps): AutoPmLoop {
             ? (deps.drainJob ?? AUTO_PM_DRAIN_JOB)
             : deps.jobs[index % deps.jobs.length]
         if (!job) continue
+        // Re-checked here because everything above is awaited: a run spawned past a `stop()` is
+        // missing from the live-run map the daemon has by then cleared, so nothing suspends or
+        // terminates it (#983). Break, not continue: stopping is a verdict on the whole sweep.
+        if (stopped) break
         // Armed before the spawn, not after: starting is slow, and a tick that overlapped the
         // spawn would otherwise see no live run yet and start a second one.
         lastStart.set(project.id, now())
@@ -379,5 +384,11 @@ export function startAutoPm(deps: AutoPmDeps): AutoPmLoop {
 
   const timer = setInterval(() => void tick(), deps.intervalMs ?? DEFAULT_AUTO_PM_INTERVAL_MS)
   timer.unref?.() // a background sweep must never be the reason the process stays up
-  return { tick, stop: () => clearInterval(timer) }
+  return {
+    tick,
+    stop: () => {
+      stopped = true
+      clearInterval(timer)
+    },
+  }
 }
