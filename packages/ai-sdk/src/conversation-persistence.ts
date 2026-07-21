@@ -47,6 +47,62 @@ export async function resolveAutoPersistSpec(
   return declared
 }
 
+/**
+ * Thrown when a run scoped to one user tries to resume a thread another user
+ * owns (#984). A distinct type so a server can answer 403 rather than 500,
+ * and so a store failure is never mistaken for a refusal.
+ */
+export class ConversationOwnershipError extends Error {
+  readonly conversationId: string
+  /** The user the run was scoped to. Never carries the real owner's id. */
+  readonly userId: string | undefined
+  constructor(conversationId: string, userId: string | undefined) {
+    const hint = userId
+      ? ''
+      : ' The call carries no user; chain forUser(ownerId) before continue(id).'
+    super(`[ai-sdk] Conversation "${conversationId}" is owned by a different user.${hint}`)
+    this.name = 'ConversationOwnershipError'
+    this.conversationId = conversationId
+    this.userId = userId
+  }
+}
+
+/**
+ * Owner recorded on a thread, or `undefined` when the store reports none.
+ * `undefined` is deliberately permissive: threads written before #984, and
+ * stores that don't mirror `meta.userId` into their listings, carry no owner
+ * and must stay readable by whoever holds the id.
+ */
+async function storedOwner(
+  store:  ConversationStore,
+  convId: string,
+  user:   string | undefined,
+): Promise<string | undefined> {
+  // Scoped listing first — the indexed read every store already supports, and
+  // a hit settles ownership without enumerating every thread in the backend.
+  if (user) {
+    const mine = await store.list(user)
+    if (mine.some(t => t.id === convId)) return user
+  }
+  const entry = (await store.list()).find(t => t.id === convId)
+  return entry?.userId || undefined
+}
+
+/**
+ * Resuming by id must be scoped to the user the run runs as (#984), otherwise
+ * any caller holding a thread id reads that thread's history into their run
+ * and appends their turn back into it.
+ */
+async function assertOwnership(
+  store:  ConversationStore,
+  convId: string,
+  user:   string | undefined,
+): Promise<void> {
+  const owner = await storedOwner(store, convId, user)
+  if (owner === undefined) return
+  if (owner !== (user || undefined)) throw new ConversationOwnershipError(convId, user)
+}
+
 interface PersistenceContext {
   spec:    ConversationalSpec
   store:   ConversationStore
@@ -65,7 +121,8 @@ interface PersistenceContext {
 /**
  * Run the load-or-create-thread half of the persistence flow. Resolves
  * the conversation id, loads history, applies `historyLimit`, and merges
- * with any caller-supplied `options.history`.
+ * with any caller-supplied `options.history`. An explicit id is owner-checked
+ * first (#984); the lookup-by-user branch is scoped by the store already.
  */
 async function preparePersistence(
   spec:           ConversationalSpec,
@@ -77,6 +134,7 @@ async function preparePersistence(
   let loaded: AiMessage[] = []
 
   if (convId) {
+    await assertOwnership(store, convId, spec.user)
     loaded = await store.load(convId)
   } else if (spec.user) {
     const agentKey = spec.agent ?? agentClassName

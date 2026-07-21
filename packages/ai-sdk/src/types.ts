@@ -942,6 +942,14 @@ export interface ConversationStoreListEntry {
   updatedAt?: Date
   /** Mirrors {@link ConversationStoreMeta.agent} on the source row. */
   agent?: string
+  /**
+   * Mirrors {@link ConversationStoreMeta.userId} on the source row — the only
+   * owner-aware read in the contract, so it is what the resume-by-id owner
+   * check reads (#984). A store that reports it gets threads only their owner
+   * can resume; a store that omits it stays as permissive as it was before,
+   * i.e. whoever holds the id can resume.
+   */
+  userId?: string
 }
 
 export interface ConversationStore {

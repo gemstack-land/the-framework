@@ -132,8 +132,10 @@ Persist multi-turn conversations with `ConversationStore`. Register via `setConv
 ```ts
 setConversationStore(new MemoryConversationStore())
 const response = await myAgent.forUser('user-123').prompt('Hello')  // creates conversation
-const follow = await myAgent.continue(response.conversationId).prompt('Follow up')
+const follow = await myAgent.forUser('user-123').continue(response.conversationId).prompt('Follow up')
 ```
+
+Keep `forUser()` on the resume: a thread may only be resumed by the user it was created for, and a mismatch (including a bare `continue()` with no user) throws `ConversationOwnershipError`. Threads stored without a `userId` stay open to whoever holds the id.
 
 For chat agents that should always auto-persist for the active user, override `conversational()` on the class — `agent.prompt(input)` then auto-loads + auto-saves without each caller passing the user id:
 

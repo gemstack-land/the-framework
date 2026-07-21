@@ -90,9 +90,11 @@ import { Agent, setConversationStore, MemoryConversationStore } from '@gemstack/
 setConversationStore(new MemoryConversationStore())   // in-memory default: dev / tests
 
 const first  = await new AssistantAgent().forUser('user-42').prompt('My name is Alice.')
-const second = await new AssistantAgent().continue(first.conversationId!).prompt("What's my name?")
+const second = await new AssistantAgent().forUser('user-42').continue(first.conversationId!).prompt("What's my name?")
 // second.text -> 'Your name is Alice.'
 ```
+
+Keep `forUser()` on the resume call: a thread is owned by the user it was created for, and resuming it as a different user (or as no user at all) throws `ConversationOwnershipError`. Otherwise a conversation id arriving on a request would let any caller read and extend somebody else's thread. Ownership is read off the `userId` your store reports in `list()`; threads that carry no owner stay resumable by whoever holds the id, so ids minted before this check keep working.
 
 `MemoryConversationStore` is in-process and loses every thread on restart, so it is for tests and dev only. For production, **implement the `ConversationStore` contract against your own database** (Postgres, Redis, an external service). It is five methods:
 
@@ -108,6 +110,8 @@ interface ConversationStore {
 ```
 
 `ConversationStoreMeta` carries `userId`, an optional `agent` thread-segregation key (see [Auto-persist](#auto-persist-conversational) below), and free-form `resourceSlug` / `recordId` fields your backend can index on.
+
+Mirror that `userId` back onto the entries your `list()` returns (`ConversationStoreListEntry.userId`). It is the only owner-aware read in the contract, so it is what the resume-by-id owner check consults; a store that omits it cannot be enforced and stays as permissive as it was.
 
 ### Sanitizing loaded history
 
@@ -156,6 +160,8 @@ Per-call override and explicit-form precedence (high to low):
 1. `agent.forUser(id).prompt()` / `agent.continue(id).prompt()` - explicit always wins.
 2. `agent.prompt(input, { conversation: false | { user, id?, historyLimit? } })` - per-call.
 3. `agent.conversational()` - class declaration.
+
+Whichever layer supplies the `id`, the owner check applies: the resolved `user` must match the thread's stored owner.
 
 Stores that surface the `agent` meta in `list()` results get the per-class thread separation; stores that ignore it fall back to "always create a new thread", which is the conservative behavior.
 

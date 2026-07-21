@@ -119,8 +119,9 @@ const myAgent = new ResearchAgent()
 const response1 = await myAgent.forUser('user-123').prompt('What is TypeScript?')
 const convId = response1.conversationId!
 
-// Continue the same conversation
-const response2 = await myAgent.continue(convId).prompt('Tell me more about generics')
+// Continue the same conversation. Keep forUser(): a thread is owned by the
+// user it was created for, and resuming it as anyone else throws.
+const response2 = await myAgent.forUser('user-123').continue(convId).prompt('Tell me more about generics')
 // The agent sees the full conversation history
 
 // Streaming with conversations

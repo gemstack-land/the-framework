@@ -4,7 +4,8 @@ import { isSafeVia } from '../conversations.js'
 import { openInApp, type OpenTarget, type OpenResult } from '../dashboard/open-in-app.js'
 import { resolveProjectPath, resolveRunPath, contextPreferences, contextPreview } from './context.js'
 import { appendFlatTodoEntry } from '../todo-loop.js'
-import { findRun, isSafeRunId, readLiveMetas, removeWorktree, pruneWorktrees, worktreePath, type RunMeta } from '../store/index.js'
+import { findRun, isSafeRunId, type RunMeta } from '../store/index.js'
+import { removeProjectWorktree } from '../worktrees.js'
 import {
   openRunPullRequest,
   pushRunBranch,
@@ -24,7 +25,6 @@ import type {
 import type { ServeTarget } from '../preview.js'
 import type { DashboardContext } from '../dashboard/telefunc-serve.js'
 import type { Preferences } from '../registry.js'
-import { errorMessage } from '../error-message.js'
 
 // The write side behind the new dashboard (#405): steering a live run. The reverse of
 // the event stream — events flow run -> events.jsonl -> Channel -> browser; steering
@@ -89,9 +89,11 @@ export async function sendMessage(projectId: string, text: string, runId?: strin
  * Remove a retained worktree (#737). A run that failed or was stopped keeps its checkout so you
  * can inspect it; this is the explicit cleanup for one, since nothing removes them on a timer.
  *
- * Refuses while that run is still live: its worktree is the checkout the agent is working in, and
- * Stop is the way to end a run, not pulling the floor out from under it. The run's history was
- * archived into the repo when it finished, so removal costs no history.
+ * The checks and the commit-first removal are {@link removeProjectWorktree}'s, shared with the
+ * `framework worktrees rm` verb (#982) so the two surfaces cannot drift again. All this adds is
+ * the daemon-only step: a retained worktree can still be serving (#797), and that dev server
+ * holds the tree being removed, so it is stopped rather than having the directory pulled out
+ * from under it.
  */
 export async function sendRemoveWorktree(projectId: string, runId: string): Promise<RemoveWorktreeResult> {
   // Read the context before the first await: telefunc only exposes it synchronously, at the top
@@ -99,21 +101,11 @@ export async function sendRemoveWorktree(projectId: string, runId: string): Prom
   const preview = contextPreview()
   const cwd = await resolveProjectPath(projectId)
   if (!cwd) return { ok: false, error: 'this project has no local path on this server' }
-  if (!isSafeRunId(runId)) return { ok: false, error: `invalid session id: ${runId}` }
-  const live = await readLiveMetas(cwd).catch(() => [])
-  if (live.some(run => run.id === runId && run.status === 'running')) {
-    return { ok: false, error: 'that session is still going; stop it before removing its worktree' }
-  }
-  try {
-    // A retained worktree can still be serving (#797), and that dev server holds the tree being
-    // removed. Stop it first rather than pulling the directory out from under it.
-    await preview?.stop(projectId, runId)
-    await removeWorktree(cwd, worktreePath(cwd, runId))
-    await pruneWorktrees(cwd)
-    return { ok: true }
-  } catch (err) {
-    return { ok: false, error: errorMessage(err) }
-  }
+  return removeProjectWorktree(cwd, runId, {
+    beforeRemove: async id => {
+      await preview?.stop(projectId, id)
+    },
+  })
 }
 
 /**

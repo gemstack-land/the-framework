@@ -56,6 +56,20 @@ describe('FakeRunnerSession.fs', () => {
     assert.equal(await s.fs.read('src/b.txt'), 'B')
     assert.deepEqual(await s.fs.list('src'), ['src/a.txt', 'src/b.txt'])
   })
+
+  it('lists the whole workspace for `.` and `/`, as the real runners do (#998)', async () => {
+    const s = await new FakeRunner().boot()
+    await s.fs.write('src/a.txt', 'A')
+    await s.fs.write('root.txt', 'R')
+    // `list_files` passes the model's `dir` through verbatim, and `.` is the most
+    // natural thing it types for the workspace root.
+    const all = ['root.txt', 'src/a.txt']
+    assert.deepEqual(await s.fs.list('.'), all)
+    assert.deepEqual(await s.fs.list('/'), all)
+    assert.deepEqual(await s.fs.list('./'), all)
+    assert.deepEqual(await s.fs.list(''), all)
+    assert.deepEqual(await s.fs.list(), all)
+  })
 })
 
 describe('FakeRunnerSession.exec', () => {
