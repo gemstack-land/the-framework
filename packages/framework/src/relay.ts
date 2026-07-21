@@ -5,6 +5,7 @@ import type { FrameworkEvent } from './events.js'
 import { resolveDashboardBundle } from './dashboard/bundle.js'
 import { serveClientBundle } from './dashboard/static.js'
 import { makeTelefuncMount } from './dashboard/telefunc-serve.js'
+import { requestPathname } from './request-path.js'
 import { emptyProjectsProvider } from './dashboard/projects.js'
 
 /**
@@ -141,7 +142,13 @@ interface HandleCtx {
 }
 
 function handle(req: IncomingMessage, res: ServerResponse, ctx: HandleCtx): void {
-  const { pathname } = new URL(req.url ?? '/', 'http://localhost')
+  // A public server: a request no URL parser accepts must get a 400, not crash the relay (#938).
+  const pathname = requestPathname(req)
+  if (pathname === undefined) {
+    res.writeHead(400, { 'content-type': 'text/plain' })
+    res.end('bad request')
+    return
+  }
   if (pathname === '/healthz') {
     res.writeHead(200, { 'content-type': 'text/plain' })
     res.end('ok')
@@ -154,7 +161,15 @@ function handle(req: IncomingMessage, res: ServerResponse, ctx: HandleCtx): void
   }
   const m = RUN_PATH.exec(pathname)
   if (m) {
-    const id = decodeURIComponent(m[1]!)
+    // A malformed escape in the id segment (`/r/%zz/`) must not throw out of the handler (#938).
+    let id: string
+    try {
+      id = decodeURIComponent(m[1]!)
+    } catch {
+      res.writeHead(400, { 'content-type': 'text/plain' })
+      res.end('bad request')
+      return
+    }
     const rest = m[2] ?? ''
     // Ingest is the one thing still under /r/:id/ — the publisher POSTs a run's events here.
     if (rest === '/publish') {

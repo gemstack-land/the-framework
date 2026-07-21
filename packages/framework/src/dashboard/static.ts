@@ -2,6 +2,7 @@ import { readFile, stat } from 'node:fs/promises'
 import { join, normalize, sep } from 'node:path'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { contentTypeFor } from './content-type.js'
+import { requestPathname } from '../request-path.js'
 
 // Serve the prerendered dashboard bundle (#405). The new dashboard is a Vike `ssr:false`
 // SPA prerendered to a static `index.html` + `assets/**`, so the daemon serves it as
@@ -14,6 +15,15 @@ async function isFile(path: string): Promise<boolean> {
   return stat(path).then(s => s.isFile()).catch(() => false)
 }
 
+/** Decode a percent-encoded path; a malformed escape names no file, so it decodes to nothing. */
+function tryDecode(pathname: string): string {
+  try {
+    return decodeURIComponent(pathname)
+  } catch {
+    return ''
+  }
+}
+
 /**
  * Serve `dir`'s static bundle for this request: the requested file when it exists,
  * otherwise `index.html` (the SPA fallback, so client routes and unknown paths still
@@ -21,8 +31,11 @@ async function isFile(path: string): Promise<boolean> {
  * `index.html` rather than reading outside the bundle.
  */
 export async function serveClientBundle(req: IncomingMessage, res: ServerResponse, dir: string): Promise<void> {
-  const { pathname } = new URL(req.url ?? '/', 'http://localhost')
-  const rel = decodeURIComponent(pathname).replace(/^\/+/, '')
+  // Neither an unparseable request target nor a malformed escape (`/%zz`) may throw: this
+  // runs void-dispatched, so an exception here would be an unhandled rejection that takes
+  // the daemon down (#938). Both fall back to the SPA shell like any other unknown path.
+  const pathname = requestPathname(req) ?? '/'
+  const rel = tryDecode(pathname).replace(/^\/+/, '')
   const root = normalize(dir)
   const candidate = normalize(join(root, rel))
   const within = candidate === root || candidate.startsWith(root + sep)

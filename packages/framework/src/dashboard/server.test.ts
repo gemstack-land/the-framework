@@ -1,6 +1,7 @@
 import { strict as assert } from 'node:assert'
 import { test } from 'node:test'
 import { get, request } from 'node:http'
+import { connect } from 'node:net'
 import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -17,6 +18,21 @@ function fetchText(url: string): Promise<{ status: number; body: string; type: s
         resolvePromise({ status: res.statusCode ?? 0, body, type: String(res.headers['content-type'] ?? '') }),
       )
     }).on('error', rejectPromise)
+  })
+}
+
+/** Send a raw request line over a socket — for request targets `http.get` refuses to send. */
+function rawRequest(url: string, requestLine: string): Promise<string> {
+  const port = Number(new URL(url).port)
+  return new Promise((resolvePromise, rejectPromise) => {
+    const sock = connect(port, '127.0.0.1', () => {
+      sock.write(`${requestLine}\r\nHost: x\r\nConnection: close\r\n\r\n`)
+    })
+    let data = ''
+    sock.on('data', c => (data += c))
+    sock.on('close', () => resolvePromise(data))
+    sock.on('error', rejectPromise)
+    sock.setTimeout(5000, () => sock.destroy())
   })
 }
 
@@ -69,6 +85,59 @@ test('serves the prerendered SPA shell at / and hashed assets, with an SPA fallb
     const deep = await fetchText(dash.url + '/some/client/route')
     assert.equal(deep.status, 200)
     assert.match(deep.body, /<div id="root">/)
+  } finally {
+    await dash.close()
+    await rm(bundle, { recursive: true, force: true })
+  }
+})
+
+test('a malformed percent-encoded path serves the SPA shell and the server survives (#938)', async () => {
+  const bundle = await fakeBundle()
+  const dash = await startDashboard({ port: 0, clientBundleDir: bundle })
+  try {
+    // `decodeURIComponent('/%zz')` throws; unguarded it is an unhandled rejection that kills the process.
+    const bad = await fetchText(dash.url + '/%zz')
+    assert.equal(bad.status, 200)
+    assert.match(bad.body, /<div id="root">/)
+
+    // The server is still alive and serving afterwards.
+    const after = await fetchText(dash.url + '/assets/app.js')
+    assert.equal(after.status, 200)
+  } finally {
+    await dash.close()
+    await rm(bundle, { recursive: true, force: true })
+  }
+})
+
+test('a malformed escape inside a browser-proxy path serves the shell and the server survives (#938)', async () => {
+  const bundle = await fakeBundle()
+  const dash = await startDashboard({ port: 0, clientBundleDir: bundle })
+  try {
+    // Passes the pathname guard (the URL parses), enters the proxy dispatch, and only explodes
+    // at decode time inside parseBrowserRoute — the crash the round-2 pass live-repro'd.
+    const bad = await fetchText(dash.url + '/browser/p/%zz/stream')
+    assert.equal(bad.status, 200)
+    assert.match(bad.body, /<div id="root">/)
+
+    const after = await fetchText(dash.url + '/')
+    assert.equal(after.status, 200)
+  } finally {
+    await dash.close()
+    await rm(bundle, { recursive: true, force: true })
+  }
+})
+
+test('an unparseable absolute-form request target gets a 400 and the server survives (#938)', async () => {
+  const bundle = await fakeBundle()
+  const dash = await startDashboard({ port: 0, clientBundleDir: bundle })
+  try {
+    // Node's parser passes absolute-form targets through verbatim; `new URL('http://[', ...)`
+    // throws synchronously in the request handler, which unguarded kills the process.
+    const raw = await rawRequest(dash.url, 'GET http://[ HTTP/1.1')
+    assert.match(raw, /^HTTP\/1\.1 400 /)
+
+    const after = await fetchText(dash.url + '/')
+    assert.equal(after.status, 200)
   } finally {
     await dash.close()
     await rm(bundle, { recursive: true, force: true })

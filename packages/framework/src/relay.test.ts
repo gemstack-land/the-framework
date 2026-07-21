@@ -70,6 +70,20 @@ test('a viewer GET of a run redirects to the SPA viewer URL /?run=:id (#426)', a
   }
 })
 
+test('a malformed escape in the run id segment gets a 400 and the relay survives (#938)', async () => {
+  const relay = await startRelay({ ...local, clientBundleDir: '/no/such/bundle' })
+  try {
+    // `decodeURIComponent('%zz')` throws; unguarded it is an uncaught exception in the handler.
+    const bad = await fetchFull(`${relay.url}/r/%zz/`)
+    assert.equal(bad.status, 400)
+
+    const health = await fetchFull(`${relay.url}/healthz`)
+    assert.equal(health.status, 200)
+  } finally {
+    await relay.close()
+  }
+})
+
 test('the relay serves the dashboard SPA at / (and its viewer URL); missing bundle is a clean 404', async () => {
   const bundle = await fakeBundle('spa-here')
   const served = await startRelay({ ...local, clientBundleDir: bundle })
