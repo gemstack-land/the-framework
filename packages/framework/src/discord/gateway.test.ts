@@ -100,6 +100,63 @@ function messageEvent(over: Record<string, unknown> = {}) {
   }
 }
 
+test('a synchronously-failing socket factory backs off and retries instead of dying (#942)', () => {
+  const socket = fakeSocket()
+  const delay = fakeDelay()
+  const clock = fakeInterval()
+  const logs: string[] = []
+  let calls = 0
+  const gateway = new DiscordGateway(
+    'tok',
+    { onMessage: () => {}, onLog: m => logs.push(m) },
+    {
+      socket: () => {
+        calls++
+        if (calls === 1) throw new Error('Invalid URL')
+        return socket.socket
+      },
+      interval: clock.factory,
+      delay: delay.factory,
+      url: 'wss://test',
+    },
+  )
+  gateway.connect()
+  assert.equal(calls, 1)
+  assert.ok(logs.some(l => /could not open/.test(l)), logs.join(','))
+  // The bug: no socket means no onClose, so without falling through to the backoff the
+  // bot is offline for the daemon's lifetime — zero loop instead of a tight one.
+  assert.equal(delay.waits.length, 1, 'a backed-off reconnect is scheduled')
+
+  delay.fire()
+  assert.equal(calls, 2, 'the backoff retried the connect')
+  socket.receive(HELLO)
+  assert.ok(socket.sent.some(p => p['op'] === OP.identify), 'the retried connection identifies')
+  gateway.stop()
+})
+
+test('stop() cancels the reconnect a sync-throwing factory scheduled (#942)', () => {
+  const delay = fakeDelay()
+  let calls = 0
+  const gateway = new DiscordGateway(
+    'tok',
+    { onMessage: () => {} },
+    {
+      socket: () => {
+        calls++
+        throw new Error('Invalid URL')
+      },
+      interval: fakeInterval().factory,
+      delay: delay.factory,
+      url: 'wss://test',
+    },
+  )
+  gateway.connect()
+  assert.equal(delay.waits.length, 1)
+  gateway.stop()
+  delay.fire()
+  assert.equal(calls, 1, 'no retry after stop')
+})
+
 test('HELLO triggers an identify with the chat intents', () => {
   const { socket } = connect()
   socket.receive(HELLO)
