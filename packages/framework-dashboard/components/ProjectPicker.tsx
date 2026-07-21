@@ -51,7 +51,10 @@ export function ProjectPicker({
   // (#784), so silently rewriting it would read as "the link worked, you clicked the wrong one".
   // The shell says so instead; this control only reports what it was given.
   const selected = selectedId === null ? null : projects?.find(p => p.id === selectedId)
-  const label = selectedId === null ? 'All projects' : (selected?.name ?? selectedId)
+  // One name for the no-project state (#948): the trigger used to say "All projects" while the
+  // menu entry it maps to says "Overview" — two names for one place. While the list is still
+  // loading, an ellipsis stands in rather than flashing the raw project id.
+  const label = selectedId === null ? 'Overview' : (selected?.name ?? (projects === null ? '…' : selectedId))
 
   return (
     <>

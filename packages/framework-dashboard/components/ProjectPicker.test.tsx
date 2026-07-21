@@ -29,10 +29,11 @@ describe('ProjectPicker (#772)', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: /^project:/i }).textContent).toContain('beta'))
   })
 
-  test('no selection reads as all projects, not as a blank', () => {
+  test('no selection reads as the Overview, not as a blank', () => {
     onProjects.mockResolvedValue(PROJECTS)
     render(<ProjectPicker selectedId={null} onSelect={() => {}} onDashboard={() => {}} />)
-    expect(screen.getByRole('button', { name: /^project:/i }).textContent).toContain('All projects')
+    // One name for one place (#948): the trigger matches the menu entry it maps to.
+    expect(screen.getByRole('button', { name: /^project:/i }).textContent).toContain('Overview')
   })
 
   test('picking a project reports it', async () => {
