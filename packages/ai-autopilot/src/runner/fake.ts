@@ -53,7 +53,10 @@ class FakeFs implements RunnerFs {
   }
 
   async list(dir?: string): Promise<string[]> {
-    const prefix = dir ? fsKey(dir) + '/' : ''
+    // `.` and `/` key to the empty string, the workspace root, so they must list
+    // everything as the real runners do — not `'/'`, which no key starts with (#998).
+    const key = dir === undefined ? '' : fsKey(dir)
+    const prefix = key ? key + '/' : ''
     return [...this.files.keys()].filter(p => p.startsWith(prefix)).sort()
   }
 
