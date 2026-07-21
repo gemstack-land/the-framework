@@ -68,24 +68,46 @@ export class ConversationOwnershipError extends Error {
 }
 
 /**
- * Owner recorded on a thread, or `undefined` when the store reports none.
- * `undefined` is deliberately permissive: threads written before #984, and
- * stores that don't mirror `meta.userId` into their listings, carry no owner
- * and must stay readable by whoever holds the id.
+ * What the store could tell us about a thread's owner.
+ *
+ * `owner: undefined` is deliberately permissive: threads written before #984,
+ * and stores that don't mirror `meta.userId` into their listings, carry no
+ * owner and must stay readable by whoever holds the id.
+ *
+ * `hidden` is the one case that is not permissive: the store demonstrably
+ * holds rows its unscoped `list()` did not report, so "absent from the
+ * listing" is no evidence of being ownerless.
  */
+interface OwnerLookup {
+  owner:  string | undefined
+  hidden: boolean
+}
+
 async function storedOwner(
   store:  ConversationStore,
   convId: string,
   user:   string | undefined,
-): Promise<string | undefined> {
+): Promise<OwnerLookup> {
   // Scoped listing first — the indexed read every store already supports, and
   // a hit settles ownership without enumerating every thread in the backend.
   if (user) {
     const mine = await store.list(user)
-    if (mine.some(t => t.id === convId)) return user
+    if (mine.some(t => t.id === convId)) return { owner: user, hidden: false }
+
+    const all   = await store.list()
+    const entry = all.find(t => t.id === convId)
+    if (entry) return { owner: entry.userId || undefined, hidden: false }
+    // Rows listed but not this one: absent thread or partial listing, and we
+    // can't tell which, so stay permissive.
+    if (all.length > 0) return { owner: undefined, hidden: false }
+    // Nothing listed while the store demonstrably holds rows: list() is not
+    // enumerating the backend, so it never had a chance to report an owner.
+    const hidden = mine.length > 0 || (await store.load(convId)).length > 0
+    return { owner: undefined, hidden }
   }
+
   const entry = (await store.list()).find(t => t.id === convId)
-  return entry?.userId || undefined
+  return { owner: entry?.userId || undefined, hidden: false }
 }
 
 /**
@@ -98,7 +120,8 @@ async function assertOwnership(
   convId: string,
   user:   string | undefined,
 ): Promise<void> {
-  const owner = await storedOwner(store, convId, user)
+  const { owner, hidden } = await storedOwner(store, convId, user)
+  if (hidden) throw new ConversationOwnershipError(convId, user)
   if (owner === undefined) return
   if (owner !== (user || undefined)) throw new ConversationOwnershipError(convId, user)
 }

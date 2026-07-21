@@ -447,4 +447,63 @@ describe('Resume-by-id owner check', () => {
     const r = await new ChatAgent().forUser('alice').continue(bobs).prompt('hi')
     assert.equal(r.conversationId, bobs)
   })
+
+  it('an ownerless thread stays resumable by a user-scoped run too', async () => {
+    const store = new MemoryConversationStore()
+    setConversationStore(store)
+    fake.respondWith('still open')
+    const orphan = await seed(store)  // pre-#984 row: created without meta
+
+    const r = await new ChatAgent().forUser('alice').continue(orphan).prompt('resume me')
+    assert.equal(r.conversationId, orphan)
+  })
+
+  /** A store that only answers scoped listings; `list()` reports nothing. */
+  function scopedOnly(store: MemoryConversationStore): ConversationStore {
+    return {
+      create:   (t, m) => store.create(t, m),
+      load:     id => store.load(id),
+      append:   (id, m) => store.append(id, m),
+      setTitle: (id, t) => store.setTitle(id, t),
+      list:     async userId => (userId ? store.list(userId) : []),
+    }
+  }
+
+  it('a store whose list() hides other users threads refuses instead of failing open', async () => {
+    const store = new MemoryConversationStore()
+    const bobs = await seed(store, 'bob')
+    setConversationStore(scopedOnly(store))
+    fake.respondWith('leaked?')
+
+    await assert.rejects(
+      () => new ChatAgent().forUser('alice').continue(bobs).prompt('what did bob say?'),
+      /is owned by a different user/,
+    )
+    assert.equal(fake.getCalls().length, 0, 'the provider never saw bob history')
+    assert.deepStrictEqual((await store.load(bobs)).map(m => m.content), ['bob-secret'])
+  })
+
+  it('a store whose list() hides threads refuses even when the target thread is empty', async () => {
+    const store = new MemoryConversationStore()
+    const bobs = await store.create(undefined, { userId: 'bob', agent: 'ChatAgent' })
+    await seed(store, 'alice')  // the caller has a thread of their own
+    setConversationStore(scopedOnly(store))
+    fake.respondWith('leaked?')
+
+    await assert.rejects(
+      () => new ChatAgent().forUser('alice').continue(bobs).prompt('hi'),
+      /is owned by a different user/,
+    )
+    assert.equal(fake.getCalls().length, 0)
+  })
+
+  it('the owner still resumes their own thread on a store whose list() hides threads', async () => {
+    const store = new MemoryConversationStore()
+    const bobs = await seed(store, 'bob')
+    setConversationStore(scopedOnly(store))
+    fake.respondWith('welcome back')
+
+    const r = await new ChatAgent().forUser('bob').continue(bobs).prompt('me again')
+    assert.equal(r.conversationId, bobs)
+  })
 })
