@@ -113,4 +113,6 @@ export interface RunWorktree {
   sizeBytes?: number
   /** The PR opened for this checkout's branch (#809), when there is one. */
   pr?: LinkedPr
+  /** The PR is not known yet, rather than absent (#1028): the lookup is still running. */
+  prPending?: boolean
 }

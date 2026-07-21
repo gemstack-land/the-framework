@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import type { GitStatus, RunWorktree } from '@gemstack/framework'
 import { ChevronRight, GitBranch } from 'lucide-react'
 import { onGitStatus, onRunWorktree } from '../server/reads.telefunc.js'
@@ -41,12 +41,16 @@ export function GitStatusBar({
 }) {
   // Two reads, one shape: both carry branch/dirty/PR, because the server resolves them from
   // whichever checkout it was asked about, and the session read adds what only a worktree has.
+  // Resting cadence is ten seconds, but a PR lookup still in flight (#1028) is an answer that
+  // lands in under a second — worth asking again for rather than showing a gap for ten.
+  const [everyMs, setEveryMs] = useState(10_000)
   const { value: status } = usePolled<GitStatus | RunWorktree | null>(
     () => (runId ? onRunWorktree(projectId, runId) : onGitStatus(projectId)),
     null,
-    10_000,
-    [projectId, runId],
+    everyMs,
+    [projectId, runId, everyMs],
   )
+  useEffect(() => setEveryMs(status?.prPending ? 1_000 : 10_000), [status?.prPending])
 
   if (!status) return null
 

@@ -1,4 +1,5 @@
 import { cliRunner, type CliRunner } from '../cli-exec.js'
+import { cachedRead, invalidate, type Cached } from './cache.js'
 
 /**
  * The `gh` CLI, in one place: the two JSON reads the dashboard makes and the runner its write
@@ -72,6 +73,28 @@ export async function ghPrView(cwd: string, branch?: string): Promise<LinkedPr |
   const args = ['pr', 'view', ...(branch ? [branch] : []), '--json', PR_VIEW_FIELDS]
   const pr = await ghJson<LinkedPr | undefined>(args, cwd, undefined)
   return pr ? { number: pr.number, url: pr.url, state: pr.state, title: pr.title } : undefined
+}
+
+/**
+ * The cached form of {@link ghPrView} (#1028), and what the dashboard's panels use.
+ *
+ * A PR lookup costs about 600ms where the git reads beside it cost ten, and the answer changes
+ * about as often as someone opens a PR. Cached per checkout and branch, shared between the
+ * worktree bar and the handoff summary, and refreshed behind whoever asks. `pending` says the
+ * answer is not known yet rather than that there is no PR — the difference matters to a caller
+ * deciding whether to offer "Open PR".
+ */
+export async function cachedPrView(cwd: string, branch?: string): Promise<Cached<LinkedPr | undefined>> {
+  return cachedRead(prCacheKey(cwd, branch), () => ghPrView(cwd, branch))
+}
+
+/** Forget a branch's PR, after an action that changes whether it has one. */
+export function forgetPr(cwd: string, branch?: string): void {
+  invalidate(prCacheKey(cwd, branch))
+}
+
+function prCacheKey(cwd: string, branch?: string): string {
+  return `pr\u0000${cwd}\u0000${branch ?? ''}`
 }
 
 /** An open PR on the interventions queue (#632). */

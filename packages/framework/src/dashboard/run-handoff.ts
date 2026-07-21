@@ -1,5 +1,5 @@
 import { nodeGitRunner, type GitRunner } from '../project.js'
-import { ghPrView, nodeGhRunner, type GhRunner, type LinkedPr, type BranchPrLookup } from './gh.js'
+import { cachedPrView, forgetPr, nodeGhRunner, type GhRunner, type LinkedPr, type BranchPrLookup } from './gh.js'
 import { parseNumstat } from './file-diff.js'
 import { errorMessage } from '../error-message.js'
 
@@ -60,6 +60,8 @@ export interface RunHandoff {
   merged: boolean
   /** The PR opened for this branch, when there is one. */
   pr?: LinkedPr
+  /** The PR is not known yet, rather than absent (#1028): the lookup is still running. */
+  prPending?: boolean
 }
 
 /** Injectable seams so the reader is unit-testable off disk. */
@@ -152,7 +154,11 @@ export async function readRunHandoff(
 
   const commits = parseCommits(commitsOut)
   const files = parseHandoffFiles(numstatOut)
-  const pr = await (deps.pr ?? ghPrView)(cwd, branch).catch(() => undefined)
+  // Read through the cache and allowed to arrive late (#1028): the commits, the files and
+  // whether the branch is pushed are all local git, and none of them should wait on `gh`.
+  const pr = deps.pr
+    ? { value: await deps.pr(cwd, branch).catch(() => undefined), pending: false }
+    : await cachedPrView(cwd, branch).catch(() => ({ value: undefined, pending: false }))
 
   return {
     branch,
@@ -168,7 +174,8 @@ export async function readRunHandoff(
     hasRemote,
     pushed: remoteTip.trim() === tip,
     merged: mergedOut.trim().length > 0,
-    ...(pr ? { pr } : {}),
+    ...(pr.value ? { pr: pr.value } : {}),
+    ...(pr.pending ? { prPending: true } : {}),
   }
 }
 
@@ -238,6 +245,9 @@ export async function openRunPullRequest(
     const args = ['pr', 'create', '--head', branch, '--title', draft.title, '--body', draft.body]
     if (draft.base) args.push('--base', draft.base)
     const out = (await gh(args, cwd)).trim()
+    // The branch has a PR now, so the cached "no PR" must go or the bar would keep offering to
+    // open one for the next minute (#1028).
+    forgetPr(cwd, branch)
     // gh prints the new PR's URL as its last line.
     const url = out.split('\n').filter(Boolean).at(-1)
     return url ? { ok: true, url } : { ok: true }

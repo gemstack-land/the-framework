@@ -68,6 +68,9 @@ export function HandoffActions({
 }) {
   const { handoff, busy, pending, act } = state
   if (!handoff || !handoff.exists || handoff.empty || handoff.pr) return null
+  // While the PR lookup is still out (#1028), offering "Open PR" could mean offering to open a
+  // second one. Say nothing for the moment it takes rather than offer the wrong thing.
+  if (handoff.prPending) return null
   // No remote means neither action can work, and a disabled button with no reason is worse than
   // a sentence saying why.
   if (!handoff.hasRemote) return <span className="text-xs text-muted-foreground">No remote to push to.</span>

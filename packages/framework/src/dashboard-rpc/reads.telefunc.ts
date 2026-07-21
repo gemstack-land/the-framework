@@ -108,6 +108,8 @@ export async function onRunWorktree(projectId: string, runId: string): Promise<R
     // The same read already looked the PR up (#809): a session's branch is exactly the thing
     // that has one, so the session's bar can show it like the project's does.
     ...(status?.pr ? { pr: status.pr } : {}),
+    // Still being looked up rather than absent (#1028), so the bar can ask again shortly.
+    ...(status?.prPending ? { prPending: true } : {}),
   }
 }
 
