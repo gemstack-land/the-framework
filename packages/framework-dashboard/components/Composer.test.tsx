@@ -24,7 +24,7 @@ vi.mock('../server/projects.telefunc.js', () => ({ onProjects: () => Promise.res
 vi.mock('./PromptEditor.js', async () => {
   const { forwardRef, useImperativeHandle } = await import('react')
   const PromptEditor = forwardRef((props: any, ref: any) => {
-    useImperativeHandle(ref, () => ({ clear: () => props.onChange(''), focus: () => {}, loadTemplate: () => {} }))
+    useImperativeHandle(ref, () => ({ clear: () => props.onChange(''), focus: () => {} }))
     return (
       <div>
         <input aria-label="prompt" onChange={e => props.onChange(e.target.value)} disabled={props.disabled} />

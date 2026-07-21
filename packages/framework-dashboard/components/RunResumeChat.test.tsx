@@ -24,7 +24,7 @@ vi.mock('../lib/editors.js', () => ({ useDetectedEditors: () => [] }))
 vi.mock('./PromptEditor.js', async () => {
   const { forwardRef, useImperativeHandle } = await import('react')
   const PromptEditor = forwardRef((props: any, ref: any) => {
-    useImperativeHandle(ref, () => ({ clear: () => props.onChange(''), focus: () => {}, loadTemplate: () => {} }))
+    useImperativeHandle(ref, () => ({ clear: () => props.onChange(''), focus: () => {} }))
     return <input aria-label="prompt" onChange={e => props.onChange(e.target.value)} disabled={props.disabled} />
   })
   return { PromptEditor }

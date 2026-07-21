@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest'
 import type { FrameworkEvent } from '@gemstack/framework'
-import { agentViews, pendingChoices, pendingChoice, isRunActive, currentRunEvents } from './live-state.js'
+import { agentViews, pendingChoices, isRunActive, currentRunEvents } from './live-state.js'
 
 const view = (id: string, title: string, markdown: string): FrameworkEvent => ({ kind: 'view', id, title, markdown })
 const choice = (id: string, title: string): FrameworkEvent => ({
@@ -44,10 +44,9 @@ describe('pendingChoices', () => {
     expect(pendingChoices([choice('c1', 'Approve?'), resolved('c1')])).toEqual([])
   })
 
-  test('tracks several gates at once, and pendingChoice returns the latest', () => {
+  test('tracks several gates at once, in fire order', () => {
     const events = [choice('c1', 'One?'), choice('c2', 'Two?')]
     expect(pendingChoices(events).map(c => c.id)).toEqual(['c1', 'c2'])
-    expect(pendingChoice(events)?.id).toBe('c2')
   })
 
   test('strips the kind discriminant from the request', () => {

@@ -14,11 +14,10 @@ import type { SuggestionItem } from './prompt-editor/SuggestionList.js'
 // references (the repeated macro tags `<AWAIT>`/`<REVIEW_FILE>`… and the registered projects).
 // Inserted tokens render as chips but serialize back to the exact prompt text the agent reads,
 // so nothing downstream changes. Markdown is live (StarterKit shortcuts) and round-trips via
-// tiptap-markdown. The editor is imperative for preset loading; text flows out via onChange.
+// tiptap-markdown. Presets load through the `/` menu; text flows out via onChange, and the
+// handle only clears and focuses.
 
 export interface PromptEditorHandle {
-  /** Replace the content with a preset/template string, chip-ifying its tokens. */
-  loadTemplate: (text: string) => void
   clear: () => void
   focus: () => void
 }
@@ -245,9 +244,6 @@ export const PromptEditor = forwardRef<PromptEditorHandle, PromptEditorProps>(fu
   })
 
   useImperativeHandle(ref, () => ({
-    loadTemplate: (text: string) => {
-      if (editor) loadTemplateInto(editor, text)
-    },
     clear: () => {
       editor?.commands.clearContent()
       setIsEmpty(true)
