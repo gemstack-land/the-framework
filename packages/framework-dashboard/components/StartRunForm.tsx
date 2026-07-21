@@ -98,6 +98,8 @@ export function StartRunForm({
         onPromptChange={value => {
           setPrompt(value)
           if (!value.trim() && note) setNote(null)
+          // Editing after a failed start: the red error described the old attempt, drop it (#948).
+          if (error) reset()
         }}
         onPreset={(label, replaced) => {
           reset()
@@ -112,6 +114,11 @@ export function StartRunForm({
         submitBusyLabel="Starting…"
         showShortcutHint
       />
+
+      {/* Feedback right where the action is (#948): the error used to render below the (possibly
+          expanded, tall) Context disclosure, past the fold from the Start button that caused it. */}
+      {error && <p role="alert" className="mt-2 text-xs text-red-500">{error}</p>}
+      {note && !error && <p role="status" className="mt-2 text-xs text-muted-foreground">{note}</p>}
 
       <SystemPromptDisclosure
         prompt={prompt}
@@ -168,9 +175,6 @@ export function StartRunForm({
             </div>
           )}
       </div>
-
-      {error && <p className="mt-2 text-xs text-red-500">{error}</p>}
-      {note && !error && <p className="mt-2 text-xs text-muted-foreground">{note}</p>}
     </form>
   )
 }

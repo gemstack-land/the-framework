@@ -268,7 +268,15 @@ export const PromptEditor = forwardRef<PromptEditorHandle, PromptEditorProps>(fu
       }),
     ],
     editorProps: {
-      attributes: { class: 'pe-prose focus:outline-none' },
+      // The bare contenteditable needs its textbox semantics spelled out (#948): without them a
+      // screen reader gets an unlabeled editable region, and the placeholder span is decorative.
+      attributes: {
+        class: 'pe-prose focus:outline-none',
+        role: 'textbox',
+        'aria-multiline': 'true',
+        'aria-label': 'Prompt',
+        'aria-placeholder': placeholder,
+      },
       handleKeyDown: (_view, event) => {
         if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
           event.preventDefault()

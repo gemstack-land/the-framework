@@ -154,11 +154,18 @@ export const Composer = forwardRef<ComposerHandle, {
     focus: () => editorRef.current?.focus(),
   }))
 
+  // A synchronous latch alongside the async `busy` prop (#948): two fast ⌘↵ presses both read
+  // `busy === false` (React state lags), fired two starts, and the second surfaced a spurious
+  // "already active" error. The ref flips before any await.
+  const submittingRef = useRef(false)
   const submit = (e?: FormEvent) => {
     e?.preventDefault()
     const text = prompt.trim()
-    if (!text || busy) return
-    void onSubmit(text, kind)
+    if (!text || busy || submittingRef.current) return
+    submittingRef.current = true
+    void Promise.resolve(onSubmit(text, kind)).finally(() => {
+      submittingRef.current = false
+    })
   }
 
   // A preset (from the `/` menu or the Presets button) loads the rendered template into the
