@@ -1,5 +1,5 @@
 import { nodeGitRunner, type GitRunner } from '../project.js'
-import type { LinkedPr } from './git-status.js'
+import { ghPrView, nodeGhRunner, type GhRunner, type LinkedPr, type BranchPrLookup } from './gh.js'
 
 // What a finished session produced, and what is left to do with it (#799).
 //
@@ -58,51 +58,6 @@ export interface RunHandoff {
   merged: boolean
   /** The PR opened for this branch, when there is one. */
   pr?: LinkedPr
-}
-
-/**
- * A PR lookup addressed at a *branch* rather than at the checkout's current HEAD.
- *
- * The existing `PrLookup` asks `gh` about whatever branch `cwd` happens to be on, which for a
- * finished session is the project's own branch, not the session's. Here the branch is named.
- */
-export type BranchPrLookup = (cwd: string, branch: string) => Promise<LinkedPr | undefined>
-
-/** A {@link BranchPrLookup} via `gh`; resolves undefined when gh is missing/unauthed or there is no PR. */
-export function nodeGhBranchPrLookup(): BranchPrLookup {
-  return (cwd, branch) =>
-    new Promise(resolve => {
-      void import('node:child_process').then(({ execFile }) => {
-        const args = ['pr', 'view', branch, '--json', 'number,url,state,title']
-        execFile('gh', args, { cwd, timeout: 8_000 }, (err, stdout) => {
-          if (err) return resolve(undefined)
-          try {
-            const pr = JSON.parse(String(stdout)) as LinkedPr
-            resolve({ number: pr.number, url: pr.url, state: pr.state, title: pr.title })
-          } catch {
-            resolve(undefined)
-          }
-        })
-      })
-    })
-}
-
-/** Runs `gh`, resolving stdout and rejecting with the CLI's own stderr on failure. */
-export type GhRunner = (args: string[], cwd: string) => Promise<string>
-
-/** A {@link GhRunner} backed by `execFile('gh', ...)`. */
-export function nodeGhRunner(): GhRunner {
-  return async (args, cwd) => {
-    const { execFile } = await import('node:child_process')
-    return new Promise((resolvePromise, rejectPromise) => {
-      execFile('gh', args, { cwd, timeout: 60_000 }, (err, stdout, stderr) => {
-        // gh puts the useful part on stderr ("not logged in", "no default remote"), and that is
-        // exactly what the dashboard should show instead of a generic failure.
-        if (err) rejectPromise(new Error(String(stderr).trim() || err.message))
-        else resolvePromise(String(stdout))
-      })
-    })
-  }
 }
 
 /** Injectable seams so the reader is unit-testable off disk. */
@@ -209,7 +164,7 @@ export async function readRunHandoff(
 
   const commits = parseCommits(commitsOut)
   const files = parseNumstat(numstatOut)
-  const pr = await (deps.pr ?? nodeGhBranchPrLookup())(cwd, branch).catch(() => undefined)
+  const pr = await (deps.pr ?? ghPrView)(cwd, branch).catch(() => undefined)
 
   return {
     branch,

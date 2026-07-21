@@ -1,6 +1,7 @@
 import { listRuns, readLiveMetas, type LiveRun, type RunMeta } from '../store/index.js'
 import type { ProjectSummary } from './projects.js'
 import { readRunHandoff, runBranchFor, type RunHandoff } from './run-handoff.js'
+import { ghPrList, type OpenPr, type PrLister } from './gh.js'
 
 // The interventions queue (#632, part of the Queue #624): the cross-project "needs you" list.
 // Rom's design (#624): proposals and finished work are both just PRs, so the bulk of what
@@ -39,37 +40,6 @@ export interface Intervention {
   createdAt?: string
 }
 
-/** An open PR as the lister reports it. */
-export interface OpenPr {
-  number: number
-  title: string
-  url: string
-  /** Draft PRs are not ready for review, so they are left off the queue. */
-  isDraft: boolean
-  createdAt?: string
-}
-
-/** Lists a checkout's open PRs; resolves `[]` when there is no remote / gh is unavailable. */
-export type PrLister = (cwd: string) => Promise<OpenPr[]>
-
-/** A {@link PrLister} via the `gh` CLI; resolves `[]` when gh is missing/unauthed or there is no remote. */
-export function nodeGhPrLister(): PrLister {
-  return cwd =>
-    new Promise(resolve => {
-      void import('node:child_process').then(({ execFile }) => {
-        const args = ['pr', 'list', '--state', 'open', '--limit', '50', '--json', 'number,title,url,isDraft,createdAt']
-        execFile('gh', args, { cwd, timeout: 8_000 }, (err, stdout) => {
-          if (err) return resolve([])
-          try {
-            resolve(JSON.parse(String(stdout)) as OpenPr[])
-          } catch {
-            resolve([])
-          }
-        })
-      })
-    })
-}
-
 /** Injectable seam so {@link buildInterventions} is unit-testable off disk. */
 export interface InterventionsDeps {
   prs?: PrLister
@@ -106,7 +76,7 @@ export async function buildInterventions(
   projects: ProjectSummary[],
   deps: InterventionsDeps = {},
 ): Promise<Intervention[]> {
-  const prs = deps.prs ?? nodeGhPrLister()
+  const prs = deps.prs ?? ghPrList
   const liveRuns = deps.liveRuns ?? readLiveMetas
   const items: Intervention[] = []
   for (const project of projects) {

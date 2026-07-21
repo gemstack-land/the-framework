@@ -1,3 +1,4 @@
+import { cliRunner, type CliRunner } from './cli-exec.js'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { FrameworkSignals } from '@gemstack/ai-autopilot'
@@ -56,19 +57,16 @@ export async function isActivated(cwd: string, fs: ProjectFs = nodeProjectFs()):
 }
 
 /** Runs `git` in `cwd` and resolves stdout. Injectable so the crawl is testable. */
-export type GitRunner = (args: string[], cwd: string) => Promise<string>
+export type GitRunner = CliRunner
 
-/** A {@link GitRunner} backed by `execFile('git', ...)`. Rejects on any git error. */
+/**
+ * A {@link GitRunner} backed by `execFile('git', ...)`. Rejects on any git error.
+ *
+ * The buffer is raised well past the default because a repo crawl (`git ls-files`) prints a
+ * line per file, and a large checkout overruns it.
+ */
 export function nodeGitRunner(): GitRunner {
-  return async (args, cwd) => {
-    const { execFile } = await import('node:child_process')
-    return new Promise((resolvePromise, rejectPromise) => {
-      execFile('git', args, { cwd, timeout: 10_000, maxBuffer: 16 * 1024 * 1024 }, (err, stdout) => {
-        if (err) rejectPromise(err)
-        else resolvePromise(String(stdout))
-      })
-    })
-  }
+  return cliRunner({ bin: 'git', timeoutMs: 10_000, maxBuffer: 16 * 1024 * 1024 })
 }
 
 /**
