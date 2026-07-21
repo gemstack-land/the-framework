@@ -72,8 +72,10 @@ export const Composer = forwardRef<ComposerHandle, {
   addContext: (path: string) => void
   /** Drop a path from the run Context when its `@`/`#` chip leaves the editor (#948). */
   removeContext?: ((path: string) => void) | undefined
-  /** Run the composed text. `kind` is `prompt` once a preset was loaded, else `build`. */
-  onSubmit: (text: string, kind: 'build' | 'prompt') => void | Promise<void>
+  /** Run the composed text. `kind` is `prompt` once a preset was loaded, else `build`.
+   *  `newSession` (#959) says the loaded preset must open a session of its own, so the two
+   *  in-session hosts send it as a new run instead of into the session they sit in. */
+  onSubmit: (text: string, kind: 'build' | 'prompt', opts: { newSession: boolean }) => void | Promise<void>
   /** Mirror the live prompt + kind out, so the launcher can drive its disclosure/context UI. */
   onPromptChange?: ((prompt: string, kind: 'build' | 'prompt') => void) | undefined
   /** A preset was loaded (so the launcher can flag it in its note); `replaced` says a typed
@@ -106,6 +108,8 @@ export const Composer = forwardRef<ComposerHandle, {
 ) {
   const [prompt, setPrompt] = useState('')
   const [kind, setKind] = useState<'build' | 'prompt'>('build')
+  // Set by the loaded preset, not by the surface (#959). Cleared with the box, like `kind`.
+  const [newSession, setNewSession] = useState(false)
   const [addingPreset, setAddingPreset] = useState(false)
   const editorRef = useRef<PromptEditorHandle>(null)
   // The registered projects for the `@` picker — the same list the launcher reads.
@@ -128,6 +132,7 @@ export const Composer = forwardRef<ComposerHandle, {
         label: p.label,
         ...(p.tooltip ? { tooltip: p.tooltip } : {}),
         render: () => p.render(undefined, { session_name: sessionName, settings: { technical_control: technical } }),
+        ...(p.newSession ? { newSession: true } : {}),
       })),
     [sessionName, technical],
   )
@@ -169,23 +174,24 @@ export const Composer = forwardRef<ComposerHandle, {
     const text = prompt.trim()
     if (!text || busy || submittingRef.current) return
     submittingRef.current = true
-    void Promise.resolve(onSubmit(text, kind)).finally(() => {
+    void Promise.resolve(onSubmit(text, kind, { newSession })).finally(() => {
       submittingRef.current = false
     })
   }
 
   // A preset (from the `/` menu or the Presets button) loads the rendered template into the
   // editor, which chip-ifies its tags; the run then goes verbatim as a `prompt` kind.
-  const loadPreset = (label: string, replaced: boolean) => {
+  const loadPreset = (label: string, replaced: boolean, presetNewSession = false) => {
     setKind('prompt')
+    setNewSession(presetNewSession)
     onPreset?.(label, replaced)
   }
 
   // The Presets button's load path (#948): through the imperative handle rather than the
   // suggestion plugin, then the same bookkeeping as the `/` menu.
-  const loadPresetFromMenu = (text: string, label: string) => {
+  const loadPresetFromMenu = (text: string, label: string, presetNewSession?: boolean) => {
     const replaced = editorRef.current?.loadTemplate(text) ?? false
-    loadPreset(label, replaced)
+    loadPreset(label, replaced, presetNewSession)
   }
 
   const onPromptEdit = (value: string) => {
@@ -193,6 +199,8 @@ export const Composer = forwardRef<ComposerHandle, {
     // An emptied box is a fresh start: back to a normal build run.
     const nextKind = !value.trim() && kind !== 'build' ? 'build' : kind
     if (nextKind !== kind) setKind(nextKind)
+    // Emptying the box drops the preset, and with it its new-session rule.
+    if (nextKind === 'build' && newSession) setNewSession(false)
     onPromptChange?.(value, nextKind)
   }
 

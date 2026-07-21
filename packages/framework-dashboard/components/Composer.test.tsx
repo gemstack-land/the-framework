@@ -24,7 +24,15 @@ vi.mock('../server/projects.telefunc.js', () => ({ onProjects: () => Promise.res
 vi.mock('./PromptEditor.js', async () => {
   const { forwardRef, useImperativeHandle } = await import('react')
   const PromptEditor = forwardRef((props: any, ref: any) => {
-    useImperativeHandle(ref, () => ({ clear: () => props.onChange(''), focus: () => {} }))
+    useImperativeHandle(ref, () => ({
+      clear: () => props.onChange(''),
+      focus: () => {},
+      // Loading a preset puts its text in the box, which is what makes a loaded preset submittable.
+      loadTemplate: (text: string) => {
+        props.onChange(text)
+        return false
+      },
+    }))
     return (
       <div>
         <input aria-label="prompt" onChange={e => props.onChange(e.target.value)} disabled={props.disabled} />
@@ -81,7 +89,7 @@ describe('Composer (#721)', () => {
     // The editor + submit still work (so `/` `<` `@` `#` triggers remain live in the editor).
     fireEvent.change(screen.getByLabelText('prompt'), { target: { value: 'quick run' } })
     fireEvent.click(screen.getByRole('button', { name: 'Start' }))
-    expect(onSubmit).toHaveBeenCalledWith('quick run', 'build')
+    expect(onSubmit).toHaveBeenCalledWith('quick run', 'build', { newSession: false })
   })
 
   test('showAgentModel={false} (#831) drops the agent/model select, keeping the rest of the row', () => {
@@ -92,7 +100,7 @@ describe('Composer (#721)', () => {
     expect(screen.getByRole('button', { name: 'Session options' })).toBeTruthy()
     fireEvent.change(screen.getByLabelText('prompt'), { target: { value: 'follow-up' } })
     fireEvent.click(screen.getByRole('button', { name: 'Send' }))
-    expect(onSubmit).toHaveBeenCalledWith('follow-up', 'build')
+    expect(onSubmit).toHaveBeenCalledWith('follow-up', 'build', { newSession: false })
   })
 
   test('option labels promise only what the code delivers (#801)', () => {
@@ -131,14 +139,14 @@ describe('Composer (#721)', () => {
     fireEvent.change(screen.getByLabelText('prompt'), { target: { value: 'ship it' } })
     expect(submit.hasAttribute('disabled')).toBe(false)
     fireEvent.click(submit)
-    expect(onSubmit).toHaveBeenCalledWith('ship it', 'build')
+    expect(onSubmit).toHaveBeenCalledWith('ship it', 'build', { newSession: false })
   })
 
   test('the editor shortcut (Cmd/Ctrl+Enter) submits too', () => {
     const { onSubmit } = renderComposer()
     fireEvent.change(screen.getByLabelText('prompt'), { target: { value: 'go' } })
     fireEvent.click(screen.getByText('editor-submit'))
-    expect(onSubmit).toHaveBeenCalledWith('go', 'build')
+    expect(onSubmit).toHaveBeenCalledWith('go', 'build', { newSession: false })
   })
 
   test('mirrors prompt changes out via onPromptChange', () => {
@@ -146,5 +154,37 @@ describe('Composer (#721)', () => {
     renderComposer({ onPromptChange })
     fireEvent.change(screen.getByLabelText('prompt'), { target: { value: 'hi' } })
     expect(onPromptChange).toHaveBeenLastCalledWith('hi', 'build')
+  })
+
+  // #959: a preset can declare that it never belongs in the open session. The Composer does not
+  // act on that itself — it carries the flag out to the host, which is the only thing that knows
+  // whether "new session" means anything on its surface.
+  test('a new-session preset marks its submit, and a normal one does not (#959)', () => {
+    const { onSubmit } = renderComposer()
+    fireEvent.click(screen.getByRole('button', { name: /Presets/ }))
+    fireEvent.click(screen.getByText('Import tickets from GitHub'))
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+    expect(onSubmit).toHaveBeenCalledWith('Import tickets from GitHub', 'prompt', { newSession: true })
+
+    cleanup()
+    const second = renderComposer()
+    fireEvent.click(screen.getByRole('button', { name: /Presets/ }))
+    fireEvent.click(screen.getByText('Security audit'))
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+    expect(second.onSubmit).toHaveBeenCalledWith(expect.stringContaining('Security audit'), 'prompt', { newSession: false })
+  })
+
+  test('emptying the box drops the preset\'s new-session rule with the preset (#959)', () => {
+    const { onSubmit } = renderComposer()
+    fireEvent.click(screen.getByRole('button', { name: /Presets/ }))
+    fireEvent.click(screen.getByText('Import tickets from GitHub'))
+    // The stub editor does not mirror the loaded text into the DOM input, and jsdom drops a
+    // change event whose value did not actually change — so give it something to clear.
+    fireEvent.change(screen.getByLabelText('prompt'), { target: { value: 'edited' } })
+    // Clearing it back to a typed prompt is a fresh start: a plain build run, in this session.
+    fireEvent.change(screen.getByLabelText('prompt'), { target: { value: '' } })
+    fireEvent.change(screen.getByLabelText('prompt'), { target: { value: 'just a question' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+    expect(onSubmit).toHaveBeenCalledWith('just a question', 'build', { newSession: false })
   })
 })

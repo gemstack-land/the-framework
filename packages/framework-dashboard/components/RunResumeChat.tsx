@@ -43,8 +43,18 @@ export function RunResumeChat({
   const composerRef = useRef<ComposerHandle>(null)
   const { busy, error, start } = useStartRun()
 
-  const send = async (text: string): Promise<void> => {
+  const send = async (text: string, _kind: 'build' | 'prompt', opts: { newSession: boolean }): Promise<void> => {
     if (busy) return
+    // A new-session preset is not a continuation (#959): it drops the resume seed and the run id,
+    // so it opens its own run rather than writing more history into this finished one.
+    if (opts.newSession) {
+      const started = await start(projectId, text, 'prompt', {})
+      if (started) {
+        composerRef.current?.clear()
+        onRunStarted(text, started.runId)
+      }
+      return
+    }
     // A continuation is a `prompt` run seeded with the finished run's session id (#720). It
     // resumes on the run's own agent; the model and the system-prompt options are moot here, since
     // the resumed transcript keeps the framing and model it already had.

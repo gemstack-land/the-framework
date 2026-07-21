@@ -8,6 +8,9 @@ import { Token, MACRO_TOKENS, ACTION_TOKENS, type TokenSpec } from './prompt-edi
 import { makeTrigger } from './prompt-editor/suggestion.js'
 import { tokenizeEditorDoc } from './prompt-editor/tokenize.js'
 import type { SuggestionItem } from './prompt-editor/SuggestionList.js'
+// The same entry the Presets button renders: the `/` menu is the other face of that one list,
+// so it reads the shape rather than restating it structurally.
+import type { PresetEntry } from './PresetsMenu.js'
 
 // The rich prompt editor (#470): a Tiptap surface that replaces the plain textarea. `/` opens
 // commands (load a preset, insert an agent action like `showMultiSelect()`), `@` opens
@@ -30,7 +33,7 @@ interface PromptEditorProps {
   onSubmit: () => void
   /** A preset picked from the `/` menu (so the form can flip to a `prompt` run). `replaced` says
    *  whether a typed draft was overwritten — undo brings it back, and the form's note says so. */
-  onPreset?: (label: string, replaced: boolean) => void
+  onPreset?: (label: string, replaced: boolean, newSession?: boolean) => void
   /** A project referenced via `@` (so the form can add it to the run context). */
   onMentionProject?: (path: string) => void
   /** A file referenced via `#` (so the form can add its repo-relative path to the run context). */
@@ -41,7 +44,7 @@ interface PromptEditorProps {
   projects: ProjectSummary[]
   /** The current project's files, repo-relative, for the `#` picker (#504). */
   files?: string[]
-  presets: { id: string; label: string; render: () => string; tooltip?: string | undefined }[]
+  presets: PresetEntry[]
   /** The user's saved presets (#626), loaded verbatim from the `/` menu (#722). */
   customPresets?: CustomPreset[]
   /** Open the create panel from the `/` menu's "New preset…" (#722). Omit where there is no panel
@@ -192,7 +195,7 @@ export const PromptEditor = forwardRef<PromptEditorHandle, PromptEditorProps>(fu
               // Drop the `/query` trigger first so it does not count as a replaced draft.
               ed.chain().focus().deleteRange(range).run()
               const replaced = loadTemplateInto(ed, preset.render())
-              onPresetRef.current?.(preset.label, replaced)
+              onPresetRef.current?.(preset.label, replaced, preset.newSession)
             }
             return
           }

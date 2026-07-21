@@ -1,6 +1,7 @@
 import { definePreset, type PresetDef } from './preset-prompt.js'
 import {
   PRESETS_DRAIN_QUEUE,
+  PRESETS_IMPORT_TICKETS,
   PRESETS_MAINTAINABILITY,
   PRESETS_MAINTENANCE,
   PRESETS_MARKET_RESEARCH,
@@ -69,6 +70,17 @@ export const presets = {
   marketResearch: definePreset({ name: 'market-research', template: PRESETS_MARKET_RESEARCH, label: 'Market research' }),
 
   /**
+   * [Import tickets from GitHub] (#959): fill `tickets/` from the repo's own issues, so the
+   * triage and planning presets have a backlog to read. One line of prompt, because the system
+   * prompt already tells the agent what a ticket is and where it goes.
+   *
+   * The only preset marked {@link PresetSpec.newSession}: importing is repo work, not a reply, so
+   * it opens its own session rather than appending to whichever one the user happens to be
+   * reading.
+   */
+  importTickets: definePreset({ name: 'import-tickets', template: PRESETS_IMPORT_TICKETS, label: 'Import tickets from GitHub', newSession: true, tooltip: 'Fill `tickets/` from the GitHub issues. Always runs in a new session.' }),
+
+  /**
    * [Quick wins] (#773): harvest the cheap work out of the plans we already have. Reads the
    * `.plan.md` companions the #684 format defines and appends the quick ones to `TODO_AGENTS.md`.
    * This is the half of auto PM that closes the loop: [Spike & plan] turns tickets into plans,
@@ -130,6 +142,7 @@ export const LAUNCHER_PRESETS: readonly PresetDef[] = [
   presets.spikeAndPlan,
   presets.quickWins,
   presets.marketResearch,
+  presets.importTickets,
   presets.maintenance,
   presets.triageQuick,
   presets.triageConsensual,
