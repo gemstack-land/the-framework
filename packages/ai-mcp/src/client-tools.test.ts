@@ -164,6 +164,71 @@ describe('mcpClientTools (caller-owned client)', () => {
   })
 })
 
+// ─── Streaming is live, not replayed (#977) ──────────────
+
+describe('mcpClientTools (streaming is live)', () => {
+  it('yields a tool-update chunk while the remote call is still running', async () => {
+    // A fake client whose callTool reports progress, then blocks until we release it.
+    let release: () => void = () => {}
+    const blocked = new Promise<void>((resolve) => { release = resolve })
+    const client = {
+      listTools: async () => ({ tools: [{ name: 'slow', description: '', inputSchema: { type: 'object' } }] }),
+      callTool:  async (
+        _params: unknown,
+        _schema: unknown,
+        opts?: { onprogress?: (p: { progress: number; total?: number }) => void },
+      ) => {
+        opts?.onprogress?.({ progress: 1, total: 2 })
+        await blocked
+        return { content: [{ type: 'text', text: 'finished' }] }
+      },
+      close: async () => {},
+    }
+
+    const tools = await mcpClientTools(client, { streaming: true })
+    const iter = (tools[0]!.execute as (input: unknown) => AsyncGenerator<
+      { progress: number }, string, void
+    >)({})
+
+    try {
+      // The chunk has to arrive before the call resolves, so race it against a
+      // timer rather than awaiting (which would hang if progress is batched).
+      const first = await Promise.race([
+        iter.next(),
+        new Promise<'timeout'>((resolve) => { setTimeout(() => resolve('timeout'), 250) }),
+      ])
+      assert.notEqual(first, 'timeout', 'no tool-update chunk arrived while the remote call was still running')
+      const chunk = first as IteratorResult<{ progress: number }, string>
+      assert.equal(chunk.done, false)
+      assert.equal((chunk as IteratorYieldResult<{ progress: number }>).value.progress, 1)
+    } finally {
+      release()
+      await iter.return('')
+    }
+  })
+
+  it('every progress chunk still lands before the result', async () => {
+    const { client, cleanup } = await buildLoopback()
+    try {
+      const tools = await mcpClientTools(client, { streaming: true })
+      const longTask = tools.find(t => t.definition.name === 'long_task')!
+      const { yields, result } = await runStreamingTool(longTask, { steps: 3 })
+      assert.deepStrictEqual(yields.map(y => y.progress), [1, 2, 3])
+      assert.strictEqual(result, 'done in 3 steps')
+    } finally { await cleanup() }
+  })
+
+  it('propagates a callTool rejection out of the streaming generator', async () => {
+    const client = {
+      listTools: async () => ({ tools: [{ name: 'boom', description: '', inputSchema: { type: 'object' } }] }),
+      callTool:  async () => { throw new Error('remote exploded') },
+      close:     async () => {},
+    }
+    const tools = await mcpClientTools(client, { streaming: true })
+    await assert.rejects(runTool(tools[0]!, {}), /remote exploded/)
+  })
+})
+
 // ─── Connect failures (#978) ─────────────────────────────
 
 describe('mcpClientTools (connect failure)', () => {

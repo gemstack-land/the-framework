@@ -55,7 +55,7 @@ await tools.close?.()
 |---|---|---|
 | `filter` | all tools | `(toolName) => boolean` — drop remote tools you don't want to expose. |
 | `namePrefix` | `''` | Prefix every tool name, to avoid collisions when wiring several remote servers. |
-| `streaming` | `true` | Forward the remote server's `notifications/progress` as `tool-update` chunks during a run. |
+| `streaming` | `true` | Forward the remote server's `notifications/progress` as `tool-update` chunks, each one as it arrives while the remote tool is still running. Every chunk lands before the tool's result. |
 
 ```ts
 const tools = await mcpClientTools('https://api.example.com/mcp', {
