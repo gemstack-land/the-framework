@@ -3,7 +3,7 @@ import { describe, it, beforeEach } from 'node:test'
 import assert from 'node:assert/strict'
 import { z } from 'zod'
 import {
-  Mcp, McpServer, McpTool, McpResource, McpPrompt, McpResponse,
+  McpServer, McpTool, McpResource, McpPrompt, McpResponse,
   Name, Version, Instructions, Description, Handle,
   IsReadOnly, IsDestructive, IsIdempotent, IsOpenWorld,
   Audience, Priority, LastModified,
@@ -358,63 +358,6 @@ describe('McpResource', () => {
     }
 
     assert.equal(new TestResource().mimeType(), 'text/plain')
-  })
-})
-
-// ─── Mcp Registry ─────────────────────────────────────────
-
-describe('Mcp', () => {
-  beforeEach(() => {
-    // Clear registries between tests
-    Mcp.getWebServers().clear()
-    Mcp.getLocalServers().clear()
-  })
-
-  it('registers and retrieves web servers', () => {
-    class TestServer extends McpServer {}
-    Mcp.web('/mcp', TestServer)
-
-    const servers = Mcp.getWebServers()
-    assert.equal(servers.size, 1)
-    assert.ok(servers.has('/mcp'))
-  })
-
-  it('registers and retrieves local servers', () => {
-    class TestServer extends McpServer {}
-    Mcp.local('test', TestServer)
-
-    const servers = Mcp.getLocalServers()
-    assert.equal(servers.size, 1)
-    assert.ok(servers.has('test'))
-  })
-
-  it('web servers include middleware', () => {
-    class TestServer extends McpServer {}
-    const middleware = [() => {}]
-    Mcp.web('/mcp', TestServer, middleware)
-
-    const entry = Mcp.getWebServers().get('/mcp')
-    assert.ok(entry)
-    assert.equal(entry.middleware.length, 1)
-  })
-
-  it('.oauth2() stores options on the entry', () => {
-    class TestServer extends McpServer {}
-    Mcp.web('/mcp', TestServer).oauth2({ scopes: ['mcp.read'] })
-
-    const entry = Mcp.getWebServers().get('/mcp')
-    assert.ok(entry)
-    assert.ok(entry.oauth2)
-    assert.deepStrictEqual(entry.oauth2.scopes, ['mcp.read'])
-  })
-
-  it('.oauth2() defaults to empty options when called without args', () => {
-    class TestServer extends McpServer {}
-    Mcp.web('/mcp', TestServer).oauth2()
-
-    const entry = Mcp.getWebServers().get('/mcp')
-    assert.ok(entry?.oauth2)
-    assert.deepStrictEqual(entry.oauth2, {})
   })
 })
 
@@ -1496,30 +1439,6 @@ describe('oauth2McpMiddleware — the WWW-Authenticate challenge is not client-s
     const b = body as unknown as Record<string, unknown>
     assert.equal(b['resource'], 'http://app.test/mcp/secure')
     assert.deepStrictEqual(b['authorization_servers'], ['http://app.test'])
-  })
-})
-
-describe('Mcp servers registry on globalThis', () => {
-  it('state lives on globalThis so it survives a second copy of @gemstack/mcp', () => {
-    // Vite-bundled server apps inline `@gemstack/mcp` (the route mounter
-    // reads `Mcp.getWebServers()`) into entry.mjs, but any `Mcp.web()` /
-    // `Mcp.local()` calls in `routes/console.ts` or `app/Mcp/...` can run
-    // from a node_modules copy resolved via the provider auto-discovery
-    // manifest. Without a globalThis-routed store, servers registered from
-    // the externalized copy would never be visible to the bundled copy's
-    // mounter — every `/mcp/*` request would 404. This test pins the
-    // contract: writes from this module copy are visible on a global key
-    // the second copy would also read from.
-    class S extends McpServer { Name = 'Echo'; Version = '1.0.0' }
-    Mcp.web('/mcp/echo', S)
-    Mcp.local('echo', S)
-    const store = (globalThis as Record<string, unknown>)['__gemstack_mcp_servers__'] as {
-      web:   Map<string, unknown>
-      local: Map<string, unknown>
-    } | undefined
-    assert.ok(store, 'global store should exist after Mcp.web()')
-    assert.ok(store.web.has('/mcp/echo'))
-    assert.ok(store.local.has('echo'))
   })
 })
 

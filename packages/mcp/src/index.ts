@@ -6,8 +6,6 @@ export { McpResource } from './McpResource.js'
 export { McpPrompt } from './McpPrompt.js'
 export type { McpPromptMessage } from './McpPrompt.js'
 export { McpResponse } from './McpResponse.js'
-export { Mcp } from './Mcp.js'
-export type { McpWebEntry, McpWebBuilder } from './Mcp.js'
 export {
   Name, Version, Instructions, Description, Handle,
   IsReadOnly, IsDestructive, IsIdempotent, IsOpenWorld,
