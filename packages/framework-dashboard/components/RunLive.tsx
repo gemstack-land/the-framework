@@ -20,6 +20,7 @@ export function RunLive({
   addContext,
   removeContext,
   lost = false,
+  onRunStarted,
 }: {
   projectId: string
   /** Which run to steer (#749); absent right after Start, before the poll adopts its id. */
@@ -30,6 +31,8 @@ export function RunLive({
   removeContext?: ((path: string) => void) | undefined
   /** The live channel's health (#948) — surfaced as a banner over the feed. */
   lost?: boolean
+  /** Jump to the run a new-session preset started from the chat below (#959). */
+  onRunStarted?: ((intent: string, runId?: string) => void) | undefined
 }) {
   // The session's own name, once the agent has set it (#874): presets in the chat below default
   // to targeting this session rather than the whole codebase.
@@ -41,7 +44,7 @@ export function RunLive({
           falls back to the project root and would report the user's own dirty files as the run's. */}
       {runId && <RunChanges projectId={projectId} runId={runId} />}
       <RunFeed events={events} showSessionLink={false} lost={lost} />
-      <RunChat projectId={projectId} runId={runId} files={files} addContext={addContext} removeContext={removeContext} sessionName={sessionName} />
+      <RunChat projectId={projectId} runId={runId} files={files} addContext={addContext} removeContext={removeContext} sessionName={sessionName} onRunStarted={onRunStarted} />
     </>
   )
 }

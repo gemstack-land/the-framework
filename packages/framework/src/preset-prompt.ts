@@ -64,6 +64,14 @@ export interface PresetSpec {
   label: string
   /** One line under the label, when the name alone does not say what the preset queues. */
   tooltip?: string
+  /**
+   * Always run in a session of its own (#959), even when picked from inside one. A preset whose
+   * work is about the repo rather than about the conversation has nothing to gain from the current
+   * transcript and something to lose from it: sent to a live session it would land on that
+   * session's branch, behind its context. The flag sits on the preset rather than on the surface
+   * that fires it, because it is a property of the work, not of where the user clicked.
+   */
+  newSession?: boolean
 }
 
 /** A preset's public shape: how it is declared, plus its resolved params and a renderer. */

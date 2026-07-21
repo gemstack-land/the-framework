@@ -19,6 +19,8 @@ export interface PresetEntry {
   label: string
   render: () => string
   tooltip?: string | undefined
+  /** Runs in a session of its own, even when loaded from inside one (#959). */
+  newSession?: boolean | undefined
 }
 
 // The visible face of the presets (#948). Loading used to live only behind typing `/` in the
@@ -37,8 +39,9 @@ export function PresetsMenu({
   presets: PresetEntry[]
   customPresets: CustomPreset[]
   busy: boolean
-  /** Load a preset's prompt into the editor. */
-  onLoad: (text: string, label: string) => void
+  /** Load a preset's prompt into the editor. `newSession` marks the ones that never append to
+   *  the open session (#959); a saved preset is always a plain load. */
+  onLoad: (text: string, label: string, newSession?: boolean) => void
   /** Open the create panel; absent where no panel renders. */
   onNew?: (() => void) | undefined
   /** Delete a saved preset by id. */
@@ -62,7 +65,7 @@ export function PresetsMenu({
             <DropdownMenuItem
               key={p.id}
               disabled={busy}
-              onClick={() => onLoad(p.render(), p.label)}
+              onClick={() => onLoad(p.render(), p.label, p.newSession)}
               {...(p.tooltip ? { title: p.tooltip } : {})}
               className="items-start"
             >

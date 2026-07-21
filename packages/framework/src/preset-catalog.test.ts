@@ -20,6 +20,7 @@ const PARAMETERIZED = [
 /** The presets that scope themselves, so there is no blank for a user to fill. */
 const PARAMLESS = [
   presets.marketResearch,
+  presets.importTickets,
   presets.quickWins,
   presets.spikeAndPlan,
   presets.suggestNewTickets,
@@ -35,9 +36,10 @@ test('every preset keeps its exact run-kind name', () => {
   assert.deepEqual(
     Object.values(presets).map(p => p.name).sort(),
     [
-      'drain-queue', 'maintainability', 'maintenance', 'market-research', 'quick-wins',
-      'readability', 'research', 'security-audit', 'spike-and-plan', 'suggest-new-tickets',
-      'suggest-tickets-to-work-on', 'triage-consensual', 'triage-quick', 'ux',
+      'drain-queue', 'import-tickets', 'maintainability', 'maintenance', 'market-research',
+      'quick-wins', 'readability', 'research', 'security-audit', 'spike-and-plan',
+      'suggest-new-tickets', 'suggest-tickets-to-work-on', 'triage-consensual', 'triage-quick',
+      'ux',
     ],
   )
 })
@@ -200,3 +202,15 @@ test('neither ungated triage preset waits on a human (#891/#892 vs #698)', () =>
   }
   assert.ok(presets.suggestTicketsToWorkOn.template.includes('<AWAIT>'), 'the gated preset still awaits')
 })
+
+test('one preset, and only one, always opens a session of its own (#959)', () => {
+  // The flag is a property of the work, not of the surface that fires it, so it is pinned here
+  // rather than in the dashboard: the import reads GitHub and writes `tickets/`, which has nothing
+  // to do with whatever session the user happened to be reading when they clicked it.
+  const marked = Object.values(presets).filter(p => p.newSession).map(p => p.name)
+  assert.deepEqual(marked, ['import-tickets'])
+  assert.equal(presets.importTickets.template, 'Import tickets from GitHub')
+  assert.equal(presets.importTickets.render(), 'Import tickets from GitHub')
+  assert.equal(LAUNCHER_PRESETS.includes(presets.importTickets), true)
+})
+

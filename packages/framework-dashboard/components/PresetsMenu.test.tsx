@@ -26,7 +26,7 @@ describe('PresetsMenu', () => {
   test('lists built-ins and loads the rendered prompt', () => {
     const { onLoad } = mount()
     fireEvent.click(screen.getByText('[Research]'))
-    expect(onLoad).toHaveBeenCalledWith('RESEARCH PROMPT', '[Research]')
+    expect(onLoad).toHaveBeenCalledWith('RESEARCH PROMPT', '[Research]', undefined)
   })
 
   test('a saved preset loads verbatim', () => {
