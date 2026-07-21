@@ -164,8 +164,8 @@ export function startBackgroundServices(deps: BackgroundServiceDeps): Background
       const outcome = await promoteQueue(project.path, run)
       if (!outcome.promoted) log(`[framework] auto PM: ${outcome.reason} (${runId})`)
       // A finished run is settled either way — one that wrote no queue is not going to start.
-      // The exception is a checkout busy with the user's own queue edits, which is worth retrying.
-      const retry = !outcome.promoted && outcome.reason === 'the checkout has uncommitted queue changes'
+      // The exception (a checkout busy with the user's own queue edits) is the callee's to flag.
+      const retry = !outcome.promoted && outcome.retry === true
       return { settled: !retry, promoted: outcome.promoted }
     },
     log,
