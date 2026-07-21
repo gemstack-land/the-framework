@@ -381,6 +381,139 @@ describe('handoff loop integration', () => {
     assert.equal(sideEffectRan, false, 'sibling tool was skipped, not executed')
   })
 
+  // #971 removed the force-downgrade to serial dispatch when a handoff tool
+  // was present, so the two tests below exercise a handoff inside a
+  // multi-call step under BOTH dispatch modes and assert they agree.
+
+  it('parallel dispatch: a sibling after a handoff is skipped and the carried log stays paired', async () => {
+    const parent = scriptedAdapter('parent', [
+      {
+        kind: 'toolCalls',
+        calls: [
+          { id: 'p1', name: 'handoffToChild', arguments: { message: 'go' } },
+          { id: 'p2', name: 'sideEffect',     arguments: {} },
+        ],
+      },
+    ])
+    const childMsgs: AiMessage[][] = []
+    const child = scriptedAdapter('child', [{ kind: 'text', text: 'done' }], { lastMessages: childMsgs })
+
+    AiRegistry.register(parent.factory)
+    AiRegistry.register(child.factory)
+    AiRegistry.setDefault('parent/m')
+
+    let sideEffectRan = false
+    class Child extends Agent {
+      instructions() { return 'c' }
+      override model() { return 'child/m' }
+    }
+    class Parent extends Agent {
+      instructions() { return 'p' }
+      override model() { return 'parent/m' }
+      tools() {
+        return [
+          handoff(Child),
+          {
+            definition: { name: 'sideEffect', description: 'side effect', inputSchema: z.object({}) },
+            execute: async () => { sideEffectRan = true; return 'should not run' },
+            toSchema() {
+              return { name: 'sideEffect', description: 'side effect', parameters: { type: 'object', properties: {}, required: [], additionalProperties: false } }
+            },
+          } as never,
+        ]
+      }
+    }
+
+    const r = await new Parent().prompt('go', { parallelTools: true })
+    assert.equal(r.text, 'done')
+    assert.equal(sideEffectRan, false, 'sibling must not be dispatched once the handoff has been decided')
+
+    // Both tool calls still get a tool message, so the carried log replays.
+    const seen = childMsgs[0]!
+    assert.ok(seen.some(m => m.role === 'tool' && m.toolCallId === 'p1' && String(m.content).includes('Handed off to Child')))
+    assert.ok(seen.some(m => m.role === 'tool' && m.toolCallId === 'p2' && String(m.content).includes('Skipped: parent agent handed off')))
+  })
+
+  it('tools decided before a handoff still dispatch concurrently, and the log matches serial', async () => {
+    const sleep = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms))
+
+    const run = async (parallelTools: boolean) => {
+      AiRegistry.reset()
+      const parent = scriptedAdapter('parent', [
+        {
+          kind: 'toolCalls',
+          calls: [
+            { id: 'b1', name: 'slow_a',         arguments: {} },
+            { id: 'b2', name: 'fast_b',         arguments: {} },
+            { id: 'b3', name: 'handoffToChild', arguments: { message: 'go' } },
+          ],
+        },
+      ])
+      const childMsgs: AiMessage[][] = []
+      const child = scriptedAdapter('child', [{ kind: 'text', text: 'done' }], { lastMessages: childMsgs })
+
+      AiRegistry.register(parent.factory)
+      AiRegistry.register(child.factory)
+      AiRegistry.setDefault('parent/m')
+
+      const events: string[] = []
+      const sleeper = (name: string, ms: number) => ({
+        definition: { name, description: name, inputSchema: z.object({}) },
+        execute: async () => {
+          events.push(`${name}-enter`)
+          await sleep(ms)
+          events.push(`${name}-exit`)
+          return `${name}-done`
+        },
+        toSchema() {
+          return { name, description: name, parameters: { type: 'object', properties: {}, required: [], additionalProperties: false } }
+        },
+      }) as never
+
+      class Child extends Agent {
+        instructions() { return 'c' }
+        override model() { return 'child/m' }
+      }
+      class Parent extends Agent {
+        instructions() { return 'p' }
+        override model() { return 'parent/m' }
+        tools() { return [sleeper('slow_a', 40), sleeper('fast_b', 5), handoff(Child)] }
+      }
+
+      const r = await new Parent().prompt('go', { parallelTools })
+      return {
+        text:        r.text,
+        handoffPath: r.handoffPath,
+        events,
+        toolMsgs:    childMsgs[0]!.filter(m => m.role === 'tool'),
+      }
+    }
+
+    const parallel = await run(true)
+    const serial   = await run(false)
+
+    // The handoff no longer forces serial dispatch (#971): both non-handoff
+    // calls enter before either exits.
+    const enters = [parallel.events.indexOf('slow_a-enter'), parallel.events.indexOf('fast_b-enter')]
+    const exits  = [parallel.events.indexOf('slow_a-exit'),  parallel.events.indexOf('fast_b-exit')]
+    assert.ok(enters.every(i => i >= 0) && exits.every(i => i >= 0), `all lifecycle events fire — got ${parallel.events.join(' → ')}`)
+    assert.ok(Math.max(...enters) < Math.min(...exits), `concurrent: both enters precede both exits — got ${parallel.events.join(' → ')}`)
+    // Serial still interleaves, which is what the downgrade used to force.
+    assert.deepEqual(serial.events, ['slow_a-enter', 'slow_a-exit', 'fast_b-enter', 'fast_b-exit'])
+
+    // Everything observable downstream is identical between the two modes.
+    for (const [mode, got] of [['parallel', parallel], ['serial', serial]] as const) {
+      assert.equal(got.text, 'done', `${mode}: child still produces the final text`)
+      assert.deepEqual(got.toolMsgs.map(m => m.toolCallId), ['b1', 'b2', 'b3'], `${mode}: tool messages stay in tool-call order`)
+      assert.ok(String(got.toolMsgs[2]!.content).includes('Handed off to Child'), `${mode}: handoff result recorded`)
+    }
+    assert.deepEqual(parallel.handoffPath, serial.handoffPath)
+    assert.deepEqual(
+      parallel.toolMsgs.map(m => m.content),
+      serial.toolMsgs.map(m => m.content),
+    )
+  })
+
   it('handoffPath is absent when no handoff occurred', async () => {
     const adapter = scriptedAdapter('plain', [{ kind: 'text', text: 'hi' }])
     AiRegistry.register(adapter.factory)

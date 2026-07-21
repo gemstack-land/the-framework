@@ -23,6 +23,8 @@ export interface NodeFs {
   mkdir(path: string): Promise<void>
   /** List a directory's entries (names only). Missing dir yields `[]`. */
   readdir(path: string): Promise<string[]>
+  /** Replace `to` with `from`. Atomic within one filesystem, which is the point of having it. */
+  rename(from: string, to: string): Promise<void>
 }
 
 /** The `node:fs/promises` implementation of {@link NodeFs}. */
@@ -67,6 +69,10 @@ export function nodeFs(): NodeFs {
       } catch {
         return []
       }
+    },
+    async rename(from, to) {
+      const { rename } = await import('node:fs/promises')
+      await rename(from, to)
     },
   }
 }

@@ -196,12 +196,18 @@ export interface RegistryFs {
   write(path: string, contents: string): Promise<void>
   /** Recursive; used on the registry file's parent dir. */
   mkdir(path: string): Promise<void>
+  /**
+   * Replace `to` with `from`, atomically. Optional only so an existing implementation of this
+   * seam keeps compiling; without it {@link writeRegistry} falls back to the truncate-then-write
+   * this method exists to avoid (#991).
+   */
+  rename?(from: string, to: string): Promise<void>
 }
 
 /** A {@link RegistryFs} backed by `node:fs/promises`. See {@link nodeFs}. */
 export function nodeRegistryFs(): RegistryFs {
-  const { read, write, mkdir } = nodeFs()
-  return { read, write, mkdir }
+  const { read, write, mkdir, rename } = nodeFs()
+  return { read, write, mkdir, rename }
 }
 
 /** True when `value` is a well-formed {@link ProjectRecord}. */
@@ -386,6 +392,13 @@ export async function readRegistry(
  * Write the registry back as pretty object-form JSON, creating the parent dir. The per-project
  * block is omitted while empty, so a user who never sets a per-project option keeps the file
  * they have today.
+ *
+ * Atomic (#991): the JSON goes to a temp file beside the real one and is then renamed over it,
+ * the same shape #922 gave the daemon state file. A direct write truncates first, so a crash, a
+ * kill or a full disk mid-write left a half file — and {@link readRegistry} reports a malformed
+ * file as an empty registry, so every project and preference vanished silently. A failed write
+ * now only ever damages the temp file. The temp is left behind on failure rather than swept up:
+ * one stray file is the cheaper half of that trade.
  */
 async function writeRegistry(registry: Registry, fs: RegistryFs, env: NodeJS.ProcessEnv): Promise<void> {
   const file = registryPath(env)
@@ -393,8 +406,33 @@ async function writeRegistry(registry: Registry, fs: RegistryFs, env: NodeJS.Pro
   const contents = Object.keys(projectPreferences).length
     ? { projects, preferences, projectPreferences }
     : { projects, preferences }
+  const json = JSON.stringify(contents, null, 2)
   await fs.mkdir(dirname(file))
-  await fs.write(file, JSON.stringify(contents, null, 2))
+  if (!fs.rename) return fs.write(file, json)
+  const temp = `${file}.${process.pid}.tmp`
+  await fs.write(temp, json)
+  await fs.rename(temp, file)
+}
+
+/**
+ * Serializes the read-modify-write mutators below (#991). Each reads the whole registry, edits it
+ * and writes it back, and one daemon runs several concurrently: `daemon.ts` and `daemon-runtime.ts`
+ * both call {@link addProject} while the dashboard's savePreferences RPC writes through
+ * {@link registryPreferencesStore}. Interleaved, the later write was computed from a read taken
+ * before the earlier one landed, so it silently dropped it. One tail promise for the module, not
+ * one per file: the writes are small, and the registry is a single file per machine anyway.
+ */
+let mutations: Promise<void> = Promise.resolve()
+
+function serialize<T>(mutate: () => Promise<T>): Promise<T> {
+  const result = mutations.then(mutate)
+  // A rejected mutation must not poison the queue, and must not surface as an unhandled rejection
+  // here — the caller still gets `result`, which carries the error.
+  mutations = result.then(
+    () => {},
+    () => {},
+  )
+  return result
 }
 
 /**
@@ -419,15 +457,17 @@ export async function addProject(
   fs: RegistryFs = nodeRegistryFs(),
   env: NodeJS.ProcessEnv = process.env,
 ): Promise<ProjectRecord> {
-  const absolute = resolve(path)
-  const registry = await readRegistry(fs, env)
-  const existing = registry.projects.find(project => resolve(project.path) === absolute)
-  if (existing) return existing
+  return serialize(async () => {
+    const absolute = resolve(path)
+    const registry = await readRegistry(fs, env)
+    const existing = registry.projects.find(project => resolve(project.path) === absolute)
+    if (existing) return existing
 
-  const record: ProjectRecord = { id: projectId(absolute), path: absolute, addedAt }
-  registry.projects.push(record)
-  await writeRegistry(registry, fs, env)
-  return record
+    const record: ProjectRecord = { id: projectId(absolute), path: absolute, addedAt }
+    registry.projects.push(record)
+    await writeRegistry(registry, fs, env)
+    return record
+  })
 }
 
 /**
@@ -440,12 +480,14 @@ export async function removeProject(
   fs: RegistryFs = nodeRegistryFs(),
   env: NodeJS.ProcessEnv = process.env,
 ): Promise<boolean> {
-  const registry = await readRegistry(fs, env)
-  const remaining = registry.projects.filter(project => project.id !== id)
-  if (remaining.length === registry.projects.length) return false
-  const { [id]: _dropped, ...projectPreferences } = registry.projectPreferences
-  await writeRegistry({ projects: remaining, preferences: registry.preferences, projectPreferences }, fs, env)
-  return true
+  return serialize(async () => {
+    const registry = await readRegistry(fs, env)
+    const remaining = registry.projects.filter(project => project.id !== id)
+    if (remaining.length === registry.projects.length) return false
+    const { [id]: _dropped, ...projectPreferences } = registry.projectPreferences
+    await writeRegistry({ projects: remaining, preferences: registry.preferences, projectPreferences }, fs, env)
+    return true
+  })
 }
 
 /** The user's dashboard preferences (#410), or `{}` when none are stored. */
@@ -462,8 +504,10 @@ export async function writePreferences(
   fs: RegistryFs = nodeRegistryFs(),
   env: NodeJS.ProcessEnv = process.env,
 ): Promise<void> {
-  const registry = await readRegistry(fs, env)
-  await writeRegistry({ ...registry, preferences: sanitizePreferences(preferences) }, fs, env)
+  return serialize(async () => {
+    const registry = await readRegistry(fs, env)
+    await writeRegistry({ ...registry, preferences: sanitizePreferences(preferences) }, fs, env)
+  })
 }
 
 /** One project's overrides (#840), or `{}` when it has none. */
@@ -486,11 +530,13 @@ export async function writeProjectPreferences(
   fs: RegistryFs = nodeRegistryFs(),
   env: NodeJS.ProcessEnv = process.env,
 ): Promise<void> {
-  const registry = await readRegistry(fs, env)
-  const sanitized = sanitizeProjectPreferences(preferences)
-  const { [projectId]: _previous, ...rest } = registry.projectPreferences
-  const projectPreferences = Object.keys(sanitized).length ? { ...rest, [projectId]: sanitized } : rest
-  await writeRegistry({ ...registry, projectPreferences }, fs, env)
+  return serialize(async () => {
+    const registry = await readRegistry(fs, env)
+    const sanitized = sanitizeProjectPreferences(preferences)
+    const { [projectId]: _previous, ...rest } = registry.projectPreferences
+    const projectPreferences = Object.keys(sanitized).length ? { ...rest, [projectId]: sanitized } : rest
+    await writeRegistry({ ...registry, projectPreferences }, fs, env)
+  })
 }
 
 /** A {@link PreferencesStore} bound to the real registry file, wired by the daemon so the

@@ -21,23 +21,50 @@ import {
   type RegistryFs,
 } from './registry.js'
 
-/** An in-memory {@link RegistryFs} so the registry logic is tested without touching disk. */
-function memFs(seed: Record<string, string> = {}): RegistryFs & { files: Map<string, string>; dirs: string[] } {
+/**
+ * An in-memory {@link RegistryFs} so the registry logic is tested without touching disk.
+ *
+ * `write` truncates before it stores, as a real `writeFile` does. That is what makes the
+ * atomicity of #991 observable: `failWritesTo` models a crash or a full disk between the
+ * truncate and the flush, leaving the file it truncated empty.
+ */
+function memFs(
+  seed: Record<string, string> = {},
+  options: { failWritesTo?: string; slow?: boolean } = {},
+): RegistryFs & { files: Map<string, string>; dirs: string[]; written: string[] } {
   const files = new Map<string, string>(Object.entries(seed))
   const dirs: string[] = []
+  const written: string[] = []
+  // An await point inside read and write, so concurrent callers interleave rather than each
+  // running start to finish.
+  const pause = async () => {
+    if (options.slow) await new Promise(resolve => setTimeout(resolve, 1))
+  }
   return {
     files,
     dirs,
+    written,
     async read(path) {
+      await pause()
       const v = files.get(path)
       if (v === undefined) throw new Error(`ENOENT: ${path}`)
       return v
     },
     async write(path, contents) {
+      written.push(path)
+      files.set(path, '') // truncate, as `writeFile` does
+      await pause()
+      if (options.failWritesTo === path) throw new Error(`ENOSPC: ${path}`)
       files.set(path, contents)
     },
     async mkdir(path) {
       dirs.push(path) // no-op: the memory fs has no directories
+    },
+    async rename(from, to) {
+      const contents = files.get(from)
+      if (contents === undefined) throw new Error(`ENOENT: ${from}`)
+      files.delete(from)
+      files.set(to, contents)
     },
   }
 }
@@ -405,5 +432,60 @@ test('registryPreferencesStore round-trips through the same file', async () => {
   assert.deepEqual(await store.read(), {})
   await store.save({ vanilla: true })
   assert.deepEqual(await store.read(), { vanilla: true })
+})
+
+test('the registry file is never written in place, only renamed over (#991)', async () => {
+  const fs = memFs({ [FILE]: JSON.stringify({ projects: [APP_A], preferences: {} }) })
+  await writePreferences({ vanilla: true }, fs, ENV)
+  assert.deepEqual(
+    fs.written.filter(path => path === FILE),
+    [],
+    'the live file must only ever be replaced by a rename, so a reader sees the whole old or the whole new one',
+  )
+  assert.ok(fs.written.every(path => path.startsWith(`${FILE}.`) && path.endsWith('.tmp')))
+  assert.deepEqual(await readRegistry(fs, ENV), {
+    projects: [APP_A],
+    preferences: { vanilla: true },
+    projectPreferences: {},
+  })
+  assert.equal([...fs.files.keys()].length, 1, 'the temp file is renamed away, not left beside the real one')
+})
+
+test('a write that dies partway leaves the previous registry intact (#991)', async () => {
+  const stored = JSON.stringify({ projects: [APP_A, APP_B], preferences: { autopilot: false } })
+  // The disk fills between the truncate and the flush. Whatever it truncated must not be the live file.
+  const fs = memFs({ [FILE]: stored }, { failWritesTo: `${FILE}.${process.pid}.tmp` })
+  await assert.rejects(() => writePreferences({ vanilla: true }, fs, ENV), /ENOSPC/)
+  assert.equal(fs.files.get(FILE), stored, 'the live file is untouched by a failed write')
+  assert.deepEqual(await readRegistry(fs, ENV), {
+    projects: [APP_A, APP_B],
+    preferences: { autopilot: false },
+    projectPreferences: {},
+  })
+})
+
+test('concurrent addProject calls both survive rather than the later one dropping the earlier (#991)', async () => {
+  const fs = memFs({ [FILE]: JSON.stringify({ projects: [], preferences: {} }) }, { slow: true })
+  await Promise.all([addProject('/repos/app-a', APP_A.addedAt, fs, ENV), addProject('/repos/app-b', APP_B.addedAt, fs, ENV)])
+  assert.deepEqual(await listProjects(fs, ENV), [APP_A, APP_B])
+})
+
+test('a concurrent addProject and writePreferences do not drop each other (#991)', async () => {
+  const fs = memFs({ [FILE]: JSON.stringify({ projects: [], preferences: {} }) }, { slow: true })
+  await Promise.all([addProject('/repos/app-a', APP_A.addedAt, fs, ENV), writePreferences({ vanilla: true }, fs, ENV)])
+  assert.deepEqual(await readRegistry(fs, ENV), {
+    projects: [APP_A],
+    preferences: { vanilla: true },
+    projectPreferences: {},
+  })
+})
+
+test('a rejected mutation does not wedge the queue for the next caller (#991)', async () => {
+  const temp = `${FILE}.${process.pid}.tmp`
+  const fs = memFs({ [FILE]: JSON.stringify({ projects: [], preferences: {} }) }, { failWritesTo: temp })
+  await assert.rejects(() => addProject('/repos/app-a', APP_A.addedAt, fs, ENV), /ENOSPC/)
+  const healthy = memFs({ [FILE]: JSON.stringify({ projects: [], preferences: {} }) })
+  await addProject('/repos/app-b', APP_B.addedAt, healthy, ENV)
+  assert.deepEqual(await listProjects(healthy, ENV), [APP_B])
 })
 

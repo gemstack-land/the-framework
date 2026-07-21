@@ -6,8 +6,9 @@ import { tmpdir } from 'node:os'
 import { sendStop, sendMessage, sendChoice, sendRemoveWorktree } from './control.telefunc.js'
 import { onRetainedWorktrees, onRuns } from './reads.telefunc.js'
 import { addProject, projectId as idFor } from '../registry.js'
-import { FRAMEWORK_DIR, WORKTREES_DIR } from '../store/index.js'
+import { FRAMEWORK_DIR, WORKTREES_DIR, addWorktree, runBranchName } from '../store/index.js'
 import { CONTROL_FILE } from '../control.js'
+import { nodeGitRunner } from '../project.js'
 
 // #749: a run tails the control log inside its own worktree (#736), so a steering call has to
 // resolve the RUN, not the project. Addressed at the project root, Stop / messages / choice picks
@@ -124,6 +125,75 @@ test('sendRemoveWorktree rejects an unsafe run id before touching anything (#737
     const result = await sendRemoveWorktree(ctx.projectId, '../../etc')
     assert.equal(result.ok, false)
     assert.match(result.ok === false ? result.error : '', /invalid session id/)
+  } finally {
+    ctx.restore()
+    await rm(ctx.dir, { recursive: true, force: true })
+  }
+})
+
+// #982: the dashboard's Remove and `framework worktrees rm` are now one implementation, so the
+// button gets the commit-first removal and the checks the CLI already had. Before that it went
+// straight to a forcing removeWorktree, which deleted the very diff a retained checkout was kept
+// for, and reported success for a session that had no worktree at all.
+
+/** A registered project whose retained worktree holds an uncommitted edit, in a real git repo. */
+async function projectWithDirtyWorktree(): Promise<{
+  dir: string
+  projectId: string
+  runId: string
+  worktree: string
+  branch: string
+  restore: () => void
+}> {
+  const git = nodeGitRunner()
+  const dir = await realpath(await mkdtemp(join(tmpdir(), 'framework-remove-')))
+  await git(['init'], dir)
+  await git(['config', 'user.email', 't@t'], dir)
+  await git(['config', 'user.name', 't'], dir)
+  await writeFile(join(dir, 'index.html'), '<h1>Hello, world!</h1>\n')
+  await git(['add', '-A'], dir)
+  await git(['commit', '-m', 'init'], dir)
+
+  const runId = 'run1'
+  const { path, branch } = await addWorktree(dir, { runId, branch: runBranchName(runId) }, git)
+  await writeFile(join(path, 'index.html'), '<h1>Welcome!</h1>\n')
+
+  const previous = process.env.XDG_CONFIG_HOME
+  process.env.XDG_CONFIG_HOME = join(dir, 'cfg')
+  await mkdir(process.env.XDG_CONFIG_HOME, { recursive: true })
+  await addProject(dir, new Date().toISOString())
+
+  return {
+    dir,
+    projectId: idFor(dir),
+    runId,
+    worktree: path,
+    branch,
+    restore: () => {
+      if (previous === undefined) delete process.env.XDG_CONFIG_HOME
+      else process.env.XDG_CONFIG_HOME = previous
+    },
+  }
+}
+
+test('the dashboard Remove commits the checkout it takes away, rather than forcing past it (#982)', async () => {
+  const ctx = await projectWithDirtyWorktree()
+  try {
+    assert.deepEqual(await sendRemoveWorktree(ctx.projectId, ctx.runId), { ok: true })
+    const shown = await nodeGitRunner()(['show', `${ctx.branch}:index.html`], ctx.dir)
+    assert.match(shown, /Welcome!/, 'the uncommitted edit survived on the run branch')
+  } finally {
+    ctx.restore()
+    await rm(ctx.dir, { recursive: true, force: true })
+  }
+})
+
+test('the dashboard Remove reports an unknown session instead of claiming success (#982)', async () => {
+  const ctx = await projectWithWorktreeRun()
+  try {
+    const result = await sendRemoveWorktree(ctx.projectId, 'nosuchrun')
+    assert.equal(result.ok, false)
+    assert.match(result.ok === false ? result.error : '', /no worktree for session nosuchrun/)
   } finally {
     ctx.restore()
     await rm(ctx.dir, { recursive: true, force: true })
