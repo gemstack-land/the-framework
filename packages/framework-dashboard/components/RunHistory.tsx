@@ -4,14 +4,11 @@ import { Button } from './ui/button.js'
 import { Badge } from './ui/badge.js'
 import { cn } from '../lib/utils.js'
 import { formatDateTime } from '../lib/format-date.js'
+import { STATUS_TONE } from '../lib/status-tone.js'
 import { ScrollArea } from './ui/scroll-area.js'
 
-const STATUS_TONE: Record<string, string> = {
-  running: 'text-primary',
-  done: 'text-emerald-500',
-  stopped: 'text-amber-500',
-  failed: 'text-red-500',
-}
+/** A label hidden in the collapsed strip, revealed by hover/focus on the rail (#862). */
+const FADED_LABEL = 'opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100'
 
 // The Runs rail (#314 second sidebar). "Live" is the permanent home/launcher — selecting it
 // shows the Start form + cards (ProjectHome), and it is never consumed by a run. Every run
@@ -70,9 +67,7 @@ export function RunHistory({
   // than as deliberate. Fade the labels out and leave the status dots, which is all that fits;
   // opening the rail brings them back. Fading rather than unmounting keeps one DOM, so the
   // reveal is CSS and the rows stay tab-reachable while narrow.
-  const label = collapsed
-    ? 'opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100'
-    : ''
+  const label = collapsed ? FADED_LABEL : ''
 
   return (
     // Collapsed (#862), the rail reserves only a strip and its panel floats over the main pane
@@ -162,9 +157,7 @@ function RunRow({
 }) {
   // Only a live run can be waiting on you; a finished one is just finished.
   const parked = waiting && status === 'running'
-  const label = collapsed
-    ? 'opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100'
-    : ''
+  const label = collapsed ? FADED_LABEL : ''
   return (
     <Button
       variant="ghost"

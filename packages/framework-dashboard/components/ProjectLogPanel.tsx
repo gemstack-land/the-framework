@@ -4,14 +4,8 @@ import { Badge } from './ui/badge.js'
 import { usePolled } from '../lib/use-async.js'
 import { cn } from '../lib/utils.js'
 import { formatDateTime } from '../lib/format-date.js'
+import { STATUS_TONE } from '../lib/status-tone.js'
 import { ScrollArea } from './ui/scroll-area.js'
-
-const STATUS_TONE: Record<string, string> = {
-  running: 'text-primary',
-  done: 'text-emerald-500',
-  stopped: 'text-amber-500',
-  failed: 'text-red-500',
-}
 
 // The committed project log (#378/#379): `.the-framework/LOGS.md`, every finished
 // loop/prompt/build run newest-first, over a Telefunc RPC (server/reads.telefunc.ts).
