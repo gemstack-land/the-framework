@@ -27,31 +27,15 @@ import {
   type SuspendedRun,
 } from './store/index.js'
 import { startDashboard, type Dashboard, type StartRunKind, type StartRunOptions, type StartRunResult, type AddProjectResult, type PreviewResult, type PreviewStatus } from './dashboard/index.js'
-import { startKeyedWatcher, type KeyedWatcher } from './dashboard/keyed-watcher.js'
-import { buildInterventions, interventionKey, postInterventionsDiscord } from './dashboard/interventions.js'
-import { buildActivity, activityKey, postActivityDiscord } from './dashboard/activity.js'
 import { defaultQuotaSource } from './dashboard/quota.js'
-import { startAutoPm, AUTO_PM_JOBS } from './auto-pm.js'
-import { maintenanceDue, readMaintenanceState, mergeMaintenanceState } from './maintenance.js'
-import { promoteQueue } from './queue-promote.js'
+import { startBackgroundServices, resumeSuspendedRuns } from './daemon-services.js'
 import { isSafeVia } from './conversations.js'
-import { startConversationCommitter, type ConversationCommitter } from './conversation-commit.js'
-import { findTodoBacklog } from './todo-loop.js'
 import { startPreview, detectServeTargets, type PreviewHandle, type ServeTarget } from './preview.js'
 import { resolveDashboardBundle } from './dashboard/bundle.js'
 import { isActivated } from './project.js'
-import { addProject, listProjects, projectId, readPreferences, readProjectPreferences, resolvePreferences } from './registry.js'
-import { discordNotificationEnabled, notificationEnabled } from './preference-defaults.js'
-import { runOptionsFromPreferences, preferencesFromFileConfig } from './run-options.js'
-import { loadFrameworkConfig } from './config.js'
+import { addProject, listProjects, projectId } from './registry.js'
 import { installProject, enumerateGitRepos } from './install.js'
 import { JsonlTailer } from './jsonl-tail.js'
-import { startDiscordBot, DISCORD_VIA } from './discord/bot.js'
-import { startDiscordReplyMirror } from './discord/reply-mirror.js'
-import { snapshotLiveRun } from './discord/live-run.js'
-import { readConversation } from './conversations.js'
-import { postMessage } from './discord/rest.js'
-import { sendChoice, sendMessage, sendStop } from './dashboard-rpc/control.telefunc.js'
 
 /**
  * The persistent background dashboard (#302). Today the dashboard dies with the
@@ -79,12 +63,8 @@ export const DAEMON_STATE_FILE = 'the-framework-daemon.json'
 /** The default dashboard port the daemon binds. Matches the per-run dashboard. */
 export const DEFAULT_DAEMON_PORT = 4200
 
-/**
- * What a resumed run is asked to do (#923). The agent comes back with its own session, so it has
- * the whole conversation: the only thing it is missing is why it suddenly stopped mid-task.
- */
-export const RESUME_PROMPT =
-  'This session was interrupted when The Framework restarted, not by anyone asking you to stop. Look at what you had already done, then carry on from there.'
+// The resume prompt moved beside the resume itself (#923); re-exported so this stays its import site.
+export { RESUME_PROMPT } from './daemon-services.js'
 
 /** What a running daemon writes so a later `framework` invocation can find it. */
 export interface DaemonState {
@@ -380,25 +360,34 @@ export interface StopDaemonOptions {
 export async function stopDaemon(env: NodeJS.ProcessEnv = process.env, opts: StopDaemonOptions = {}): Promise<boolean> {
   const state = await readDaemonState(env)
   if (!state) return false
-  const alive = isProcessAlive(state.pid)
-  if (alive) {
-    try {
-      process.kill(state.pid, 'SIGTERM')
-    } catch {
-      // already gone between the check and the signal
-    }
-    if (!(await waitForExit(state.pid, opts.timeoutMs ?? 5000))) {
-      // Ignored SIGTERM / wedged shutdown: take the port back rather than leave a zombie.
-      try {
-        process.kill(state.pid, 'SIGKILL')
-      } catch {
-        // raced us to exit
-      }
-      await waitForExit(state.pid, 1000)
-    }
-  }
+  const alive = await terminate(state.pid, opts.timeoutMs ?? 5000)
   await rm(daemonStatePath(env), { force: true }).catch(() => {})
   return alive
+}
+
+/**
+ * Stop a process and wait for it to actually go: SIGTERM, then SIGKILL if the grace period lapses.
+ * Returns whether it was alive to begin with.
+ *
+ * Both callers need the escalation for the same reason and had their own copy of it: a process
+ * that ignores SIGTERM (or wedges in shutdown) must not be left holding a port or a worktree.
+ */
+async function terminate(pid: number, graceMs: number): Promise<boolean> {
+  if (!isProcessAlive(pid)) return false
+  try {
+    process.kill(pid, 'SIGTERM')
+  } catch {
+    // exited between the check and the signal
+  }
+  if (!(await waitForExit(pid, graceMs))) {
+    try {
+      process.kill(pid, 'SIGKILL')
+    } catch {
+      // raced us to exit
+    }
+    await waitForExit(pid, 1000)
+  }
+  return true
 }
 
 /** Poll until the process is gone, or the timeout lapses. */
@@ -507,241 +496,41 @@ export async function runDaemon(cwd: string, opts: RunDaemonOptions = {}): Promi
     throw err
   }
 
-  // Discord notifications (#627): fire on new "needs you" items even when no dashboard is open.
-  // Two gates: a `DISCORD_WEBHOOK` (where to post) and the per-user `notifyDiscord` preference
-  // (whether to). The pref is checked at post time, not watcher start, so the header toggle takes
-  // effect without a daemon restart — and the watcher keeps observing while off, so flipping it on
-  // starts from now rather than blasting the whole open backlog.
-  const webhook = env.DISCORD_WEBHOOK
-  const listSummaries = async () =>
-    (await listProjects(undefined, env).catch(() => [])).map(p => ({
-      id: p.id,
-      path: p.path,
-      name: basename(p.path),
-      activated: true,
-    }))
-  const readPrefs = () =>
-    readPreferences(undefined, env).catch(() => ({}) as Awaited<ReturnType<typeof readPreferences>>)
-  /**
-   * The run options a project's settings imply (#858): the global tier, then the repo's committed
-   * `the-framework.yml` (#842), then the project's own overrides (#840) on top. The same mapping
-   * and the same layer order the launcher uses, so a run started by the daemon and a run started
-   * by hand differ only in who asked for it. An unreadable tier falls back to empty rather than
-   * failing the start: the defaults are what the run would have used anyway.
-   */
-  const resolvedRunOptions = async (id: string) => {
-    const global = await readPrefs()
-    const project = await readProjectPreferences(id, undefined, env).catch(() => undefined)
-    const path = (await listProjects(undefined, env).catch(() => [])).find(p => p.id === id)?.path
-    const file = path ? await loadFrameworkConfig(path).catch(() => ({})) : {}
-    return runOptionsFromPreferences(
-      resolvePreferences({ ...global, ...preferencesFromFileConfig(file) }, project),
-    )
-  }
-  // Resume what the last daemon suspended (#923). A run does not outlive its daemon: it is stopped
-  // at shutdown and its id + agent session recorded, so a restart continues the same conversation
-  // in the same worktree instead of leaving an orphan behind. The state survives the process, which
-  // is the #857 direction; the process does not. Capped by age (SUSPEND_MAX_AGE_MS) so a machine
-  // that has been off for a week does not wake up spending a day's quota on stale work, and cleared
-  // as it is read, so a run that fails to resume is not retried on every boot.
-  void (async () => {
-    for (const record of await listProjects(undefined, env).catch(() => [])) {
-      const suspended = await readSuspendedRuns(record.path).catch(() => [])
-      if (suspended.length === 0) continue
-      await writeSuspendedRuns(record.path, []).catch(() => {})
-      const resumable = resumableRuns(suspended, Date.now())
-      const dropped = suspended.length - resumable.length
-      if (dropped > 0) console.log(`[framework] ${dropped} suspended session(s) in ${basename(record.path)} are too old to resume`)
-      for (const run of resumable) {
-        const options = await resolvedRunOptions(record.id)
-        const result = await runtime.onStart(
-          RESUME_PROMPT,
-          'prompt',
-          {
-            ...options,
-            unattended: true,
-            continueRunId: run.runId,
-            ...(run.sessionId ? { resumeSession: run.sessionId } : {}),
-          },
-          record.id,
-        )
-        console.log(
-          result.ok
-            ? `[framework] resumed session ${run.runId} in ${basename(record.path)}`
-            : `[framework] could not resume session ${run.runId}: ${result.error}`,
-        )
-      }
-    }
-  })()
+  // Every background start is a verbatim prompt run (#353): these are preset prompts and chat
+  // text, not build intents to scaffold from.
+  const startRun = (prompt: string, options: StartRunOptions, id: string) => runtime.onStart(prompt, 'prompt', options, id)
 
-  let watcher: KeyedWatcher | undefined
-  let activityWatcher: KeyedWatcher | undefined
-  if (webhook) {
-    watcher = startKeyedWatcher({
-      projects: listSummaries,
-      // Pass the daemon's own URL so a paused-run item (#636) can link back to the dashboard.
-      build: projects => buildInterventions(projects, { dashboardUrl: dashboard.url }),
-      keyOf: interventionKey,
-      onNew: async items => {
-        if (!discordNotificationEnabled(await readPrefs(), 'notifyHumanIntervention')) return
-        await postInterventionsDiscord(webhook, items).catch(() => {})
-      },
-    })
-    // The default-off "New activity" category (#627): the same Discord path for run started/finished
-    // events. Gated at post time so the header toggles take effect without a daemon restart, and the
-    // watcher keeps observing while off, so flipping it on starts from now rather than blasting the backlog.
-    activityWatcher = startKeyedWatcher({
-      projects: listSummaries,
-      build: buildActivity,
-      keyOf: activityKey,
-      onNew: async items => {
-        if (!discordNotificationEnabled(await readPrefs(), 'notifyNewActivity')) return
-        await postActivityDiscord(webhook, items).catch(() => {})
-      },
-    })
-  }
-
-  // Auto PM (#685/#773): while the queue is dry and there is quota to spare, harvest quick-wins
-  // and spike & plan tickets rather than let the day's allowance expire unused. Gated on the
-  // `autoPm` preference, read per tick so the toggle takes effect without a daemon restart.
-  const autoPm = startAutoPm({
-    projects: listSummaries,
-    jobs: AUTO_PM_JOBS,
-    enabled: async () => (await readPrefs()).autoPm === true,
-    backlogEmpty: async project => (await findTodoBacklog(project.path)) === undefined,
-    activeRuns: project => runtime.activeRunCount(project.id),
-    // The quota boundary is the gate (#879): auto PM has no budget notion of its own.
-    quota: async () => (await quota.read()).boundary,
-    // The periodic codebase sweep (#882). The schedule is a file in the project checkout rather
-    // than loop state, because unlike the rotation it has to survive a daemon restart: a machine
-    // rebooted daily would otherwise sweep every morning and never reach its interval.
-    maintenanceDue: async project => maintenanceDue(await readMaintenanceState(project.path), Date.now()),
-    recordMaintenance: async project => mergeMaintenanceState(project.path, { sweptAt: new Date().toISOString() }),
-    start: async (project, job) => {
-      // The settings a launcher-started run would have used (#858). `onStart` does not resolve
-      // these itself, so passing nothing meant an unattended run silently ignored the project's
-      // agent and model. `unattended` is forced on top: it is a property of nobody watching, not
-      // a preference, and without it every gate parks forever (#846).
-      const options = await resolvedRunOptions(project.id)
-      const result = await runtime.onStart(job.prompt, 'prompt', { ...options, unattended: true }, project.id)
-      return result.ok ? result.runId : undefined
-    },
-    // The daemon promotes the queue, never the agent (#852): the run stays sandboxed in its
-    // worktree, and one known file is copied across once it has finished cleanly.
-    promote: async (project, runId) => {
-      const run = (await listRuns(project.path).catch(() => [])).find(r => r.id === runId)
-      // Unknown or still going: not settled, so it is tried again next tick.
-      if (!run || run.status === 'running') return { settled: false, promoted: false }
-      const outcome = await promoteQueue(project.path, run)
-      if (!outcome.promoted) console.log(`[framework] auto PM: ${outcome.reason} (${runId})`)
-      // A finished run is settled either way -- one that wrote no queue is not going to start.
-      // The exception is a checkout busy with the user's own queue edits, which is worth retrying.
-      const retry = !outcome.promoted && outcome.reason === 'the checkout has uncommitted queue changes'
-      return { settled: !retry, promoted: outcome.promoted }
-    },
-    log: message => console.log(message),
+  // Resume what the last daemon suspended (#923), and bring up everything that runs in the
+  // background beside serving the dashboard: the Discord watchers, auto PM, the conversation
+  // committer, and the chatbot. Fire-and-forget: a resume that fails must not stop the daemon
+  // coming up, and there is nothing to return to.
+  void resumeSuspendedRuns(env, startRun, console.log)
+  const services = startBackgroundServices({
+    cwd,
+    env,
+    dashboardUrl: dashboard.url,
+    quota,
+    startRun,
+    activeRunCount: runtime.activeRunCount,
+    log: console.log,
   })
-
-  // Commit the conversations recorded on the main checkout (#912). A run's own worktree already
-  // sweeps its transcript on teardown; nothing did the same for a chat held in the checkout itself,
-  // so it sat as an uncommitted change until a human noticed. Path-scoped and debounced, and it
-  // skips a repo that is mid-rebase or index-locked rather than committing into someone's work.
-  const conversationCommitter = startConversationCommitter({
-    projects: listSummaries,
-    log: message => console.log(message),
-  })
-
-  // The Discord chatbot (#680): chat to The Framework from Discord. Two gates, mirroring the
-  // notification watchers above — a `DISCORD_BOT_TOKEN` (a bot can read replies; the #627 webhook
-  // cannot) and the per-user `discordBot` preference, read per message so the toggle takes effect
-  // without a daemon restart. Unset token means no bot, exactly as before.
-  const botToken = env.DISCORD_BOT_TOKEN
-  // Say so when the token is set but the toggle is not: the bot would otherwise connect and then
-  // ignore every message, which reads as broken rather than as off.
-  if (botToken) {
-    void readPrefs().then(prefs => {
-      if (!notificationEnabled(prefs, 'discordBot')) {
-        console.log('[framework] Discord bot: DISCORD_BOT_TOKEN is set but the `discordBot` preference is off, so it will not answer.')
-      }
-    })
-  }
-  // The daemon's own project, resolved the same way the runtime resolves it. Chat has no project
-  // picker, so a message with no run to join starts one here.
-  const botHomeId = projectId(resolve(cwd))
-  const botProjectPath = async (id: string) => (await listSummaries()).find(p => p.id === id)?.path ?? cwd
-  // Send a session's answers back to the channel that asked (#932). The conversation (#908) is the
-  // source: it holds the settled reply the user would have read, which is what belongs in chat.
-  // Bound per run by the bot, since the channel is only known when a message arrives.
-  const replyMirror = botToken
-    ? startDiscordReplyMirror({
-        readConversation: async runId => {
-          // A run's transcript lives in the checkout the run used, which for a daemon-spawned run
-          // is its own worktree rather than the project root.
-          for (const project of await listSummaries()) {
-            const meta = (await readLiveMetas(project.path).catch(() => [])).find(run => run.id === runId)
-            if (meta) return readConversation(meta.cwd, runId).catch(() => [])
-          }
-          return []
-        },
-        post: (channelId, text) => postMessage(botToken, channelId, text),
-        enabled: async () => notificationEnabled(await readPrefs(), 'discordBot'),
-        onLog: message => console.log(`[framework] ${message}`),
-      })
-    : undefined
-
-  const discordBot = botToken
-    ? startDiscordBot({
-        token: botToken,
-        target: async () => {
-          const home = (await listSummaries()).find(p => p.id === botHomeId)
-          return home ? { id: home.id, name: home.name } : { id: botHomeId, name: basename(cwd) }
-        },
-        liveRun: async id => snapshotLiveRun(id, await botProjectPath(id)),
-        start: async (id, text) => {
-          // Same resolution and the same forced `unattended` as auto PM (#846/#858): nobody is
-          // watching a chat-started run either, so a parked gate would hang it. The gate is then
-          // answered from Discord by number instead.
-          const options = await resolvedRunOptions(id)
-          // `via` so the opening turn is filed under Discord too (#917). Without it a chat-started
-          // session reads as if its first message came from the dashboard and only the follow-ups
-          // came from Discord, which is a worse record than attributing none of it.
-          const result = await runtime.onStart(text, 'prompt', { ...options, unattended: true, via: DISCORD_VIA }, id)
-          return result.ok ? result.runId : undefined
-        },
-        sendMessage: (id, text, runId) => sendMessage(id, text, runId, DISCORD_VIA),
-        sendChoice: (id, gateId, pick, runId) => sendChoice(id, gateId, pick, 'user', runId),
-        sendStop: (id, runId) => sendStop(id, runId),
-        ...(replyMirror ? { onRunBound: (runId, channelId) => replyMirror.bind(runId, channelId) } : {}),
-        enabled: async () => notificationEnabled(await readPrefs(), 'discordBot'),
-        ...(env.DISCORD_CHANNEL_ID ? { channelId: env.DISCORD_CHANNEL_ID } : {}),
-        onLog: message => console.log(`[framework] ${message}`),
-      })
-    : undefined
 
   await waitForShutdown(opts.signal)
 
-  // Ctrl+C takes the bot offline (#680). Its gateway socket is the one connection here that
-  // would otherwise hold the event loop open on its own.
-  discordBot?.stop()
-  replyMirror?.stop()
-  autoPm.stop()
-  // Stop the runs this daemon spawned (#923), before the previews they may be serving. Left
-  // running they are orphans nothing tracks; stopped here they are recorded and resumed on the
-  // next boot. Auto PM is stopped first so nothing starts a run while we are stopping them.
+  // Nothing may start or steer a run from here on, so the background services go first (#923):
+  // auto PM or a Discord message arriving mid-shutdown would start one while we stop the rest.
+  services.quiesce()
+  // Stop the runs this daemon spawned, before the previews they may be serving. Left running they
+  // are orphans nothing tracks; stopped here they are recorded and resumed on the next boot.
   const suspended = await runtime.suspendRuns().catch(() => 0)
   if (suspended > 0) console.log(`[framework] suspended ${suspended} session(s); they resume when the daemon starts again`)
-  // Commit whatever conversation the shutdown just ended (#912), after the runs have been stopped
-  // so their last turns are on disk. Stop the timer first, then flush once past the idle window:
-  // there is no next poll to wait for, and an uncommitted chat would otherwise sit until a human
-  // committed it by hand -- the exact gap this service exists to close.
-  conversationCommitter.stop()
-  const conversations = await conversationCommitter.flush().catch(() => 0)
+  // Now that the runs' last turns are on disk, commit them (#912) — otherwise an uncommitted chat
+  // sits until a human notices, which is the exact gap that service exists to close.
+  const conversations = await services.flushConversations()
   if (conversations > 0) console.log(`[framework] committed conversations in ${conversations} project(s)`)
   // Stopped here as well as by the dashboard: a broken install serves 503s without ever taking
   // ownership of the source we handed in, and that poller would go on reading by itself.
   quota.stop()
-  watcher?.stop()
-  activityWatcher?.stop()
   await runtime.dispose() // stop live previews (#475) so their dev servers do not outlive us
   await dashboard.close()
   // Stop re-asserting before removing, or the heartbeat writes the record back (#922).
@@ -815,16 +604,6 @@ function createProjectRuntime({ cwd, env, binPath }: ProjectRuntimeOptions): Pro
   }
 
   /**
-   * The checkout a run gets (#736). Each run is given its own git worktree under the
-   * project's `.the-framework/worktrees/<runId>`, on a `the-framework/run-<runId>` branch,
-   * so N runs on one repo never fight over the working tree — and the user's own checkout,
-   * uncommitted work included, is left untouched.
-   *
-   * A project that cannot provide one (not a git repo, or any git failure) falls back to the
-   * main checkout, which is exactly the pre-#736 behavior — and keeps its pre-#736 limit of
-   * one run at a time, since those runs *would* collide. Signalled by the absent `runId`.
-   */
-  /**
    * Put a continued run (#762) back in its own checkout: the same worktree if it was retained, else
    * its own branch checked out fresh. Its archived history is restored into the checkout so the run
    * reopens its log rather than starting empty, which is what keeps it one row.
@@ -850,6 +629,16 @@ function createProjectRuntime({ cwd, env, binPath }: ProjectRuntimeOptions): Pro
     }
   }
 
+  /**
+   * The checkout a run gets (#736). Each run is given its own git worktree under the project's
+   * `.the-framework/worktrees/<runId>`, on a `the-framework/run-<runId>` branch, so N runs on one
+   * repo never fight over the working tree — and the user's own checkout, uncommitted work
+   * included, is left untouched.
+   *
+   * A project that cannot provide one (not a git repo, or any git failure) falls back to the main
+   * checkout, which is exactly the pre-#736 behavior — and keeps its pre-#736 limit of one run at a
+   * time, since those runs *would* collide. Signalled by the absent `runId`.
+   */
   const allocateWorkspace = async (projectCwd: string, runId: string): Promise<{ cwd: string; runId?: string }> => {
     try {
       const worktree = await addWorktree(projectCwd, { runId, branch: runBranchName(runId) })
@@ -1113,20 +902,7 @@ function createProjectRuntime({ cwd, env, binPath }: ProjectRuntimeOptions): Pro
       const projectKey = separator === -1 ? key : key.slice(0, separator)
       const runId = separator === -1 ? undefined : key.slice(separator + 2)
       const projectCwd = await resolveProject(projectKey)
-      if (!isProcessAlive(pid)) continue
-      try {
-        process.kill(pid, 'SIGTERM')
-      } catch {
-        // exited between the check and the signal
-      }
-      if (!(await waitForExit(pid, graceMs))) {
-        try {
-          process.kill(pid, 'SIGKILL')
-        } catch {
-          // raced us to exit
-        }
-        await waitForExit(pid, 1000)
-      }
+      if (!(await terminate(pid, graceMs))) continue
       // A fallback run (no worktree, no run id) cannot be continued, so it is stopped and no more.
       if (!runId || !projectCwd) continue
       const meta = (await readLiveMetas(projectCwd).catch(() => [])).find(run => run.id === runId)
