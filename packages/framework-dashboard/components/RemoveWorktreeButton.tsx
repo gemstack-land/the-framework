@@ -31,6 +31,7 @@ export function RemoveWorktreeButton({
           <Button
             variant="outline"
             size="icon-sm"
+            aria-label="Remove this session's worktree"
             disabled={busy}
             onClick={() =>
               void run(() => sendRemoveWorktree(projectId, runId), 'Could not remove the worktree.').then(

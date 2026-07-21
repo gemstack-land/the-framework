@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import type { FrameworkEvent } from '@gemstack/framework'
 import { sessionInfo } from '@gemstack/framework/client'
 import { Square, ExternalLink } from 'lucide-react'
@@ -9,6 +10,7 @@ import { RemoveWorktreeButton } from './RemoveWorktreeButton.js'
 import { WorkspaceActions } from './WorkspaceActions.js'
 import { GitStatusBar } from './GitStatusBar.js'
 import { Button, buttonVariants } from './ui/button.js'
+import { CopyButton } from './ui/copy-button.js'
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from './ui/tooltip.js'
 
 // One run's action bar: Serve, Stop, and Open session as a single row of icon buttons with
@@ -37,9 +39,16 @@ export function RunActionBar({
   // and a failed stop surfaces instead of silently doing nothing.
   const { busy, error, run } = useAction()
   const active = isRunActive(events)
-  // Only a real per-session deep link is shown; the generic claude.ai/code entry is a dead end,
-  // so Claude Code runs get no Open button (the session id is still in the event log).
-  const session = describeSessionLink(sessionInfo(events))
+  // A landed stop keeps the button parked until the end event flips `active` (#948): useAction
+  // resets busy on success, and for that gap the enabled button invited a redundant second stop.
+  const [stopRequested, setStopRequested] = useState(false)
+  useEffect(() => setStopRequested(false), [runId])
+  const stopping = busy || (stopRequested && active)
+  // Only a real per-session deep link is shown; the generic claude.ai/code entry is a dead end.
+  // A session with an id but no deep link still gets its id offered for copy (#948): it is the
+  // exact string a --resume takes, and it used to live only as a mono line buried in the feed.
+  const info = sessionInfo(events)
+  const session = describeSessionLink(info)
 
   return (
     <div className="flex flex-wrap items-center gap-2 border-b border-border px-4 py-2">
@@ -62,19 +71,27 @@ export function RunActionBar({
                 <Button
                   variant="outline"
                   size="icon-sm"
-                  disabled={busy}
-                  onClick={() => void run(() => sendStop(projectId, runId ?? undefined), 'Could not stop the session.')}
+                  aria-label="Stop session"
+                  disabled={stopping}
+                  onClick={() =>
+                    void run(() => sendStop(projectId, runId ?? undefined).then(() => true), 'Could not stop the session.').then(
+                      result => result && setStopRequested(true),
+                    )
+                  }
                 />
               }
             >
               <Square className="h-3 w-3 fill-current" />
             </TooltipTrigger>
-            <TooltipContent>{busy ? 'Stopping…' : 'Stop session'}</TooltipContent>
+            <TooltipContent>{stopping ? 'Stopping…' : 'Stop session'}</TooltipContent>
           </Tooltip>
         )}
         {/* A retained worktree only exists for a finished run, so this never sits beside Stop. */}
         {retainedWorktree && !active && runId && (
           <RemoveWorktreeButton projectId={projectId} runId={runId} onRemoved={() => onWorktreeRemoved?.()} />
+        )}
+        {!session && info?.sessionId && (
+          <CopyButton text={info.sessionId} label={`Copy session id (${info.sessionId})`} className="p-1.5" />
         )}
         {session && (
           <Tooltip>
@@ -84,6 +101,7 @@ export function RunActionBar({
                   href={session.href}
                   target="_blank"
                   rel="noreferrer"
+                  aria-label={session.label.replace(' ↗', '')}
                   className={buttonVariants({ variant: 'outline', size: 'icon-sm' })}
                 />
               }
