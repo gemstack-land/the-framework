@@ -66,6 +66,28 @@ describe('mcpServerFromAgent — tools mode', () => {
     } finally { await cleanup() }
   })
 
+  it('forwards a tool whose execute fn returns synchronously', async () => {
+    // `.server()` accepts `TReturn | Promise<TReturn>`, so a bare return is
+    // legal and must not be mistaken for an async generator.
+    const syncTool = toolDefinition({
+      name:        'shout',
+      description: 'Shout a word',
+      inputSchema: z.object({ word: z.string() }),
+    }).server(({ word }) => word.toUpperCase())
+
+    class SyncAgent extends Agent {
+      instructions() { return 'Sync tool agent.' }
+      tools() { return [syncTool] }
+    }
+
+    const server = await mcpServerFromAgent(SyncAgent)
+    const { client, cleanup } = await connectClient(server)
+    try {
+      const result = await client.callTool({ name: 'shout', arguments: { word: 'hi' } })
+      assert.strictEqual(textFromResult(result), 'HI')
+    } finally { await cleanup() }
+  })
+
   it('stringifies structured tool results as JSON', async () => {
     const server = await mcpServerFromAgent(FixtureAgent)
     const { client, cleanup } = await connectClient(server)

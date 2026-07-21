@@ -115,12 +115,23 @@ function registerAgentPromptToolOnServer(
   )
 }
 
+/** True only for an async generator: a Promise has neither `next` nor `Symbol.asyncIterator`. */
+function isAsyncGenerator(v: unknown): v is AsyncGenerator<unknown, unknown, void> {
+  const maybe = v as { next?: unknown; [Symbol.asyncIterator]?: unknown } | null
+  return maybe != null
+    && typeof maybe.next === 'function'
+    && typeof maybe[Symbol.asyncIterator] === 'function'
+}
+
 async function runAgentTool(tool: Tool, input: unknown): Promise<unknown> {
   if (!tool.execute) {
     throw new Error(`mcpServerFromAgent: tool "${tool.definition.name}" has no execute fn (client-only tool — cannot be exposed via MCP)`)
   }
   const out = (tool.execute as (input: unknown, ctx?: ToolCallContext) => unknown)(input)
-  if (out instanceof Promise) return await out
+  // Duck-type the generator rather than testing `out instanceof Promise`: a
+  // `.server()` fn may legally return a bare value or a non-native thenable,
+  // and both would otherwise be mistaken for a generator and die on `.next()`.
+  if (!isAsyncGenerator(out)) return await out
 
   // Generator path — drain progress yields silently and return the final value.
   // (MCP forwards progress via `notifications/progress`; the agent loop's
