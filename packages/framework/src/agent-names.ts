@@ -27,7 +27,8 @@ export const AGENT_LABELS: Record<AgentName, string> = {
 /**
  * The agent behind a driver name (#831): a run records the driver that ran it
  * (`claude-code`), while `--agent` takes the agent name (`claude`). `undefined` for a driver
- * no agent claims (the fake driver, or a record from a newer version).
+ * no agent claims (the fake driver, or a record from a newer version). An agent whose driver
+ * name differs from its own needs a case here, like claude's does.
  */
 export function agentForDriver(driver: string | undefined): AgentName | undefined {
   if (driver === 'claude-code') return 'claude'

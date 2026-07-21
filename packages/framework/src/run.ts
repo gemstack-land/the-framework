@@ -331,10 +331,10 @@ export async function runFramework(opts: RunFrameworkOptions): Promise<RunFramew
   const { runSignal, onDriverEvent, consumptionTrip, budgetController, consumptionController, declineController } =
     createRunControls({
       emit,
-      ...(opts.signal ? { signal: opts.signal } : {}),
-      ...(opts.sessionLink ? { sessionLink: opts.sessionLink } : {}),
-      ...(opts.budgetUsd != null ? { budgetUsd: opts.budgetUsd } : {}),
-      ...(opts.consumptionGate ? { consumptionGate: opts.consumptionGate } : {}),
+      signal: opts.signal,
+      sessionLink: opts.sessionLink,
+      budgetUsd: opts.budgetUsd,
+      consumptionGate: opts.consumptionGate,
     })
 
   // 2. One driver session for the whole run; each prompt is a fresh invocation.

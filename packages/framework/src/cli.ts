@@ -953,7 +953,6 @@ export function isInteractive(opts: { runId?: string | undefined }, hasDashboard
   return hasDashboard || opts.runId !== undefined
 }
 
-
 /**
  * Route Ctrl+C / SIGTERM into aborting the run — not into default signal termination, which
  * would kill the framework while its spawned Claude Code tree keeps running (the

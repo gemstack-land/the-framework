@@ -38,7 +38,6 @@ export const DAEMON_STATE_FILE = 'the-framework-daemon.json'
 /** The default dashboard port the daemon binds. Matches the per-run dashboard. */
 export const DEFAULT_DAEMON_PORT = 4200
 
-
 /** What a running daemon writes so a later `framework` invocation can find it. */
 export interface DaemonState {
   /** The daemon process id. */
@@ -55,7 +54,6 @@ export interface DaemonState {
 export function daemonDir(cwd: string): string {
   return join(cwd, FRAMEWORK_DIR)
 }
-
 
 /** True when `child` lives strictly inside `parent` (not equal, not outside). */
 export function isNestedWithin(child: string, parent: string): boolean {
@@ -78,7 +76,6 @@ export async function registerHomeProject(cwd: string, env: NodeJS.ProcessEnv = 
   if (existing.some(p => isNestedWithin(cwd, p.path))) return
   await addProject(cwd, new Date().toISOString(), undefined, env).catch(() => {})
 }
-
 
 /**
  * The global daemon state file path (#393): a single file beside the registry, so
@@ -237,7 +234,6 @@ async function waitForDaemon(env: NodeJS.ProcessEnv | undefined, timeoutMs: numb
   return undefined
 }
 
-
 /** Options for {@link stopDaemon}. */
 export interface StopDaemonOptions {
   /** Grace period for SIGTERM before escalating to SIGKILL, ms. Default 5000. */
@@ -262,7 +258,6 @@ export async function stopDaemon(env: NodeJS.ProcessEnv = process.env, opts: Sto
   await rm(daemonStatePath(env), { force: true }).catch(() => {})
   return alive
 }
-
 
 /**
  * Tails the append-only `.the-framework/events.jsonl` run log. The generic tailing
@@ -398,7 +393,6 @@ export async function runDaemon(cwd: string, opts: RunDaemonOptions = {}): Promi
   selfHeal?.stop()
   await removeDaemonStateIfOwned(process.pid, env)
 }
-
 
 /** Resolve on SIGINT/SIGTERM, or when the optional abort signal fires. */
 function waitForShutdown(signal?: AbortSignal): Promise<void> {
