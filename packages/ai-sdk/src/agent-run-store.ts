@@ -1,5 +1,6 @@
 import type { AiMessage, ToolCall } from './types.js'
 import type { CacheAdapter } from './cache-adapter.js'
+import { CachedRunStoreBase, InMemoryRunStoreBase } from './run-store-base.js'
 
 /**
  * Discriminator for the kind of pause a standalone run is parked on.
@@ -116,29 +117,7 @@ export function newAgentRunId(): string {
  * deployment, use {@link CachedAgentRunStore} with a shared cache, or a custom
  * backend.
  */
-export class InMemoryAgentRunStore implements AgentRunStore {
-  private readonly states = new Map<string, AgentRunState>()
-
-  async store(runId: string, state: AgentRunState): Promise<void> {
-    this.states.set(runId, state)
-  }
-
-  async load(runId: string): Promise<AgentRunState | null> {
-    return this.states.get(runId) ?? null
-  }
-
-  async consume(runId: string): Promise<AgentRunState | null> {
-    const state = this.states.get(runId)
-    if (!state) return null
-    this.states.delete(runId)
-    return state
-  }
-
-  /** Test helper — clears all snapshots without consuming. */
-  clear(): void {
-    this.states.clear()
-  }
-}
+export class InMemoryAgentRunStore extends InMemoryRunStoreBase<AgentRunState> implements AgentRunStore {}
 
 // ─── Cache-backed store (bring your own CacheAdapter) ───────
 
@@ -164,33 +143,8 @@ export interface CachedAgentRunStoreOptions {
  * client tool calls or an approval decision, short enough that abandoned runs
  * garbage-collect promptly and the storage bill stays bounded.
  */
-export class CachedAgentRunStore implements AgentRunStore {
-  private readonly cache:      CacheAdapter
-  private readonly keyPrefix:  string
-  private readonly ttlSeconds: number
-
+export class CachedAgentRunStore extends CachedRunStoreBase<AgentRunState> implements AgentRunStore {
   constructor(opts: CachedAgentRunStoreOptions) {
-    if (!opts?.cache) {
-      throw new Error('[ai-sdk] CachedAgentRunStore requires a cache adapter: new CachedAgentRunStore({ cache }).')
-    }
-    this.cache      = opts.cache
-    this.keyPrefix  = opts.keyPrefix  ?? 'gemstack:ai:agent-run:'
-    this.ttlSeconds = opts.ttlSeconds ?? 5 * 60
-  }
-
-  async store(runId: string, state: AgentRunState): Promise<void> {
-    await this.cache.set(this.keyPrefix + runId, state, this.ttlSeconds)
-  }
-
-  async load(runId: string): Promise<AgentRunState | null> {
-    return (await this.cache.get<AgentRunState>(this.keyPrefix + runId)) ?? null
-  }
-
-  async consume(runId: string): Promise<AgentRunState | null> {
-    const key = this.keyPrefix + runId
-    const state = await this.cache.get<AgentRunState>(key)
-    if (!state) return null
-    await this.cache.forget(key)
-    return state
+    super(opts, { keyPrefix: 'gemstack:ai:agent-run:', storeName: 'CachedAgentRunStore' })
   }
 }
