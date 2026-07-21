@@ -5,10 +5,10 @@ import { tmpdir } from 'node:os'
 import { join, dirname } from 'node:path'
 import { appendControl } from './control.js'
 import { daemonStatePath } from './daemon.js'
+import { BROWSER_MCP_SERVERS, withBrowser } from './browser.js'
 import { EVENTS_FILE, FRAMEWORK_DIR, RUNS_DIR, type StoreFs } from './store/index.js'
 import { nodeGitRunner } from './project.js'
 import {
-  activeModes,
   buildDeployTarget,
   chooseSessionLink,
   claudeDriverOptions,
@@ -24,8 +24,6 @@ import {
   runLogKind,
   runOnBeforeMergeable,
   unguardedNotices,
-  withBrowser,
-  BROWSER_MCP_SERVERS,
   type CliIO,
   isSteerable,
   isInteractive,
@@ -487,12 +485,6 @@ test('parseArgs reads the relay subcommand and --share (#230)', () => {
   assert.equal(parseArgs(['x']).share, undefined)
 })
 
-
-test('activeModes maps the mode flags to Open Loop mode names', () => {
-  assert.deepEqual(activeModes({ autopilot: false, technical: false }), [])
-  assert.deepEqual(activeModes({ autopilot: true, technical: false }), ['autopilot'])
-  assert.deepEqual(activeModes({ autopilot: true, technical: true }), ['autopilot', 'technical'])
-})
 
 test('mergeRunConfig: the-framework.yml supplies defaults, flags override (#258)', () => {
   const flags = {}

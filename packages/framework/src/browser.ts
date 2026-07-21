@@ -1,4 +1,5 @@
 import { spawn, type ChildProcess } from 'node:child_process'
+import type { ClaudeCodeDriverOptions, McpServerSpec } from './driver/index.js'
 import { existsSync } from 'node:fs'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { createServer } from 'node:net'
@@ -175,4 +176,35 @@ export async function launchSharedBrowser(
     return undefined
   }
   return { browserUrl, close }
+}
+
+/**
+ * The `--browser` MCP wiring (#452): chrome-devtools-mcp is a maintained stdio
+ * server that launches its own Chromium and exposes DevTools tools (navigate,
+ * console, network, DOM, screenshot). `npx -y` resolves it on demand so there is
+ * nothing to pre-install. Merged into the build driver only, not the short
+ * preset-router turn.
+ */
+export const BROWSER_MCP_SERVERS: Record<string, McpServerSpec> = {
+  'chrome-devtools': { command: 'npx', args: ['-y', 'chrome-devtools-mcp@latest'] },
+}
+
+/**
+ * The same server, pointed at a Chrome the run already launched (#793). `--browserUrl` makes
+ * it attach instead of launching, which is what lets a second client (the #609 screencast)
+ * watch the very page the agent is on. Without a URL this is the old spec unchanged.
+ */
+export function browserMcpServers(browserUrl?: string | undefined): Record<string, McpServerSpec> {
+  if (!browserUrl) return BROWSER_MCP_SERVERS
+  return { 'chrome-devtools': { command: 'npx', args: ['-y', 'chrome-devtools-mcp@latest', '--browserUrl', browserUrl] } }
+}
+
+/** Fold the `--browser` MCP server into driver options when the flag is set. */
+export function withBrowser(
+  base: ClaudeCodeDriverOptions,
+  browser: boolean,
+  browserUrl?: string | undefined,
+): ClaudeCodeDriverOptions {
+  if (!browser) return base
+  return { ...base, mcpServers: { ...base.mcpServers, ...browserMcpServers(browserUrl) } }
 }

@@ -12,9 +12,9 @@ import {
   type DomainPreset,
   type FrameworkSignals,
 } from '@gemstack/ai-autopilot'
-import { type ClaudeCodeDriverOptions, type Driver, type DriverSession, type McpServerSpec, type PermissionMode } from './driver/index.js'
+import { type ClaudeCodeDriverOptions, type Driver, type DriverSession, type PermissionMode } from './driver/index.js'
 import { AGENTS, AGENT_SPECS, createDriver, isAgentName, type AgentName } from './agent.js'
-import { launchSharedBrowser, type SharedBrowser } from './browser.js'
+import { launchSharedBrowser, withBrowser, type SharedBrowser } from './browser.js'
 import { connectCdp, startBrowserStream, type BrowserStream } from './browser-stream.js'
 import { hostExecutor } from './host-exec.js'
 import { startDashboard, singleProjectProvider, resolveDashboardBundle, type Dashboard } from './dashboard/index.js'
@@ -641,37 +641,6 @@ export function claudeDriverOptions(opts: Pick<CliOptions, 'permissionMode' | 's
 }
 
 /**
- * The `--browser` MCP wiring (#452): chrome-devtools-mcp is a maintained stdio
- * server that launches its own Chromium and exposes DevTools tools (navigate,
- * console, network, DOM, screenshot). `npx -y` resolves it on demand so there is
- * nothing to pre-install. Merged into the build driver only, not the short
- * preset-router turn.
- */
-export const BROWSER_MCP_SERVERS: Record<string, McpServerSpec> = {
-  'chrome-devtools': { command: 'npx', args: ['-y', 'chrome-devtools-mcp@latest'] },
-}
-
-/**
- * The same server, pointed at a Chrome the run already launched (#793). `--browserUrl` makes
- * it attach instead of launching, which is what lets a second client (the #609 screencast)
- * watch the very page the agent is on. Without a URL this is the old spec unchanged.
- */
-export function browserMcpServers(browserUrl?: string | undefined): Record<string, McpServerSpec> {
-  if (!browserUrl) return BROWSER_MCP_SERVERS
-  return { 'chrome-devtools': { command: 'npx', args: ['-y', 'chrome-devtools-mcp@latest', '--browserUrl', browserUrl] } }
-}
-
-/** Fold the `--browser` MCP server into driver options when the flag is set. */
-export function withBrowser(
-  base: ClaudeCodeDriverOptions,
-  browser: boolean,
-  browserUrl?: string | undefined,
-): ClaudeCodeDriverOptions {
-  if (!browser) return base
-  return { ...base, mcpServers: { ...base.mcpServers, ...browserMcpServers(browserUrl) } }
-}
-
-/**
  * The flags the picked agent cannot honor (#542), as lines to print at startup.
  *
  * A flag that silently does nothing is worse than one that errors. `--agent
@@ -698,9 +667,6 @@ export function unguardedNotices(
   }
   return notices
 }
-
-/** The active Open Loop modes of a resolved run config, in a stable order. */
-export const activeModes = resolvedModes
 
 /** The Eco section drops in effect (#314), or `undefined` when none are set. */
 export function ecoOptions(opts: Pick<CliOptions, 'eco'>): EcoOptions | undefined {
@@ -986,6 +952,175 @@ export function isInteractive(opts: { runId?: string | undefined }, hasDashboard
   return hasDashboard || opts.runId !== undefined
 }
 
+
+/**
+ * Route Ctrl+C / SIGTERM into aborting the run — not into default signal termination, which
+ * would kill the framework while its spawned Claude Code tree keeps running (the
+ * orphaned-process leak). Aborting drives the driver to group-kill its child; a second
+ * signal force-quits. Returns the disarm, called once the run settles.
+ */
+function armInterrupt(controller: AbortController, io: CliIO): () => void {
+  let interrupts = 0
+  const onInterrupt = () => {
+    if (++interrupts === 1) {
+      io.err('\n■ Interrupt: stopping the session (Ctrl+C again to force-quit)…')
+      controller.abort()
+    } else {
+      process.exit(130)
+    }
+  }
+  process.on('SIGINT', onInterrupt)
+  process.on('SIGTERM', onInterrupt)
+  return () => {
+    process.off('SIGINT', onInterrupt)
+    process.off('SIGTERM', onInterrupt)
+  }
+}
+
+/**
+ * Record chat turns into the committed conversation (#908). Fire-and-forget at the call
+ * site — a failed write must never stall or fail a run — but appends are chained rather
+ * than fired in parallel: each one creates the dir/header before it writes, so two
+ * overlapping turns would race and could land the reply above the message it answers.
+ * `flush()` is awaited before the run's log entry, or the last reply is lost (#908).
+ */
+function conversationRecorder(deps: {
+  cwd: string
+  enabled: boolean
+  conversationId: string | undefined
+  localVia: string
+}): { recordMessage?: RecordMessage; flush: () => Promise<void> } {
+  const { cwd, conversationId } = deps
+  if (!deps.enabled || !conversationId) return { flush: () => Promise.resolve() }
+  let tail: Promise<void> = Promise.resolve()
+  const recordMessage: RecordMessage = (role, text, via) => {
+    // A per-turn origin wins, but only a safe one: it arrives from a chat surface over the
+    // control channel, and the heading it lands in is line-parsed (#897's threat model).
+    const message = { at: new Date().toISOString(), role, via: isSafeVia(via) ? via : deps.localVia, text }
+    tail = tail.then(() => appendMessage(cwd, conversationId, message)).catch(() => {})
+  }
+  return { recordMessage, flush: () => tail }
+}
+
+/** What the run journal exposes to the epilogue. See {@link createRunJournal}. */
+interface RunJournal {
+  onEvent: (event: FrameworkEvent) => void
+  /** The session name the agent chose via setSessionName() (#326), once it has. */
+  sessionName: () => string | undefined
+  /** The agent signalled setReadyForMerge() this run (#326). */
+  sawReadyForMerge: () => boolean
+  /** The run stopped cleanly (user interrupt / budget cap #322) rather than failed. */
+  stoppedCleanly: () => boolean
+  /** Hold the browser preview's port until the session opens (#829/#813). */
+  announceBrowserPort: (port: number) => void
+  /** Write the run's `.the-framework/LOGS.md` entry (#898). Idempotent; every exit path calls it. */
+  finishLog: () => Promise<void>
+}
+
+/**
+ * The run's event sink and the state its epilogue reads. One event arrives and this prints it,
+ * persists it, publishes it to the relay, folds the fields the LOGS.md entry needs (session
+ * id/link, the end event), tracks the settle flags (#322/#326), renames the framework-owned
+ * branch once the agent names its session (#736), and re-emits a held browser-stream port
+ * right after `session` so it lands in the slice the dashboard renders (#829). These jobs sat
+ * inline in runCli across six mutable locals; the journal is their one owner, and runCli reads
+ * the getters.
+ */
+function createRunJournal(deps: {
+  io: CliIO
+  cwd: string
+  store: RunStore | undefined
+  publisher: RelayPublisher | undefined
+  runId: string | undefined
+  kind: LogEntry['kind']
+  title: string
+  /** Awaited before the log entry is written: the queued conversation appends (#908). */
+  beforeLog: () => Promise<void>
+}): RunJournal {
+  const { io, cwd, store, publisher } = deps
+  // The framework's own verdict that the run stopped cleanly rather than failed — set by a
+  // user interrupt or a budget cap (#322). Trusted over which signal aborted, since a budget
+  // stop trips an internal signal the CLI never sees.
+  let stoppedCleanly = false
+  let sawReadyForMerge = false
+  let sessionName: string | undefined
+  let logSessionId: string | undefined
+  let logSessionLink: string | undefined
+  let logEnd: Extract<FrameworkEvent, { kind: 'end' }> | undefined
+  // The browser preview's port, announced on the first `session` event rather than when the
+  // bridge opens (#829): the dashboard renders only the tail from the last `session` event, so
+  // anything emitted ahead of it is dropped from the run's view.
+  let pendingBrowserPort: number | undefined
+
+  const onEvent = (event: FrameworkEvent) => {
+    if (event.kind === 'session' && event.sessionLink) logSessionLink = event.sessionLink
+    else if (event.kind === 'session-update') {
+      logSessionId = event.sessionId
+      if (event.sessionLink) logSessionLink = event.sessionLink
+    }
+    if (event.kind === 'ready-for-merge') sawReadyForMerge = true
+    if (event.kind === 'session-name') {
+      sessionName = event.name
+      // The framework-owned checkout (#736) was branched as `the-framework/run-<id>` before a
+      // name existed; put the readable name on it now. No-ops when the agent branched itself.
+      if (deps.runId) void renameRunBranch(cwd, runBranchName(deps.runId), `the-framework/${event.name}`)
+    }
+    if (event.kind === 'end') {
+      if (event.stopped) stoppedCleanly = true
+      // Held, not logged here (#898): the entry is written as the run settles, which is both
+      // after every run reaches it (an `end` is not guaranteed) and the last moment the branch
+      // can still be read off the checkout.
+      logEnd = event
+    }
+    io.out(formatFrameworkEvent(event))
+    void store?.append(event)
+    publisher?.publish(event)
+
+    // Right after the session opens, so it lands inside the slice the dashboard renders.
+    if (event.kind === 'session' && pendingBrowserPort !== undefined) {
+      const port = pendingBrowserPort
+      pendingBrowserPort = undefined
+      onEvent({ kind: 'browser-stream', port })
+    }
+  }
+
+  // Once per run, and on every path out — a stopped or crashed run is still a session that
+  // happened, and leaving it out is what made the committed log an incomplete record (#898).
+  let logged = false
+  const finishLog = async (): Promise<void> => {
+    if (logged) return
+    logged = true
+    // Let the queued conversation appends land before we exit, or the last reply is lost (#908).
+    await deps.beforeLog()
+    const entry = runLogEntry({
+      at: new Date().toISOString(),
+      kind: deps.kind,
+      title: deps.title,
+      end: logEnd,
+      stopped: stoppedCleanly,
+      id: deps.runId,
+      sessionId: logSessionId,
+      sessionLink: logSessionLink,
+      sessionName,
+      // The last moment it can be observed (#799): a run worktree is torn down after this
+      // process exits, and the agent may have branched itself, so neither name is derivable later.
+      branch: await currentBranch(cwd),
+    })
+    await appendLog(cwd, entry).catch(() => {})
+  }
+
+  return {
+    onEvent,
+    sessionName: () => sessionName,
+    sawReadyForMerge: () => sawReadyForMerge,
+    stoppedCleanly: () => stoppedCleanly,
+    announceBrowserPort: port => {
+      pendingBrowserPort = port
+    },
+    finishLog,
+  }
+}
+
 export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<number> {
   const opts = parseArgs(argv)
   if (opts.error) {
@@ -1084,7 +1219,7 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
   // Resolve which Open Loop domain preset (+ modes + build event) to run under:
   // --preset / the-framework.yml, or none at all (#545). Nothing infers one.
   let presetName = config.presetName
-  let modeList = activeModes(config)
+  let modeList = resolvedModes(config)
   let buildEvent = config.buildEvent
   let domainPreset: DomainPreset | undefined
 
@@ -1128,26 +1263,9 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
   // wired below.
   const controller = new AbortController()
 
-  // Ctrl+C / SIGTERM during a live run must abort the run — not let default
-  // signal termination kill the framework while its spawned Claude Code tree
-  // keeps running (the orphaned-process leak). Aborting drives the driver to
-  // group-kill its child; a second signal force-quits. Removed once the run
-  // settles so the post-run dashboard wait keeps its own Ctrl+C handling.
-  let interrupts = 0
-  const onInterrupt = () => {
-    if (++interrupts === 1) {
-      io.err('\n■ Interrupt: stopping the session (Ctrl+C again to force-quit)…')
-      controller.abort()
-    } else {
-      process.exit(130)
-    }
-  }
-  const clearInterrupt = () => {
-    process.off('SIGINT', onInterrupt)
-    process.off('SIGTERM', onInterrupt)
-  }
-  process.on('SIGINT', onInterrupt)
-  process.on('SIGTERM', onInterrupt)
+  // Ctrl+C / SIGTERM during a live run aborts the run; disarmed once it settles so the
+  // post-run dashboard wait keeps its own Ctrl+C handling.
+  const clearInterrupt = armInterrupt(controller, io)
 
   // The dashboard Stop button aborts the run-wide controller created above.
   // runFramework checks the signal between phases and the driver kills its current
@@ -1267,85 +1385,35 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
 
   // Persist the chat into the committed conversation (#908/#857), so a clone carries what was
   // said and not just the fact a run happened. Keyed by the same run id LOGS.md records, which
-  // is what joins the committed session list to the committed chat. Fire-and-forget: a failed
-  // write must never stall or fail a run, exactly like the project log above.
-  const conversationId = opts.runId ?? store?.snapshot().id
-  // Appends are chained rather than fired in parallel: each one creates the dir/header before it
-  // writes, so two overlapping turns race and can land the reply above the message it answers.
-  let conversationTail: Promise<void> = Promise.resolve()
-  // The surface this run is being driven from, when nothing more specific is known. `--via` names
-  // it for a run the daemon started on a surface's behalf (#917), so a Discord-started session's
-  // opening turn is not filed under the dashboard; otherwise it is whichever local surface is here.
-  const localVia = isSafeVia(opts.via) ? opts.via : requestChoice ? 'dashboard' : 'cli'
-  const recordMessage: RecordMessage | undefined =
-    opts.persist && conversationId
-      ? (role, text, via) => {
-          // A per-turn origin wins, but only a safe one: it arrives from a chat surface over the
-          // control channel, and the heading it lands in is line-parsed (#897's threat model).
-          const message = { at: new Date().toISOString(), role, via: isSafeVia(via) ? via : localVia, text }
-          conversationTail = conversationTail.then(() => appendMessage(cwd, conversationId, message)).catch(() => {})
-        }
-      : undefined
+  // is what joins the committed session list to the committed chat. `--via` names the surface
+  // for a run the daemon started on another surface's behalf (#917); otherwise it is whichever
+  // local surface is here.
+  const conversation = conversationRecorder({
+    cwd,
+    enabled: opts.persist,
+    conversationId: opts.runId ?? store?.snapshot().id,
+    localVia: isSafeVia(opts.via) ? opts.via : requestChoice ? 'dashboard' : 'cli',
+  })
+  const recordMessage = conversation.recordMessage
 
   // The session link shown on the dashboard: --session-link, else Claude Code's own entry for
   // a live Claude run, else nothing (#212/#542). Same for both run paths.
   const sessionLink = chooseSessionLink(opts, fake)
 
-  // The framework's own verdict that the run stopped cleanly rather than failed —
-  // set by a user interrupt or a budget cap (#322). Trusted over which signal
-  // aborted, since a budget stop trips an internal signal the CLI never sees.
-  let stoppedCleanly = false
-  // The agent signalled setReadyForMerge() this run (#326): with --on-before-mergeable on, fire the
-  // on-before-mergeable prompt once the run settles (not mid-run — it would race the agent's own git work).
-  let sawReadyForMerge = false
-  // The session the agent named via setSessionName() (#326). Carried on run state because the
-  // on-before-mergeable prompt names it on every line: it is set before the first change and read here,
-  // after the run.
-  let sessionName: string | undefined
-  // Record the finished run in the project log `.the-framework/LOGS.md` (#379). The
-  // kind + title are known up front; the session id/link arrive mid-run, and the
-  // `end` event holds the outcome. Best-effort: the project DB is committed history,
-  // so it must never break a run.
-  const logKind = runLogKind(opts, transparent)
-  const logTitle = intent || (opts.research ? defaultWhat() : '')
-  let logSessionId: string | undefined
-  let logSessionLink: string | undefined
-  let logEnd: Extract<FrameworkEvent, { kind: 'end' }> | undefined
-  // The browser preview's port, announced on the first `session` event rather than when the
-  // bridge opens (#829). The dashboard renders only the tail from the last `session` event, so
-  // anything emitted ahead of it is dropped from the run's view.
-  let pendingBrowserPort: number | undefined
-  const onEvent = (event: FrameworkEvent) => {
-    if (event.kind === 'session' && event.sessionLink) logSessionLink = event.sessionLink
-    else if (event.kind === 'session-update') {
-      logSessionId = event.sessionId
-      if (event.sessionLink) logSessionLink = event.sessionLink
-    }
-    if (event.kind === 'ready-for-merge') sawReadyForMerge = true
-    if (event.kind === 'session-name') {
-      sessionName = event.name
-      // The framework-owned checkout (#736) was branched as `the-framework/run-<id>` before a
-      // name existed; put the readable name on it now. No-ops when the agent branched itself.
-      if (opts.runId) void renameRunBranch(cwd, runBranchName(opts.runId), `the-framework/${event.name}`)
-    }
-    if (event.kind === 'end') {
-      if (event.stopped) stoppedCleanly = true
-      // Held, not logged here (#898): the entry is written as the run settles, which is both
-      // after every run reaches it (an `end` is not guaranteed) and the last moment the branch
-      // can still be read off the checkout.
-      logEnd = event
-    }
-    io.out(formatFrameworkEvent(event))
-    void store?.append(event)
-    publisher?.publish(event)
-
-    // Right after the session opens, so it lands inside the slice the dashboard renders.
-    if (event.kind === 'session' && pendingBrowserPort !== undefined) {
-      const port = pendingBrowserPort
-      pendingBrowserPort = undefined
-      onEvent({ kind: 'browser-stream', port })
-    }
-  }
+  // Everything the run reports that its epilogue needs — the settle flags, the LOGS.md
+  // fields, the deferred browser-port announcement — plus the fan-out of every event to the
+  // terminal, the store and the relay, lives in the journal. runCli reads its getters below.
+  const journal = createRunJournal({
+    io,
+    cwd,
+    store,
+    publisher,
+    runId: opts.runId,
+    kind: runLogKind(opts, transparent),
+    title: intent || (opts.research ? defaultWhat() : ''),
+    beforeLog: conversation.flush,
+  })
+  const onEvent = journal.onEvent
 
   // Fire the #326 on-before-mergeable prompt once a --on-before-mergeable run has settled and the agent
   // signalled setReadyForMerge(). Skipped for a fake/offline run and when the run was stopped —
@@ -1357,14 +1425,15 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
     // run is spawned with `stdio: 'ignore'`, so silence there read as "it ran and found nothing".
     const skip = (reason: OnBeforeMergeableSkip) =>
       onEvent({ kind: 'on-before-mergeable', outcome: 'skipped', reason })
-    if (!sawReadyForMerge) return skip('not-ready-for-merge')
-    if (stoppedCleanly) return skip('run-stopped')
+    if (!journal.sawReadyForMerge()) return skip('not-ready-for-merge')
+    if (journal.stoppedCleanly()) return skip('run-stopped')
     if (fake) return skip('fake-run')
     // --eco-auto-maintenance (#314) no longer skips the whole run: since #537 this prompt
     // also carries `## Business knowledge`, which the flag does not name. It drops just
     // `## Maintenance` inside renderOnBeforeMergeablePrompt() instead.
     // Every line of the prompt names the session, so there is nothing to queue without one.
     // An agent that made changes has one; this is the agent that ignored the instruction.
+    const sessionName = journal.sessionName()
     if (!sessionName) return skip('no-session-name')
     const binPath = process.argv[1]
     if (!binPath) return skip('no-bin-path')
@@ -1377,32 +1446,6 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
       opts.eco,
     )
     onEvent({ kind: 'on-before-mergeable', outcome })
-  }
-
-  // Write the run's entry into `.the-framework/LOGS.md` as it settles (#898). Once per run, and
-  // on every path out — a stopped or crashed run is still a session that happened, and leaving it
-  // out is what made the committed log an incomplete record of the transient `runs/` archive.
-  let logged = false
-  const finishLog = async (): Promise<void> => {
-    if (logged) return
-    logged = true
-    // Let the queued conversation appends land before we exit, or the last reply is lost (#908).
-    await conversationTail
-    const entry = runLogEntry({
-      at: new Date().toISOString(),
-      kind: logKind,
-      title: logTitle,
-      end: logEnd,
-      stopped: stoppedCleanly,
-      id: opts.runId,
-      sessionId: logSessionId,
-      sessionLink: logSessionLink,
-      sessionName,
-      // The last moment it can be observed (#799): a run worktree is torn down after this
-      // process exits, and the agent may have branched itself, so neither name is derivable later.
-      branch: await currentBranch(cwd),
-    })
-    await appendLog(cwd, entry).catch(() => {})
   }
 
   // A mode/kind given with no preset in effect has nothing to act on: note it.
@@ -1445,14 +1488,11 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
   const browserStream = sharedBrowser
     ? await startBrowserStream({ browserUrl: sharedBrowser.browserUrl, connect: connectCdp }).catch(() => undefined)
     : undefined
-  // A dashboard-started run is spawned with its stdout discarded, so printing the URL reaches
-  // nobody (#813). The port goes through onEvent — persisted and published live — which is how
-  // the dashboard finds the pane to render.
-  // Held until the session opens (see `pendingBrowserPort`) rather than emitted here: the bridge
-  // exists before the run does, and an event ahead of `session` never reaches the dashboard (#829).
-  // It travels as an event at all because a dashboard-started run is spawned with its stdout
-  // discarded, so a printed URL reaches nobody (#813).
-  if (browserStream) pendingBrowserPort = browserStream.port
+  // The port travels as an event — persisted and published live — because a dashboard-started
+  // run is spawned with its stdout discarded, so a printed URL reaches nobody (#813). The
+  // journal holds it until the session opens: the bridge exists before the run does, and an
+  // event ahead of `session` never reaches the dashboard (#829).
+  if (browserStream) journal.announceBrowserPort(browserStream.port)
 
   // The quota boundary (#879). Nothing to configure and nothing to pass: the
   // boundary is derived from the account's own week, so a run started from a
@@ -1485,8 +1525,8 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
     browserStream,
     clearInterrupt,
     maybeFireOnBeforeMergeable,
-    finishLog,
-    isStopped: () => controller.signal.aborted || stoppedCleanly,
+    finishLog: journal.finishLog,
+    isStopped: () => controller.signal.aborted || journal.stoppedCleanly(),
     failLabel,
   })
 
