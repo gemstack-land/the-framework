@@ -4,6 +4,7 @@ import {
   listWorktreeDirs,
   listRuns,
   readLiveMetas,
+  commitPendingWork,
   removeWorktree,
   pruneWorktrees,
   worktreePath,
@@ -40,6 +41,15 @@ export interface PruneResult {
 
 /** The outcome of {@link removeProjectWorktree}. */
 export type RemoveResult = { ok: true } | { ok: false; error: string }
+
+/** Surface-specific work {@link removeProjectWorktree} does once removal is decided on. */
+export interface RemoveWorktreeOptions {
+  /**
+   * Run after the safety checks pass and the work is committed, just before the checkout goes.
+   * The dashboard stops the preview serving that tree here (#797); the CLI has none to stop.
+   */
+  beforeRemove?: (runId: string) => Promise<void>
+}
 
 /**
  * The worktrees a project still has on disk (#752), newest first — the same view the dashboard's
@@ -78,16 +88,26 @@ async function sizeOf(cwd: string, runId: string): Promise<{ sizeBytes?: number 
 }
 
 /**
- * Remove one retained worktree (#752/#737), refusing while its run is still going — a run's
- * checkout is where its agent is working, and Stop is how you end a run, not pulling the floor
- * out from under it. The run's history was archived into the repo when it finished, so removal
- * costs no history.
+ * Remove one retained worktree (#752/#737): the one implementation behind both surfaces that
+ * offer it, the `framework worktrees rm` verb and the dashboard's Remove button (#982). They were
+ * two copies of the same checks and had already drifted, so a bogus session id read as a raw git
+ * error on one and a plain sentence on the other.
  *
- * Unlike the dashboard's Remove, this cannot stop a preview serving that checkout: previews live
- * in the daemon, and the CLI is a different process. A worktree being served is still removed;
- * the dev server is the daemon's to notice.
+ * Refuses while the run is still going — a run's checkout is where its agent is working, and Stop
+ * is how you end a run, not pulling the floor out from under it. The run's history was archived
+ * into the repo when it finished, so removal costs no history.
+ *
+ * Commits whatever the checkout is still holding before removing it, exactly as teardown does
+ * (#786), and refuses when that commit fails (#982). A worktree is only *retained* when its run
+ * failed or was stopped, which is precisely when it is still holding uncommitted agent work — and
+ * {@link removeWorktree} forces past a dirty tree, so without this both surfaces reliably deleted
+ * the very diff the checkout was kept for.
  */
-export async function removeProjectWorktree(cwd: string, runId: string): Promise<RemoveResult> {
+export async function removeProjectWorktree(
+  cwd: string,
+  runId: string,
+  opts: RemoveWorktreeOptions = {},
+): Promise<RemoveResult> {
   if (!isSafeRunId(runId)) return { ok: false, error: `invalid session id: ${runId}` }
   const names = await listWorktreeDirs(cwd).catch((): string[] => [])
   if (!names.includes(runId)) return { ok: false, error: `no worktree for session ${runId}` }
@@ -95,8 +115,16 @@ export async function removeProjectWorktree(cwd: string, runId: string): Promise
   if (live.some(run => run.id === runId && run.status === 'running')) {
     return { ok: false, error: 'that session is still going; stop it before removing its worktree' }
   }
+  const path = worktreePath(cwd, runId)
   try {
-    await removeWorktree(cwd, worktreePath(cwd, runId))
+    if (!(await commitPendingWork(path))) {
+      return {
+        ok: false,
+        error: `session ${runId} has uncommitted work that could not be committed; its worktree was kept`,
+      }
+    }
+    await opts.beforeRemove?.(runId)
+    await removeWorktree(cwd, path)
     await pruneWorktrees(cwd)
     return { ok: true }
   } catch (err) {
