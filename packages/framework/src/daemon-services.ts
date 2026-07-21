@@ -3,7 +3,7 @@ import { listProjects, projectId, readPreferences, readProjectPreferences, resol
 import { discordNotificationEnabled, notificationEnabled } from './preference-defaults.js'
 import { runOptionsFromPreferences, preferencesFromFileConfig } from './run-options.js'
 import { loadFrameworkConfig } from './config.js'
-import { readSuspendedRuns, writeSuspendedRuns, resumableRuns, readLiveMetas, listRuns } from './store/index.js'
+import { readSuspendedRuns, writeSuspendedRuns, resumableRuns, readLiveMetas, listRuns, type LiveRun } from './store/index.js'
 import { startKeyedWatcher, type KeyedWatcher } from './dashboard/keyed-watcher.js'
 import { buildInterventions, interventionKey, postInterventionsDiscord } from './dashboard/interventions.js'
 import { buildActivity, activityKey, postActivityDiscord } from './dashboard/activity.js'
@@ -198,11 +198,21 @@ export function startBackgroundServices(deps: BackgroundServiceDeps): Background
         readConversation: async runId => {
           // A run's transcript lives in the checkout the run used, which for a daemon-spawned run
           // is its own worktree rather than the project root.
-          for (const project of await projects()) {
-            const meta = (await readLiveMetas(project.path).catch(() => [])).find(run => run.id === runId)
+          const summaries = await projects()
+          let listed = false
+          for (const project of summaries) {
+            const metas = await readLiveMetas(project.path).then(
+              m => ((listed = true), m),
+              (): LiveRun[] => [],
+            )
+            const meta = metas.find(run => run.id === runId)
             if (meta) return readConversation(meta.cwd, runId).catch(() => [])
           }
-          return []
+          // `undefined` = the listings worked and the run genuinely is not there (archived, or its
+          // project removed); the mirror counts these and releases the binding, so per-poll IO
+          // stops growing (#941). An empty/unreadable registry or all-failing meta reads is a
+          // transient outage, not evidence the run is gone — `[]` keeps the binding alive.
+          return summaries.length > 0 && listed ? undefined : []
         },
         post: (channelId, text) => postMessage(botToken, channelId, text),
         enabled: botEnabled,

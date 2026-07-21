@@ -1,7 +1,7 @@
 import { strict as assert } from 'node:assert'
 import { test } from 'node:test'
 import type { ConversationMessage } from '../conversations.js'
-import { startDiscordReplyMirror } from './reply-mirror.js'
+import { startDiscordReplyMirror, UNBIND_AFTER_MISSES } from './reply-mirror.js'
 
 const turn = (role: 'user' | 'agent', text: string): ConversationMessage => ({
   at: '2026-07-21T00:00:00.000Z',
@@ -12,7 +12,7 @@ const turn = (role: 'user' | 'agent', text: string): ConversationMessage => ({
 
 /** A mirror over an in-memory transcript, recording everything posted. */
 function harness(seed: ConversationMessage[] = [], enabled?: () => Promise<boolean>) {
-  let transcript = seed
+  let transcript: ConversationMessage[] | undefined = seed
   const posted: Array<{ channelId: string; text: string }> = []
   let deliver = true
   const logs: string[] = []
@@ -30,7 +30,9 @@ function harness(seed: ConversationMessage[] = [], enabled?: () => Promise<boole
     mirror,
     posted,
     logs,
-    say: (...messages: ConversationMessage[]) => (transcript = [...transcript, ...messages]),
+    say: (...messages: ConversationMessage[]) => (transcript = [...(transcript ?? []), ...messages]),
+    /** The run stops resolving: archived, or its project was removed (#941). */
+    gone: () => (transcript = undefined),
     set deliver(v: boolean) {
       deliver = v
     },
@@ -150,6 +152,47 @@ test('unbind stops mirroring a finished run (#932)', async () => {
     h.say(turn('agent', 'after the end'))
     await h.mirror.poll()
     assert.equal(h.posted.length, 0)
+  } finally {
+    h.mirror.stop()
+  }
+})
+
+test('a binding is released once its run stops resolving (#941)', async () => {
+  const h = harness()
+  try {
+    await h.mirror.bind('run-1', 'chan-1')
+    h.say(turn('agent', 'still here'))
+    await h.mirror.poll()
+    assert.equal(h.posted.length, 1)
+
+    h.gone() // the run archived; nothing ever unbinds it otherwise
+    for (let i = 0; i < UNBIND_AFTER_MISSES; i++) {
+      assert.equal(h.mirror.isBound('run-1'), true, `still bound after ${i} misses`)
+      await h.mirror.poll()
+    }
+    assert.equal(h.mirror.isBound('run-1'), false, 'released after consecutive misses')
+    assert.ok(h.logs.some(l => /no longer resolves/.test(l)), h.logs.join(','))
+  } finally {
+    h.mirror.stop()
+  }
+})
+
+test('a transient miss does not release the binding, and posting resumes (#941)', async () => {
+  const h = harness()
+  try {
+    await h.mirror.bind('run-1', 'chan-1')
+    h.gone() // e.g. the live-meta listing failed this tick
+    await h.mirror.poll()
+    assert.equal(h.mirror.isBound('run-1'), true, 'one miss is not the end')
+
+    h.say(turn('agent', 'back again')) // resolves again, from an empty transcript
+    await h.mirror.poll()
+    assert.deepEqual(h.posted.map(p => p.text), ['back again'])
+
+    // The miss counter reset: it takes the full run of consecutive misses to release.
+    h.gone()
+    for (let i = 0; i < UNBIND_AFTER_MISSES - 1; i++) await h.mirror.poll()
+    assert.equal(h.mirror.isBound('run-1'), true)
   } finally {
     h.mirror.stop()
   }
