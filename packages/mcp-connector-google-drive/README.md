@@ -11,8 +11,9 @@ npm i @gemstack/mcp-connector-google-drive @gemstack/mcp-connectors @gemstack/mc
 ## Use
 
 ```ts
+import { createServer } from 'node:http'
 import { mountConnectors } from '@gemstack/mcp-connectors'
-import { Mcp } from '@gemstack/mcp'
+import { createMcpHttpHandler } from '@gemstack/mcp'
 import drive from '@gemstack/mcp-connector-google-drive'
 
 const Server = mountConnectors([drive], {
@@ -20,7 +21,11 @@ const Server = mountConnectors([drive], {
   credentials: () => ({ token: process.env.GOOGLE_ACCESS_TOKEN }),
 })
 
-Mcp.web('/mcp/drive', Server)
+// `Server` is a standard @gemstack/mcp server class. Mount an instance
+// on any transport: raw node:http / Express / Connect here, or
+// `createWebRequestHandler` / `startStdio` from `@gemstack/mcp/runtime`.
+const handler = createMcpHttpHandler(new Server())
+createServer((req, res) => { void handler(req, res) }).listen(3000)
 ```
 
 Tools are exposed namespaced by connector id, e.g. `google-drive_list-files`.

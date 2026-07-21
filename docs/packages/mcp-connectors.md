@@ -12,7 +12,7 @@ A connector only **declares** what it needs (its auth requirement) and **what it
 npm i @gemstack/mcp-connectors @gemstack/mcp zod
 ```
 
-The server it produces plugs into the same surface as any other `@gemstack/mcp` server (`Mcp.web` / `Mcp.local`, `McpTestClient`, the neutral HTTP handler).
+The server it produces plugs into the same surface as any other `@gemstack/mcp` server (`createMcpHttpHandler`, `createWebRequestHandler`, `startStdio`, `McpTestClient`).
 
 ## Writing a connector
 
@@ -94,8 +94,9 @@ For `oauth`, protect the mounted endpoint with `@gemstack/mcp`'s `oauth2McpMiddl
 `mountConnectors` composes any number of connectors into one standard `@gemstack/mcp` server class.
 
 ```ts
+import { createServer } from 'node:http'
 import { mountConnectors } from '@gemstack/mcp-connectors'
-import { Mcp } from '@gemstack/mcp'
+import { createMcpHttpHandler } from '@gemstack/mcp'
 import library from './library-connector.js'
 import github from '@gemstack/mcp-connector-github'
 
@@ -106,8 +107,13 @@ const Server = mountConnectors([library, github], {
   credentials: (id) => ({ token: process.env[`${id.toUpperCase()}_TOKEN`] }),
 })
 
-Mcp.web('/mcp/connectors', Server) // a standard @gemstack/mcp server
+// `Server` is a standard @gemstack/mcp server class. Instantiate it and hand
+// the instance to a transport handler.
+const handler = createMcpHttpHandler(new Server())
+createServer((req, res) => { void handler(req, res) }).listen(3000)
 ```
+
+`createMcpHttpHandler` is the raw `node:http` / Express / Connect mount. For a Fetch-style host (Hono, Vike, Bun, Deno, Workers) use `createWebRequestHandler(new Server())` from `@gemstack/mcp/runtime`, which returns a `(Request) => Promise<Response>`. For a local CLI over stdio, `await startStdio(new Server())` from the same subpath.
 
 Tools are namespaced by connector id, so `library.get-book` is exposed as `library_get-book` and never collides with another connector's `get-book`. Pass `namespace: 'none'` to keep names verbatim (you then own collision-avoidance).
 

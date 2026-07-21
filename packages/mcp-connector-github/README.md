@@ -11,8 +11,9 @@ npm i @gemstack/mcp-connector-github @gemstack/mcp-connectors @gemstack/mcp
 ## Use
 
 ```ts
+import { createServer } from 'node:http'
 import { mountConnectors } from '@gemstack/mcp-connectors'
-import { Mcp } from '@gemstack/mcp'
+import { createMcpHttpHandler } from '@gemstack/mcp'
 import github from '@gemstack/mcp-connector-github'
 
 const Server = mountConnectors([github], {
@@ -20,7 +21,11 @@ const Server = mountConnectors([github], {
   credentials: () => ({ token: process.env.GITHUB_TOKEN }),
 })
 
-Mcp.web('/mcp/github', Server)
+// `Server` is a standard @gemstack/mcp server class. Mount an instance
+// on any transport: raw node:http / Express / Connect here, or
+// `createWebRequestHandler` / `startStdio` from `@gemstack/mcp/runtime`.
+const handler = createMcpHttpHandler(new Server())
+createServer((req, res) => { void handler(req, res) }).listen(3000)
 ```
 
 Tools are exposed namespaced by connector id, e.g. `github_list-issues`.

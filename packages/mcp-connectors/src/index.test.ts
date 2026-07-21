@@ -5,6 +5,8 @@ import { z } from 'zod'
 import { McpTestClient } from '@gemstack/mcp/testing'
 import { defineConnector, mountConnectors, McpResponse } from './index.js'
 import type { ConnectorContext } from './index.js'
+import { createMcpHttpHandler } from '@gemstack/mcp'
+import { createWebRequestHandler } from '@gemstack/mcp/runtime'
 import type { McpToolResult } from '@gemstack/mcp'
 
 function txt(result: McpToolResult): string {
@@ -162,4 +164,65 @@ test('mountConnectors puts server-level instructions before per-connector ones',
 test('mountConnectors omits instructions when no connector or server sets any', () => {
   const Server = mountConnectors([notesConnector()])
   assert.equal(new Server().metadata().instructions, undefined)
+})
+
+// ─── mountConnectors -> a real transport handler ──────────
+// The docs tell you to mount the returned class on a transport. These pin the
+// shape the handler factories actually accept (an INSTANCE, not the class), so
+// the mount snippets can't drift away from the API again (#976).
+
+const MCP_HEADERS = {
+  accept: 'application/json, text/event-stream',
+  'content-type': 'application/json',
+}
+
+function post(body: unknown, headers: Record<string, string> = {}): Request {
+  return new Request('http://localhost/mcp', {
+    method: 'POST',
+    headers: { ...MCP_HEADERS, ...headers },
+    body: JSON.stringify(body),
+  })
+}
+
+/** Both JSON and SSE bodies carry one JSON-RPC payload; pull it out either way. */
+async function rpc(res: Response): Promise<Record<string, unknown>> {
+  const text = await res.text()
+  const line = text.split('\n').find((l) => l.startsWith('data:'))
+  return JSON.parse(line ? line.slice(5).trim() : text) as Record<string, unknown>
+}
+
+test('a mounted connector server serves a real MCP session over createWebRequestHandler', async () => {
+  const Server = mountConnectors([notesConnector()])
+  const handler = createWebRequestHandler(new Server())
+
+  const init = await handler(post({
+    jsonrpc: '2.0', id: 1, method: 'initialize',
+    params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 't', version: '1.0.0' } },
+  }))
+  assert.equal(init.status, 200)
+  const sessionId = init.headers.get('mcp-session-id')
+  assert.ok(sessionId, 'initialize must mint a session id')
+  await init.body?.cancel()
+
+  const listed = await rpc(await handler(post(
+    { jsonrpc: '2.0', id: 2, method: 'tools/list', params: {} },
+    { 'mcp-session-id': sessionId },
+  )))
+  const tools = (listed['result'] as { tools: { name: string }[] }).tools
+  assert.deepEqual(tools.map((t) => t.name).sort(), ['notes_get', 'notes_list'])
+
+  const called = await rpc(await handler(post(
+    { jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'notes_get', arguments: { index: 0 } } },
+    { 'mcp-session-id': sessionId },
+  )))
+  assert.equal(txt(called['result'] as McpToolResult), 'buy milk')
+
+  await handler.close()
+})
+
+test('a mounted connector server is accepted by createMcpHttpHandler (the node:http mount)', async () => {
+  const Server = mountConnectors([notesConnector()])
+  const handler = createMcpHttpHandler(new Server())
+  assert.equal(typeof handler, 'function')
+  await handler.close()
 })

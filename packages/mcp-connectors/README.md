@@ -2,7 +2,7 @@
 
 The connector contract for GemStack AI orchestration. Define a tool connector to an external service (GitHub, Google Drive, ...) once with `defineConnector`, then compose any number of connectors into a single MCP server with `mountConnectors`.
 
-Built on [`@gemstack/mcp`](../mcp). Framework-agnostic: the server it produces plugs into the same surface as any other `@gemstack/mcp` server (`Mcp.web` / `Mcp.local`, `McpTestClient`, the neutral HTTP handler).
+Built on [`@gemstack/mcp`](../mcp). Framework-agnostic: the server it produces plugs into the same surface as any other `@gemstack/mcp` server (`createMcpHttpHandler`, `createWebRequestHandler`, `startStdio`, `McpTestClient`).
 
 > A connector only **declares** what it needs (its auth requirement) and **what it does** (its tools). It never reaches for env vars, OAuth, or a transport itself. The orchestrator that mounts it supplies credentials and chooses how to serve it. That split is what lets first-party and third-party connectors compose interchangeably.
 
@@ -49,8 +49,9 @@ A tool's `handle` may return a `string` (wrapped as text), any JSON-serializable
 ## Mount connectors into a server
 
 ```ts
+import { createServer } from 'node:http'
 import { mountConnectors } from '@gemstack/mcp-connectors'
-import { Mcp } from '@gemstack/mcp'
+import { createMcpHttpHandler } from '@gemstack/mcp'
 import notes from './notes.js'
 import github from '@gemstack/mcp-connector-github'
 
@@ -61,9 +62,13 @@ const Server = mountConnectors([notes, github], {
   credentials: (id) => ({ token: process.env[`${id.toUpperCase()}_TOKEN`] }),
 })
 
-// The result is a standard @gemstack/mcp server class.
-Mcp.web('/mcp/connectors', Server)
+// `Server` is a standard @gemstack/mcp server class. Instantiate it and hand
+// the instance to a transport handler.
+const handler = createMcpHttpHandler(new Server())
+createServer((req, res) => { void handler(req, res) }).listen(3000)
 ```
+
+`createMcpHttpHandler` is the raw `node:http` / Express / Connect mount. For a Fetch-style host (Hono, Vike, Bun, Deno, Workers) use `createWebRequestHandler(new Server())` from `@gemstack/mcp/runtime`, which returns a `(Request) => Promise<Response>`. For a local CLI over stdio, `await startStdio(new Server())` from the same subpath.
 
 Tools are namespaced by connector id, so `notes.list` is exposed as `notes_list` and never collides with another connector's `list`. Pass `namespace: 'none'` to keep names verbatim (you then own collision-avoidance).
 

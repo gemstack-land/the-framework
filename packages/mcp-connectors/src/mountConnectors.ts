@@ -10,7 +10,7 @@ import {
 import type { McpServerOptions, McpToolResult, ZodLikeObject } from '@gemstack/mcp'
 import type { Connector, ConnectorContext, ConnectorTool, ConnectorToolReturn, Credential } from './types.js'
 
-/** A constructable MCP server, ready for `Mcp.web()` / `Mcp.local()` or `McpTestClient`. */
+/** A constructable MCP server: instantiate it for a transport handler or `McpTestClient`. */
 export type ConnectorServerClass = new (options?: McpServerOptions) => McpServer
 
 export interface MountOptions {
@@ -39,14 +39,15 @@ export interface MountOptions {
  * Compose any number of connectors into a single MCP server class. Each
  * connector's tools become MCP tools on one server, namespaced by connector id
  * so names never collide. The returned class plugs straight into the
- * @gemstack/mcp surface: register it with `Mcp.web(path, ServerClass)` /
- * `Mcp.local(name, ServerClass)`, or drive it in tests with `McpTestClient`.
+ * @gemstack/mcp surface: instantiate it and hand the instance to a transport
+ * handler (`createMcpHttpHandler`, `createWebRequestHandler`, `startStdio`), or
+ * drive it in tests with `McpTestClient`.
  *
  * ```ts
  * const Server = mountConnectors([github, drive], {
  *   credentials: (id) => ({ token: process.env[`${id.toUpperCase()}_TOKEN`] }),
  * })
- * Mcp.web('/mcp/connectors', Server)
+ * const handler = createMcpHttpHandler(new Server())
  * ```
  */
 export function mountConnectors(connectors: Connector[], options: MountOptions = {}): ConnectorServerClass {
