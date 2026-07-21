@@ -310,6 +310,7 @@ export default function Page() {
           toggleContext={toggleContext}
           hasBrowser={selectedRun?.status === 'running' && selectedRun.browserStreamPort !== undefined}
           onWideChange={setWideRail}
+          onRunStarted={onRunStarted}
         />
       </div>
     </div>

@@ -29,7 +29,15 @@ const PRIORITY_TONE: Record<string, string> = {
 // The tickets view (#697): the project's `tickets/*.md`, so the backlog the agent plans from
 // is readable without opening the repo. Each row can be put on the agent queue, and an empty
 // `tickets/` offers to import the repo's GitHub issues instead of just saying "nothing here".
-export function TicketsPanel({ projectId }: { projectId: string | null }) {
+export function TicketsPanel({
+  projectId,
+  onRunStarted,
+}: {
+  projectId: string | null
+  /** Told when the import session starts, so the shell can show it (#948) — the button used
+   *  to flip "Starting…" and leave you staring at the still-empty panel. */
+  onRunStarted?: ((intent: string, runId?: string) => void) | undefined
+}) {
   const { value: tickets, loaded } = usePolled<WorkspaceTicket[]>(
     projectId ? () => onTickets(projectId) : null,
     [],
@@ -50,8 +58,12 @@ export function TicketsPanel({ projectId }: { projectId: string | null }) {
     if (result?.ok) setQueued(prev => new Set(prev).add(ticket.file))
   }
 
-  const importFromGithub = () =>
-    run(() => sendStart(projectId, IMPORT_PROMPT, 'prompt'), 'The import could not be started.')
+  const importFromGithub = async () => {
+    const result = await run(() => sendStart(projectId, IMPORT_PROMPT, 'prompt'), 'The import could not be started.')
+    // Jump to the session doing the import, so its progress is watchable instead of the
+    // panel sitting empty until files land.
+    if (result?.ok) onRunStarted?.(IMPORT_PROMPT, result.runId)
+  }
 
   if (tickets.length === 0) {
     return (
