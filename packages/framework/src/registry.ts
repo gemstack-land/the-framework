@@ -1,7 +1,7 @@
 import { basename, dirname, join, resolve } from 'node:path'
 import { isAgentName } from './agent-names.js'
 import { nodeFs } from './node-fs.js'
-import { PROJECT_PREFERENCE_KEYS, type ProjectPreferences } from './preference-defaults.js'
+import { PROJECT_PREFERENCE_KEYS, MAX_SPEND_OFFSET, type ProjectPreferences } from './preference-defaults.js'
 
 /**
  * The multi-project registry (#390): the list of projects the user has
@@ -109,6 +109,16 @@ export interface Preferences {
    * so it is opt-in like {@link notifyDiscord} rather than a baseline.
    */
   autoPm?: boolean
+  /**
+   * How far the automatic-consumption limit sits from the quota boundary, in percentage points
+   * (#960). Absent or `0` puts it exactly on the boundary, which is the default policy of #879:
+   * unattended work stops once the account has spent its share of the week.
+   *
+   * Negative holds unattended work back further; positive lets it borrow into the days still to
+   * come. It is an *offset* rather than an absolute percentage so the limit travels with the
+   * boundary as the week goes on, instead of being overtaken by it on day two.
+   */
+  autoSpendOffset?: number
   /** User-defined presets (#626): the user's own saved prompts, shown beside the built-in presets. */
   customPresets?: CustomPreset[]
 }
@@ -125,7 +135,7 @@ export interface Preferences {
 // The key list lives in the leaf `preference-defaults.ts` so the dashboard reads the same one
 // (a second copy there erased the type link, see that module); re-exported so this stays the
 // import site for everything that already reads it beside `Preferences`.
-export { PROJECT_PREFERENCE_KEYS, type ProjectPreferences } from './preference-defaults.js'
+export { PROJECT_PREFERENCE_KEYS, MAX_SPEND_OFFSET, type ProjectPreferences } from './preference-defaults.js'
 
 /**
  * The persisted registry file shape (#410): the project list plus the user preferences.
@@ -274,6 +284,11 @@ function sanitizePreferences(value: unknown): Preferences {
   // `system`, so it is simply dropped rather than persisted.
   if (typeof input['theme'] === 'string' && (KNOWN_THEMES as readonly string[]).includes(input['theme']))
     preferences.theme = input['theme'] as (typeof KNOWN_THEMES)[number]
+  // `autoSpendOffset` (#960) is the one numeric preference: a slider position in percentage
+  // points, clamped so a hand-edited file cannot push the limit somewhere the slider could not.
+  const offset = input['autoSpendOffset']
+  if (typeof offset === 'number' && Number.isFinite(offset))
+    preferences.autoSpendOffset = Math.round(Math.min(Math.max(offset, -MAX_SPEND_OFFSET), MAX_SPEND_OFFSET))
   const customPresets = sanitizeCustomPresets(input['customPresets'])
   if (customPresets.length) preferences.customPresets = customPresets
   return preferences

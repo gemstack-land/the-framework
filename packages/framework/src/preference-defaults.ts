@@ -83,3 +83,12 @@ export function discordNotificationEnabled(
 ): boolean {
   return notificationEnabled(preferences, 'notifyDiscord') && notificationEnabled(preferences, category)
 }
+
+/**
+ * How far either way the automatic-consumption slider reaches, in percentage points (#960).
+ *
+ * Here rather than in `registry.ts` for the reason this module exists: the slider that writes the
+ * value is in the browser and the sanitizer that clamps it is in the daemon, so the bound has to
+ * be one number both can import.
+ */
+export const MAX_SPEND_OFFSET = 50

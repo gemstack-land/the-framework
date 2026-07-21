@@ -5,7 +5,7 @@ import { onDashboard } from '../server/reads.telefunc.js'
 import { interventionKey } from '@gemstack/framework/client'
 import { ActivityChart } from './ActivityChart.js'
 import { RunOutcomes } from './RunOutcomes.js'
-import { UsagePanel } from './UsagePanel.js'
+import { Quota } from './Quota.js'
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card.js'
 import { usePolled } from '../lib/use-async.js'
 import { cn } from '../lib/utils.js'
@@ -99,7 +99,7 @@ export function DashboardPage({
               </CardContent>
             </Card>
 
-            <UsagePanel />
+            <Quota />
           </>
         )}
       </div>

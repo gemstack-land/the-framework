@@ -15,6 +15,7 @@ import {
   writePreferences,
   writeProjectPreferences,
   REGISTRY_FILE,
+  MAX_SPEND_OFFSET,
   type Preferences,
   type ProjectRecord,
   type RegistryFs,
@@ -286,6 +287,23 @@ test('writePreferences persists sanitized prefs and preserves the project list',
   })
   // The project list still reads back unchanged.
   assert.deepEqual(await listProjects(fs, ENV), [APP_A, APP_B])
+})
+
+test('writePreferences round-trips and clamps the spend-limit slider (#960)', async () => {
+  const fs = memFs({ [FILE]: JSON.stringify([APP_A]) })
+  await writePreferences({ autoSpendOffset: -12 }, fs, ENV)
+  assert.deepEqual(await readPreferences(fs, ENV), { autoSpendOffset: -12 })
+
+  // The one numeric preference, so it needs its own guard: a hand-edited file must not be able to
+  // put the limit somewhere the slider could not reach, and junk must not land in the home file.
+  await writePreferences({ autoSpendOffset: 9000 }, fs, ENV)
+  assert.deepEqual(await readPreferences(fs, ENV), { autoSpendOffset: MAX_SPEND_OFFSET })
+  await writePreferences({ autoSpendOffset: -9000 }, fs, ENV)
+  assert.deepEqual(await readPreferences(fs, ENV), { autoSpendOffset: -MAX_SPEND_OFFSET })
+  await writePreferences({ autoSpendOffset: Number.NaN }, fs, ENV)
+  assert.deepEqual(await readPreferences(fs, ENV), {})
+  await writePreferences({ autoSpendOffset: '20' } as never, fs, ENV)
+  assert.deepEqual(await readPreferences(fs, ENV), {})
 })
 
 test('writePreferences round-trips the notifyDiscord toggle (#627)', async () => {

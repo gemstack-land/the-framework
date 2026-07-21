@@ -80,9 +80,15 @@ export function quotaHeadroom(quota: QuotaBoundaryStatus | undefined): QuotaDeci
   if (!quota) return { start: false, reason: 'the quota could not be read, so there is no way to tell what is spare' }
   const reached = quota.reached
   if (reached) {
+    // Name the line it actually stopped at (#960). With the slider moved, saying "the week's 43%"
+    // when the run stopped at 63% would send someone looking for a bug that is a setting.
+    const { limit, boundary } = quota
+    const line = limit.offset === 0
+      ? `the week's ${Math.round(boundary.percent)}%`
+      : `your ${Math.round(limit.percent)}% limit (${limit.offset > 0 ? '+' : ''}${limit.offset} on the week's ${Math.round(boundary.percent)}%)`
     return {
       start: false,
-      reason: `${reached.label} is ${Math.round(reached.percentUsed)}% used, at or past day ${quota.boundary.day} of the week's ${Math.round(quota.boundary.percent)}%`,
+      reason: `${reached.label} is ${Math.round(reached.percentUsed)}% used, at or past day ${boundary.day} of ${line}`,
     }
   }
   return { start: true }

@@ -100,3 +100,40 @@ test('reports nothing when the week cannot be placed', () => {
   assert.equal(quotaBoundaryStatus({ windows: [{ label: 'Current week (all models)', kind: 'week', percentUsed: 16 }], now: NOW }), undefined)
   assert.equal(quotaBoundaryStatus({ windows: [weekWindow(16, 'later')], now: NOW }), undefined)
 })
+
+test('the limit is the boundary until the user moves it (#960)', () => {
+  const status = quotaBoundaryStatus({ windows: [weekWindow(16)], now: NOW })!
+  assert.equal(status.limit.offset, 0)
+  assert.equal(status.limit.percent, status.boundary.percent)
+})
+
+test('the slider moves the line work stops at, without moving the boundary (#960)', () => {
+  // 16% used against a boundary that has not reached it yet: room to spare.
+  const base = quotaBoundaryStatus({ windows: [weekWindow(16)], now: NOW })!
+  assert.equal(base.reached, null)
+
+  // Pulled back below what is already spent, the same reading is now over the line. The boundary
+  // itself is untouched — that is the whole reason limit and boundary are separate values.
+  const strict = quotaBoundaryStatus({ windows: [weekWindow(16)], now: NOW, limitOffset: -base.boundary.percent })!
+  assert.equal(strict.boundary.percent, base.boundary.percent)
+  assert.equal(strict.limit.percent, 0)
+  assert.equal(strict.limit.offset, -base.boundary.percent)
+  assert.equal(strict.reached?.percentUsed, 16)
+
+  // Pushed forward, an account that had reached the boundary gets room again.
+  const spent = quotaBoundaryStatus({ windows: [weekWindow(50)], now: NOW })!
+  assert.notEqual(spent.reached, null)
+  const lenient = quotaBoundaryStatus({ windows: [weekWindow(50)], now: NOW, limitOffset: 40 })!
+  assert.equal(lenient.reached, null)
+})
+
+test('a limit dragged past either end of the week stops at the week (#960)', () => {
+  // Unclamped, a negative limit would read as "always stopped" and one over 100 as "never stops".
+  const low = quotaBoundaryStatus({ windows: [weekWindow(0)], now: NOW, limitOffset: -500 })!
+  assert.equal(low.limit.percent, 0)
+  const high = quotaBoundaryStatus({ windows: [weekWindow(99)], now: NOW, limitOffset: 500 })!
+  assert.equal(high.limit.percent, 100)
+  // 99% used is still under a limit pinned at the top of the week, so work may still run.
+  assert.equal(high.reached, null)
+})
+

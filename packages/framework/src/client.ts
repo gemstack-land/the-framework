@@ -41,7 +41,7 @@ export { presets, LAUNCHER_PRESETS, type PresetKey } from './preset-catalog.js'
 // The identity + diff both notifier paths run, and the preference defaults both sides read (#627).
 // Pure, so the dashboard shares them rather than keeping copies that drift silently.
 export { interventionKey, pickNewInterventions, activityKey, pickNewActivity } from './dashboard/keys.js'
-export { PROJECT_PREFERENCE_KEYS, NOTIFICATION_DEFAULTS, notificationEnabled, discordNotificationEnabled, type ProjectPreferences } from './preference-defaults.js'
+export { PROJECT_PREFERENCE_KEYS, NOTIFICATION_DEFAULTS, MAX_SPEND_OFFSET, notificationEnabled, discordNotificationEnabled, type ProjectPreferences } from './preference-defaults.js'
 // The preferences -> run options mapping (#858), shared with the daemon so an unattended run
 // starts with the same settings a launcher-started one would. Pure field logic, no Node imports.
 export { runOptionsFromPreferences, autopilotEnabled, preferencesFromFileConfig } from './run-options.js'

@@ -1,6 +1,7 @@
 import { QuotaPoller } from '../quota-poller.js'
 import { quotaBoundaryStatus, type QuotaBoundaryStatus } from '../quota-boundary.js'
 import { ClaudeCodeDriver, type DriverQuotaUnavailableReason, type DriverQuotaWindow } from '../driver/index.js'
+import { readPreferences, type Preferences } from '../registry.js'
 
 /**
  * Everything the dashboard needs to draw the usage panel (#533): the account's
@@ -44,13 +45,18 @@ export interface QuotaSource {
  * No model is passed — the panel is about the account, and a model's own week
  * only narrows the gate for a run that has chosen one (#879).
  */
-export function pollerQuotaSource(poller: QuotaPoller, now: () => number = () => Date.now()): QuotaSource {
+export function pollerQuotaSource(
+  poller: QuotaPoller,
+  now: () => number = () => Date.now(),
+  /** The user's slider position, read per call so moving it takes effect without a restart (#960). */
+  limitOffset: () => number | Promise<number> = () => 0,
+): QuotaSource {
   return {
     stop: () => poller.stop(),
     read: async () => {
       const envelope = poller.current()
       const windows = envelope.lastGood?.windows ?? []
-      const boundary = quotaBoundaryStatus({ windows, now: now() })
+      const boundary = quotaBoundaryStatus({ windows, now: now(), limitOffset: await limitOffset() })
       const view: QuotaView = {
         windows,
         ...(boundary ? { boundary } : {}),
@@ -70,9 +76,15 @@ export function pollerQuotaSource(poller: QuotaPoller, now: () => number = () =>
  * Separate from the per-run guard on purpose — that one exists to pause a run
  * and dies with it, this one exists to draw a bar.
  */
-export function defaultQuotaSource(): QuotaSource {
+export function defaultQuotaSource(env: NodeJS.ProcessEnv = process.env): QuotaSource {
   const driver = new ClaudeCodeDriver()
   const poller = new QuotaPoller({ read: () => driver.readQuota() })
   poller.start()
-  return pollerQuotaSource(poller)
+  // One source, so the bar the user reads and the line auto PM obeys cannot disagree (#960): the
+  // slider is read here rather than in each consumer. An unreadable registry means the default
+  // policy, which is what a fresh install runs anyway.
+  return pollerQuotaSource(poller, undefined, async () => {
+    const prefs = await readPreferences(undefined, env).catch(() => ({}) as Preferences)
+    return prefs.autoSpendOffset ?? 0
+  })
 }

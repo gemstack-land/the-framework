@@ -135,16 +135,32 @@ export interface BoundaryWindow {
   label: string
   /** How much of it is gone, 0-100. */
   percentUsed: number
-  /** Whether it has reached the boundary. */
+  /** Whether it has reached the limit in force. */
   reached: boolean
+}
+
+/**
+ * The line unattended work actually stops at (#960).
+ *
+ * The boundary is the policy; this is the policy plus whatever the user asked for with the
+ * slider. They are separate values because the panel draws both: moving your own limit should
+ * not silently redraw the boundary it is measured against.
+ */
+export interface QuotaLimit {
+  /** Where the limit sits, 0-100. */
+  percent: number
+  /** How far it is from the boundary, in percentage points. `0` is the default policy. */
+  offset: number
 }
 
 /** Where the account stands against its boundary. */
 export interface QuotaBoundaryStatus {
   boundary: QuotaBoundary
+  /** The line in force, which is the boundary unless the user moved it (#960). */
+  limit: QuotaLimit
   /** The windows in force: the account's week, plus the selected model's own week when we can tell which it is. */
   windows: BoundaryWindow[]
-  /** The window that has reached the boundary, or `null` while there is room. */
+  /** The window that has reached the limit, or `null` while there is room. */
   reached: BoundaryWindow | null
 }
 
@@ -171,6 +187,11 @@ export function quotaBoundaryStatus(input: {
   now: number
   /** The model the work will run on, e.g. `claude-fable-5`. Its own week joins the gate when given. */
   model?: string
+  /**
+   * How far the automatic-consumption limit sits from the boundary, in percentage points (#960).
+   * Omitted or `0` is the #879 policy: the limit *is* the boundary.
+   */
+  limitOffset?: number
 }): QuotaBoundaryStatus | undefined {
   const week = input.windows.find(w => w.kind === 'week')
   if (!week?.resetsAtText) return undefined
@@ -186,10 +207,15 @@ export function quotaBoundaryStatus(input: {
     return name !== undefined && model.includes(name)
   })
 
+  // Clamped, so a limit dragged past either end of the week stops at the week rather than
+  // becoming unreachable (which would read as "never stop") or negative (as "always stopped").
+  const offset = input.limitOffset ?? 0
+  const limit: QuotaLimit = { percent: Math.min(Math.max(boundary.percent + offset, 0), 100), offset }
+
   const windows = inForce.map(w => ({
     label: w.label,
     percentUsed: w.percentUsed,
-    reached: w.percentUsed >= boundary.percent,
+    reached: w.percentUsed >= limit.percent,
   }))
-  return { boundary, windows, reached: windows.find(w => w.reached) ?? null }
+  return { boundary, limit, windows, reached: windows.find(w => w.reached) ?? null }
 }
