@@ -50,6 +50,19 @@ return toVercelResponse(stream)   // text/plain Response, X-Vercel-AI-Data-Strea
 
 `toVercelResponse(stream)` wraps a `Response`; `toVercelDataStream(stream)` returns the raw `ReadableStream<Uint8Array>` if you need to frame the response yourself. Both take the `stream` iterator (`AgentStreamResponse.stream`), not the whole `{ stream, response }` object.
 
+The wire is the **AI SDK v4** Data Stream Protocol (the version `X-Vercel-AI-Data-Stream: v1` selects), not the v5 SSE protocol. Chunks map onto parts like this:
+
+| chunk | part | prefix |
+|---|---|---|
+| `text-delta` | Text | `0:` |
+| `tool-call-delta` (carrying `toolCall.name`) | Tool Call Streaming Start | `b:` |
+| `tool-call-delta` (carrying `text`) | Tool Call Delta | `c:` |
+| `tool-call` | Tool Call | `9:` |
+| `tool-result` | Tool Result | `a:` |
+| `finish` | Finish Step, then Finish Message | `e:`, then `d:` |
+
+`tool-update`, `pending-client-tools`, `pending-approval` and `handoff` have no v4 part and are dropped. Use the SSE protocol below when a UI needs them.
+
 ## Server-Sent Events (named-event protocol)
 
 When you want a plain `text/event-stream` with self-describing event names (rather than the Vercel numeric-prefix wire), `@gemstack/ai-sdk` ships a matched server/browser pair so the wire vocabulary can never drift between the two ends. Both live in the engine and use only web globals (`ReadableStream`, `Response`, `TextEncoder`), so they run server-side (Node or edge) and in the browser alike.
