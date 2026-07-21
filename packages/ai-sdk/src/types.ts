@@ -952,11 +952,30 @@ export interface ConversationStoreListEntry {
   userId?: string
 }
 
+/**
+ * Backend for persisted conversation threads.
+ *
+ * Implementing `list` correctly is what makes the resume-by-id owner check
+ * (#984) enforceable, so it carries a contract beyond its signature:
+ *
+ * - `list(userId)` must return only that user's threads.
+ * - `list()` with no argument must return every thread in the store, and each
+ *   entry must mirror the row's `meta.userId` into
+ *   {@link ConversationStoreListEntry.userId}. That field is the only
+ *   owner-aware read in the contract.
+ * - Omitting `userId` from entries leaves the store as permissive as it was
+ *   before #984: whoever holds a thread id can resume it, because there is no
+ *   owner to compare the run's user against.
+ * - A `list()` that reports nothing while the store demonstrably holds rows
+ *   cannot be reasoned about at all, so a resume by id is refused with
+ *   `ConversationOwnershipError` rather than allowed.
+ */
 export interface ConversationStore {
   create(title?: string, meta?: ConversationStoreMeta): Promise<string>
   load(conversationId: string): Promise<AiMessage[]>
   append(conversationId: string, messages: AiMessage[]): Promise<void>
   setTitle(conversationId: string, title: string): Promise<void>
+  /** Threads for `userId`, or every thread in the store when omitted. See the interface docs. */
   list(userId?: string): Promise<ConversationStoreListEntry[]>
   delete?(conversationId: string): Promise<void>
 }
