@@ -1,5 +1,23 @@
 # @gemstack/ai-autopilot
 
+## 0.11.1
+
+### Patch Changes
+
+- 8bf9d20: `FakeRunner`'s filesystem now lists the whole workspace for `.` and `/`, matching what the local,
+  Docker and WebContainer runners return.
+
+  It returned `[]` instead. `.` keys to the empty string, so the prefix built for the filter was `/`,
+  which no key starts with. Since `list_files` passes the model's `dir` straight through and `.` is
+  the most natural thing an agent types for the workspace root, a test could assert agent behaviour
+  on an apparently empty workspace where production hands back the full tree.
+
+- Updated dependencies [46c79a6]
+- Updated dependencies [f6efb7d]
+- Updated dependencies [f38f80b]
+  - @gemstack/ai-sdk@0.6.0
+  - @gemstack/ai-skills@0.2.3
+
 ## 0.11.0
 
 ### Minor Changes

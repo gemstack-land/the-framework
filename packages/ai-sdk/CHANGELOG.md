@@ -1,5 +1,51 @@
 # @gemstack/ai-sdk
 
+## 0.6.0
+
+### Minor Changes
+
+- 46c79a6: fix(ai-sdk): a resumed conversation id is now checked against the user the run is scoped to
+
+  `preparePersistence` loaded a conversation by id without ever reading `spec.user`, so `agent.forUser('alice').continue(bobsConversationId)` read Bob's whole thread into Alice's run and appended Alice's turn back into it. The same reached through `prompt(input, { conversation: { user: 'alice', id: bobsConvId } })` and through the streaming variant. Conversation ids are ordinary identifiers here, not secrets, and a resume endpoint takes one straight off a request.
+
+  The owner was already recorded at create time and simply never consulted. It is now read back before the load, and a mismatch throws the new `ConversationOwnershipError` (exported, so a server can answer 403 rather than 500). The error names the conversation and the user the run was scoped to, never the real owner.
+
+  `ConversationStore.load()` is unchanged. Ownership is read from `ConversationStoreListEntry.userId`, a new optional field mirroring `ConversationStoreMeta.userId` the way `agent` already does, and `MemoryConversationStore` reports it.
+
+  Two deliberately permissive cases:
+
+  - A thread whose stored meta carries no `userId`, and any store that does not report `userId` in its listings, stays resumable by whoever holds the id. Existing stored conversations do not become unreadable.
+  - A bare `continue(id)` with no user is not a special error; it carries an empty user and fails the same owner check, so it still resumes unowned threads and is refused for owned ones.
+
+  That second point changes a documented flow: `myAgent.forUser('u').prompt(...)` followed by `myAgent.continue(id).prompt(...)` now throws. Chain `forUser('u').continue(id)` instead. The docs shipped with the package have been corrected.
+
+### Patch Changes
+
+- f6efb7d: Tool calls alongside a handoff now dispatch in parallel like every other batch (#971)
+
+  `tool-execution.ts` implemented the tool phase twice, once serial and once parallel, with
+  every gate written in both copies: unknown-tool, client-tool stop and placeholder, approval
+  rejected and pending, `onBeforeToolCall` skip/abort/transformArgs, and argument validation.
+  The `executeMaybeStreaming` pause-detection loop was duplicated near byte-for-byte,
+  differing only in `yield` versus a push into a buffer.
+
+  The copies had already drifted. The handoff branch existed only in the serial path, so
+  `executeToolPhase` force-downgraded the whole step to serial whenever any call in it was a
+  handoff. The gate chain is now one function, `decideToolCall()`, that returns a decision
+  both paths consume, and one shared generator drives execution for both. The parallel path
+  gained the handoff branch from that, so the downgrade is gone.
+
+  The only user-visible change: in a step that mixes ordinary tool calls with a handoff, the
+  ordinary calls decided before the handoff now run concurrently instead of one after another.
+  Everything downstream is unchanged. The first handoff in a step still wins, later calls are
+  still skipped with the same synthetic result rather than executed, and the tool messages are
+  still emitted in tool-call order with identical content. Apps that need the old ordering can
+  already opt out with `parallelTools: false`.
+
+- f38f80b: Fix `toVercelDataStream` so the wire matches the AI SDK v4 Data Stream Protocol it advertises. Tool results were never emitted at all, and the prefixes it did emit were mismapped: tool call streaming start went out on `9:` instead of `b:`, and argument deltas went out on `a:` instead of `c:`. Because `a:` is the Tool Result part, `useChat()` read every argument delta as a tool result with `result: undefined` and resolved the tool-call chip before the model had finished writing its arguments.
+
+  Tool results now go out on `a:`, streaming start on `b:`, argument deltas on `c:`, and a complete `9:` tool call with its `args` is emitted. Argument deltas now carry the correlated `toolCallId` on adapters that ship args as a bare text delta, and the Finish Message part carries `usage` alongside the Finish Step part.
+
 ## 0.5.1
 
 ### Patch Changes

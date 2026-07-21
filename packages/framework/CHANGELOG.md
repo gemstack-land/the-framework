@@ -1,5 +1,73 @@
 # @gemstack/framework
 
+## 1.1.0
+
+### Minor Changes
+
+- 5100ecf: Git operations get a timeout budget chosen by subcommand, and a timeout is now distinguishable
+  from a command git rejected.
+
+  One flat 10s budget covered every git invocation in the package, the repo's ~20 call sites, which
+  meant the two slowest ran under what is really a read's budget. `git worktree add` writes a whole
+  checkout and `git push` uploads a packfile; on a large repo both routinely pass 10s, at which
+  point `execFile` SIGTERMs them. A killed `worktree add` drops a run into the user's main checkout
+  instead of its own worktree, and a killed `push` may have half-landed on the remote.
+
+  `nodeGitRunner()` now picks the budget from the args: 10s for reads (`status`, `rev-parse`,
+  `ls-files`, `log`, `diff`, `show`, `remote`, `rev-list`, `symbolic-ref`, `branch --list`,
+  `worktree list`), 30s for local mutations (`add`, `commit`, `init`, `checkout`,
+  `worktree remove`, `worktree prune`), and 120s for the network and for a full checkout (`push`,
+  `fetch`, `pull`, `clone`, `worktree add`). Reads deliberately keep the old budget: widening
+  everything to cover a slow op would let a hung read hold the daemon six times longer. This
+  mirrors the read/write split `gh` already had.
+
+  A CLI killed for outrunning its budget now rejects with a `CliTimeoutError` reading
+  `git push --set-upstream origin <branch> timed out after 120000ms`, rather than the bare
+  `Command failed: git push ...` that a SIGTERM with empty stderr used to produce. `isCliTimeout()`
+  tells the two apart programmatically.
+
+  `nodeGitRunner()`'s signature is unchanged; the budget is derived from the args, so every existing
+  call site gets the right one with no change. New exports: `gitTimeoutMs`, `GIT_READ_TIMEOUT_MS`,
+  `GIT_WRITE_TIMEOUT_MS`, `GIT_SLOW_TIMEOUT_MS`, `CliTimeoutError`, `isCliTimeout` and the
+  `CliTimeout` type. `CliRunnerOptions.timeoutMs` accepts a function of the args as well as a number.
+
+### Patch Changes
+
+- 7a04eeb: The user registry (`~/.the-framework.json`) is now written atomically, and its mutators are
+  serialized.
+
+  The file holds the project list, the global preferences and every per-project override, and it
+  was written with a plain truncate-then-write while the reader treated a malformed file as an
+  empty registry. A crash, a kill or a full disk mid-write therefore erased all of it silently and
+  the next read reported a clean slate. The write now goes to a temp file beside the real one and
+  is renamed over it, the same shape the daemon state file got in #922, so a reader sees either
+  the whole old file or the whole new one and a failed write only damages the temp.
+
+  `addProject`, `removeProject`, `writePreferences` and `writeProjectPreferences` each read the
+  whole registry, edit it and write it back, and one daemon runs several concurrently. Interleaved,
+  the later write was computed from a read taken before the earlier one landed and silently dropped
+  it. They now queue through a single tail promise.
+
+  `RegistryFs` gains an optional `rename`; the node-backed implementation always provides it.
+
+- 2fc8790: Removing a retained worktree no longer destroys the uncommitted work it was kept for (#982)
+
+  A worktree is only retained when its session failed or was stopped, which is exactly when the
+  checkout is still holding an uncommitted diff. Both surfaces that offer to remove one, the
+  `framework worktrees rm` verb and the dashboard's Remove button, went straight to a removal that
+  falls back to `git worktree remove --force`, so the work was deleted with the directory and there
+  was nothing left to recover it from.
+
+  Both now commit the checkout to the session's own branch first, the way the daemon's teardown
+  already does, and refuse the removal when that commit fails, keeping the checkout instead. The
+  two surfaces are now one implementation, so the session-still-running refusal, the unknown-session
+  check and the new commit-first behaviour are identical on both. Removing a session that has no
+  worktree now reports that instead of the dashboard reporting success.
+
+- 23cad81: Stop a failed log tail from killing the daemon. `followFile`'s pump had no `catch` and every caller discarded its promise, so a rejected read (EIO on a network mount, EISDIR, a log grown past `kMaxLength`) surfaced as an unhandled rejection and exited the process, taking every connected dashboard stream with it. The same function installed no `'error'` listener on its `FSWatcher`, where an error event with no listener throws out of the emitter. Both are now absorbed, and the poll backstop carries the tail on its own once a watcher is lost.
+- Updated dependencies [8bf9d20]
+  - @gemstack/ai-autopilot@0.11.1
+
 ## 1.0.0
 
 ### Major Changes
