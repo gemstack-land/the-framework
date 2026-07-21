@@ -4,8 +4,12 @@ import { join } from 'node:path'
 import { THE_FRAMEWORK_DIR } from './logs.js'
 import {
   crawlRepoFiles,
+  gitTimeoutMs,
   isActivated,
   theFrameworkDir,
+  GIT_READ_TIMEOUT_MS,
+  GIT_SLOW_TIMEOUT_MS,
+  GIT_WRITE_TIMEOUT_MS,
   type GitRunner,
   type ProjectFs,
 } from './project.js'
@@ -62,4 +66,71 @@ test('crawlRepoFiles yields [] when git fails', async () => {
     throw new Error('not a git repository')
   })
   assert.deepEqual(files, [])
+})
+
+/**
+ * Every git invocation in the package, taken from the call sites listed in #997, against the
+ * budget it should get. The point of the split is that these are not all the same number.
+ */
+const BUDGETS: { args: string[]; ms: number }[] = [
+  // The network and a whole checkout: the two the flat 10s budget was killing.
+  { args: ['push', '--set-upstream', 'origin', 'the-framework/run-1'], ms: GIT_SLOW_TIMEOUT_MS },
+  { args: ['worktree', 'add', '-b', 'the-framework/run-1', '/wt', 'main'], ms: GIT_SLOW_TIMEOUT_MS },
+  { args: ['worktree', 'add', '/wt', 'the-framework/run-1'], ms: GIT_SLOW_TIMEOUT_MS },
+  { args: ['clone', 'https://example.com/repo.git', '/dest'], ms: GIT_SLOW_TIMEOUT_MS },
+  { args: ['fetch', 'origin'], ms: GIT_SLOW_TIMEOUT_MS },
+  // Local mutations.
+  { args: ['add', '-A'], ms: GIT_WRITE_TIMEOUT_MS },
+  { args: ['commit', '-m', 'msg', '--', 'path'], ms: GIT_WRITE_TIMEOUT_MS },
+  { args: ['init'], ms: GIT_WRITE_TIMEOUT_MS },
+  { args: ['checkout', 'branch', '--', 'TODO.md'], ms: GIT_WRITE_TIMEOUT_MS },
+  { args: ['worktree', 'remove', '--force', '/wt'], ms: GIT_WRITE_TIMEOUT_MS },
+  { args: ['worktree', 'prune'], ms: GIT_WRITE_TIMEOUT_MS },
+  // Reads, which must stay short so a hung one does not hold the daemon for minutes.
+  { args: ['ls-files', '-z', '--cached', '--others', '--exclude-standard'], ms: GIT_READ_TIMEOUT_MS },
+  { args: ['status', '--porcelain'], ms: GIT_READ_TIMEOUT_MS },
+  { args: ['rev-parse', '--abbrev-ref', 'HEAD'], ms: GIT_READ_TIMEOUT_MS },
+  { args: ['rev-parse', '--git-common-dir'], ms: GIT_READ_TIMEOUT_MS },
+  { args: ['rev-list', '--count', 'a..b'], ms: GIT_READ_TIMEOUT_MS },
+  { args: ['log', '--format=%H%x1f%s', 'a..b'], ms: GIT_READ_TIMEOUT_MS },
+  { args: ['diff', '--numstat', 'HEAD'], ms: GIT_READ_TIMEOUT_MS },
+  { args: ['show', 'HEAD:TODO.md'], ms: GIT_READ_TIMEOUT_MS },
+  { args: ['remote', 'get-url', 'origin'], ms: GIT_READ_TIMEOUT_MS },
+  { args: ['symbolic-ref', '--short', 'refs/remotes/origin/HEAD'], ms: GIT_READ_TIMEOUT_MS },
+  { args: ['branch', '--list', '--merged', 'main', 'topic'], ms: GIT_READ_TIMEOUT_MS },
+  { args: ['worktree', 'list', '--porcelain'], ms: GIT_READ_TIMEOUT_MS },
+]
+
+for (const { args, ms } of BUDGETS) {
+  test(`gitTimeoutMs: \`git ${args.join(' ')}\` gets ${ms}ms (#997)`, () => {
+    assert.equal(gitTimeoutMs(args), ms)
+  })
+}
+
+test('the git budgets stay split rather than collapsing to one number (#997)', () => {
+  // Pinned on purpose: widening reads to "fix" a slow op would let a hung read hold the daemon.
+  assert.equal(GIT_READ_TIMEOUT_MS, 10_000)
+  assert.equal(GIT_WRITE_TIMEOUT_MS, 30_000)
+  assert.equal(GIT_SLOW_TIMEOUT_MS, 120_000)
+})
+
+test('gitTimeoutMs: a slow op gets far longer than a read (#997)', () => {
+  assert.ok(
+    gitTimeoutMs(['push', '--set-upstream', 'origin', 'b']) > gitTimeoutMs(['rev-parse', 'HEAD']) * 2,
+    'push must not run under a read budget',
+  )
+  assert.ok(
+    gitTimeoutMs(['worktree', 'add', '-b', 'b', '/wt']) > gitTimeoutMs(['worktree', 'list']) * 2,
+    'worktree add must not run under the budget its read sibling gets',
+  )
+})
+
+test('gitTimeoutMs: an unknown subcommand is treated as a mutation, not as slow (#997)', () => {
+  assert.equal(gitTimeoutMs(['bisect', 'start']), GIT_WRITE_TIMEOUT_MS)
+  assert.equal(gitTimeoutMs([]), GIT_WRITE_TIMEOUT_MS)
+})
+
+test('gitTimeoutMs: leading flags do not hide the subcommand (#997)', () => {
+  assert.equal(gitTimeoutMs(['--no-pager', 'status', '--porcelain']), GIT_READ_TIMEOUT_MS)
+  assert.equal(gitTimeoutMs(['--no-pager', 'push', 'origin', 'b']), GIT_SLOW_TIMEOUT_MS)
 })

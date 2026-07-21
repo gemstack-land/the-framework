@@ -6,7 +6,8 @@ import { join } from 'node:path'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { readRunHandoff, runBranchFor, pushRunBranch, openRunPullRequest, gitReason } from './run-handoff.js'
-import { nodeGitRunner, type GitRunner } from '../project.js'
+import { nodeGitRunner, GIT_SLOW_TIMEOUT_MS, type GitRunner } from '../project.js'
+import { CliTimeoutError, isCliTimeout } from '../cli-exec.js'
 
 const exec = promisify(execFile)
 const SEP = String.fromCharCode(31)
@@ -144,6 +145,23 @@ test('a failed push comes back as an error rather than throwing', async () => {
   }
   const result = await pushRunBranch('/repo', 'b', git)
   assert.deepEqual(result, { ok: false, error: 'no upstream configured' })
+})
+
+test('a timed-out push says so instead of reading like a rejected push (#997)', async () => {
+  const git: GitRunner = async args => {
+    throw new CliTimeoutError('git', args, GIT_SLOW_TIMEOUT_MS)
+  }
+  const result = await pushRunBranch('/repo', 'b', git)
+  assert.equal(result.ok, false)
+  const error = result.ok === false ? result.error : ''
+  // A SIGTERM'd push has empty stderr, so this used to surface as a bare 'Command failed: git push'.
+  assert.match(error, /timed out after 120000ms/)
+  assert.match(error, /push --set-upstream origin b/)
+})
+
+test('a timeout is distinguishable from a git rejection (#997)', () => {
+  assert.equal(isCliTimeout(new CliTimeoutError('git', ['push'], 120_000)), true)
+  assert.equal(isCliTimeout(new Error("fatal: 'origin' does not appear to be a git repository")), false)
 })
 
 test("a push failure shows git's reason, not the command echoed back", () => {

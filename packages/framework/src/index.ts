@@ -194,10 +194,15 @@ export {
   nodeProjectFs,
   crawlRepoFiles,
   nodeGitRunner,
+  gitTimeoutMs,
+  GIT_READ_TIMEOUT_MS,
+  GIT_WRITE_TIMEOUT_MS,
+  GIT_SLOW_TIMEOUT_MS,
   readProjectSignals,
   type ProjectFs,
   type GitRunner,
 } from './project.js'
+export { CliTimeoutError, isCliTimeout, type CliTimeout } from './cli-exec.js'
 export {
   projectId,
   registryPath,
