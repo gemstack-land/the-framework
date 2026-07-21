@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { ChevronRight } from 'lucide-react'
 import type { FileChange } from '@gemstack/framework'
 import { onRunChanges } from '../server/reads.telefunc.js'
@@ -67,13 +67,40 @@ function ChangeRow({ projectId, runId, change }: { projectId: string; runId: str
   )
 }
 
+/** How many files the live session has touched, said in the action bar beside its branch (#1023). */
+export function ChangesSummary({ count, added, removed }: { count: number; added: number; removed: number }) {
+  if (count === 0) return null
+  return (
+    <span className="flex items-center gap-x-2 text-muted-foreground">
+      <span>
+        {count} {count === 1 ? 'file' : 'files'}
+      </span>
+      <DiffStat added={added} removed={removed} className="text-xs" />
+    </span>
+  )
+}
+
 /**
  * `runId` is required, and the caller must only render this for a session whose worktree is still
  * there. Once a worktree is gone `resolveRunPath` falls back to the project root, and the panel
  * would present the user's own uncommitted files as the session's work.
+ *
+ * The caller owns `open` and renders the count in the action bar, so the section carries no header
+ * of its own: the branch row above says what changed, this says which files (#1023). It keeps
+ * polling while collapsed — that count is the reason to open it.
  */
-export function RunChanges({ projectId, runId }: { projectId: string; runId: string }) {
-  const [open, setOpen] = useState(true)
+export function RunChanges({
+  projectId,
+  runId,
+  open = true,
+  onSummary,
+}: {
+  projectId: string
+  runId: string
+  open?: boolean
+  /** Told the running totals, so the bar can offer them without a second read. */
+  onSummary?: ((count: number, added: number, removed: number) => void) | undefined
+}) {
   const { value: changes } = usePolled<FileChange[]>(
     () => onRunChanges(projectId, runId),
     EMPTY,
@@ -81,35 +108,24 @@ export function RunChanges({ projectId, runId }: { projectId: string; runId: str
     [projectId, runId],
   )
 
-  // A session that has changed nothing has nothing to say here, and an empty panel above the
-  // output would only push the output down.
-  if (changes.length === 0) return null
-
   const added = changes.reduce((sum, c) => sum + c.added, 0)
   const removed = changes.reduce((sum, c) => sum + c.removed, 0)
+  // Through a ref so a caller passing an inline function doesn't re-fire this every render.
+  const report = useRef(onSummary)
+  report.current = onSummary
+  useEffect(() => report.current?.(changes.length, added, removed), [changes.length, added, removed])
+
+  // A session that has changed nothing has nothing to say here, and an empty panel above the
+  // output would only push the output down.
+  if (changes.length === 0 || !open) return null
 
   return (
-    <section className="border-b border-border">
-      <button
-        type="button"
-        onClick={() => setOpen(o => !o)}
-        aria-expanded={open}
-        className="flex w-full items-center gap-2 px-4 py-2 text-left hover:bg-accent"
-      >
-        <ChevronRight className={cn('size-3.5 shrink-0 text-muted-foreground transition-transform', open && 'rotate-90')} />
-        <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Changes</h3>
-        <span className="text-xs text-muted-foreground">
-          {changes.length} {changes.length === 1 ? 'file' : 'files'}
-        </span>
-        <DiffStat added={added} removed={removed} className="ml-auto" />
-      </button>
-      {open && (
-        <ul className="max-h-80 overflow-auto border-t border-border">
-          {changes.map(change => (
-            <ChangeRow key={change.path} projectId={projectId} runId={runId} change={change} />
-          ))}
-        </ul>
-      )}
+    <section className="border-b border-border" aria-label="Changed files">
+      <ul className="max-h-80 overflow-auto">
+        {changes.map(change => (
+          <ChangeRow key={change.path} projectId={projectId} runId={runId} change={change} />
+        ))}
+      </ul>
     </section>
   )
 }

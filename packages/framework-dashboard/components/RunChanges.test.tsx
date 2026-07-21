@@ -5,7 +5,7 @@ const onRunChanges = vi.fn(async () => [] as unknown)
 const onFileDiff = vi.fn(async () => null as unknown)
 vi.mock('../server/reads.telefunc.js', () => ({ onRunChanges, onFileDiff }))
 
-const { RunChanges } = await import('./RunChanges.js')
+const { ChangesSummary, RunChanges } = await import('./RunChanges.js')
 
 const CHANGES = [
   { path: 'src/a.ts', status: 'modified', added: 3, removed: 1, binary: false },
@@ -36,8 +36,18 @@ describe('RunChanges (#817)', () => {
     expect(screen.getByText('new.ts')).toBeTruthy()
     expect(screen.getByText('modified')).toBeTruthy()
     expect(screen.getByText('new')).toBeTruthy()
+  })
+
+  test('reports its totals upward, so the branch row can offer them collapsed (#1023)', async () => {
+    const onSummary = vi.fn()
+    render(<RunChanges projectId="p1" runId="run-1" open={false} onSummary={onSummary} />)
+    // 3 + 10 added, 1 removed, across two files.
+    await waitFor(() => expect(onSummary).toHaveBeenCalledWith(2, 13, 1))
+    // Collapsed means the rows are not there — only the count above them.
+    expect(screen.queryByText('a.ts')).toBeNull()
+    cleanup()
+    render(<ChangesSummary count={2} added={13} removed={1} />)
     expect(screen.getByText('2 files')).toBeTruthy()
-    // The header totals the files below it: 3 + 10 added, 1 removed.
     expect(screen.getByText('+13')).toBeTruthy()
   })
 
@@ -59,11 +69,12 @@ describe('RunChanges (#817)', () => {
     await waitFor(() => expect(screen.getByText('+const b = 3')).toBeTruthy())
   })
 
-  test('the section collapses, and stops showing the rows', async () => {
-    render(<RunChanges projectId="p1" runId="run-1" />)
-    await waitFor(() => expect(screen.getByText('a.ts')).toBeTruthy())
-    fireEvent.click(screen.getByText('Changes'))
-    expect(screen.queryByText('a.ts')).toBeNull()
+  test('a session that changed nothing reports zero, so no disclosure is offered', async () => {
+    onRunChanges.mockResolvedValue([])
+    const onSummary = vi.fn()
+    render(<RunChanges projectId="p1" runId="run-1" onSummary={onSummary} />)
+    await waitFor(() => expect(onSummary).toHaveBeenCalledWith(0, 0, 0))
+    expect(screen.queryByLabelText('Changed files')).toBeNull()
   })
 
   test('a failed read leaves the panel silent instead of throwing', async () => {

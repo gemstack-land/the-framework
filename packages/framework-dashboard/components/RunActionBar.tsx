@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import type { FrameworkEvent } from '@gemstack/framework'
 import { sessionInfo } from '@gemstack/framework/client'
 import { Square, ExternalLink } from 'lucide-react'
@@ -25,6 +25,10 @@ export function RunActionBar({
   events,
   retainedWorktree = false,
   onWorktreeRemoved,
+  summary,
+  expanded = false,
+  onToggle,
+  actions,
 }: {
   projectId: string
   /** Which run Stop addresses (#749); absent falls back to the project's own control log. */
@@ -34,6 +38,13 @@ export function RunActionBar({
   retainedWorktree?: boolean
   /** Told after that worktree is removed, so the button goes. */
   onWorktreeRemoved?: () => void
+  /** What the session's branch holds, said beside the branch itself (#1023). */
+  summary?: ReactNode
+  expanded?: boolean
+  /** Given, the branch reads as a disclosure for the detail the caller renders under this bar. */
+  onToggle?: (() => void) | undefined
+  /** The session's next step (push, open PR), kept in the bar rather than behind the disclosure. */
+  actions?: ReactNode
 }) {
   // Stop routes through useAction like every other mutation: a click disables + shows "Stopping…"
   // and a failed stop surfaces instead of silently doing nothing.
@@ -56,12 +67,15 @@ export function RunActionBar({
         {/* Where this session is working (#798/#809): the same status the project home shows,
             read from this session's own worktree — its branch, whether it is holding uncommitted
             work, its size on disk, and the PR its branch has. */}
-        <GitStatusBar projectId={projectId} runId={runId} inline />
+        <GitStatusBar projectId={projectId} runId={runId} inline summary={summary} expanded={expanded} onToggle={onToggle} />
         {error && <span className="text-xs text-danger">{error}</span>}
         {/* What the session IS sits at the start of the bar; what you can DO to it sits at the end,
             so the buttons keep one home as the row's contents come and go (Stop only while it runs,
             Remove only on a retained worktree, Open session only once one is reported). */}
         <div className="min-w-0 flex-1" />
+        {/* The handoff's next step sits before the workspace icons: it is the one thing here that
+            moves the session forward rather than just opening it somewhere. */}
+        {actions}
         {/* GitHub, folder, editor and Serve, addressed to this session's worktree (#809). */}
         <WorkspaceActions projectId={projectId} runId={runId} />
         {active && (

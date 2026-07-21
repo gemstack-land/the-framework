@@ -4,7 +4,8 @@ import { useCallback, useState } from 'react'
 import { onRun, onRetainedWorktrees } from '../server/reads.telefunc.js'
 import { EventList } from './EventList.js'
 import { RunActionBar } from './RunActionBar.js'
-import { RunHandoffPanel } from './RunHandoffPanel.js'
+import { HandoffActions, HandoffSummary, RunHandoffDetails, handoffExpandable } from './RunHandoff.js'
+import { useRunHandoff } from '../lib/use-run-handoff.js'
 import { RunResumeChat } from './RunResumeChat.js'
 import { useLoaded } from '../lib/use-async.js'
 import { runOutcome } from '../lib/live-state.js'
@@ -38,6 +39,12 @@ export function RunReplay({
   const [removed, setRemoved] = useState(false)
   const hasWorktree = !removed && retained.includes(runId)
   const onWorktreeRemoved = useCallback(() => setRemoved(true), [])
+  // What the session's branch holds (#799), read once for both the bar and the detail it opens.
+  // Collapsed by default: the summary in the bar answers "did it do anything", and the commit and
+  // file lists are the follow-up question, not the first one (#1023).
+  const handoff = useRunHandoff(projectId, runId)
+  const [openHandoff, setOpenHandoff] = useState(false)
+  const canExpand = handoffExpandable(handoff.handoff)
 
   if (events === null) return <div className="grid flex-1 place-items-center text-sm text-muted-foreground">Loading session…</div>
   // The agent session this run ran under (from its `session-update` events): present once the
@@ -54,11 +61,18 @@ export function RunReplay({
         events={events}
         retainedWorktree={hasWorktree}
         onWorktreeRemoved={onWorktreeRemoved}
+        summary={
+          <>
+            <HandoffSummary handoff={handoff.handoff} />
+            {handoff.error && <span className="text-danger">{handoff.error}</span>}
+          </>
+        }
+        expanded={openHandoff}
+        {...(canExpand ? { onToggle: () => setOpenHandoff(open => !open) } : {})}
+        actions={<HandoffActions projectId={projectId} runId={runId} state={handoff} />}
       />
-      {/* What this session produced and what to do with it (#799). Directly under the action bar,
-          because it is the first thing you want from a finished session and the last thing the
-          dashboard could answer. */}
-      <RunHandoffPanel projectId={projectId} runId={runId} />
+      {/* The commits and files behind that summary, once asked for. */}
+      {openHandoff && <RunHandoffDetails handoff={handoff.handoff} />}
       {events.length === 0 ? (
         <div className="grid flex-1 place-items-center text-sm text-muted-foreground">This session has no events.</div>
       ) : (

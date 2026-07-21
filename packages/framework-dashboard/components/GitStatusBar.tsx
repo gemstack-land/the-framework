@@ -1,9 +1,11 @@
+import type { ReactNode } from 'react'
 import type { GitStatus, RunWorktree } from '@gemstack/framework'
-import { GitBranch } from 'lucide-react'
+import { ChevronRight, GitBranch } from 'lucide-react'
 import { onGitStatus, onRunWorktree } from '../server/reads.telefunc.js'
 import { usePolled } from '../lib/use-async.js'
 import { formatBytes } from '@gemstack/framework/client'
 import { cn } from '../lib/utils.js'
+import { CopyButton } from './ui/copy-button.js'
 
 // The checkout in play (#491, part of #488): active branch, a clean/dirty dot, the linked PR.
 // Polled, so it tracks a run committing or branching. Hidden when there is no git repo (or on
@@ -15,15 +17,27 @@ import { cn } from '../lib/utils.js'
 // looks depending on the page, and either could drift with an edit to the other.
 //
 // `inline` renders just the status (for an action bar); otherwise a full-width row.
+//
+// `summary` and `onToggle` make this row the one place a session's branch is spoken about (#1023):
+// what the branch holds is said here, and clicking it expands the detail the caller renders below,
+// instead of a second card underneath repeating the branch name.
 export function GitStatusBar({
   projectId,
   runId,
   inline = false,
+  summary,
+  expanded = false,
+  onToggle,
 }: {
   projectId: string
   /** The session whose worktree to report; absent reports the project's checkout. */
   runId?: string | null | undefined
   inline?: boolean
+  /** What the branch holds, in a phrase — rendered beside the branch's own status. */
+  summary?: ReactNode
+  expanded?: boolean
+  /** Given, the branch reads as a disclosure for the detail the caller renders below. */
+  onToggle?: (() => void) | undefined
 }) {
   // Two reads, one shape: both carry branch/dirty/PR, because the server resolves them from
   // whichever checkout it was asked about, and the session read adds what only a worktree has.
@@ -43,10 +57,15 @@ export function GitStatusBar({
   // project's own checkout it is the user's. Same dot, honest wording.
   const dirtyLabel = worktree?.own ? 'Uncommitted changes in this session' : 'Uncommitted changes'
 
-  const content = (
+  const facts = (
     <>
-      <span className="flex items-center gap-1.5 text-muted-foreground">
-        <GitBranch className="h-3.5 w-3.5" />
+      <span className="flex min-w-0 items-center gap-1.5 text-muted-foreground">
+        {/* The chevron only appears where there is something to open, so a bar without a
+            disclosure doesn't advertise one. */}
+        {onToggle && (
+          <ChevronRight className={cn('h-3.5 w-3.5 shrink-0 transition-transform', expanded && 'rotate-90')} />
+        )}
+        <GitBranch className="h-3.5 w-3.5 shrink-0" />
         <span
           className="max-w-[14rem] truncate font-medium text-foreground"
           title={worktree ? `${branch ?? 'no branch'}\n${worktree.path}` : `branch ${branch}`}
@@ -71,6 +90,27 @@ export function GitStatusBar({
           {size}
         </span>
       )}
+      {summary}
+    </>
+  )
+
+  const content = (
+    <>
+      {/* A disclosure wraps only the facts: the PR link and the copy button are interactive in
+          their own right and can't sit inside a button. */}
+      {onToggle ? (
+        <button
+          type="button"
+          onClick={onToggle}
+          aria-expanded={expanded}
+          className="flex min-w-0 items-center gap-2 rounded text-left hover:text-foreground"
+        >
+          {facts}
+        </button>
+      ) : (
+        facts
+      )}
+      {branch && <CopyButton text={branch} label="Copy branch name" />}
       {status.pr && (
         <a
           href={status.pr.url}
@@ -88,7 +128,7 @@ export function GitStatusBar({
     </>
   )
 
-  if (inline) return <span className="flex items-center gap-2 text-xs">{content}</span>
+  if (inline) return <span className="flex min-w-0 items-center gap-2 text-xs">{content}</span>
 
   return <div className="flex items-center gap-2 border-b border-border px-4 py-2 text-xs">{content}</div>
 }
