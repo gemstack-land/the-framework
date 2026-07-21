@@ -57,7 +57,7 @@ export interface LoopStepOptions {
 
 /** Options for {@link loopChecklist}. */
 export interface LoopChecklistOptions extends LoopStepOptions {
-  /** The event kind whose chain runs the checklist prompt. Default `production-check`. */
+  /** The event kind whose chain runs the checklist prompt. Default `production-check`, which `defaultLoops()` defines. */
   kind?: string
   /** The prompt id to read the `{ blockers }` verdict from. Default `production-grade`. */
   promptId?: string
@@ -69,7 +69,7 @@ export interface LoopChecklistOptions extends LoopStepOptions {
  * treated as a blocker (the checklist must return one to pass).
  */
 export function loopChecklist(opts: LoopChecklistOptions): NonNullable<BootstrapSteps['checklist']> {
-  const kind = opts.kind ?? 'production-check'
+  const kind = opts.kind ?? LOOP_EVENTS.productionCheck
   const promptId = opts.promptId ?? LOOP_PROMPTS.productionGrade
   return async ({ intent, blockers }) => {
     const summary = blockers.length ? `Re-check after addressing: ${blockers.join('; ')}` : intent

@@ -10,6 +10,8 @@ export const LOOP_EVENTS = {
   majorChange: 'major-change',
   /** A new user-facing flow (auth, checkout, ...): fires QA + UX. */
   uiFlow: 'ui-flow',
+  /** The bootstrap checklist gate: fires the production-grade verdict prompt. */
+  productionCheck: 'production-check',
 } as const
 
 /**
@@ -29,8 +31,9 @@ export const LOOP_PROMPTS = {
 
 /**
  * The built-in loop policy as data: a major change runs review then code-quality
- * then security; a new UI flow runs QA then UX. Extend it by concatenating your
- * own {@link defineLoop} results, or replace it wholesale.
+ * then security; a new UI flow runs QA then UX; a production check runs the
+ * production-grade gate. Extend it by concatenating your own {@link defineLoop}
+ * results, or replace it wholesale.
  */
 export function defaultLoops(): Loop[] {
   return [
@@ -41,6 +44,11 @@ export function defaultLoops(): Loop[] {
     defineLoop({
       on: LOOP_EVENTS.uiFlow,
       run: [LOOP_PROMPTS.qa, LOOP_PROMPTS.ux],
+    }),
+    // The kind `loopChecklist` fires by default, so the bootstrap gate resolves out of the box.
+    defineLoop({
+      on: LOOP_EVENTS.productionCheck,
+      run: [LOOP_PROMPTS.productionGrade],
     }),
   ]
 }
