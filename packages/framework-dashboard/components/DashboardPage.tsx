@@ -52,42 +52,47 @@ export function DashboardPage({
               <StatTile icon={<History className="h-4 w-4" />} label="Total sessions" value={data.totals.totalRuns} />
             </div>
 
-            <div className="grid gap-4 lg:grid-cols-2">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Session activity</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <ActivityChart data={data.activity} />
-                </CardContent>
-              </Card>
-              <Card>
-                <CardHeader>
-                  <CardTitle>Session outcomes</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <RunOutcomes counts={data.runsByStatus} />
-                </CardContent>
-              </Card>
-            </div>
-
-            <div className="grid gap-4 lg:grid-cols-2">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Working now</CardTitle>
-                </CardHeader>
-                <CardContent className="pt-0">
-                  <WorkingNow active={data.active} onSelectProject={onSelectProject} />
-                </CardContent>
-              </Card>
-              <Card>
-                <CardHeader>
-                  <CardTitle>Backlog</CardTitle>
-                </CardHeader>
-                <CardContent className="pt-0">
-                  <Backlog queue={data.queue} onSelectProject={onSelectProject} />
-                </CardContent>
-              </Card>
+            {/* Two column stacks rather than two rows of two. As rows, each card was stretched to
+                its neighbour's height, so a quiet board left half of "Session outcomes" and most of
+                "Working now" as empty card. Stacking lets every card size to its content and pairs
+                the tall chart against the tall list, so the columns come out level. */}
+            <div className="grid items-start gap-4 lg:grid-cols-2">
+              <div className="flex flex-col gap-4">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Session activity</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <ActivityChart data={data.activity} />
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Working now</CardTitle>
+                  </CardHeader>
+                  <CardContent className="pt-0">
+                    <WorkingNow active={data.active} onSelectProject={onSelectProject} />
+                  </CardContent>
+                </Card>
+              </div>
+              <div className="flex flex-col gap-4">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Session outcomes</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <RunOutcomes counts={data.runsByStatus} />
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Backlog</CardTitle>
+                  </CardHeader>
+                  <CardContent className="pt-0">
+                    <Backlog queue={data.queue} onSelectProject={onSelectProject} />
+                  </CardContent>
+                </Card>
+              </div>
             </div>
 
             <Card>

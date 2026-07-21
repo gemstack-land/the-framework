@@ -214,15 +214,16 @@ export function Quota() {
           <OtherWindow window={week} />
         ) : null}
 
-        {others.length ? <div className="space-y-1 border-t pt-3">{others.map(w => <OtherWindow key={w.label} window={w} />)}</div> : null}
+        {others.length ? <div className="space-y-1 border-t border-border pt-3">{others.map(w => <OtherWindow key={w.label} window={w} />)}</div> : null}
 
         {note ? <p className="text-sm text-muted-foreground">{note}</p> : null}
 
         {view ? (
-          <div className="space-y-1 border-t pt-3">
+          <div className="space-y-1 border-t border-border pt-3">
             <label className="flex cursor-pointer items-center gap-1.5 text-sm">
               <input
                 type="checkbox"
+                className="accent-[var(--color-primary)]"
                 checked={preferences.autoPm ?? false}
                 onChange={e => updatePreferences({ autoPm: e.target.checked })}
               />
@@ -238,7 +239,7 @@ export function Quota() {
         {/* Only where there is a boundary to offset from: without one there is no line to move,
             and a slider over nothing would imply a limit that is not being applied. */}
         {view?.boundary ? (
-          <div className="border-t pt-3">
+          <div className="border-t border-border pt-3">
             <SpendLimit offset={offset} boundaryPercent={view.boundary.boundary.percent} onChange={setOffset} />
           </div>
         ) : null}
