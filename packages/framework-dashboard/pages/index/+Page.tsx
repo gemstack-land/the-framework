@@ -26,6 +26,8 @@ import { pendingChoices, agentViews } from '../../lib/live-state.js'
 import { useDocumentTitle } from '../../lib/document-title.js'
 import { useWorking } from '../../lib/use-working.js'
 import { useFavicon } from '../../lib/favicon.js'
+import { useDaemonHealth } from '../../lib/use-daemon-health.js'
+import { TriangleAlert } from 'lucide-react'
 
 /** Stable, so `files` keeps one identity while no project is selected. */
 const EMPTY_FILES: string[] = []
@@ -199,6 +201,11 @@ export default function Page() {
   const working = useWorking(local)
   useFavicon(working, local)
 
+  // Whether the daemon answers at all (#948). Without this, a dead daemon froze every surface
+  // silently: the channels retry their transport without a verdict and the polls keep their
+  // last value, so "the agent went quiet" and "nothing on this page is live" looked identical.
+  const healthy = useDaemonHealth(local)
+
   // Hooks above run unconditionally (rules of hooks); this early return is safe after them.
   if (relayRun) return <RelayView runId={relayRun} />
 
@@ -281,6 +288,12 @@ export default function Page() {
           <NotificationsMenu />
         </div>
       </header>
+      {!healthy && (
+        <div role="alert" className="flex items-center gap-2 border-b border-border bg-amber-500/10 px-4 py-2 text-xs text-amber-600 dark:text-amber-400">
+          <TriangleAlert className="h-3.5 w-3.5 shrink-0" aria-hidden />
+          The daemon is not answering — retrying. Everything on this page is frozen until it returns.
+        </div>
+      )}
       {/* The workspace row is fixed-height: each column scrolls internally, so the row itself
           must never scroll. overflow-hidden clips any stray horizontal bleed (no page X-scroll).
           `relative` is load-bearing (#904): overflow only clips a descendant this box is the
