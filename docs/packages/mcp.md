@@ -242,7 +242,7 @@ const app = new Hono()
 app.all('/mcp', (c) => handler(c.req.raw))
 ```
 
-By default each new client gets its own transport (stateful sessions). Pass `sessionIdGenerator: undefined` for **stateless** mode, where a single transport is created lazily and reused for the handler's lifetime. `createMcpHttpHandler` is built on top of this Web handler.
+By default each new client gets its own transport (stateful sessions). Only an `initialize` POST opens one: any other request without a live `mcp-session-id` is answered `400`/`404` and allocates nothing. Idle sessions are dropped after 30 minutes (`sessionIdleMs`), and both handlers expose `close()` to tear every live session down on shutdown. Pass `sessionIdGenerator: undefined` for **stateless** mode, where each request gets its own transport, released once its response ends. `createMcpHttpHandler` is built on top of this Web handler.
 
 ### stdio
 

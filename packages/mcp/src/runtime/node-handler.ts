@@ -2,6 +2,12 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { McpServer } from '../McpServer.js'
 import { createWebRequestHandler, type WebRequestHandlerOptions } from './web-handler.js'
 
+export interface McpHttpHandler {
+  (req: IncomingMessage, res: ServerResponse): Promise<void>
+  /** Tear down every live session and refuse further requests. Idempotent. */
+  close(): Promise<void>
+}
+
 /**
  * A framework-neutral `node:http` request handler for an MCP server. Mount it
  * on a raw `http.createServer(...)`, or anywhere a `(req, res)` handler fits
@@ -22,10 +28,10 @@ import { createWebRequestHandler, type WebRequestHandlerOptions } from './web-ha
 export function createMcpHttpHandler(
   server: McpServer,
   options?: WebRequestHandlerOptions,
-): (req: IncomingMessage, res: ServerResponse) => Promise<void> {
+): McpHttpHandler {
   const handle = createWebRequestHandler(server, options)
 
-  return async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
+  const handler = (async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
     try {
       const request = await toWebRequest(req)
       const response = await handle(request)
@@ -37,7 +43,10 @@ export function createMcpHttpHandler(
       const message = err instanceof Error ? err.message : String(err)
       res.end(JSON.stringify({ error: 'internal_error', message }))
     }
-  }
+  }) as McpHttpHandler
+
+  handler.close = () => handle.close()
+  return handler
 }
 
 /** Build a Web Standard `Request` from a Node `IncomingMessage`. */
