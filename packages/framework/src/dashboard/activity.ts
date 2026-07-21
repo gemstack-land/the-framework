@@ -107,3 +107,33 @@ export function activityKey(item: Activity): string {
 export function pickNewActivity(seen: ReadonlySet<string>, current: Activity[]): Activity[] {
   return current.filter(item => !seen.has(activityKey(item)))
 }
+
+/**
+ * How one activity item reads on Discord: a started run, or a finished one tagged by its outcome.
+ * Beside {@link Activity} for the same reason {@link interventionLine} sits beside `Intervention`
+ * — it switches on the kind, so it belongs with the type that declares the kinds.
+ */
+export function activityLine(item: Activity): string {
+  const what = item.title ?? 'a session'
+  if (item.kind === 'started') return `▶️ started: ${what}`
+  const mark = item.status === 'failed' ? '❌' : item.status === 'stopped' ? '⏹️' : '✅'
+  return `${mark} finished: ${what}`
+}
+
+/** Post the given activity items to a Discord webhook as one message. `fetch` is injectable for tests. */
+export async function postActivityDiscord(
+  webhook: string,
+  items: Activity[],
+  fetchImpl: typeof fetch = fetch,
+): Promise<void> {
+  if (items.length === 0) return
+  const content =
+    items.length === 1
+      ? `📣 Activity (${items[0]!.projectName}): ${activityLine(items[0]!)}`
+      : `📣 ${items.length} session updates:\n${items.map(i => `• ${i.projectName}: ${activityLine(i)}`).join('\n')}`
+  await fetchImpl(webhook, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ content }),
+  })
+}

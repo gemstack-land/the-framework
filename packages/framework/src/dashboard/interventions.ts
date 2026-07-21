@@ -220,3 +220,39 @@ export function interventionKey(item: Intervention): string {
 export function pickNewInterventions(seen: ReadonlySet<string>, current: Intervention[]): Intervention[] {
   return current.filter(item => !seen.has(interventionKey(item)))
 }
+
+/**
+ * How one intervention reads on Discord. Beside {@link Intervention} rather than inside the
+ * watcher that posts it: it switches on every `kind`, so adding a kind is a change here, not in
+ * a transport module that has no other opinion about what an intervention is.
+ *
+ * A PR reads `#123 Title — url`; a paused run (#636) has no number and only the dashboard url,
+ * so it reads `Title — awaiting your answer` with the link appended when the daemon knows it.
+ * Unpushed work (#860) names the branch, since that is the actionable part.
+ */
+export function interventionLine(item: Intervention): string {
+  if (item.kind === 'awaiting') return `${item.title} — awaiting your answer${item.url ? ` — ${item.url}` : ''}`
+  if (item.kind === 'unpushed') {
+    const count = item.commits === 1 ? '1 commit' : `${item.commits ?? 0} commits`
+    return `${item.title} — ${count} on ${item.branch ?? ''}, never pushed${item.url ? ` — ${item.url}` : ''}`
+  }
+  return `#${item.number} ${item.title} — ${item.url}`
+}
+
+/** Post the given interventions to a Discord webhook as one message. `fetch` is injectable for tests. */
+export async function postInterventionsDiscord(
+  webhook: string,
+  items: Intervention[],
+  fetchImpl: typeof fetch = fetch,
+): Promise<void> {
+  if (items.length === 0) return
+  const content =
+    items.length === 1
+      ? `🔔 Needs you (${items[0]!.projectName}): ${interventionLine(items[0]!)}`
+      : `🔔 ${items.length} items need you:\n${items.map(i => `• ${interventionLine(i)}`).join('\n')}`
+  await fetchImpl(webhook, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ content }),
+  })
+}

@@ -27,9 +27,9 @@ import {
   type SuspendedRun,
 } from './store/index.js'
 import { startDashboard, type Dashboard, type StartRunKind, type StartRunOptions, type StartRunResult, type AddProjectResult, type PreviewResult, type PreviewStatus } from './dashboard/index.js'
-import { startInterventionWatcher, postDiscord, type InterventionWatcher } from './dashboard/intervention-watcher.js'
-import { buildInterventions } from './dashboard/interventions.js'
-import { startActivityWatcher, postActivityDiscord, type ActivityWatcher } from './dashboard/activity-watcher.js'
+import { startKeyedWatcher, type KeyedWatcher } from './dashboard/keyed-watcher.js'
+import { buildInterventions, interventionKey, postInterventionsDiscord } from './dashboard/interventions.js'
+import { buildActivity, activityKey, postActivityDiscord } from './dashboard/activity.js'
 import { defaultQuotaSource } from './dashboard/quota.js'
 import { startAutoPm, AUTO_PM_JOBS } from './auto-pm.js'
 import { maintenanceDue, readMaintenanceState, mergeMaintenanceState } from './maintenance.js'
@@ -573,28 +573,30 @@ export async function runDaemon(cwd: string, opts: RunDaemonOptions = {}): Promi
     }
   })()
 
-  let watcher: InterventionWatcher | undefined
-  let activityWatcher: ActivityWatcher | undefined
+  let watcher: KeyedWatcher | undefined
+  let activityWatcher: KeyedWatcher | undefined
   if (webhook) {
-    watcher = startInterventionWatcher({
+    watcher = startKeyedWatcher({
       projects: listSummaries,
       // Pass the daemon's own URL so a paused-run item (#636) can link back to the dashboard.
       build: projects => buildInterventions(projects, { dashboardUrl: dashboard.url }),
+      keyOf: interventionKey,
       onNew: async items => {
         const prefs = await readPrefs()
         // Double-gated like activity below: the method (`notifyDiscord`) AND the category
         // (`notifyHumanIntervention`) must both be on. The category defaults on, so `?? true` —
         // do NOT copy activity's plain `!prefs.x`, which would silence the baseline by default.
         if (!prefs.notifyDiscord || (prefs.notifyHumanIntervention ?? true) === false) return
-        await postDiscord(webhook, items).catch(() => {})
+        await postInterventionsDiscord(webhook, items).catch(() => {})
       },
     })
     // The default-off "New activity" category (#627): the same Discord path for run started/finished
-    // events. Double-gated at post time so the header toggles take effect without a daemon restart —
-    // the category (`notifyNewActivity`) AND the method (`notifyDiscord`) must both be on. The watcher
-    // keeps observing while off, so flipping it on starts from now rather than blasting the backlog.
-    activityWatcher = startActivityWatcher({
+    // events. Gated at post time so the header toggles take effect without a daemon restart, and the
+    // watcher keeps observing while off, so flipping it on starts from now rather than blasting the backlog.
+    activityWatcher = startKeyedWatcher({
       projects: listSummaries,
+      build: buildActivity,
+      keyOf: activityKey,
       onNew: async items => {
         const prefs = await readPrefs()
         if (!prefs.notifyDiscord || !prefs.notifyNewActivity) return
