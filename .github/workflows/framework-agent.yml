@@ -1,0 +1,93 @@
+# The workflow ActionsDriver dispatches (#610): one run is one `prompt()` turn.
+#
+# The driver cannot learn a run id from the dispatch API (it answers 204 with no body), so
+# the correlation id it generates is echoed into `run-name` and into the artifact name. That
+# is how the driver finds its own run, and it is why both must keep interpolating it.
+name: framework-agent
+run-name: framework-agent ${{ inputs.correlation_id }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      prompt:
+        description: What the agent should do. Passed to the action verbatim, never through a shell.
+        required: true
+      correlation_id:
+        description: How the driver finds this run. Must appear in run-name and in the artifact name.
+        required: true
+      model:
+        description: Model id, e.g. claude-opus-4-8. Empty means the action's default.
+        required: false
+      resume_session_id:
+        description: A prior agent session id to continue instead of starting fresh.
+        required: false
+
+# The agent pushes a branch and may open a PR; nothing here needs write access to anything else.
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  agent:
+    runs-on: ubuntu-latest
+    # Well under the 6h job cap. A turn that runs this long has gone wrong.
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Full history: the agent reads the log to understand what it is changing.
+          fetch-depth: 0
+
+      # Built from environment variables rather than by interpolating ${{ }} into the shell,
+      # so a crafted input cannot become a command. The driver validates them too.
+      - name: Compose agent arguments
+        id: args
+        env:
+          MODEL: ${{ inputs.model }}
+          RESUME: ${{ inputs.resume_session_id }}
+        run: |
+          set -euo pipefail
+          # Agent mode grants no permissions by default, so an unattended run cannot edit
+          # or run anything without this. The runner is disposable, which is what makes it safe.
+          args="--dangerously-skip-permissions"
+          # Written as `if` rather than `[ .. ] && ..`, which returns non-zero when the input
+          # is empty and would fail the step under `set -e`.
+          if [ -n "$MODEL" ]; then args="$args --model $MODEL"; fi
+          if [ -n "$RESUME" ]; then args="$args --resume $RESUME"; fi
+          echo "value=$args" >> "$GITHUB_OUTPUT"
+
+      - name: Run the agent
+        id: claude
+        uses: anthropics/claude-code-action@v1
+        with:
+          # A `claude setup-token` OAuth token: the run spends the subscription, not an API key (#495).
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          prompt: ${{ inputs.prompt }}
+          claude_args: ${{ steps.args.outputs.value }}
+
+      # The only REST-readable channel out of a run. `always()` so a failed turn still
+      # returns its transcript, which is exactly when we most want to read it.
+      - name: Collect the transcript
+        if: always()
+        env:
+          EXECUTION_FILE: ${{ steps.claude.outputs.execution_file }}
+          BRANCH: ${{ steps.claude.outputs.branch_name }}
+          SESSION_ID: ${{ steps.claude.outputs.session_id }}
+        run: |
+          set -euo pipefail
+          mkdir -p .framework-run
+          # An empty array still parses, so a crashed action yields an empty turn, not a driver error.
+          if [ -n "$EXECUTION_FILE" ] && [ -f "$EXECUTION_FILE" ]; then
+            cp "$EXECUTION_FILE" .framework-run/execution.json
+          else
+            echo '[]' > .framework-run/execution.json
+          fi
+          jq -n --arg branch "$BRANCH" --arg session_id "$SESSION_ID" \
+            '{branch: $branch, session_id: $session_id}' > .framework-run/meta.json
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: framework-run-${{ inputs.correlation_id }}
+          path: .framework-run
+          retention-days: 7

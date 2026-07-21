@@ -24,6 +24,8 @@ export {
   type McpServerSpec,
   type PermissionMode,
 } from './claude-code.js'
+export { ActionsDriver, ActionsSession, replayTranscript, type ActionsDriverOptions, type FetchLike } from './actions.js'
+export { readZip, type ZipEntry } from './actions-zip.js'
 export {
   runAgentCli,
   type AgentCliParser,
