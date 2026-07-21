@@ -10,10 +10,13 @@ import { ScrollArea } from './ui/scroll-area.js'
 // The surfaced documents (#319/#328): the PLAN/TODO the agent writes, rendered beside
 // the run. Telefunc RPC (server/reads.telefunc.ts), polled so edits mid-run show up.
 export function DocsPanel({ projectId }: { projectId: string | null }) {
-  const { value: docs } = usePolled<WorkspaceDoc[]>(projectId ? () => onDocs(projectId) : null, [], 4000, [projectId])
+  const { value: docs, loaded } = usePolled<WorkspaceDoc[]>(projectId ? () => onDocs(projectId) : null, [], 4000, [projectId])
   const [active, setActive] = useState(0)
 
   if (!projectId) return null
+  // Loading and empty are different facts (#948): without the guard, a project with docs
+  // flashed "No PLAN/TODO docs yet." on every open while the first read was still out.
+  if (!loaded) return <p className="p-4 text-sm text-muted-foreground">Loading…</p>
   if (docs.length === 0) return <p className="p-4 text-sm text-muted-foreground">No PLAN/TODO docs yet.</p>
 
   const current = docs[Math.min(active, docs.length - 1)]!

@@ -12,9 +12,11 @@ import { ScrollArea } from './ui/scroll-area.js'
 // Polled like the sibling rail panels, so an entry a run appends on finishing shows up
 // without a project switch.
 export function ProjectLogPanel({ projectId }: { projectId: string | null }) {
-  const logs = usePolled<LogEntry[]>(projectId ? () => onProjectLog(projectId) : null, [], 10_000, [projectId]).value
+  const { value: logs, loaded } = usePolled<LogEntry[]>(projectId ? () => onProjectLog(projectId) : null, [], 10_000, [projectId])
 
   if (!projectId) return null
+  // Loading and empty are different facts (#948) — same guard as the Tickets panel.
+  if (!loaded) return <p className="p-4 text-sm text-muted-foreground">Loading…</p>
   if (logs.length === 0) return <p className="p-4 text-sm text-muted-foreground">No committed log entries yet.</p>
 
   return (
