@@ -1,9 +1,9 @@
 import { useRef, useState } from 'react'
 import type { ProjectSummary } from '@gemstack/framework'
-import { sendStart } from '../server/control.telefunc.js'
+import { runOptionsFromPreferences } from '@gemstack/framework/client'
 import { onProjects } from '../server/projects.telefunc.js'
 import { usePreferences, updatePreferences, autopilotEnabled } from '../lib/preferences.js'
-import { collectRunOptions } from '../lib/run-options.js'
+import { useStartRun } from '../lib/use-start-run.js'
 import { useLoaded } from '../lib/use-async.js'
 import { Composer, type ComposerHandle } from './Composer.js'
 import { ContextFiles } from './ContextFiles.js'
@@ -35,9 +35,8 @@ export function StartRunForm({
   toggleContext: (path: string) => void
 }) {
   const [prompt, setPrompt] = useState('')
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
   const [note, setNote] = useState<string | null>(null)
+  const { busy, error, reset, start } = useStartRun()
   const composerRef = useRef<ComposerHandle>(null)
 
   // The Global options persist daemon-side (#410), shared with the choice-gate countdown.
@@ -45,10 +44,6 @@ export function StartRunForm({
   const autopilot = autopilotEnabled(preferences)
   const vanilla = preferences.vanilla ?? false
   const transparent = preferences.transparent ?? false // #625: the master off-switch (raw Claude Code)
-  const eco = preferences.eco ?? false
-  const ecoPlanning = preferences.ecoPlanning ?? false
-  const ecoResearch = preferences.ecoResearch ?? false
-  const ecoMaintenance = preferences.ecoMaintenance ?? false
 
   // Context selector (#439/#314): the agent can reach every registered repo, so ticking a subset
   // narrows its focus — the picked paths become one `Context:` line in the system prompt.
@@ -70,37 +65,21 @@ export function StartRunForm({
     .filter(Boolean)
     .join(' · ')
 
-  // The eco drops for the system-prompt preview (#520): what the run trims is what you read. The run
-  // itself gets them via collectRunOptions (which recomputes them from the same prefs).
-  const ecoDrops = {
-    ...(ecoPlanning ? { autoPlanning: true } : {}),
-    ...(ecoResearch ? { autoResearch: true } : {}),
-    ...(ecoMaintenance ? { autoMaintenance: true } : {}),
-  }
+  // The options this run will start with: the daemon's own mapping (#858), read once, so the
+  // submit and the system-prompt preview below cannot disagree with the run they describe.
+  const options = runOptionsFromPreferences(preferences, [...context])
 
   const submit = async (text: string, submitKind: 'build' | 'prompt') => {
     if (busy) return
-    setBusy(true)
-    setError(null)
     setNote('Starting…')
-    try {
-      const result = await sendStart(projectId, text, submitKind, collectRunOptions(preferences, [...context]))
-      if (result.ok) {
-        // Show the run in the Runs rail immediately (#405): the spawned process writes its run.json
-        // a beat later, so seed an optimistic row with the typed prompt until the real meta takes over.
-        onRunStarted?.(text, result.runId) // select the run we just started (#761)
-        composerRef.current?.clear()
-        setPrompt('')
-        setNote(null)
-      } else {
-        setNote(null)
-        setError(result.busy ? 'A session is already active for this project.' : result.error)
-      }
-    } catch (err) {
-      setNote(null)
-      setError(err instanceof Error ? err.message : 'Failed to start the session.')
-    } finally {
-      setBusy(false)
+    const result = await start(projectId, text, submitKind, options)
+    setNote(null)
+    if (result) {
+      // Show the run in the Runs rail immediately (#405): the spawned process writes its run.json
+      // a beat later, so seed an optimistic row with the typed prompt until the real meta takes over.
+      onRunStarted?.(text, result.runId) // select the run we just started (#761)
+      composerRef.current?.clear()
+      setPrompt('')
     }
   }
 
@@ -117,7 +96,7 @@ export function StartRunForm({
           if (!value.trim() && note) setNote(null)
         }}
         onPreset={label => {
-          setError(null)
+          reset()
           setNote(`${label} preset loaded — review or edit, then Start`)
         }}
         busy={busy}
@@ -134,10 +113,10 @@ export function StartRunForm({
         onTransparentChange={value => updatePreferences({ transparent: value })}
         // Read off the options this form will really send, so the preview cannot claim a
         // smaller prompt than the run gets (#863 asks for the entire one). The browser
-        // section is Claude-only, and that rule lives in there rather than here.
-        browser={collectRunOptions(preferences, [...context]).browser ?? false}
+        // section is Claude-only, and that rule lives in the mapping rather than here.
+        browser={options.browser ?? false}
         autopilot={autopilot}
-        eco={eco && !vanilla ? ecoDrops : undefined}
+        eco={options.eco}
         context={[...context]}
         busy={busy}
       />

@@ -104,6 +104,33 @@ export async function readFileDiff(
   return { path, status, patch, ...countChanges(patch), truncated, binary: false }
 }
 
+
+/** One `git diff --numstat` line, parsed. */
+export interface NumstatEntry {
+  path: string
+  added: number
+  removed: number
+  binary: boolean
+}
+
+/**
+ * Parse `git diff --numstat` output: `added<TAB>removed<TAB>path`, with `-` for both counts
+ * on a binary file. The one parser for the grammar — it was written here and in run-handoff,
+ * and the copies had already drifted on a path containing a tab (this side rejoined it, the
+ * other dropped the line).
+ */
+export function parseNumstat(out: string): NumstatEntry[] {
+  const entries: NumstatEntry[] = []
+  for (const line of out.split('\n')) {
+    const [added, removed, ...rest] = line.split('\t')
+    const path = rest.join('\t')
+    if (!path || added === undefined || removed === undefined) continue
+    const binary = added === '-' || removed === '-'
+    entries.push({ path, added: binary ? 0 : Number(added) || 0, removed: binary ? 0 : Number(removed) || 0, binary })
+  }
+  return entries
+}
+
 /**
  * Every changed file in the checkout at `cwd`, with its line counts: the session's Changes list
  * (#817). One `git status` plus one `git diff --numstat`, not a diff per file, so a session that
@@ -124,21 +151,13 @@ export async function readFileChanges(
   const numstat = await git(['diff', '--numstat', 'HEAD'], cwd)
     .catch(() => git(['diff', '--numstat'], cwd))
     .catch(() => '')
-  const counted = new Map<string, { added: number; removed: number; binary: boolean }>()
-  for (const line of numstat.split('\n')) {
-    // `added<TAB>removed<TAB>path`, with `-` for both counts on a binary file.
-    const [added, removed, ...rest] = line.split('\t')
-    const path = rest.join('\t')
-    if (!path || added === undefined || removed === undefined) continue
-    const binary = added === '-' || removed === '-'
-    counted.set(path, { added: binary ? 0 : Number(added), removed: binary ? 0 : Number(removed), binary })
-  }
+  const counted = new Map(parseNumstat(numstat).map(entry => [entry.path, entry]))
 
   const changes = await Promise.all(
     paths.map(async (path): Promise<FileChange> => {
       const status = statuses[path]!
       const known = counted.get(path)
-      if (known) return { path, status, ...known }
+      if (known) return { ...known, status }
       if (status !== 'untracked') return { path, status, added: 0, removed: 0, binary: false }
       // An untracked file is not in any diff, so its whole content is the addition.
       const diff = await readFileDiff(cwd, path, status, git).catch(() => null)

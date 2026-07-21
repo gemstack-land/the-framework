@@ -1,6 +1,5 @@
 import { getContext } from 'telefunc'
-import { readLiveMetas, worktreePath, isSafeRunId } from '../store/index.js'
-import { nodeFs } from '../node-fs.js'
+import { resolveRunCheckout } from '../store/index.js'
 import { defaultProjectsProvider, type ProjectsProvider } from '../dashboard/projects.js'
 import type { DashboardContext, EventsSource } from '../dashboard/telefunc-serve.js'
 import type { PreferencesStore } from '../registry.js'
@@ -40,28 +39,13 @@ export function resolveProjectPath(projectId: string): Promise<string | undefine
  * The checkout a call should act on: a live run's own worktree when `runId` names one (#738/#749),
  * else the project root. Since #736 a run reads and writes inside its worktree — its event log,
  * its control log, its working tree — so anything addressed at a *run* has to resolve here, not
- * at the project path, or it reads an empty log and steers a run that is not listening.
- *
- * An unknown or finished `runId` falls back to the project root rather than failing: the run's
- * worktree may already be gone, and the project's own state is still the sane thing to act on.
+ * at the project path, or it reads an empty log and steers a run that is not listening. The
+ * resolution itself (and its #766 first-seconds subtlety) lives in the store's
+ * {@link resolveRunCheckout}, shared with the daemon; this adds only the project-id lookup.
  */
 export async function resolveRunPath(projectId: string, runId?: string): Promise<string | undefined> {
   const cwd = await resolveProjectPath(projectId)
-  if (!cwd || !runId || !isSafeRunId(runId)) return cwd
-  const live = await readLiveMetas(cwd).catch(() => [])
-  const running = live.find(run => run.id === runId)?.cwd
-  if (running) return running
-  // Not in the live list yet. That is the normal state for the first seconds of a run (#766): the
-  // daemon creates the worktree and spawns the process, and only then does the run write its
-  // `run.json`, so a lookup by run state misses a run that certainly exists. The directory is named
-  // with the run id and is there before the process starts, so ask the filesystem instead.
-  //
-  // This matters beyond a slow first read: a Telefunc Channel resolves its path once, when the
-  // client subscribes. Falling back to the project root here does not self-correct a moment later
-  // — it tails the wrong file for the life of the subscription, which is how a newly started run
-  // ended up showing a previous run's output.
-  const path = worktreePath(cwd, runId)
-  return (await nodeFs().isDirectory(path)) ? path : cwd
+  return cwd ? resolveRunCheckout(cwd, runId) : undefined
 }
 
 /**

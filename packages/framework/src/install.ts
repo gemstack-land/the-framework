@@ -4,6 +4,7 @@ import { logsPath, LOGS_HEADER, THE_FRAMEWORK_DIR, gitignorePath, LOGS_GITIGNORE
 import { CONVERSATIONS_GITIGNORE } from './conversations.js'
 import { nodeStoreFs, type StoreFs } from './store/index.js'
 import { materializePresets } from './presets.js'
+import { errorMessage } from './error-message.js'
 
 /**
  * Install/activate a repo for The Framework (#391): create the
@@ -71,7 +72,7 @@ export async function installProject(cwd: string, deps: InstallDeps = {}): Promi
     await git(['commit', '-m', '[The Framework] install The Framework'], cwd)
     return insideRepo ? { ok: true } : { ok: true, initialized: true }
   } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : String(err) }
+    return { ok: false, error: errorMessage(err) }
   }
 }
 

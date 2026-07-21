@@ -1,4 +1,5 @@
 import { readAllRuns, type RunMeta, type RunStatus } from '../store/index.js'
+import { postDiscordWebhook } from './discord-webhook.js'
 import type { ProjectSummary } from './projects.js'
 
 // The identity + diff live in the leaf `keys.ts` so the dashboard can share them (they are pure);
@@ -103,9 +104,5 @@ export async function postActivityDiscord(
     items.length === 1
       ? `📣 Activity (${items[0]!.projectName}): ${activityLine(items[0]!)}`
       : `📣 ${items.length} session updates:\n${items.map(i => `• ${i.projectName}: ${activityLine(i)}`).join('\n')}`
-  await fetchImpl(webhook, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ content }),
-  })
+  await postDiscordWebhook(webhook, content, fetchImpl)
 }

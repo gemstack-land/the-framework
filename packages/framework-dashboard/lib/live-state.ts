@@ -30,11 +30,6 @@ export function pendingChoices(events: readonly FrameworkEvent[]): ChoiceRequest
   return [...open.values()]
 }
 
-/** The single gate the run is currently parked on (the most recent), or null. */
-export function pendingChoice(events: readonly FrameworkEvent[]): ChoiceRequest | null {
-  return pendingChoices(events).at(-1) ?? null
-}
-
 /**
  * One ad-hoc markdown view the agent pushed to the right rail (#441): the `view` event
  * minus its discriminant, derived so a field added to the event carries through here on

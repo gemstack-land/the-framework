@@ -1,6 +1,6 @@
 import { forwardRef, useImperativeHandle, useMemo, useRef, useState, type FormEvent } from 'react'
 import type { ProjectSummary } from '@gemstack/framework'
-import { LAUNCHER_PRESETS } from '@gemstack/framework/client'
+import { AGENTS, AGENT_LABELS, LAUNCHER_PRESETS, type AgentName } from '@gemstack/framework/client'
 import {
   usePreferences,
   updatePreferences,
@@ -27,11 +27,11 @@ import { Button } from './ui/button.js'
 // The agent + model tree (#650/#656/#658): each agent lists ONLY its own models, since `--model`
 // passes straight through to that agent's CLI. Picking a model in an agent's submenu sets both, so
 // an incompatible pair can't be chosen. Empty value = the agent's own default (no `--model` flag).
-// Kept as a client const so the dashboard bundle never imports the node-only driver layer.
-const AGENTS: AgentOption[] = [
-  {
-    value: 'claude',
-    label: 'Claude Code',
+// The names and labels are the framework's own vocabulary (browser-safe via /client); only the
+// icons and model lists are UI data, and the Record<AgentName, ...> shape means a new agent
+// framework-side is a compile error here rather than a silently missing menu entry.
+const AGENT_UI: Record<AgentName, { icon: AgentOption['icon']; models: AgentOption['models'] }> = {
+  claude: {
     icon: <ClaudeLogo className="h-4 w-4" />,
     models: [
       { value: '', label: 'Default model' },
@@ -40,9 +40,7 @@ const AGENTS: AgentOption[] = [
       { value: 'haiku', label: 'Haiku' },
     ],
   },
-  {
-    value: 'codex',
-    label: 'Codex',
+  codex: {
     icon: <CodexLogo className="h-4 w-4" />,
     models: [
       { value: '', label: 'Default model' },
@@ -51,7 +49,8 @@ const AGENTS: AgentOption[] = [
       { value: 'o3', label: 'o3' },
     ],
   },
-]
+}
+const AGENT_OPTIONS: AgentOption[] = AGENTS.map(name => ({ value: name, label: AGENT_LABELS[name], ...AGENT_UI[name] }))
 
 export interface ComposerHandle {
   clear: () => void
@@ -226,7 +225,7 @@ export const Composer = forwardRef<ComposerHandle, {
     <>
       {showAgentModel && (
         <AgentModelMenu
-          agents={AGENTS}
+          agents={AGENT_OPTIONS}
           agent={agent}
           model={model}
           onChange={(a, m) => updatePreferences({ agent: a, model: m })}

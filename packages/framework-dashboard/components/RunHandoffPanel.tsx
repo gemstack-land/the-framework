@@ -4,6 +4,7 @@ import { onRunHandoff } from '../server/reads.telefunc.js'
 import { sendOpenPullRequest, sendPushBranch } from '../server/control.telefunc.js'
 import { usePolled } from '../lib/use-async.js'
 import { useAction } from '../lib/use-action.js'
+import { DiffStat } from './DiffView.js'
 import { Button } from './ui/button.js'
 
 // The end-of-session handoff (#799): what this session produced, and the next step offered rather
@@ -76,10 +77,7 @@ function Summary({ handoff }: { handoff: RunHandoff }) {
       <span>{commits}</span>
       <span>·</span>
       <span>{files}</span>
-      <span className="tabular-nums">
-        <span className="text-emerald-500">+{handoff.insertions}</span>{' '}
-        <span className="text-red-500">-{handoff.deletions}</span>
-      </span>
+      <DiffStat added={handoff.insertions} removed={handoff.deletions} className="text-xs" />
       {handoff.merged && <span className="text-muted-foreground">· merged</span>}
     </span>
   )
@@ -186,15 +184,8 @@ function Files({ handoff }: { handoff: RunHandoff }) {
             <span className="truncate" title={file.path}>
               {file.path}
             </span>
-            <span className="ml-auto shrink-0 tabular-nums text-muted-foreground">
-              {file.binary ? (
-                'binary'
-              ) : (
-                <>
-                  <span className="text-emerald-500">+{file.insertions}</span>{' '}
-                  <span className="text-red-500">-{file.deletions}</span>
-                </>
-              )}
+            <span className="ml-auto shrink-0 text-muted-foreground">
+              {file.binary ? 'binary' : <DiffStat added={file.insertions} removed={file.deletions} className="text-xs" />}
             </span>
           </li>
         ))}

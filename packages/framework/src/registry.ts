@@ -1,4 +1,5 @@
 import { basename, dirname, join, resolve } from 'node:path'
+import { isAgentName } from './agent-names.js'
 import { nodeFs } from './node-fs.js'
 import { PROJECT_PREFERENCE_KEYS, type ProjectPreferences } from './preference-defaults.js'
 
@@ -235,9 +236,6 @@ const PREFERENCE_KEYS = [
 
 /** Keep only the known preference fields, so a hand-edited or browser-supplied
  * object never lands junk (or the wrong type) in the user's home file. */
-/** The coding agents the dashboard offers (#650); mirrors AGENTS in agent.ts, kept local. */
-const KNOWN_AGENTS = ['claude', 'codex']
-
 /** The color themes the dashboard offers (#725); anything else means the default `system`. */
 const KNOWN_THEMES = ['system', 'light', 'dark'] as const
 
@@ -251,9 +249,9 @@ function sanitizePreferences(value: unknown): Preferences {
   // `model` (#628) is a free-form string preference; the rest are booleans. A blank string is "no
   // choice", same as absent, so it is dropped rather than persisted.
   if (typeof input['model'] === 'string' && input['model'].trim()) preferences.model = input['model'].trim()
-  // `agent` (#650) is constrained to the known set so junk never reaches the run; mirrors AGENTS
-  // in agent.ts (kept local so the registry doesn't import the driver layer). Default = claude.
-  if (typeof input['agent'] === 'string' && KNOWN_AGENTS.includes(input['agent'])) preferences.agent = input['agent']
+  // `agent` (#650) is constrained to the known set so junk never reaches the run; the set is
+  // the shared node-free vocabulary (agent-names.ts). Default = claude.
+  if (isAgentName(input['agent'] as string | undefined)) preferences.agent = input['agent'] as string
   // `editor` (#727) is a free-form CLI name, trimmed and length-capped so junk / a huge string
   // never lands in the file. A blank string is "no choice" (fall back to env / `code`), so dropped.
   if (typeof input['editor'] === 'string' && input['editor'].trim())

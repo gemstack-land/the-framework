@@ -4,7 +4,7 @@ import { isSafeVia } from '../conversations.js'
 import { openInApp, type OpenTarget, type OpenResult } from '../dashboard/open-in-app.js'
 import { resolveProjectPath, resolveRunPath, contextPreferences, contextPreview } from './context.js'
 import { appendFlatTodoEntry } from '../todo-loop.js'
-import { isSafeRunId, listRuns, readLiveMetas, removeWorktree, pruneWorktrees, worktreePath, type RunMeta } from '../store/index.js'
+import { findRun, isSafeRunId, readLiveMetas, removeWorktree, pruneWorktrees, worktreePath, type RunMeta } from '../store/index.js'
 import {
   openRunPullRequest,
   pushRunBranch,
@@ -24,6 +24,7 @@ import type {
 import type { ServeTarget } from '../preview.js'
 import type { DashboardContext } from '../dashboard/telefunc-serve.js'
 import type { Preferences } from '../registry.js'
+import { errorMessage } from '../error-message.js'
 
 // The write side behind the new dashboard (#405): steering a live run. The reverse of
 // the event stream — events flow run -> events.jsonl -> Channel -> browser; steering
@@ -111,7 +112,7 @@ export async function sendRemoveWorktree(projectId: string, runId: string): Prom
     await pruneWorktrees(cwd)
     return { ok: true }
   } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : String(err) }
+    return { ok: false, error: errorMessage(err) }
   }
 }
 
@@ -198,8 +199,7 @@ export async function sendOpenInApp(projectId: string, target: OpenTarget, runId
 async function handoffTargetFor(projectId: string, runId: string): Promise<{ cwd: string; run: RunMeta } | undefined> {
   const cwd = await resolveProjectPath(projectId)
   if (!cwd || !isSafeRunId(runId)) return undefined
-  const live = (await readLiveMetas(cwd).catch(() => [])).find(run => run.id === runId)
-  const run = live ?? (await listRuns(cwd).catch(() => [])).find(run => run.id === runId)
+  const run = await findRun(cwd, runId).catch(() => undefined)
   return run ? { cwd, run } : undefined
 }
 

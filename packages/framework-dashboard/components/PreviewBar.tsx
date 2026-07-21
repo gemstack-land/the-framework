@@ -32,7 +32,6 @@ export function PreviewBar({
   inline?: boolean
 }) {
   const [url, setUrl] = useState<string | null>(null)
-  const [command, setCommand] = useState<string | null>(null)
   const [targets, setTargets] = useState<ServeTarget[]>([])
   const { busy, error, reset, run } = useAction()
 
@@ -41,13 +40,11 @@ export function PreviewBar({
   useEffect(() => {
     let live = true
     setUrl(null)
-    setCommand(null)
     setTargets([])
     reset()
     void onPreviewStatus(projectId, runId ?? undefined).then(status => {
       if (!live || !status.running) return
       setUrl(status.url ?? null)
-      setCommand(status.command ?? null)
     })
     void onServeTargets(projectId, runId ?? undefined).then(list => {
       if (live) setTargets(list)
@@ -60,10 +57,7 @@ export function PreviewBar({
   // Serve the given app (or the daemon's remembered/default one when no id is passed).
   const open = async (targetId?: string) => {
     const result = await run(() => sendPreview(projectId, targetId, runId ?? undefined), 'Failed to start the preview.')
-    if (result?.ok) {
-      setUrl(result.url)
-      setCommand(result.command)
-    }
+    if (result?.ok) setUrl(result.url)
   }
 
   const stop = async () => {
@@ -71,10 +65,7 @@ export function PreviewBar({
       await sendStopPreview(projectId, runId ?? undefined)
       return true as const
     }, 'Failed to stop the preview.')
-    if (stopped) {
-      setUrl(null)
-      setCommand(null)
-    }
+    if (stopped) setUrl(null)
   }
 
   // The control (all icon-only, h-7 to match the other actions): once serving, a segmented pair —

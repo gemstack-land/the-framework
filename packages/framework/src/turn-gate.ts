@@ -197,8 +197,9 @@ function lastBlock(text: string, tag: string): { body: string; index: number } |
   return found
 }
 
-/** Parse the JSON body of an await block, returning its `options` array or undefined. */
-function parseBody(body: string): { record: Record<string, unknown>; options: Record<string, unknown>[] } | undefined {
+/** Parse an await block's JSON body to a record, or `undefined` — the shared first step of
+ * every gate parser (it was written out three times). */
+function parseRecord(body: string): Record<string, unknown> | undefined {
   let raw: unknown
   try {
     raw = JSON.parse(body)
@@ -206,8 +207,13 @@ function parseBody(body: string): { record: Record<string, unknown>; options: Re
     return undefined
   }
   if (typeof raw !== 'object' || raw === null) return undefined
-  const record = raw as Record<string, unknown>
-  if (!Array.isArray(record.options)) return undefined
+  return raw as Record<string, unknown>
+}
+
+/** Parse the JSON body of an await block, returning its `options` array or undefined. */
+function parseBody(body: string): { record: Record<string, unknown>; options: Record<string, unknown>[] } | undefined {
+  const record = parseRecord(body)
+  if (!record || !Array.isArray(record.options)) return undefined
   return { record, options: record.options as Record<string, unknown>[] }
 }
 
@@ -283,14 +289,8 @@ export function parseMultiSelectGate(text: string): ParsedMultiSelectGate | unde
 export function parseConfirmationGate(text: string): ParsedConfirmationGate | undefined {
   const block = lastBlock(text, 'await-confirmation')
   if (!block) return undefined
-  let raw: unknown
-  try {
-    raw = JSON.parse(block.body)
-  } catch {
-    return undefined
-  }
-  if (typeof raw !== 'object' || raw === null) return undefined
-  const record = raw as Record<string, unknown>
+  const record = parseRecord(block.body)
+  if (!record) return undefined
   const file = str(record.file)
   return { title: str(record.title) || 'Approve this plan?', ...(file ? { file } : {}) }
 }
@@ -303,14 +303,8 @@ export function parseConfirmationGate(text: string): ParsedConfirmationGate | un
 export function parseBrowserGate(text: string): ParsedBrowserGate | undefined {
   const block = lastBlock(text, 'await-browser')
   if (!block) return undefined
-  let raw: unknown
-  try {
-    raw = JSON.parse(block.body)
-  } catch {
-    return undefined
-  }
-  if (typeof raw !== 'object' || raw === null) return undefined
-  const record = raw as Record<string, unknown>
+  const record = parseRecord(block.body)
+  if (!record) return undefined
   const url = str(record.url)
   return { title: str(record.title) || 'Take over in the browser', ...(url ? { url } : {}) }
 }
@@ -323,41 +317,25 @@ export function parseBrowserGate(text: string): ParsedBrowserGate | undefined {
  * normal build flows straight through.
  */
 export function parseAwaitGate(text: string): ParsedAwaitGate | undefined {
-  const kinds: { at: number; parse: () => ParsedAwaitGate | undefined }[] = [
-    {
-      at: lastBlock(text, 'await-choices')?.index ?? -1,
-      parse: () => {
-        const g = parseChoicesGate(text)
-        return g ? { kind: 'choices', ...g } : undefined
-      },
-    },
-    {
-      at: lastBlock(text, 'await-multiselect')?.index ?? -1,
-      parse: () => {
-        const g = parseMultiSelectGate(text)
-        return g ? { kind: 'multi', ...g } : undefined
-      },
-    },
-    {
-      at: lastBlock(text, 'await-confirmation')?.index ?? -1,
-      parse: () => {
-        const g = parseConfirmationGate(text)
-        return g ? { kind: 'confirm', ...g } : undefined
-      },
-    },
-    {
-      at: lastBlock(text, 'await-browser')?.index ?? -1,
-      parse: () => {
-        const g = parseBrowserGate(text)
-        return g ? { kind: 'browser', ...g } : undefined
-      },
-    },
-  ]
+  const kinds = GATE_KINDS.map(k => ({ at: lastBlock(text, k.tag)?.index ?? -1, parse: k.parse }))
   for (const kind of kinds.filter(k => k.at >= 0).sort((a, b) => b.at - a.at)) {
-    const gate = kind.parse()
+    const gate = kind.parse(text)
     if (gate) return gate
   }
   return undefined
+}
+
+/** The four gate kinds, each as its tag plus a parse that stamps the discriminant. */
+const GATE_KINDS: readonly { tag: string; parse: (text: string) => ParsedAwaitGate | undefined }[] = [
+  { tag: 'await-choices', parse: text => tagged('choices', parseChoicesGate(text)) },
+  { tag: 'await-multiselect', parse: text => tagged('multi', parseMultiSelectGate(text)) },
+  { tag: 'await-confirmation', parse: text => tagged('confirm', parseConfirmationGate(text)) },
+  { tag: 'await-browser', parse: text => tagged('browser', parseBrowserGate(text)) },
+]
+
+/** Stamp a parsed gate with its kind, passing an unparseable one through as `undefined`. */
+function tagged<K extends ParsedAwaitGate['kind'], G extends object>(kind: K, gate: G | undefined): (G & { kind: K }) | undefined {
+  return gate ? { kind, ...gate } : undefined
 }
 
 /**

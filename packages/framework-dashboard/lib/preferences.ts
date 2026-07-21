@@ -21,9 +21,9 @@ import { parseRoute } from './route.js'
 // Components never see the split — `usePreferences()` hands back the resolved result, so a
 // toggle reads the same way it always did — but a write lands on whichever tier owns the key.
 
-/** Run options a project owns; the rest of {@link Preferences} is global (#840). Mirrors
- * PROJECT_PREFERENCE_KEYS in the framework's registry.ts, kept local so the client bundle does
- * not import the package root (and with it, node). */
+/** Run options a project owns, as a Set for the write split; the rest of
+ * {@link Preferences} is global (#840). The list itself is the framework's, via the
+ * browser-safe client entry, so adding a key there routes it here without a second copy. */
 const PROJECT_KEYS = new Set<string>(PROJECT_PREFERENCE_KEYS)
 
 const EMPTY: Preferences = {}

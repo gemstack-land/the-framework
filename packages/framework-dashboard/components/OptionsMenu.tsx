@@ -38,13 +38,33 @@ function setOption(key: keyof Preferences, checked: boolean) {
   updatePreferences({ [key]: checked } as Partial<Preferences>)
 }
 
-/** An option's label with a short one-line description under it (#654). */
-function OptionLabel({ label, description }: { label: string; description?: string | undefined }) {
+/** A menu item's label with a short one-line description under it (#654). Shared with the
+ * notifications menu, so the two dropdowns read identically. */
+export function OptionLabel({ label, description }: { label: string; description?: string | undefined }) {
   return (
     <span className="flex flex-col gap-0.5">
       <span className="leading-tight">{label}</span>
       {description && <span className="text-xs font-normal text-[var(--color-muted-foreground)]">{description}</span>}
     </span>
+  )
+}
+
+/** One preference checkbox row. The disabled reason rides the description (the `title`
+ * tooltip is suppressed on disabled dropdown items), so a greyed row isn't a mystery. */
+function OptionCheckboxRow({ row, busy, indent = false }: { row: OptionRow; busy: boolean; indent?: boolean }) {
+  return (
+    <DropdownMenuCheckboxItem
+      checked={row.checked}
+      disabled={busy || !!row.disabled}
+      onCheckedChange={checked => setOption(row.key, checked)}
+      title={row.title}
+      className={indent ? 'items-start pl-8' : 'items-start'}
+    >
+      <OptionLabel
+        label={row.label}
+        description={row.disabled && row.disabledReason ? [row.description, `— ${row.disabledReason}`].filter(Boolean).join(' ') : row.description}
+      />
+    </DropdownMenuCheckboxItem>
   )
 }
 
@@ -98,37 +118,13 @@ export function OptionsMenu({
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="min-w-[19rem] max-w-[22rem]">
         {options.map(o => (
-          <DropdownMenuCheckboxItem
-            key={o.key}
-            checked={o.checked}
-            disabled={busy || !!o.disabled}
-            onCheckedChange={checked => setOption(o.key, checked)}
-            title={o.title}
-            className="items-start"
-          >
-            <OptionLabel
-              label={o.label}
-              description={o.disabled && o.disabledReason ? [o.description, `— ${o.disabledReason}`].filter(Boolean).join(' ') : o.description}
-            />
-          </DropdownMenuCheckboxItem>
+          <OptionCheckboxRow key={o.key} row={o} busy={busy} />
         ))}
         {showEco && (
           <>
             <DropdownMenuSeparator />
             {ecoOptions.map(o => (
-              <DropdownMenuCheckboxItem
-                key={o.key}
-                checked={o.checked}
-                disabled={busy || !!o.disabled}
-                onCheckedChange={checked => setOption(o.key, checked)}
-                title={o.title}
-                className="items-start pl-8"
-              >
-                <OptionLabel
-              label={o.label}
-              description={o.disabled && o.disabledReason ? [o.description, `— ${o.disabledReason}`].filter(Boolean).join(' ') : o.description}
-            />
-              </DropdownMenuCheckboxItem>
+              <OptionCheckboxRow key={o.key} row={o} busy={busy} indent />
             ))}
           </>
         )}

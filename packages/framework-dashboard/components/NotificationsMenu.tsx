@@ -2,6 +2,7 @@ import { useSyncExternalStore } from 'react'
 import { Bell, BellOff } from 'lucide-react'
 import { usePreferences, updatePreferences, notificationsEnabled, discordEnabled, discordBotEnabled, newActivityEnabled, humanInterventionEnabled } from '../lib/preferences.js'
 import { cn } from '../lib/utils.js'
+import { OptionLabel } from './OptionsMenu.js'
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -34,16 +35,6 @@ function subscribePermission(onChange: () => void): () => void {
   // requestPermission() resolves (which re-renders anyway). Poll lightly as a backstop.
   const timer = setInterval(onChange, 3000)
   return () => clearInterval(timer)
-}
-
-/** A toggle's label with a short one-line hint under it (mirrors OptionsMenu's OptionLabel). */
-function NotifLabel({ label, hint }: { label: string; hint?: string | undefined }) {
-  return (
-    <span className="flex flex-col gap-0.5">
-      <span className="leading-tight">{label}</span>
-      {hint && <span className="text-xs font-normal text-[var(--color-muted-foreground)]">{hint}</span>}
-    </span>
-  )
 }
 
 export function NotificationsMenu() {
@@ -100,7 +91,7 @@ export function NotificationsMenu() {
               title={browserHint}
               className="items-start"
             >
-              <NotifLabel label="Browser" hint={browserHint} />
+              <OptionLabel label="Browser" description={browserHint} />
             </DropdownMenuCheckboxItem>
           )}
           <DropdownMenuCheckboxItem
@@ -109,7 +100,7 @@ export function NotificationsMenu() {
             title="Reaches you with no dashboard open (needs DISCORD_WEBHOOK on the daemon)"
             className="items-start"
           >
-            <NotifLabel label="Discord" hint="Needs DISCORD_WEBHOOK on the daemon" />
+            <OptionLabel label="Discord" description="Needs DISCORD_WEBHOOK on the daemon" />
           </DropdownMenuCheckboxItem>
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
@@ -123,7 +114,7 @@ export function NotificationsMenu() {
             title="A session awaiting your answer, or a PR ready to review"
             className="items-start"
           >
-            <NotifLabel label="Needs you" hint="A session awaiting you, or a PR to review" />
+            <OptionLabel label="Needs you" description="A session awaiting you, or a PR to review" />
           </DropdownMenuCheckboxItem>
           <DropdownMenuCheckboxItem
             checked={activity}
@@ -131,7 +122,7 @@ export function NotificationsMenu() {
             title="Also ping when a session starts or finishes, not just when something needs you"
             className="items-start"
           >
-            <NotifLabel label="New activity" hint="A session started or finished" />
+            <OptionLabel label="New activity" description="A session started or finished" />
           </DropdownMenuCheckboxItem>
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
@@ -145,7 +136,7 @@ export function NotificationsMenu() {
             title="Lets Discord messages start and steer sessions (needs DISCORD_BOT_TOKEN on the daemon)"
             className="items-start"
           >
-            <NotifLabel label="Discord bot" hint="Start and steer sessions from Discord" />
+            <OptionLabel label="Discord bot" description="Start and steer sessions from Discord" />
           </DropdownMenuCheckboxItem>
         </DropdownMenuGroup>
       </DropdownMenuContent>

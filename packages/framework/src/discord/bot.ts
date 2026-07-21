@@ -1,6 +1,7 @@
 import { DiscordGateway, type DiscordMessage, type GatewayDeps } from './gateway.js'
 import { postMessage } from './rest.js'
 import { decideAction, type ProjectTarget, type RunSnapshot } from './routing.js'
+import { errorMessage } from '../error-message.js'
 
 /**
  * The Discord chatbot (#680): chat to The Framework from Discord instead of the dashboard.
@@ -107,7 +108,7 @@ export function startDiscordBot(opts: DiscordBotOptions): DiscordBot {
       }
       await reply(message, action.reply)
     } catch (err) {
-      log(`Discord bot could not handle a message: ${err instanceof Error ? err.message : String(err)}`)
+      log(`Discord bot could not handle a message: ${errorMessage(err)}`)
     }
   }
 

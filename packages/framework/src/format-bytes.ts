@@ -3,7 +3,7 @@
 
 const UNITS = ['B', 'KB', 'MB', 'GB', 'TB'] as const
 
-/** `1536` → `1.5 KB`. Absent, negative, or unparseable reads as an em-less dash, like a missing date. */
+/** `1536` → `1.5 KB`. Absent, negative, or unparseable reads as an en dash, like a missing date. */
 export function formatBytes(bytes: number | undefined, fallback = '–'): string {
   if (typeof bytes !== 'number' || !Number.isFinite(bytes) || bytes < 0) return fallback
   let value = bytes

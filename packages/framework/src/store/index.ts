@@ -5,6 +5,9 @@ export {
   metaFromEvents,
   listRuns,
   readAllRuns,
+  findRun,
+  readEventLog,
+  isPidAlive,
   readLiveMeta,
   reconcileOrphanedRuns,
   loadRunEvents,
@@ -26,6 +29,7 @@ export {
   type RunStatus,
   type OpenStoreOptions,
 } from './run-store.js'
+export { resolveRunCheckout } from './run-checkout.js'
 export {
   addWorktree,
   attachWorktree,

@@ -1,6 +1,7 @@
 import type { GitRunner } from './project.js'
 import { nodeGitRunner } from './project.js'
 import { FLAT_TODO_FILE } from './tickets.js'
+import { errorMessage } from './error-message.js'
 
 /**
  * Promoting the agent queue out of a finished run's branch and into the project checkout (#852).
@@ -26,7 +27,18 @@ import { FLAT_TODO_FILE } from './tickets.js'
 /** Why a promotion did not happen, or that it did. */
 export type QueuePromotion =
   | { promoted: true; branch: string }
-  | { promoted: false; reason: string }
+  | {
+      promoted: false
+      reason: string
+      /**
+       * Worth trying again next tick: the queue file is mid-edit in the checkout, and the human's
+       * work outranks an unattended tidy-up only until they commit it. Every other skip is final
+       * for this run. The callee owns this call — the daemon used to decide it by string-matching
+       * the prose `reason`, where a one-word copyedit would have silently turned "retry next
+       * tick" into "settled forever".
+       */
+      retry?: true
+    }
 
 /** The commit message a promotion writes. Names the run so the history says where it came from. */
 export function promotionMessage(runId: string): string {
@@ -63,7 +75,7 @@ export async function promoteQueue(
     // A dirty queue file means someone is editing it by hand right now. Leave it alone; the next
     // tick will try again, and until then auto PM simply does not start more work.
     const dirty = (await git(['status', '--porcelain', '--', FLAT_TODO_FILE], projectCwd)).trim()
-    if (dirty) return { promoted: false, reason: 'the checkout has uncommitted queue changes' }
+    if (dirty) return { promoted: false, reason: 'the checkout has uncommitted queue changes', retry: true }
 
     // `checkout <branch> -- <path>` writes the file and stages it in one step, touching nothing
     // else in the tree. The commit is pathspec-scoped for the same reason: whatever else is
@@ -72,6 +84,6 @@ export async function promoteQueue(
     await git(['commit', '-m', promotionMessage(run.id), '--', FLAT_TODO_FILE], projectCwd)
     return { promoted: true, branch }
   } catch (err) {
-    return { promoted: false, reason: err instanceof Error ? err.message : String(err) }
+    return { promoted: false, reason: errorMessage(err) }
   }
 }

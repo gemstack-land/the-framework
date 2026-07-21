@@ -1,3 +1,5 @@
+import { formatBytes } from './format-bytes.js'
+import { errorMessage } from './error-message.js'
 import {
   listWorktreeDirs,
   listRuns,
@@ -47,7 +49,7 @@ export type RemoveResult = { ok: true } | { ok: false; error: string }
  * A live run's checkout is included and flagged rather than hidden: "what is this directory and
  * why can I not remove it" is exactly the question the list has to answer.
  */
-export async function listProjectWorktrees(cwd: string): Promise<WorktreeRow[]> {
+export async function listProjectWorktrees(cwd: string, opts: { sizes?: boolean } = {}): Promise<WorktreeRow[]> {
   const [names, live, archived] = await Promise.all([
     listWorktreeDirs(cwd).catch(() => []),
     readLiveMetas(cwd).catch(() => []),
@@ -62,8 +64,9 @@ export async function listProjectWorktrees(cwd: string): Promise<WorktreeRow[]> 
       live: isLive,
       ...(meta?.branch ? { branch: meta.branch } : {}),
       ...(meta?.status ? { status: meta.status } : {}),
-      // Sizing a tree an agent is writing to gives a number that is wrong by the time it prints.
-      ...(isLive ? {} : await sizeOf(cwd, runId)),
+      // Sizing a tree an agent is writing to gives a number that is wrong by the time it prints;
+      // a caller that only wants the rows (the dashboard's retained list) skips the du entirely.
+      ...(isLive || opts.sizes === false ? {} : await sizeOf(cwd, runId)),
     })
   }
   return rows.sort((a, b) => (a.runId < b.runId ? 1 : a.runId > b.runId ? -1 : 0))
@@ -97,7 +100,7 @@ export async function removeProjectWorktree(cwd: string, runId: string): Promise
     await pruneWorktrees(cwd)
     return { ok: true }
   } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : String(err) }
+    return { ok: false, error: errorMessage(err) }
   }
 }
 
@@ -120,19 +123,6 @@ export async function pruneProjectWorktrees(cwd: string): Promise<PruneResult> {
   return result
 }
 
-/** Human sizes for the list. Whole units below 10 so the column stays narrow. */
-export function formatSize(bytes: number | undefined): string {
-  if (bytes === undefined) return '-'
-  const units = ['B', 'KB', 'MB', 'GB', 'TB']
-  let value = bytes
-  let unit = 0
-  while (value >= 1024 && unit < units.length - 1) {
-    value /= 1024
-    unit++
-  }
-  return `${value < 10 && unit > 0 ? value.toFixed(1) : Math.round(value)}${units[unit]}`
-}
-
 /**
  * The `framework worktrees` table (#752). Pure so the layout is testable: columns padded to the
  * widest cell, and a message rather than an empty table when a project has no worktrees.
@@ -143,7 +133,7 @@ export function formatWorktreeList(rows: WorktreeRow[]): string[] {
   const body = rows.map(row => [
     row.runId,
     row.live ? 'running' : (row.status ?? 'unknown'),
-    formatSize(row.sizeBytes),
+    formatBytes(row.sizeBytes, '-'),
     row.branch ?? '-',
   ])
   const widths = header.map((_, column) => Math.max(...[header, ...body].map(cells => (cells[column] ?? '').length)))

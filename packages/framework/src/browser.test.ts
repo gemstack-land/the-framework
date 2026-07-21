@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
 import { chromeLaunchArgs, freePort, launchSharedBrowser, resolveChromePath, waitForDebugEndpoint } from './browser.js'
-import { browserMcpServers, withBrowser, BROWSER_MCP_SERVERS } from './cli.js'
+import { browserMcpServers, withBrowser, BROWSER_MCP_SERVERS } from './browser.js'
 
 test('chromeLaunchArgs opens the debug port on a throwaway profile (#793)', () => {
   const args = chromeLaunchArgs(9333, '/tmp/profile')
