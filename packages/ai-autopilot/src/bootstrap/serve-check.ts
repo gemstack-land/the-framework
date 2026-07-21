@@ -76,8 +76,11 @@ export function serveCheck(session: RunnerSession, opts: ServeCheckOptions): Non
       const target = new URL(healthPath, url.endsWith('/') ? url : url + '/').toString()
 
       // If the server crashed on boot, its process has already exited — say so.
+      // Bound the fetch: a server that accepts the connection but never answers
+      // (wedged SSR, mid-HMR, holding proxy) would otherwise hang the pass loop
+      // forever, since `proc.exit` never settles either.
       const raced = await Promise.race([
-        fetch(target).then(res => ({ ok: true as const, status: res.status }), err => ({ ok: false as const, error: err as Error })),
+        fetch(target, { signal: AbortSignal.timeout(waitMs) }).then(res => ({ ok: true as const, status: res.status }), err => ({ ok: false as const, error: err as Error })),
         proc.exit.then(r => ({ ok: false as const, exited: r.exitCode, log: (r.stderr || r.stdout).trim().split('\n').slice(-3).join(' ').slice(0, 300) })),
       ])
 

@@ -74,8 +74,9 @@ export function softwareDevelopmentPreset(opts: LoadPresetOptions = {}): Promise
 
 /**
  * Load every domain preset shipped with the package (under `presets/`) — the set
- * the CLI/UI picker enumerates. Today that is just "Software Development" (#243),
- * but new built-ins are discovered automatically as their directories land. Use
+ * the CLI/UI picker enumerates. Five ship today (software-development,
+ * web-development, data-science, product-management, biological-science), and new
+ * built-ins are discovered automatically as their directories land. Use
  * {@link selectPreset} to pick one by name.
  */
 export function builtinDomainPresets(opts: LoadPresetOptions = {}): Promise<DomainPreset[]> {

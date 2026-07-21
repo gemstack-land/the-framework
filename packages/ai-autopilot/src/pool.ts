@@ -30,18 +30,24 @@ export async function runPool<T, R>(
 
   async function worker(): Promise<void> {
     while (true) {
+      // Bound first: with nothing left to claim there is no work to skip, so a
+      // budget met exactly by the final item is completion, not truncation.
+      if (next >= items.length) return
       if (shouldStop?.()) {
         stopped = true
         return
       }
       const index = next++
-      if (index >= items.length) return
       const value = await run(items[index]!, index)
       out.push({ index, value })
     }
   }
 
-  await Promise.all(Array.from({ length: workers }, () => worker()))
+  // allSettled so one rejecting worker cannot orphan its siblings into
+  // unhandled rejections; the first error is rethrown once all have drained.
+  const settled = await Promise.allSettled(Array.from({ length: workers }, () => worker()))
+  const failed = settled.find(s => s.status === 'rejected')
+  if (failed) throw (failed as PromiseRejectedResult).reason
 
   out.sort((a, b) => a.index - b.index)
   return { results: out.map(o => o.value), stopped }

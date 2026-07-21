@@ -130,6 +130,20 @@ describe('LocalRunnerSession.exec', () => {
       await s.dispose()
     }
   })
+
+  it('times out even when a background grandchild outlives the shell', async () => {
+    const s = await new LocalRunner().boot()
+    try {
+      // The grandchild survives a kill aimed at `sh` alone and holds the inherited
+      // stdio open, so `close` never fires — the timeout must still bound the call.
+      const started = Date.now()
+      const r = await s.exec('node -e "setTimeout(()=>{}, 10000)" & sleep 10', { timeoutMs: 300 })
+      assert.equal(r.exitCode, 124)
+      assert.ok(Date.now() - started < 5000, `exec took ${Date.now() - started}ms — the timeout did not bound it`)
+    } finally {
+      await s.dispose()
+    }
+  })
 })
 
 describe('LocalRunnerSession.preview', () => {

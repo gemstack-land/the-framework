@@ -93,13 +93,13 @@
  * - {@link composeDomainPresets} — merge presets into one (later wins on prompt id)
  * - {@link builtinDomainPresets} / {@link loadDomainPresetsFrom} — enumerate a set (the picker primitive)
  * - {@link selectPreset} — pick the user's chosen domain by name
- * - {@link softwareDevelopmentPreset} — the shipped, stack-agnostic built-in
+ * - {@link softwareDevelopmentPreset} — the stack-agnostic default of the five shipped presets
  * - {@link loadDomainPreset} `{ modes }` — activate Autopilot/Technical variants
  *   ({@link selectWinners}): a `conditions` sibling `.md` overrides its base
  */
 export { Supervisor } from './supervisor.js'
 export { agentPlanner, type AgentPlannerOptions } from './planner.js'
-export { agentSynthesizer, defaultSynthesize } from './synthesizer.js'
+export { agentSynthesizer, defaultSynthesize, type AgentSynthesizerOptions } from './synthesizer.js'
 export {
   FakeRunner,
   FakeRunnerSession,

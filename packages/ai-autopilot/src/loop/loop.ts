@@ -113,6 +113,12 @@ export class LoopEngine {
       if (!prompt) {
         this.emit({ type: 'unknown-prompt', promptId: id })
         outcomes.push({ promptId: id, passes: [], ok: false, passing: false })
+        // A missing prompt is a non-passing outcome like any other: it must not
+        // slip past a blocking gate that a throwing prompt would have stopped.
+        if (!this.continueOnError) {
+          this.emit({ type: 'gate-stop', promptId: id })
+          break
+        }
         continue
       }
 

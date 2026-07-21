@@ -45,7 +45,7 @@
     "dev": "tsc -p tsconfig.build.json --watch",
     "typecheck": "tsc --noEmit",
     "test": "tsc -p tsconfig.test.json && cd dist-test && node --test",
-    "clean": "rm -rf dist"
+    "clean": "rm -rf dist dist-test"
   },
   "dependencies": {
     "@gemstack/ai-sdk": "workspace:^",

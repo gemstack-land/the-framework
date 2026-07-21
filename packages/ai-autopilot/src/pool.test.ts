@@ -38,6 +38,33 @@ describe('runPool', () => {
     assert.deepEqual(results, [1, 2])
   })
 
+  it('reports completion, not truncation, when the budget is met by the final item', async () => {
+    let done = 0
+    const { results, stopped } = await runPool([1, 2, 3], 1, async (n) => {
+      done++
+      return n
+    }, () => done >= 3)
+    // Everything ran, so there was nothing to skip — `stopped` must stay false
+    // or callers see a false "guardrail truncated the plan" signal.
+    assert.deepEqual(results, [1, 2, 3])
+    assert.equal(stopped, false)
+  })
+
+  it('surfaces a worker error without orphaning its siblings', async () => {
+    const seen: number[] = []
+    await assert.rejects(
+      () => runPool([1, 2, 3, 4], 2, async (n) => {
+        await tick()
+        if (n === 1) throw new Error('boom')
+        seen.push(n)
+        return n
+      }),
+      /boom/,
+    )
+    // Siblings drain rather than rejecting unhandled after the pool settles.
+    await tick()
+  })
+
   it('handles an empty list', async () => {
     const { results, stopped } = await runPool([], 4, async () => 1)
     assert.deepEqual(results, [])

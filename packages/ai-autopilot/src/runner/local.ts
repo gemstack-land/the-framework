@@ -218,34 +218,61 @@ export class LocalRunnerSession implements RunnerSession {
     const cwd = within(this.root, opts.cwd ?? (this.cwd || '.'))
     const env = { ...process.env, ...this.env, ...(opts.env ?? {}) }
     return await new Promise<ExecResult>((resolvePromise, reject) => {
-      const child = spawn(command, { cwd, env, shell: true })
+      // Own process group (like `start`) so a timeout kills the whole tree. A
+      // plain kill only reaps the `sh` wrapper; a surviving grandchild keeps the
+      // inherited stdio open, `close` never fires, and the timeout never lands.
+      const child = spawn(command, { cwd, env, shell: true, detached: true })
       let stdout = ''
       let stderr = ''
       let timedOut = false
+      let settled = false
+      let reaper: NodeJS.Timeout | undefined
+
+      const finish = (result: ExecResult): void => {
+        if (settled) return
+        settled = true
+        if (timer) clearTimeout(timer)
+        if (reaper) clearTimeout(reaper)
+        resolvePromise(result)
+      }
+      const timedOutResult = (): ExecResult => ({
+        stdout,
+        stderr: stderr + `\n[ai-autopilot] command timed out after ${opts.timeoutMs}ms`,
+        exitCode: 124,
+      })
+      const killTree = (): void => {
+        if (child.pid == null) return
+        try {
+          process.kill(-child.pid, 'SIGKILL')
+        } catch {
+          child.kill('SIGKILL') // group already gone, or no group to speak of
+        }
+      }
+
       const timer =
         opts.timeoutMs != null
           ? setTimeout(() => {
               timedOut = true
-              child.kill('SIGKILL')
+              killTree()
+              // A detached grandchild can still hold the pipes open, so don't
+              // wait on `close` forever — settle shortly after the kill.
+              reaper = setTimeout(() => finish(timedOutResult()), 250)
+              reaper.unref?.()
             }, opts.timeoutMs)
           : undefined
       child.stdout?.on('data', d => (stdout += d))
       child.stderr?.on('data', d => (stderr += d))
       child.on('error', err => {
+        if (settled) return
+        settled = true
         if (timer) clearTimeout(timer)
+        if (reaper) clearTimeout(reaper)
         reject(new RunnerError(`failed to spawn: ${(err as Error).message}`))
       })
       child.on('close', (code, signal) => {
-        if (timer) clearTimeout(timer)
-        if (timedOut) {
-          resolvePromise({
-            stdout,
-            stderr: stderr + `\n[ai-autopilot] command timed out after ${opts.timeoutMs}ms`,
-            exitCode: 124,
-          })
-          return
-        }
-        resolvePromise({ stdout, stderr, exitCode: code ?? (signal ? 137 : 1) })
+        finish(
+          timedOut ? timedOutResult() : { stdout, stderr, exitCode: code ?? (signal ? 137 : 1) },
+        )
       })
     })
   }

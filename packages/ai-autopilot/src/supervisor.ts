@@ -110,10 +110,7 @@ export class Supervisor {
 
 // ─── Internals ───────────────────────────────────────────────────
 
-/**
- * Wrap the user's `onEvent` so a throwing callback can never abort a run.
- * Observer errors are reported to the console but otherwise swallowed.
- */
+/** Run one subtask on its routed worker, converting any failure into a result. */
 async function runSubtask(route: WorkerRouter, subtask: PlannedSubtask): Promise<SubtaskResult> {
   try {
     const agent = route(subtask)

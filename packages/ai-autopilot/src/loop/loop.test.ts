@@ -87,6 +87,19 @@ describe('LoopEngine — dispatch', () => {
     assert.equal(result.outcomes[0]?.ok, false)
     assert.ok(events.some(e => e.type === 'unknown-prompt' && e.promptId === 'ghost'))
   })
+
+  it('stops a blocking chain at an unknown prompt instead of running past it', async () => {
+    const after = definePrompt({ id: 'security', run: () => 'ran' })
+    const loop = new LoopEngine({
+      loops: [defineLoop({ on: 'c', run: ['ghost', 'security'] })],
+      prompts: [after],
+      continueOnError: false,
+    })
+    const result = await loop.handle({ kind: 'c' })
+    // A missing prompt must gate exactly like a throwing one.
+    assert.equal(result.outcomes.length, 1)
+    assert.equal(result.outcomes[0]?.promptId, 'ghost')
+  })
 })
 
 describe('LoopEngine — failure policy', () => {

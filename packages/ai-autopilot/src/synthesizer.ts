@@ -22,11 +22,17 @@ export function defaultSynthesize(_task: string, results: SubtaskResult[]): stri
     .join('\n\n')
 }
 
+/** Options for {@link agentSynthesizer}. */
+export interface AgentSynthesizerOptions {
+  /** Override the default "combine, don't concatenate" instruction. */
+  instructions?: string
+}
+
 /**
  * Build a {@link Synthesizer} that asks an agent to combine the worker results
  * into a single coherent answer. Failed subtasks are omitted from the prompt.
  */
-export function agentSynthesizer(agent: Agent, opts: { instructions?: string } = {}): Synthesizer {
+export function agentSynthesizer(agent: Agent, opts: AgentSynthesizerOptions = {}): Synthesizer {
   const instructions = opts.instructions
     ?? 'Combine the worker results below into a single, coherent answer to the task. Resolve overlaps and contradictions; do not just concatenate.'
 
