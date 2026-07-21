@@ -200,7 +200,9 @@ export function startBackgroundServices(deps: BackgroundServiceDeps): Background
             const meta = (await readLiveMetas(project.path).catch(() => [])).find(run => run.id === runId)
             if (meta) return readConversation(meta.cwd, runId).catch(() => [])
           }
-          return []
+          // No live meta anywhere: the run archived (or its project was removed). The mirror
+          // counts these and releases the binding, so per-poll IO stops growing (#941).
+          return undefined
         },
         post: (channelId, text) => postMessage(botToken, channelId, text),
         enabled: botEnabled,
