@@ -142,6 +142,9 @@ export async function gitBusy(
   return undefined
 }
 
+/** The everyday no-op outcome. Named so the poller can tell it apart from a real failure. */
+const NOTHING_PENDING = 'no conversation changes'
+
 /**
  * Stage and commit the pending conversations under `cwd`, scoped to {@link CONVERSATIONS_PATHSPEC}.
  *
@@ -160,7 +163,7 @@ export async function commitConversations(
   if (busy) return { committed: false, reason: busy }
 
   const files = await pendingConversations(cwd, git)
-  if (files.length === 0) return { committed: false, reason: 'no conversation changes' }
+  if (files.length === 0) return { committed: false, reason: NOTHING_PENDING }
 
   try {
     await git(['add', '--', CONVERSATIONS_PATHSPEC], cwd)
@@ -211,6 +214,8 @@ export interface ConversationCommitterOptions {
 interface Pending {
   fingerprint: string
   since: number
+  /** The last failure already announced, so a stuck project logs on change rather than per poll. */
+  loggedReason: string | undefined
 }
 
 /**
@@ -254,8 +259,9 @@ export function startConversationCommitter(opts: ConversationCommitterOptions): 
         // Settled (nothing changed since the last poll), or dirty long enough that waiting for
         // quiet is no longer worth it.
         const settled = previous?.fingerprint === fingerprint || now() - since >= maxWaitMs
+        const loggedReason = previous?.loggedReason
         if (!settled) {
-          pending.set(project.path, { fingerprint, since })
+          pending.set(project.path, { fingerprint, since, loggedReason })
           continue
         }
         const outcome = await commitConversations(project.path, git, exists)
@@ -265,7 +271,13 @@ export function startConversationCommitter(opts: ConversationCommitterOptions): 
         } else {
           // A busy repo or a rejected commit keeps its place, so the next window retries it
           // rather than starting the idle count over.
-          pending.set(project.path, { fingerprint, since })
+          const reason = outcome.reason === NOTHING_PENDING ? undefined : outcome.reason
+          // Announced on change only: this is a poll, so logging every failure would repeat the
+          // same line forever while a project stays stuck.
+          if (reason !== undefined && reason !== loggedReason) {
+            opts.log?.(`[framework] conversation commit failed in ${project.name}: ${reason}`)
+          }
+          pending.set(project.path, { fingerprint, since, loggedReason: reason })
         }
       }
       // Drop state for projects that went away, so the map cannot grow without bound.

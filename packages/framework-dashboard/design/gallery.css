@@ -1,0 +1,6 @@
+/* The gallery's stylesheet is the shipped one, unchanged, so a card cannot drift from the app.
+   The extra @source lines keep Tailwind scanning the preview files themselves. */
+@import '../layouts/tailwind.css';
+
+@source '../components';
+@source './previews.tsx';
