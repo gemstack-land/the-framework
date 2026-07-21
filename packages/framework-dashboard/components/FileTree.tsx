@@ -157,9 +157,22 @@ export function FileTree({
         value={query}
         onChange={e => setQuery(e.target.value)}
         placeholder="Filter files…"
+        aria-label="Filter files"
         className="mb-2 w-full rounded border border-border bg-background px-2 py-1 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-[var(--color-primary)]"
       />
-      <Files className="min-h-0 flex-1 text-sm">{renderNode(tree)}</Files>
+      {/* A query with zero hits used to render an empty pane, which reads as broken (#948). */}
+      {query.trim() && visible.length === 0 ? (
+        <p className="px-1 py-2 text-xs text-muted-foreground">No files match &ldquo;{query.trim()}&rdquo;.</p>
+      ) : (
+        <>
+          {query.trim() && (
+            <p className="px-1 pb-1 text-[10px] text-muted-foreground">
+              {visible.length} of {files.length} files
+            </p>
+          )}
+          <Files className="min-h-0 flex-1 text-sm">{renderNode(tree)}</Files>
+        </>
+      )}
     </div>
   )
 }
