@@ -121,7 +121,8 @@ export function startBackgroundServices(deps: BackgroundServiceDeps): Background
           keyOf: interventionKey,
           onNew: async items => {
             if (!discordNotificationEnabled(await prefs(), 'notifyHumanIntervention')) return
-            await postInterventionsDiscord(webhook, items).catch(() => {})
+            const delivered = await postInterventionsDiscord(webhook, items).catch(() => false)
+            if (!delivered) log('[framework] could not post a needs-you batch to the Discord webhook')
           },
         }),
         startKeyedWatcher({
@@ -130,7 +131,8 @@ export function startBackgroundServices(deps: BackgroundServiceDeps): Background
           keyOf: activityKey,
           onNew: async items => {
             if (!discordNotificationEnabled(await prefs(), 'notifyNewActivity')) return
-            await postActivityDiscord(webhook, items).catch(() => {})
+            const delivered = await postActivityDiscord(webhook, items).catch(() => false)
+            if (!delivered) log('[framework] could not post an activity batch to the Discord webhook')
           },
         }),
       ]

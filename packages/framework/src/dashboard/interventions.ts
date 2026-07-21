@@ -192,16 +192,19 @@ export function interventionLine(item: Intervention): string {
   return `#${item.number} ${item.title} — ${item.url}`
 }
 
-/** Post the given interventions to a Discord webhook as one message. `fetch` is injectable for tests. */
+/**
+ * Post the given interventions to a Discord webhook as one message, resolving whether Discord
+ * accepted it (#940). `fetch` is injectable for tests.
+ */
 export async function postInterventionsDiscord(
   webhook: string,
   items: Intervention[],
   fetchImpl: typeof fetch = fetch,
-): Promise<void> {
-  if (items.length === 0) return
+): Promise<boolean> {
+  if (items.length === 0) return true
   const content =
     items.length === 1
       ? `🔔 Needs you (${items[0]!.projectName}): ${interventionLine(items[0]!)}`
       : `🔔 ${items.length} items need you:\n${items.map(i => `• ${interventionLine(i)}`).join('\n')}`
-  await postDiscordWebhook(webhook, content, fetchImpl)
+  return postDiscordWebhook(webhook, content, fetchImpl)
 }
