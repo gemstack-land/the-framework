@@ -21,6 +21,8 @@ export interface LiveEvents {
   events: FrameworkEvent[]
   /** True while the stream is lost and being retried — the feed may be behind reality. */
   lost: boolean
+  /** The server closed the channel on purpose (relay stream ended, unknown run) — final. */
+  done: boolean
 }
 
 /** Retry delays for a lost stream: quick first, then settle at a slow poll. */
@@ -33,6 +35,7 @@ function retryDelay(attempt: number): number {
 export function useLiveEvents(projectId: string | null, runId?: string | null, resetKey?: unknown): LiveEvents {
   const [events, setEvents] = useState<FrameworkEvent[]>([])
   const [lost, setLost] = useState(false)
+  const [done, setDone] = useState(false)
 
   // Drop the accumulated feed at a run boundary the caller knows about (a fresh Start bumps
   // `resetKey`), WITHOUT tearing down the subscription. The new run truncates events.jsonl a
@@ -47,6 +50,7 @@ export function useLiveEvents(projectId: string | null, runId?: string | null, r
   useEffect(() => {
     setEvents([])
     setLost(false)
+    setDone(false)
     if (!projectId) return
     let channel: ClientChannel<never, FrameworkEvent> | undefined
     let cancelled = false
@@ -82,6 +86,7 @@ export function useLiveEvents(projectId: string | null, runId?: string | null, r
         })
         ch.onClose(err => {
           if (err) retry()
+          else if (!cancelled) setDone(true)
         })
       }, retry)
     }
@@ -99,5 +104,5 @@ export function useLiveEvents(projectId: string | null, runId?: string | null, r
   // boundaries (it only resets on a project switch), so without this a second run would show
   // the previous run's log until it finished. See {@link currentRunEvents}.
   const scoped = useMemo(() => currentRunEvents(events), [events])
-  return { events: scoped, lost }
+  return { events: scoped, lost, done }
 }
