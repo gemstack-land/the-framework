@@ -20,6 +20,8 @@ import type {
   ProviderRequestOptions,
   ProviderResponse,
   StreamChunk,
+  TokenUsage,
+  FinishReason,
   ToolDefinitionSchema,
   AiMessage,
   ToolCall,
@@ -143,6 +145,9 @@ export class OpenAIAdapter implements ProviderAdapter {
       model: this.model,
       messages,
       stream: true,
+      // OpenAI omits usage from a streamed completion unless this is set, so
+      // without it every streamed call reports nothing to budget accounting.
+      stream_options: { include_usage: true },
     }
     if (options.maxTokens) params['max_tokens'] = options.maxTokens
     if (options.temperature !== undefined) params['temperature'] = options.temperature
@@ -156,7 +161,20 @@ export class OpenAIAdapter implements ProviderAdapter {
 
     const stream = await client.chat.completions.create(params, options.signal ? { signal: options.signal } : undefined)
 
+    let streamUsage: TokenUsage | undefined
+    let streamFinishReason: FinishReason | undefined
+
     for await (const chunk of stream) {
+      // The usage-bearing chunk arrives last and carries an empty `choices`
+      // array, so it has to be read before the guard below discards it.
+      if (chunk.usage) {
+        streamUsage = {
+          promptTokens:     chunk.usage.prompt_tokens ?? 0,
+          completionTokens: chunk.usage.completion_tokens ?? 0,
+          totalTokens:      chunk.usage.total_tokens ?? 0,
+        }
+      }
+
       const choice = chunk.choices?.[0]
       if (!choice) continue
       const delta = choice.delta
@@ -191,15 +209,17 @@ export class OpenAIAdapter implements ProviderAdapter {
       }
 
       if (choice.finish_reason) {
-        yield {
-          type: 'finish',
-          finishReason: choice.finish_reason === 'tool_calls' ? 'tool_calls' : 'stop',
-          usage: chunk.usage ? {
-            promptTokens: chunk.usage.prompt_tokens ?? 0,
-            completionTokens: chunk.usage.completion_tokens ?? 0,
-            totalTokens: chunk.usage.total_tokens ?? 0,
-          } : undefined,
-        }
+        streamFinishReason = mapOpenAIFinishReason(choice.finish_reason)
+      }
+    }
+
+    // Emitted after the loop because usage lands on a later chunk than the one
+    // carrying `finish_reason`.
+    if (streamFinishReason) {
+      yield {
+        type: 'finish',
+        finishReason: streamFinishReason,
+        ...(streamUsage ? { usage: streamUsage } : {}),
       }
     }
   }
@@ -433,7 +453,23 @@ function fromOpenAIResponse(response: any): ProviderResponse {
       completionTokens: response.usage?.completion_tokens ?? 0,
       totalTokens: response.usage?.total_tokens ?? 0,
     },
-    finishReason: choice?.finish_reason === 'tool_calls' ? 'tool_calls' : 'stop',
+    finishReason: choice?.finish_reason ? mapOpenAIFinishReason(choice.finish_reason) : 'stop',
+  }
+}
+
+/**
+ * Map an OpenAI finish reason onto the neutral {@link FinishReason}. Without
+ * this, a `max_tokens` truncation and a content-filter stop both report a clean
+ * `stop`, so a caller cannot tell a complete answer from a cut-off one.
+ */
+export function mapOpenAIFinishReason(reason: string): FinishReason {
+  switch (reason) {
+    case 'tool_calls':
+    case 'function_call':
+      return 'tool_calls'
+    case 'length':          return 'length'
+    case 'content_filter':  return 'content_filter'
+    default:                return 'stop'
   }
 }
 
