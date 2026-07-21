@@ -80,6 +80,13 @@ export async function mcpClientTools(
 // Internals
 // ─────────────────────────────────────────────────────────────────
 
+/** A single `notifications/progress` payload, as the SDK hands it to `onprogress`. */
+interface McpProgress {
+  progress: number
+  total?:   number
+  message?: string
+}
+
 /** Tool metadata as returned by a remote MCP server's `listTools()`. */
 interface RemoteTool {
   name:        string
@@ -97,7 +104,7 @@ interface MinimalClient {
   callTool(
     params: { name: string; arguments?: Record<string, unknown> },
     resultSchema?: unknown,
-    options?: { onprogress?: (p: { progress: number; total?: number; message?: string }) => void },
+    options?: { onprogress?: (p: McpProgress) => void },
   ): Promise<{ content: unknown[]; isError?: boolean }>
   close(): Promise<void>
 }
@@ -122,8 +129,33 @@ async function resolveClient(
   const sdkTransport = await buildTransport(transport)
 
   const client = new Client(CLIENT_INFO)
-  await (client as unknown as { connect(t: unknown): Promise<void> }).connect(sdkTransport)
+  await connectOrClose(client as unknown as ConnectableClient, sdkTransport)
   return { client, ownsClient: true }
+}
+
+/** The slice of the SDK `Client` the connect path needs. */
+interface ConnectableClient {
+  connect(t: unknown): Promise<void>
+  close():             Promise<void>
+}
+
+/**
+ * Connect, tearing down the transport when the handshake fails. The SDK does not
+ * clean up if `transport.start()` rejects, and only fires an unawaited `close()`
+ * on an initialize failure, so a stdio subprocess or HTTP session can outlive a
+ * failed `connect()` and a retrying caller leaks one per attempt.
+ *
+ * @internal Exported for tests. Not re-exported from the package entry.
+ */
+export async function connectOrClose(client: ConnectableClient, sdkTransport: unknown): Promise<void> {
+  try {
+    await client.connect(sdkTransport)
+  } catch (err) {
+    await safeClose(client)
+    // Also close the transport directly: on an early failure the client may not own it yet.
+    await safeCloseTransport(sdkTransport)
+    throw err
+  }
 }
 
 async function buildTransport(transport: McpClientTransport): Promise<unknown> {
@@ -151,8 +183,14 @@ async function buildTransport(transport: McpClientTransport): Promise<unknown> {
   throw new Error(`mcpClientTools: unsupported transport shape: ${typeof transport}`)
 }
 
-async function safeClose(client: MinimalClient): Promise<void> {
+async function safeClose(client: { close(): Promise<void> }): Promise<void> {
   try { await client.close() } catch { /* best-effort */ }
+}
+
+async function safeCloseTransport(sdkTransport: unknown): Promise<void> {
+  const close = (sdkTransport as { close?: () => unknown } | null | undefined)?.close
+  if (typeof close !== 'function') return
+  try { await close.call(sdkTransport) } catch { /* best-effort */ }
 }
 
 function buildTool(
@@ -171,18 +209,36 @@ function buildTool(
 
   if (streaming) {
     const built = builder.server(async function* (input: unknown, _ctx?: ToolCallContext) {
-      const collected: Array<{ progress: number; total?: number; message?: string }> = []
-      const result = await client.callTool(
+      const pending: McpProgress[] = []
+      let wake: (() => void) | undefined
+      let settled = false
+      let failed  = false
+      let result:  { content: unknown[]; isError?: boolean } | undefined
+      let failure: unknown
+
+      // Never rejects — the outcome is replayed below, once the queue is drained.
+      const call = client.callTool(
         { name: remote.name, arguments: (input ?? {}) as Record<string, unknown> },
         undefined,
-        { onprogress: (p) => collected.push(p) },
-      )
-      // SDK delivers progress notifications synchronously into onprogress during
-      // the request lifetime, so by the time we're here all progress events have
-      // arrived. Yielding them before returning preserves the observable order
-      // (tool-update chunks land before tool-result).
-      for (const p of collected) yield p
-      return mcpContentToString(result)
+        { onprogress: (p) => { pending.push(p); wake?.() } },
+      ).then(
+        (r) => { result  = r },
+        (e) => { failed = true; failure = e },
+      ).finally(() => { settled = true; wake?.() })
+
+      // Yield each progress event as it lands, so a consumer sees tool-update
+      // chunks while the remote tool is still running. The last drain still runs
+      // before the return, so every chunk keeps landing ahead of the tool-result.
+      for (;;) {
+        while (pending.length > 0) yield pending.shift()!
+        if (settled) break
+        await new Promise<void>((resolve) => { wake = resolve })
+        wake = undefined
+      }
+
+      await call
+      if (failed) throw failure
+      return mcpContentToString(result!)
     })
     return built as unknown as Tool
   }

@@ -42,7 +42,9 @@ export interface McpClientToolsOptions {
   namePrefix?: string
   /**
    * Forward MCP `notifications/progress` from the remote server as `tool-update`
-   * chunks during agent execution. Defaults to `true`.
+   * chunks during agent execution. Each notification is yielded as it arrives,
+   * while the remote tool is still running, and every chunk lands before the
+   * tool's result. Defaults to `true`.
    */
   streaming?: boolean
 }
