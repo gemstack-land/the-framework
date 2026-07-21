@@ -18,6 +18,7 @@ export function RunResumeChat({
   driver,
   files,
   addContext,
+  removeContext,
   onRunStarted,
   sessionName,
   outcome,
@@ -31,6 +32,8 @@ export function RunResumeChat({
   driver?: string | undefined
   files: string[]
   addContext: (path: string) => void
+  /** Drop a path from the run Context when its chip leaves the editor (#948). */
+  removeContext?: ((path: string) => void) | undefined
   onRunStarted: (intent: string, runId?: string) => void
   /** This session's name (#874), so a preset launched here targets it by default. */
   sessionName?: string | undefined
@@ -79,6 +82,7 @@ export function RunResumeChat({
         ref={composerRef}
         files={files}
         addContext={addContext}
+        removeContext={removeContext}
         onSubmit={send}
         busy={busy}
         submitLabel="Send"

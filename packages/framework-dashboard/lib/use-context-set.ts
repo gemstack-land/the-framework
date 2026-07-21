@@ -7,11 +7,20 @@ import { useState } from 'react'
 export function useContextSet(): {
   context: Set<string>
   add: (path: string) => void
+  remove: (path: string) => void
   toggle: (path: string) => void
   reset: () => void
 } {
   const [context, setContext] = useState<Set<string>>(new Set())
   const add = (path: string) => setContext(prev => (prev.has(path) ? prev : new Set(prev).add(path)))
+  // For a deleted `@`/`#` chip (#948): the editor and the Context set must not diverge.
+  const remove = (path: string) =>
+    setContext(prev => {
+      if (!prev.has(path)) return prev
+      const next = new Set(prev)
+      next.delete(path)
+      return next
+    })
   const toggle = (path: string) =>
     setContext(prev => {
       const next = new Set(prev)
@@ -19,5 +28,5 @@ export function useContextSet(): {
       return next
     })
   const reset = () => setContext(new Set())
-  return { context, add, toggle, reset }
+  return { context, add, remove, toggle, reset }
 }

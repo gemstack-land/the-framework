@@ -18,6 +18,7 @@ export function RunLive({
   events,
   files,
   addContext,
+  removeContext,
   lost = false,
 }: {
   projectId: string
@@ -26,6 +27,7 @@ export function RunLive({
   events: FrameworkEvent[]
   files: string[]
   addContext: (path: string) => void
+  removeContext?: ((path: string) => void) | undefined
   /** The live channel's health (#948) — surfaced as a banner over the feed. */
   lost?: boolean
 }) {
@@ -39,7 +41,7 @@ export function RunLive({
           falls back to the project root and would report the user's own dirty files as the run's. */}
       {runId && <RunChanges projectId={projectId} runId={runId} />}
       <RunFeed events={events} showSessionLink={false} lost={lost} />
-      <RunChat projectId={projectId} runId={runId} files={files} addContext={addContext} sessionName={sessionName} />
+      <RunChat projectId={projectId} runId={runId} files={files} addContext={addContext} removeContext={removeContext} sessionName={sessionName} />
     </>
   )
 }

@@ -70,6 +70,8 @@ export const Composer = forwardRef<ComposerHandle, {
   files: string[]
   /** Add a path to the run Context (from an `@`/`#` mention). */
   addContext: (path: string) => void
+  /** Drop a path from the run Context when its `@`/`#` chip leaves the editor (#948). */
+  removeContext?: ((path: string) => void) | undefined
   /** Run the composed text. `kind` is `prompt` once a preset was loaded, else `build`. */
   onSubmit: (text: string, kind: 'build' | 'prompt') => void | Promise<void>
   /** Mirror the live prompt + kind out, so the launcher can drive its disclosure/context UI. */
@@ -95,7 +97,7 @@ export const Composer = forwardRef<ComposerHandle, {
    *  session exists yet. */
   sessionName?: string | undefined
 }>(function Composer(
-  { files, addContext, onSubmit, onPromptChange, onPreset, busy, submitLabel, submitBusyLabel, placeholder, showShortcutHint = false, compact = false, showAgentModel = true, sessionName },
+  { files, addContext, removeContext, onSubmit, onPromptChange, onPreset, busy, submitLabel, submitBusyLabel, placeholder, showShortcutHint = false, compact = false, showAgentModel = true, sessionName },
   ref,
 ) {
   const [prompt, setPrompt] = useState('')
@@ -214,6 +216,7 @@ export const Composer = forwardRef<ComposerHandle, {
       onPreset={loadPreset}
       onMentionProject={addContext}
       onMentionFile={addContext}
+      {...(removeContext ? { onMentionRemoved: removeContext } : {})}
       projects={projects}
       files={files}
       presets={presets}

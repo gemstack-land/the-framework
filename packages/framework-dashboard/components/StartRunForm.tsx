@@ -21,6 +21,7 @@ export function StartRunForm({
   files,
   context,
   addContext,
+  removeContext,
   toggleContext,
 }: {
   projectId: string
@@ -31,6 +32,8 @@ export function StartRunForm({
   context: Set<string>
   /** Add a path to the Context (from an `@`/`#` mention). */
   addContext: (path: string) => void
+  /** Drop a path from the Context when its `@`/`#` chip leaves the editor (#948). */
+  removeContext: (path: string) => void
   /** Toggle a path in the Context (from a repo checkbox). */
   toggleContext: (path: string) => void
 }) {
@@ -90,6 +93,7 @@ export function StartRunForm({
         ref={composerRef}
         files={files}
         addContext={addContext}
+        removeContext={removeContext}
         onSubmit={submit}
         onPromptChange={value => {
           setPrompt(value)
@@ -125,8 +129,9 @@ export function StartRunForm({
         busy={busy}
       />
 
-      {(otherProjects.length > 0 || contextFiles.length > 0) && (
-        <div className="mt-3 text-xs text-muted-foreground">
+      {/* Always rendered (#948): hiding the whole section for a single-project setup also hid
+          the only place that teaches the `#` / Files-tab focus flow. */}
+      <div className="mt-3 text-xs text-muted-foreground">
           <DisclosureToggle open={showContext} onToggle={() => setShowContext(s => !s)}>
             Context{contextSummary && <span className="text-primary"> · {contextSummary}</span>}
           </DisclosureToggle>
@@ -162,8 +167,7 @@ export function StartRunForm({
               </div>
             </div>
           )}
-        </div>
-      )}
+      </div>
 
       {error && <p className="mt-2 text-xs text-red-500">{error}</p>}
       {note && !error && <p className="mt-2 text-xs text-muted-foreground">{note}</p>}

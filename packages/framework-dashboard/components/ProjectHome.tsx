@@ -14,6 +14,7 @@ export function ProjectHome({
   files,
   context,
   addContext,
+  removeContext,
   toggleContext,
 }: {
   projectId: string
@@ -22,6 +23,7 @@ export function ProjectHome({
   files: string[]
   context: Set<string>
   addContext: (path: string) => void
+  removeContext: (path: string) => void
   toggleContext: (path: string) => void
 }) {
   return (
@@ -33,6 +35,7 @@ export function ProjectHome({
         files={files}
         context={context}
         addContext={addContext}
+        removeContext={removeContext}
         toggleContext={toggleContext}
       />
       {events.length > 0 && <RunOverview events={events} />}

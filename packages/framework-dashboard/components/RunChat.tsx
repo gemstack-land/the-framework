@@ -14,6 +14,7 @@ export function RunChat({
   runId,
   files,
   addContext,
+  removeContext,
   sessionName,
 }: {
   projectId: string
@@ -23,6 +24,8 @@ export function RunChat({
   files: string[]
   /** Add a path to the run Context (from an `@`/`#` mention). */
   addContext: (path: string) => void
+  /** Drop a path from the run Context when its chip leaves the editor (#948). */
+  removeContext?: ((path: string) => void) | undefined
   /** This session's name (#874), so a preset launched here targets it by default. */
   sessionName?: string | undefined
 }) {
@@ -59,6 +62,7 @@ export function RunChat({
         ref={composerRef}
         files={files}
         addContext={addContext}
+        removeContext={removeContext}
         onSubmit={send}
         busy={busy}
         submitLabel="Send"

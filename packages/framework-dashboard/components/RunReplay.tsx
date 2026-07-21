@@ -19,12 +19,14 @@ export function RunReplay({
   runId,
   files,
   addContext,
+  removeContext,
   onRunStarted,
 }: {
   projectId: string
   runId: string
   files: string[]
   addContext: (path: string) => void
+  removeContext?: ((path: string) => void) | undefined
   onRunStarted: (intent: string) => void
 }) {
   // null until the first answer: "Loading session…" and "no events" are different things.
@@ -65,7 +67,7 @@ export function RunReplay({
         <EventList events={events} stick={false} openAt="end" />
       )}
       {sessionId ? (
-        <RunResumeChat projectId={projectId} runId={runId} sessionId={sessionId} driver={session?.driver} files={files} addContext={addContext} onRunStarted={onRunStarted} sessionName={sessionName} outcome={runOutcome(events)} />
+        <RunResumeChat projectId={projectId} runId={runId} sessionId={sessionId} driver={session?.driver} files={files} addContext={addContext} removeContext={removeContext} onRunStarted={onRunStarted} sessionName={sessionName} outcome={runOutcome(events)} />
       ) : (
         events.length > 0 && (
           // Say why there is no composer here, instead of a wordless dead-end (#948).

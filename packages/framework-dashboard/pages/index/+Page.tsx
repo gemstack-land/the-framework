@@ -78,7 +78,7 @@ export default function Page() {
   // The run Context set lives in the shell (#492/#504) so the two surfaces that feed it share
   // one source of truth: the `#` file chips + whole-repo Context selector in the Start form
   // (main pane), and the file tree in the right rail.
-  const { context, add: addContext, toggle: toggleContext, reset: resetContext } = useContextSet()
+  const { context, add: addContext, remove: removeContext, toggle: toggleContext, reset: resetContext } = useContextSet()
 
   // The picked context is one project's, so changing projects starts fresh. Keyed off the route
   // rather than the click, because Back/Forward change projects too.
@@ -132,6 +132,8 @@ export default function Page() {
   const onRunStarted = (intent: string, startedId?: string) => {
     setRunStart(prev => ({ tick: prev.tick + 1, intent, id: startedId ?? null }))
     setAdopting(startedId === undefined)
+    // The picked context went with that run; the next launch starts from a clean focus (#948).
+    resetContext()
     // Go to the run we just started — a real history entry, so Back returns to where you launched
     // from. Its row does not exist yet; the main pane shows it live on the strength of the id.
     if (startedId !== undefined) go({ projectId, runId: startedId })
@@ -218,7 +220,7 @@ export default function Page() {
     if (runId === null) {
       // Just pressed Start on a project with no worktree: follow the live output until the poll
       // surfaces the run and the effect above adopts its id.
-      if (adopting) return <RunLive projectId={projectId} runId={null} events={events} files={files} addContext={addContext} lost={lost} />
+      if (adopting) return <RunLive projectId={projectId} runId={null} events={events} files={files} addContext={addContext} removeContext={removeContext} lost={lost} />
       return (
         <ProjectHome
           projectId={projectId}
@@ -227,6 +229,7 @@ export default function Page() {
           files={files}
           context={context}
           addContext={addContext}
+          removeContext={removeContext}
           toggleContext={toggleContext}
         />
       )
@@ -236,7 +239,7 @@ export default function Page() {
       // list we have not read yet. Both are live views; only a session that is genuinely absent
       // from a list we did read is gone.
       if (runId === runStart.id || !runsLoaded)
-        return <RunLive projectId={projectId} runId={runId} events={events} files={files} addContext={addContext} lost={lost} />
+        return <RunLive projectId={projectId} runId={runId} events={events} files={files} addContext={addContext} removeContext={removeContext} lost={lost} />
       return (
         <NotFound
           title="This session is gone"
@@ -247,8 +250,8 @@ export default function Page() {
       )
     }
     if (selectedRun.status === 'running')
-      return <RunLive projectId={projectId} runId={runId} events={events} files={files} addContext={addContext} lost={lost} />
-    return <RunReplay projectId={projectId} runId={runId} files={files} addContext={addContext} onRunStarted={onRunStarted} />
+      return <RunLive projectId={projectId} runId={runId} events={events} files={files} addContext={addContext} removeContext={removeContext} lost={lost} />
+    return <RunReplay projectId={projectId} runId={runId} files={files} addContext={addContext} removeContext={removeContext} onRunStarted={onRunStarted} />
   }
 
   return (
