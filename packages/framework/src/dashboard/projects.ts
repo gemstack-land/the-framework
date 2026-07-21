@@ -3,7 +3,7 @@ import { listProjects, type ProjectRecord } from '../registry.js'
 import { isActivated } from '../project.js'
 import { loadFrameworkConfig, type FrameworkFileConfig } from '../config.js'
 import { readLogs, type LogEntry } from '../logs.js'
-import { listRuns, readLiveMetas, type LiveRun, type RunMeta } from '../store/index.js'
+import { readAllRuns, type RunMeta } from '../store/index.js'
 
 /**
  * The multi-project read side (#392): projects the daemon serves come from the
@@ -45,19 +45,6 @@ export interface SummarizeDeps {
 }
 
 /** A project's runs, live prepended to the archived history. Forgiving: a failed read is `[]`. */
-async function readAllRuns(path: string): Promise<RunMeta[]> {
-  const [archived, live] = await Promise.all([
-    listRuns(path).catch(() => [] as RunMeta[]),
-    readLiveMetas(path).catch(() => [] as LiveRun[]),
-  ])
-  // Dedup by id like every other reader: a live run that has since been archived is one run.
-  // Live wins over archived (#768). The dedup used to drop the live copy, which was right while
-  // "archived" meant "finished for good": a run was only ever copied into `runs/` on its way out.
-  // Continuing a run (#762) breaks that — the run has an archived copy from its first leg AND is
-  // live again — and keeping the archive showed a running run as finished.
-  return [...live, ...archived.filter(run => !live.some(l => l.id === run.id))]
-}
-
 /**
  * Derive a {@link ProjectSummary} from a registry record: its display name, whether
  * it is still activated, and its last activity (the newest `LOGS.md` entry, since

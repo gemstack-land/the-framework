@@ -742,3 +742,23 @@ export function nodeStoreFs(): StoreFs {
   const { read, write, append, exists, mkdir, readdir } = nodeFs()
   return { read, write, append, exists, mkdir, readdir }
 }
+
+/**
+ * A project's runs: the live ones prepended to the archived history, newest-first. Forgiving —
+ * a side that cannot be read simply contributes nothing.
+ *
+ * Live wins over archived (#768). The dedup used to drop the live copy, which was right while
+ * "archived" meant "finished for good": a run was only ever copied into `runs/` on its way out.
+ * Continuing a run (#762) breaks that — the run has an archived copy from its first leg AND is
+ * live again — and keeping the archive showed a running run as finished.
+ *
+ * This composition, not its two halves, is what every caller actually wants; the store exporting
+ * only the halves is why three separate modules each grew their own copy of it.
+ */
+export async function readAllRuns(cwd: string, fs: StoreFs = nodeStoreFs()): Promise<RunMeta[]> {
+  const [archived, live] = await Promise.all([
+    listRuns(cwd, fs).catch(() => [] as RunMeta[]),
+    readLiveMetas(cwd, fs).catch(() => [] as LiveRun[]),
+  ])
+  return [...live, ...archived.filter(run => !live.some(l => l.id === run.id))]
+}
