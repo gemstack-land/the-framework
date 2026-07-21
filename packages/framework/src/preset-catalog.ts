@@ -50,8 +50,13 @@ export const presets = {
   /** [Security audit] (#461). */
   securityAudit: definePreset({ name: 'security-audit', template: PRESETS_SECURITY_AUDIT, what: 'What to security-audit', label: 'Security audit' }),
 
-  /** [UX review] (#472). */
-  ux: definePreset({ name: 'ux', template: PRESETS_UX, what: 'What to review the UX of', label: 'UX' }),
+  /**
+   * [UX (auto)] (#962, replacing #472's gated prompt): rate every UI flow, then fix the low
+   * scorers. Unattended by design — it ends in work rather than in `<AWAIT>`, so a run started
+   * from it finishes on its own. A gated sibling that offers its ratings as choices is #962's
+   * stated follow-up and belongs beside this row, not inside it.
+   */
+  ux: definePreset({ name: 'ux', template: PRESETS_UX, what: 'What to review the UX of', label: 'UX (auto)' }),
 
   /**
    * [Maintenance] (#881/#882): the periodic codebase sweep. Note `${{ }}` fragments cannot nest (the
@@ -64,7 +69,7 @@ export const presets = {
 
   /**
    * [Market research] (#694). Its prompt defines `<SESSION_NAME>` itself rather than reading
-   * `${{ tf.session_name }}`: the session name does not exist yet when a preset renders.
+   * `${{ tf.session_name }}`: it is launched from the launcher, where no session exists yet.
    */
   marketResearch: definePreset({ name: 'market-research', template: PRESETS_MARKET_RESEARCH, label: 'Market research' }),
 

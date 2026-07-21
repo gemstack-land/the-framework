@@ -13,7 +13,7 @@ const PARAMETERIZED = [
   { preset: presets.readability, defaultOut: /^Refactor entire codebase to make it/, custom: 'the dashboard package', customOut: /^Refactor the dashboard package to make it/ },
   { preset: presets.research, defaultOut: /problem variability" of entire codebase/, custom: 'the auth flow', customOut: /problem variability" of the auth flow/ },
   { preset: presets.securityAudit, defaultOut: /^Security audit entire codebase/, custom: 'the auth package', customOut: /^Security audit the auth package/ },
-  { preset: presets.ux, defaultOut: /^Thoroughly review UX of entire codebase/, custom: 'the settings page', customOut: /^Thoroughly review UX of the settings page/ },
+  { preset: presets.ux, defaultOut: /^Review all UI flows of entire codebase/, custom: 'the settings page', customOut: /^Review all UI flows of the settings page/ },
   { preset: presets.maintenance, defaultOut: /^Analyze entire codebase and/, custom: 'the auth package', customOut: /^Analyze the auth package and/ },
 ] as const
 
@@ -86,11 +86,23 @@ test('the quality presets carry their #326 instructions', () => {
   assert.match(presets.securityAudit.template, /verdict/)
   assert.match(presets.securityAudit.template, /each security issue in a separate commit/)
 
-  assert.match(presets.ux.template, /^Thoroughly review UX/)
-  assert.match(presets.ux.template, /usability perspective/)
-  assert.match(presets.ux.template, /showChoices\(\)/)
-  assert.match(presets.ux.template, /<AWAIT>/)
-  assert.match(presets.ux.template, /Work on all accepted proposals/)
+  assert.match(presets.ux.template, /^Review all UI flows/)
+  assert.match(presets.ux.template, /DON'T skip any UI flow \(100% coverage\)/)
+  assert.match(presets.ux.template, /10: perfect UX, 0: unusable UX/)
+  assert.match(presets.ux.template, /Separate commit for each UI flow you improved/)
+  assert.match(presets.ux.template, /old rating => new rating with link to commits/)
+})
+
+test('UX runs to completion instead of gating on a human (#962)', () => {
+  // The "(auto)" in the label is the contract: it rates, then fixes, so a run started from it
+  // finishes on its own. The gated sibling that offers its ratings as choices is #962's follow-up.
+  const out = presets.ux.render()
+  assert.equal(out.includes('<AWAIT>'), false)
+  assert.equal(out.includes('<SHOW_CHOICES>'), false)
+  assert.equal(out.includes('showChoices'), false)
+  // The laziness guard is the load-bearing half of the prompt: without it the ratings come back
+  // all-10s and nothing gets fixed.
+  assert.match(out, /that's a sign you've been lazy/)
 })
 
 test('Research gates on a multi-select and writes its own review/TODO files (#331)', () => {
