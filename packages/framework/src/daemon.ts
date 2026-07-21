@@ -27,6 +27,7 @@ import {
   type SuspendedRun,
 } from './store/index.js'
 import { startDashboard, type Dashboard, type StartRunKind, type StartRunOptions, type StartRunResult, type AddProjectResult, type PreviewResult, type PreviewStatus } from './dashboard/index.js'
+import type { PreviewHandlers } from './dashboard/telefunc-serve.js'
 import { defaultQuotaSource } from './dashboard/quota.js'
 import { startBackgroundServices, resumeSuspendedRuns } from './daemon-services.js'
 import { isSafeVia } from './conversations.js'
@@ -471,10 +472,7 @@ export async function runDaemon(cwd: string, opts: RunDaemonOptions = {}): Promi
     quota,
     onStart: runtime.onStart,
     onAddProject: runtime.onAddProject,
-    onPreview: runtime.onPreview,
-    onServeTargets: runtime.onServeTargets,
-    onStopPreview: runtime.onStopPreview,
-    onPreviewStatus: runtime.onPreviewStatus,
+    preview: runtime.preview,
     ...(clientBundleDir ? { clientBundleDir } : {}),
   })
 
@@ -552,10 +550,8 @@ interface ProjectRuntimeOptions {
 interface ProjectRuntime {
   onStart: (prompt: string, kind: StartRunKind, options?: StartRunOptions, targetProjectId?: string) => Promise<StartRunResult>
   onAddProject: (path: string, directory: boolean) => Promise<AddProjectResult>
-  onPreview: (targetProjectId?: string, targetId?: string) => Promise<PreviewResult>
-  onServeTargets: (targetProjectId?: string) => Promise<ServeTarget[]>
-  onStopPreview: (targetProjectId?: string) => Promise<void>
-  onPreviewStatus: (targetProjectId?: string) => PreviewStatus
+  /** The Preview handler set (#475/#797), handed to the dashboard as one value so `runId` survives. */
+  preview: PreviewHandlers
   /** Live runs on a project (#685), so a background job can tell an idle project from a busy one. */
   activeRunCount: (targetProjectId: string) => number
   /**
@@ -927,7 +923,14 @@ function createProjectRuntime({ cwd, env, binPath }: ProjectRuntimeOptions): Pro
     activePreviews.clear()
   }
 
-  return { onStart, onAddProject, onPreview, onServeTargets, onStopPreview, onPreviewStatus, activeRunCount, suspendRuns, dispose }
+  return {
+    onStart,
+    onAddProject,
+    preview: { start: onPreview, targets: onServeTargets, stop: onStopPreview, status: onPreviewStatus },
+    activeRunCount,
+    suspendRuns,
+    dispose,
+  }
 }
 
 /** Resolve on SIGINT/SIGTERM, or when the optional abort signal fires. */
