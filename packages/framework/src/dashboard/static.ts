@@ -14,6 +14,15 @@ async function isFile(path: string): Promise<boolean> {
   return stat(path).then(s => s.isFile()).catch(() => false)
 }
 
+/** Decode a percent-encoded path; a malformed escape names no file, so it decodes to nothing. */
+function tryDecode(pathname: string): string {
+  try {
+    return decodeURIComponent(pathname)
+  } catch {
+    return ''
+  }
+}
+
 /**
  * Serve `dir`'s static bundle for this request: the requested file when it exists,
  * otherwise `index.html` (the SPA fallback, so client routes and unknown paths still
@@ -22,7 +31,9 @@ async function isFile(path: string): Promise<boolean> {
  */
 export async function serveClientBundle(req: IncomingMessage, res: ServerResponse, dir: string): Promise<void> {
   const { pathname } = new URL(req.url ?? '/', 'http://localhost')
-  const rel = decodeURIComponent(pathname).replace(/^\/+/, '')
+  // A malformed escape (`/%zz`) must not throw: this runs void-dispatched, so an
+  // exception here would be an unhandled rejection that takes the daemon down (#938).
+  const rel = tryDecode(pathname).replace(/^\/+/, '')
   const root = normalize(dir)
   const candidate = normalize(join(root, rel))
   const within = candidate === root || candidate.startsWith(root + sep)

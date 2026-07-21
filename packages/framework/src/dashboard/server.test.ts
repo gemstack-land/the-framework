@@ -75,6 +75,24 @@ test('serves the prerendered SPA shell at / and hashed assets, with an SPA fallb
   }
 })
 
+test('a malformed percent-encoded path serves the SPA shell and the server survives (#938)', async () => {
+  const bundle = await fakeBundle()
+  const dash = await startDashboard({ port: 0, clientBundleDir: bundle })
+  try {
+    // `decodeURIComponent('/%zz')` throws; unguarded it is an unhandled rejection that kills the process.
+    const bad = await fetchText(dash.url + '/%zz')
+    assert.equal(bad.status, 200)
+    assert.match(bad.body, /<div id="root">/)
+
+    // The server is still alive and serving afterwards.
+    const after = await fetchText(dash.url + '/assets/app.js')
+    assert.equal(after.status, 200)
+  } finally {
+    await dash.close()
+    await rm(bundle, { recursive: true, force: true })
+  }
+})
+
 test('the Telefunc mount rejects a cross-origin POST (CSRF guard)', async () => {
   const bundle = await fakeBundle()
   const dash = await startDashboard({ port: 0, clientBundleDir: bundle })

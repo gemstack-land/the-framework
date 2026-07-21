@@ -2,7 +2,7 @@ import { strict as assert } from 'node:assert'
 import { test } from 'node:test'
 import { mkdir, mkdtemp, writeFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, sep } from 'node:path'
 import { detectDevScript, detectServeTargets, parsePreviewUrl, startPreview, PREVIEW_SCRIPTS } from './preview.js'
 
 async function withTmp(prefix: string, fn: (dir: string) => Promise<void>): Promise<void> {
@@ -60,6 +60,36 @@ test('startPreview falls back to a static server for a plain index.html and serv
       assert.match(handle.url, /^http:\/\/localhost:\d+$/)
       const body = await fetch(handle.url).then(r => r.text())
       assert.match(body, /hello preview/)
+    } finally {
+      await handle.stop()
+    }
+  })
+})
+
+test('a malformed percent-encoded path gets a 400 and the static server survives (#938)', async () => {
+  await withTmp('bad-escape', async dir => {
+    await writeFile(join(dir, 'index.html'), '<h1>still here</h1>')
+    const handle = await startPreview({ cwd: dir })
+    try {
+      // `decodeURIComponent('/%zz')` throws; unguarded it is an unhandled rejection that kills the process.
+      const bad = await fetch(handle.url + '/%zz')
+      assert.equal(bad.status, 400)
+
+      const after = await fetch(handle.url).then(r => r.text())
+      assert.match(after, /still here/)
+    } finally {
+      await handle.stop()
+    }
+  })
+})
+
+test('a trailing-slash cwd still serves instead of refusing every path (#938)', async () => {
+  await withTmp('trailing-slash', async dir => {
+    await writeFile(join(dir, 'index.html'), '<h1>slash ok</h1>')
+    const handle = await startPreview({ cwd: dir + sep })
+    try {
+      const body = await fetch(handle.url).then(r => r.text())
+      assert.match(body, /slash ok/)
     } finally {
       await handle.stop()
     }
