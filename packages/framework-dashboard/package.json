@@ -1,6 +1,6 @@
 {
   "name": "@gemstack/framework-dashboard",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "The Framework dashboard (spike): Vike + React + shadcn + Telefunc, a projection of the same .the-framework files the daemon writes (#405/#406).",
   "license": "MIT",

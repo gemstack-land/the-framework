@@ -1,5 +1,32 @@
 # @gemstack/ai-sdk
 
+## 0.5.1
+
+### Patch Changes
+
+- 6f7cf23: Fix four correctness bugs around streaming, SSE and the embedding cache.
+
+  - `Agent.stream()` invoked `conversational()` and `remembers()` twice for any agent that overrides them asynchronously: once in the synchronous fast-path probe (where the returned promise was dropped on the floor) and again on the async path. An override doing a DI or DB lookup ran its side effects twice per call, and a rejection from the first, unhandled promise could abort the process. Both are now called once and the values threaded through.
+  - `readAgentStream`'s "skip malformed JSON" guard also swallowed every error thrown by the consumer's own SSE callbacks, losing the diagnostic and leaving the turn half-mutated. It now parses inside the guard and applies outside it.
+  - `parseSseStream` released the reader lock without cancelling the body, so any early exit (a `stopWhen`, an approval pause, a consumer `break`) left the upstream HTTP connection open until the server timed it out.
+  - `CachedEmbeddingAdapter` reported zero token usage even when it _did_ call the provider, so anything aggregating usage undercounted embedding spend entirely; it now reports what the provider charged for cache misses. Its cache is also no longer unbounded (new `maxEntries` option, default 10_000, oldest evicted first).
+
+  `CachedEmbeddingAdapter` had no test coverage; it now has a suite.
+
+- 6f7cf23: Tidy the public surface, drop the last brand leaks, and correct docs that contradicted the code.
+
+  - `web_search`'s fallback now extracts text with `htmlToText` instead of the `<[^>]*>` regex that the same file's docblock documents as forbidden (polynomial ReDoS, trips CodeQL). It also stops leaking `<script>` / `<style>` _content_ into the model's context.
+  - Export types that were unnameable despite being public: `ServerToolBuilder` (the return type of `Agent.asTool()`, `scopedTool()`, `similaritySearch()` and `toolDefinition().server()`), plus `ProviderHint`, `ConversationalSpec`, `ConversationalOverride`, `ConversationStoreListEntry`, `FileSearchFallback`, `SimilaritySearchWhereOperator`, `SchemaIo` and `CachedEmbeddingOptions`.
+  - Replace the remaining `Rudder` references in user-visible strings: a synthesized tool-result message the _model_ reads, the `User-Agent` sent by `web_search` / `web_fetch`, and error/doc copy that told `@gemstack/ai-sdk` users to rely on a framework they may not be running.
+  - Delete "Phase N will add …" doc comments for features that already ship in the same file (`computerUseTool`, the file-search `fallback` option), and stop a fixture-version error from telling users to re-record with a CLI command that lives in another package.
+
+- da79ec8: Fix four provider protocol defects found in the AI package sweep.
+
+  - Google prompt caching dropped the system instruction and every tool declaration from the request even when the cache markers had not cached them, so a marker set like `{ messages: 2 }` silently sent neither.
+  - Google streaming derived its finish reason from Gemini's raw value. Gemini reports `STOP` for a function-call turn, so a streamed tool call ended the run instead of returning the tool results to the model, while a `SAFETY` or `MAX_TOKENS` stop claimed tool calls existed and kept the loop running.
+  - Anthropic joined `ContentPart[]` system content with `Array.prototype.join`, sending `[object Object]` as the system prompt.
+  - OpenAI never set `stream_options: { include_usage: true }` and discarded the trailing usage chunk, so every streamed call reported no token usage to budget accounting. Truncation and content-filter stops now map to `length` and `content_filter` instead of a clean `stop`.
+
 ## 0.5.0
 
 ### Minor Changes

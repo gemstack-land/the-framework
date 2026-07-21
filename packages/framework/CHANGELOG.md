@@ -1,5 +1,650 @@
 # @gemstack/framework
 
+## 1.0.0
+
+### Major Changes
+
+- 1e3647b: Presets are one catalog instead of thirteen modules, and the notifier keys plus the
+  preference defaults have a single home shared with the dashboard.
+
+  Breaking, public API. The 56 per-preset exports (`RESEARCH_PRESET_NAME`,
+  `RESEARCH_PARAMS`, `RESEARCH_PROMPT_TEMPLATE`, `renderResearchPrompt`, and the same
+  four for each of the other thirteen presets) are replaced by one `presets` record
+  plus `LAUNCHER_PRESETS`: `renderResearchPrompt(what)` becomes
+  `presets.research.render(what)`, and `RESEARCH_PRESET_NAME` becomes
+  `presets.research.name`. `definePreset` now takes a spec object rather than three
+  positional arguments.
+
+  Also removed: `nodeGhPrLister`, `nodeGhBranchPrLookup` and `nodeGhPrLookup`, replaced
+  by `ghPrView` / `ghPrList` in the new `gh` module; `startInterventionWatcher` /
+  `startActivityWatcher` / `InterventionTracker` / `ActivityTracker`, replaced by
+  `startKeyedWatcher`; and `postDiscord`, now `postInterventionsDiscord` beside the type
+  it formats.
+
+  Fixes a latent bug while doing so: `RunMeta.updatedAt` was stamped with the run's start
+  time on every event, so everything that orders by recency (the overview, the activity
+  feed, the interventions queue) was sorting on a constant.
+
+### Minor Changes
+
+- 4c89b8a: Auto maintenance: sweep the codebase on a schedule (#882)
+
+  Auto PM now fires the [Maintenance] preset (#881) for a project that has not had a codebase-wide
+  sweep in a week, ahead of its usual quick-wins/spike-and-plan rotation. The sweep only queues
+  follow-up entries, so the backlog loop still does the work one bounded piece at a time.
+
+  This reaches what session-scoped maintenance cannot: a repo that adopted The Framework late has a
+  whole history no session ever touched.
+
+  The schedule is a per-repo `sweptAt` in the existing `.the-framework/maintenance.json`, so it
+  survives a daemon restart, and it is kept separate from the commit-delta sweep's `reviewedSha` so
+  the two features cannot reset each other. There is no new setting: it rides the existing `autoPm`
+  toggle and the quota boundary.
+
+- 296b559: Auto PM: harvest quick-wins out of the plans we already have (#773)
+
+  Adds a [Quick wins] preset — "look at all tickets/\*\*.plan.md and add all quick-wins to
+  TODO_AGENTS.md" — and puts it in the auto-PM cycle ahead of [Spike & plan], so an idle
+  machine harvests the plans it has before writing more.
+
+  That closes the loop: tickets become plans (#685), plans become queued work (#773), and
+  the backlog loop drains the queue.
+
+- 8857670: Auto PM: spike & plan tickets with the quota that would otherwise expire (#685)
+
+  When the agent queue has run dry, nothing is running, and every enabled consumption
+  limit still has half its budget free, the daemon starts a PM run by itself: it spikes
+  and plans the tickets that have neither yet, so the backlog refills unattended.
+
+  Off by default (`autoPm`), and switched on from the Usage panel. The quota gate fails
+  closed, unlike the per-run guard: no reading means no run.
+
+- 6ed8f90: Show the run's browser in the run view. The stream shipped in #802 but nothing rendered it, and its URL only ever went to stdout, which a dashboard-started run discards. The run now publishes the port on its event log, the daemon proxies the stream and the input POST so the pane is same-origin, and the right rail gains a Browser tab that renders the frames and relays clicks and keys back to the page.
+- aeb4f09: The daemon now commits the conversations it records on a project's main checkout, so a chat reaches the Git repo without waiting for someone to commit it by hand. A run's own worktree already swept its transcript on teardown; a conversation held in the checkout itself had nothing doing the same, and sat as an uncommitted change indefinitely. The commit is scoped to `.the-framework/conversations` and never stages anything else, so work in progress elsewhere in the checkout, staged or not, is left exactly as it was. It is debounced on an idle window rather than committed per turn, batching a burst of chat into one commit, with a cap so a conversation that never falls idle still lands. A repo that is mid-rebase, mid-merge or holding its index lock is skipped and retried later rather than committed into, and the daemon flushes anything still pending as it shuts down.
+- a2a35be: Config layers now resolve by precedence, so a layer can turn a mode off (#841)
+
+  The layers used to combine with OR: a flag could only ever turn a mode on, and
+  `the-framework.yml` could only ever turn one on. Neither could say `false`, so a repo
+  that committed `autopilot: true` gave every run in it autopilot with no way back.
+
+  The layers now feed one resolve helper where the nearest layer that _set_ a key wins and
+  a layer that said nothing does not participate. Absent stays absent, so an existing setup
+  resolves exactly as before; the change is that an explicit `false` in a nearer layer now
+  wins. `--no-autopilot`, `--no-technical`, `--no-vanilla` and `--no-transparent` give a run
+  that nearer `false`, and the startup line now narrates which layer won each key
+  (`◆ config: preset=software-development (the-framework.yml), autopilot=off (flag)`).
+
+- b5300a6: A committed conversation now records the surface each turn came through, so a chat held in Discord reads as `discord` instead of being filed under the dashboard. The control channel's message entries carry an optional origin, the run attributes each turn to it, and an agent's reply inherits the origin of the message it answers, so a question and its answer stay one exchange. A run the daemon starts on a surface's behalf is tagged with `--via`, which keeps a chat-started session's opening turn from being attributed to the wrong place. Turns that name no surface fall back to the local one exactly as before, and entries written before this still parse. Transport names are validated where they enter, since they are written into a line-parsed conversation heading and a forged one could otherwise fake a turn.
+- 137aecd: Dashboard UX sweep (#948): every UI flow reviewed and the low scorers fixed. A lost live stream and a dead daemon now announce themselves (with automatic recovery), a session that crashed or was stopped no longer reads "finished", the replay opens at the outcome, choice gates and chat sends show sending/queued/error states instead of failing silently, presets get a visible menu with one management home, deleted @/# chips release their context focus, agent views render tables and links, the prompt preview includes the repo SYSTEM.md (#872), the browser panel recovers from a transient stream error (#946), the in-session gear stops offering spawn-time options as session state (#833), Discord toggles say when the daemon cannot deliver, and a broad accessibility pass (labels, roles, focus management) across menus, dialogs and icon buttons.
+- 3fc09a2: A session's answers now come back to the Discord channel that asked for them. Until now the bot acknowledged a message and nothing else followed, so you could talk to an agent from Discord but had to open the dashboard to read what it said. The bot binds a run to the channel it was addressed from, and a watcher posts each new agent turn there as it lands, reusing the committed conversation as the source since that holds the settled reply rather than raw console output. Binding adopts whatever the session has already said, so attaching to a long-running session never replays its backlog into a channel, and while the bot is switched off the cursor still advances, so turning it on starts from now rather than flushing everything said meanwhile. A run nobody addressed from Discord is not mirrored at all.
+- 3c8a606: Chat to The Framework from Discord (#680)
+
+  Discord was outbound-only: the daemon posts a webhook message when something needs you (#627), but
+  a webhook cannot read a reply, so answering meant leaving Discord and opening the dashboard.
+
+  The daemon now runs a Discord bot. Message it and it starts a session; message it again while that
+  session is running and the text reaches the run through the same control channel the dashboard's
+  live chat uses (#714). When a run parks on a question, the bot posts the numbered options and a
+  reply of `2` answers it. `!status`, `!stop` and `!help` do what they say. `Ctrl+C` takes the bot
+  offline with the rest of the daemon.
+
+  Chat history goes where #857 asked for it: a message routed into a run lands in that run's
+  conversation under `.the-framework/conversations/` (#908), committed with the repo. Nothing about
+  the chat is stored outside git.
+
+  Two gates, mirroring the notification watchers: a `DISCORD_BOT_TOKEN` (how to connect) and the new
+  `discordBot` preference (whether to), read per message so the toggle applies without a restart.
+  Both absent by default — unlike a notification, this one acts on what it reads. Set
+  `DISCORD_CHANNEL_ID` to confine it to one channel.
+
+  The gateway client is hand-rolled over node's global `WebSocket` rather than adding `discord.js`,
+  keeping the package's three runtime dependencies intact, and reconnects with exponential backoff so
+  a refused connection never becomes a tight loop.
+
+- c7a0bde: Run concurrently on one project, each run in its own git worktree (#736). A dashboard-started run is now given a worktree under the project's `.the-framework/worktrees/<runId>`, on a `the-framework/run-<runId>` branch, and spawned with that as its `--cwd`. Because the runs no longer share a working tree, the one-run-per-project refusal (#393) is gone: the cap is unbounded, and Start is only refused for a duplicate of the same checkout. The user's own checkout is never touched, so a run no longer commits their uncommitted work to get started.
+
+  Three supporting pieces. The daemon allocates the run id up front and passes it as `--run-id`, so the worktree directory and the run recorded inside it are one string. A fresh worktree has no `node_modules` (it is gitignored), so the parent checkout's dependency trees, workspace packages included, are symlinked in rather than copied or reinstalled. And the run renames its branch to `the-framework/<sessionName>` once the agent names the session, leaving it on the run-id name if the agent already branched itself.
+
+  A project that cannot be given a worktree (not a git repo, or any git failure) falls back to running in the main checkout, and keeps its previous limit of one run at a time.
+
+- 5c2679b: Retire a run's worktree when it finishes, keeping the ones worth looking at (#737). A run's history lives inside its worktree since #736, so it is now copied into the project's own `runs/` when the run ends, and only then is the checkout considered for removal.
+
+  The retention rule: a run that finished cleanly has nothing left to inspect, so its worktree goes. A run that failed or was stopped keeps its checkout, because that is exactly when the half-finished working tree and the diff it died holding are worth seeing. Nothing is removed on a timer; a retained worktree goes when you remove it, via a Remove action on the finished run in the dashboard.
+
+  A daemon that dies mid-run never runs that teardown, so the boot-time reconcile now sweeps the worktrees too: each orphaned run is flipped out of `running` and its history rescued into the project, with the checkout left on disk (a run that ended that way did not end cleanly).
+
+  New surface: `archiveWorktreeRun` and `listWorktreeDirs` in the store, `onRetainedWorktrees` and `sendRemoveWorktree` as RPCs. Removal refuses while the run is still live, since Stop is how a run ends.
+
+- 1c97dcb: Show every live run of a project, not just one (#738). Since #736 each run lives in its own worktree and writes its `run.json` there, so `readLiveMeta(projectPath)` stopped seeing any of them and the dashboard went blind to dashboard-started runs. A new `readLiveMetas(cwd)` discovers the live run in each `.the-framework/worktrees/*` checkout plus the project root (where a non-git project still runs, and where pre-#736 runs live), self-healing a stale one exactly as the single reader did.
+
+  Every reader now aggregates: the runs list, the "working now" overview, the awaiting-you queue, the activity feed, and the project summaries. Each live run carries the `cwd` of the checkout it is editing, and `ActiveRun` and an `awaiting` intervention now carry a `runId`, so two concurrent runs of one project are told apart. `onGitStatus`, `onProjectFileStatus`, and `onProjectFiles` take an optional `runId` and read that run's worktree rather than the user's checkout.
+
+  Also fixes a #736 bug found on the way: a repo's `.gitignore` says `node_modules/`, and a trailing slash matches a directory, not the symlink the worktree gets. The links were therefore untracked in every run's worktree, so a run's `git add -A` would commit dangling absolute symlinks onto its branch. The rule now goes into the repository's `info/exclude`, which is where git resolves excludes from for a linked worktree.
+
+  Two dashboard fixes fall out: the "working now" list keyed its rows by project id alone, which produced duplicate React keys with two live runs in one project, and following live highlighted every running row at once instead of the newest.
+
+- b6e6c82: Watch and steer a run in its own worktree (#749). #738 made concurrent runs visible; they were still not watchable or steerable, because the live event stream and the control channel were addressed by project while a run reads and writes inside its worktree (#736). The feed for a worktree run was therefore empty, and Stop, mid-run messages and choice picks were written to a log nothing was tailing.
+
+  `onEvents` now takes an optional run id and tails that run's own `events.jsonl`, so selecting one run or another shows that run's output rather than the same empty feed. `sendStop`, `sendMessage` and `sendChoice` take the run id too and append to that run's `control.jsonl`, which is the file the run tails. Both resolve through the shared `resolveRunPath`, so an unknown or finished run id falls back to the project root, and omitting the id keeps the pre-#736 behavior for a run that has no worktree.
+
+  The dashboard threads the selected run through the feed subscription and every steering control, and resubscribes when you switch runs.
+
+- 312f993: Surface the theme control and give the navbar launcher its run controls (#754, #755).
+
+  The theme has been switchable since #725, but it lived inside the per-run options gear: an app-wide appearance setting filed under one run's options, and absent entirely on a screen showing only the navbar, so it was effectively unreachable. It is now a control in the header, reading and writing the same `preferences.theme` as before. The gear drops its copy, so there is one home for it rather than two.
+
+  The navbar quick launcher rendered an editor and a Start button and nothing else, so a run started there used the stored agent, model and options with nothing on screen saying which. It now carries the same agent/model select and options gear as the full composer, sharing one definition rather than a compact-only duplicate, and stays a single row so the header does not grow.
+
+  The `dashboard` badge beside the wordmark is gone.
+
+- 0d15eb6: Tighten the composer (#756). The prompt area reserved room for text nobody had typed: a resting height of `4.5rem` in the full form, with the control row and its containers padded to match. The editor grows with its content up to the same maximum as before, so the tall empty box bought nothing.
+
+  The resting height drops to `2.75rem` (`2rem` in the navbar), the editor's vertical padding and the gap to the control row tighten, the submit button matches the size of the agent/model and options controls beside it rather than standing a size larger, and the three frames around it (`RunChat`, `RunResumeChat`, `StartRunForm`) lose a step of padding.
+
+  Scoped to the composer on purpose: the prompt, its send button, the model select and the options gear.
+
+- 0d15eb6: Adopt the brand mark (#757). The hexknot from the brand generator replaces the bare wordmark in the dashboard header and the relay view, and ships as the tab favicon.
+
+  Its six strands carry a neutral ramp that runs dark-to-light, which would sink the leading strands into a dark canvas, so the fills are CSS variables: the brand values in light, a lightened ramp in dark. Not `currentColor` with per-strand opacity, which is the usual way to make an SVG theme-aware but is wrong for a knot: the over/under crossings are literal overlaps, so any strand below full opacity shows the one beneath it through the crossing. The favicon carries its own `prefers-color-scheme` ramp inside the file, since a tab icon follows the OS theme rather than the in-app choice.
+
+- 504626d: Messaging a stopped run continues that run instead of opening a new one (#762). Sending a message to a run that had ended spawned a fresh run carrying the old session id: the agent conversation continued, but the history showed an unrelated-looking second row, so one thing you asked for looked like two.
+
+  The follow-up is still its own process; what changed is where it writes. `sendStart` takes the run to continue, and the daemon reuses that run's id, its worktree and its branch rather than allocating new ones, restoring the run's archived history into the checkout when teardown (#737) had already removed it. The run then reopens its own log instead of truncating it, keeping its original intent and pass count and flipping back to `running` under the new process. One run, one row, one branch.
+
+  Falls back to starting a new run whenever continuing is not possible: no worktree to attach, no branch left, or nothing archived to restore.
+
+- 6f2901f: Address a session by URL (#784). The dashboard's selection is now its address: `/` is the Overview, `/{projectId}` a project's home, `/{projectId}/{sessionId}` one session. A session is a link you can paste, reload, bookmark, and open two of side by side, and Back/Forward walk the sessions you looked at. Selection used to be three pieces of React state reconciled at render, which is where #761/#766/#768/#774 all came from; a route cannot disagree with itself. A URL naming a session or project that no longer exists says so rather than silently bouncing you elsewhere.
+- e834f82: Tell a settled session from a working one (#785). A run that finished its work stays open as a conversation, so it kept reporting `running` with a pulsing dot until the user closed it, whether the agent was mid-edit or had been idle for an hour. A run now says when it parks (`settled` event, `RunMeta.settledAt`), and the sessions rail reads "waiting" with a still dot instead of animating at you.
+- a42c0b7: Ticket format: specify `tickets/<DATE>_<SLUG>.plan.md`, the detailed plan that sits beside a ticket and its spike. An agent writing one now has the shape (TLDR, Plan, optional Hard problems and Variability) and, for a low-rated aspect with alternatives, presents them with showChoices() and AWAIT instead of picking silently.
+- c9e777e: `--browser` now runs against a Chrome the framework launches and stops with the run, instead of letting chrome-devtools-mcp launch its own. The debug port is open, so a second client can attach to the very page the agent is on — the prerequisite for streaming that browser to a human who needs to step in (#609). On a machine with no Chrome, `--browser` falls back to exactly what it did before.
+- c9e777e: An agent working in a browser can now hand it to a human instead of failing. When it hits a login wall, a captcha, or an SSO step, it ends the turn with an `await-browser` block; the run parks, the user acts on the page, and the agent continues with whether it was handled. It never types a password and never attempts a captcha. An unattended run answers "could not handle it", so an agent is never told a human cleared a wall that is still there.
+- 5dfa1a1: Serve a session's own worktree (#797). Preview was keyed by project and always booted the project's checkout, so pressing Serve inside a session showed you an app built from code that session never wrote, and two live sessions shared one preview. A session now serves the worktree it is working in, the project home keeps serving the main checkout, and the two run side by side. Stop and status are addressed the same way, the servable-app picker lists what the session's branch actually has, and a worktree's preview is stopped before its checkout is removed.
+- b9128e0: Show a session's worktree in its action bar (#798). Every session runs in its own git worktree, and the dashboard said so nowhere: the git status bar reads the project, so a session's branch, its uncommitted work, and the directory holding both were invisible from the one view about that session. The action bar now carries a chip with the branch, a marker when the checkout is dirty, and — once the run is no longer live — what that worktree costs on disk, next to the Remove button that offers to reclaim it. Clicking opens that checkout in your editor rather than the project's.
+- 773ca7d: End of session: surface the branch and diff, offer push and PR (#799)
+
+  A finished session now reports what it produced and what to do with it. The dashboard shows the branch the work landed on, its commits, its changed files and the line counts, and offers Push branch and Open PR as buttons rather than describing them. A session that changed nothing says so instead of showing an empty branch.
+
+  The read is branch-addressed rather than worktree-addressed, so it survives teardown: a clean run's worktree is removed when it finishes, and a checkout-based read then falls back to the project root and reports the project's own branch as though it were the session's. The branch each run left its work on is now recorded in its run meta while the worktree still exists, since the #326 prompt lets the agent name its own branch and neither derivation is reliable after the fact.
+
+  New: `onRunHandoff`, `sendPushBranch` and `sendOpenPullRequest` RPCs, and `readRunHandoff` / `pushRunBranch` / `openRunPullRequest` with injectable git and gh seams. Degrades rather than fails when there is no remote, no `gh`, or no git repo.
+
+- 7041dc4: A run with `--browser` now serves a live view of the agent's browser. The run prints a preview URL; opening it shows what the agent sees, and clicks, typing, scrolling, and navigation go back to that page — so when the agent parks on an `await-browser` gate at a login wall or a captcha, a human can actually deal with it. The view follows the agent when it switches tabs. It binds to loopback only, and no frame is written to disk or into the run's event log.
+- cab77e9: One action bar for the project home and a session (#809). The two pages styled the same facts twice: the project showed a git status row, a session showed its own differently-shaped worktree chip, and the session was missing the repo, folder and editor actions entirely — on the one page where opening a checkout in an editor matters most. Both halves are now shared and take an optional session id: the status reads that session's worktree (adding its size on disk and the PR its branch has), and GitHub, Open folder, Open in editor and Serve all address it.
+- 8ecbac6: Hover a changed file in the tree to see its diff (#816). Adds `onFileDiff`, the first read that takes a caller-supplied path, guarded by `safeRepoPath`: repo-relative only, no traversal, no leading dash, never into `.git`. Tracked files diff against `HEAD` so a staged change still shows, an untracked file renders as all-added, and a patch is cut at 500 lines and says so.
+- 867e66f: Show the session's file changes in the run output (#817). A Changes section above the event log lists every file the session touched with its line counts, each row expanding to the diff. Adds `onRunChanges`, one `git status` plus one `git diff --numstat` per poll rather than a diff per file. Derived from the worktree rather than the agent's tool calls, which carry a tool's name and not its arguments (#165), so it works for every agent and reports the outcome rather than the intent.
+- a64c29a: Hover an unchanged file in the tree to preview its contents (#828). The hover card taught on changed files now works on every row: a changed file shows its diff, an unchanged one shows its numbered contents. Adds `onFileContent`, sharing the path guard and checkout resolution of `onFileDiff`, and picking the read from the status the tree already holds rather than a second server lookup.
+
+  Also closes a real hole in that guard: the containment check compared the `resolve`d path, which does not follow symlinks, so a link inside the repo pointing outside it passed a textual check while the read left the checkout. Both reads now confine with `realpath`.
+
+- 4e32eba: Tell the user when a finished run left work nobody pushed (#860)
+
+  An unattended run writes code, commits it to its own branch, and stops. Nothing says so.
+
+  The "needs you" queue only knew two things: a pull request already on GitHub, and a run parked on a
+  choice gate. A finished run with committed work and no PR was neither, so nothing fired until
+  someone had already opened the PR by hand. The overview lists only running runs, and the push
+  button sits inside that one archived run.
+
+  The queue now has a third kind: a finished run whose branch holds commits that were never pushed
+  and never merged. It rides the existing watcher, so it reaches browser notifications and Discord
+  like any other item.
+
+  It only tells you. Pushing publishes the agent's work under your name, so that stays your click.
+
+  Only the most recent finished runs per project are checked, since each one costs a few git reads on
+  every poll.
+
+- 8dc742f: The project log is the complete list of sessions (#898)
+
+  `.the-framework/LOGS.md` is the one part of a project's run history that git keeps, but it only
+  recorded runs that finished cleanly: a stopped or crashed session left nothing behind, even
+  though the transient `runs/` archive had it. The entry is now written as the run settles, on
+  every path out, so the committed log stops disagreeing with the machine's own record.
+
+  Each entry also carries the run id, the name the agent gave the session, and the branch the
+  work landed on, read from the checkout while it is still there. So an entry now says where to
+  find the session and its code, rather than only that it happened.
+
+- b05663f: Conversations are committed to the Git repo (#908)
+
+  A project's chat was the one part of a run that git never kept. `LOGS.md` records that a session
+  happened, and #898 made it the complete, joinable list of them, but what was actually said lived
+  only in `.the-framework/`, which is transient by design (#313) — so a clone carried the index and
+  none of the content.
+
+  The chat now lands in `.the-framework/conversations/<runId>.md`, keyed by the same run id the
+  project log records, so the committed session list and the committed chat join. One file per
+  conversation and append-only, because run worktrees are live concurrently and each commits its own
+  pending work on teardown; a single shared file would conflict every time two runs chatted at once.
+
+  Only the human turns and the agent's replies are stored — not the verbose transcript, which stays
+  with the model provider (#857).
+
+  Message bodies stay multi-line and readable in a diff rather than being collapsed to one line the
+  way a `LOGS.md` field is, so only a line's leading `#` or `\` is escaped. That is enough to keep a
+  reply from forging a message, which is the same thing #897 fixed for the project log.
+
+  The seeded `.the-framework/.gitignore` is an allow-list written once and only when absent, so every
+  repo activated before this would have silently ignored its own conversations. It is upgraded in
+  place on first write as well as seeded correctly on a fresh install.
+
+- 206fc61: New preset: Import tickets from GitHub, and it always opens a session of its own (#959)
+
+  The triage and planning presets all read `tickets/`, so a repo with an empty one has nothing
+  for them to work from. This fills it from the repo's GitHub issues.
+
+  It is the first preset marked `newSession`. Loaded from inside a session, every other preset
+  is a message to that session; this one is not about the conversation at all, and appending it
+  would put the import on that session's branch, behind its context. So both in-session
+  composers send it as a new run instead, and the view follows it.
+
+- e5e662a: The launcher shows what a session will actually run with (#842)
+
+  `the-framework.yml` was read exactly once, inside the freshly spawned CLI child. The daemon never
+  read it and the dashboard never saw it, so the gear could only ever show your own preferences
+  while the repo's committed options quietly took effect later.
+
+  The project payload now carries the repo file, read fresh on each request. The dashboard resolves
+  the same layers the CLI does, nearest first: your project options, the repo's `the-framework.yml`,
+  then your global preferences. The launcher lists what is in play inline, without opening the gear,
+  and marks the values that come from the repo rather than from you.
+
+  Because the launcher now resolves the repo file itself, a start sends the four toggles it owns
+  (autopilot, technical, vanilla, transparent) explicitly, including `false`, which the CLI takes as
+  the nearest layer. Turning one off in the gear no longer gets undone by the repo file. Runs the
+  daemon starts on its own resolve through the same layers.
+
+- bf35985: Add the [Maintenance] preset (#881)
+
+  A codebase-wide sweep that queues work instead of doing it: for each subset that needs attention
+  it appends a [Maintainability] and a [Security audit] entry to `TODO_AGENTS.md`, so the backlog
+  loop does the actual refactoring later, one bounded piece at a time. [Readability] joins them
+  only under `technical_control`.
+
+  It complements the post-merge maintenance block, which only ever sees the changes one session
+  introduced. A repo that adopted The Framework late has a whole history no session has touched,
+  and this is what reaches it.
+
+  Available as a preset button in the dashboard, and materialized to
+  `.the-framework/presets/maintenance.md` like the other presets.
+
+- 862ed73: Runs no longer outlive the daemon that spawned them. A shutting-down daemon stops the runs it started and records each one as resumable; the next daemon picks them back up in the same worktree, continuing the same agent conversation. Previously a stopped daemon left every in-flight run running on `ppid 1`, holding a worktree and sometimes a headless browser, with nothing left that knew about it. Runs suspended more than a day ago are dropped rather than resumed, and a run the daemon merely steers rather than spawned is left alone.
+- 500bec7: Add `framework worktrees` for the checkouts sessions leave behind. `framework worktrees` lists them with the session's status, size on disk and branch; `framework worktrees rm <sessionId>` removes one, refusing while that session is still running; `framework worktrees prune` removes every one whose session is no longer running. Until now this cleanup existed only as a per-row button in the dashboard, so it could not be scripted, and a machine that had been running sessions for a while accumulated checkouts with no way to clear them from a terminal.
+- 45d22aa: Run options default per project instead of globally. They lived in one `Preferences` object shared by every registered project, so the model you picked for a TypeScript monorepo silently followed you into a scratch prototype. A project now stores only the options it overrides, in a `projectPreferences` block keyed by project id, and anything it does not set still falls through to the global object. Choosing an option while a project is open sets it for that project; the user-level ones (theme, editor, notifications, saved presets) and the consumption limits stay global, as does everything chosen from the Overview. Existing registries read and behave exactly as before until something is overridden.
+- d3d470e: Presets target the session they were launched from (#874)
+
+  A preset's `what` param defaulted to the literal `this PR`. It now defaults to the session the
+  preset was launched from, falling back to `entire codebase` when there is no session yet.
+
+  `${{ }}` has always been JS-evaluated, but the default value was the one string that never went
+  through the evaluator, so a `${{ }}` inside it reached the prompt as literal text. Defaults are
+  now rendered against the same context as the preset body, and that context carries
+  `session_name`, `presets` and `settings` — so a preset can also point at another preset's file
+  path, which #881 needs.
+
+  In the dashboard, a preset picked from a run page renders against that run's session; the
+  launcher has no session and gets the codebase-wide default.
+
+- ff5792c: Pace spending against a quota boundary instead of configured limits (#879)
+
+  The Framework now spends up to a moving boundary derived from the account's own week:
+  by the nth day of the quota week, at most n/7 of the week's allowance. The last day of
+  the week allows all of it, so nothing is left on the floor. Work you ask for may cross
+  the boundary and borrow against the days to come; unattended work stands down at it.
+
+  There is nothing to configure. The three consumption limits, their preference
+  (`consumptionLimits`) and their panel rows are gone, along with the rolling meter that
+  derived usage by diffing readings. The boundary is a comparison of two numbers the
+  agent reports, so it owes nothing to how long the daemon has been running.
+
+  Removed from the public API: `ConsumptionMeter`, `consumptionStatus`, `budgetsFrom`,
+  `DEFAULT_CONSUMPTION_LIMITS`, `CONSUMPTION_LIMIT_LABEL`, `resolveConsumptionLimits`,
+  `FIVE_HOURS_MS`, `ONE_DAY_MS` and their types. Added: `quotaBoundaryStatus`,
+  `boundaryFromResetsAt`, `parseResetsAt`, `QUOTA_WEEK_MS`. `QuotaView.limits` is replaced
+  by `QuotaView.boundary`, and a run's `consumptionGate` now returns the label of the
+  window that reached the boundary rather than a window enum.
+
+- e8dab8e: The usage panel is one week-long bar, with the limit on a slider (#960)
+
+  Usage used to be two flat meters: how much of the week was gone, and separately how much of it
+  was allowed by now. They were the same axis drawn twice, so nothing on screen said the second
+  was a line through the first.
+
+  Now the track _is_ the week, edge to edge, labelled by day. The fill is what has been spent, a
+  mark shows the boundary, and the colour is the two compared: green under it, blue tracking with
+  it, orange ahead of it, red once the week is gone.
+
+  The line unattended work stops at is now yours to move. It is stored as an offset from the
+  boundary rather than a fixed percentage, so it travels with the boundary through the week
+  instead of being overtaken by it. Centre is the previous behaviour, which is what an install
+  that never touches the slider keeps.
+
+- 7fced75: Add the [Suggest tickets to work on] preset (#698)
+
+  Reads the repo's tickets, proposes the ones worth doing next as a multi-select with the
+  high-confidence ones pre-ticked, waits for you, and adds only what you approve to
+  `TODO_AGENTS.md`.
+
+  The attended way to fill the agent queue. `/` menu items can now carry hover text, so the
+  preset can say where its output lands.
+
+- eff5f40: Tell the agent it has a browser. `--browser` wired the chrome-devtools tools into the run but the system channel never mentioned them, so the agent reached for `WebFetch` and the browser sat on `about:blank` for the whole run, taking the preview with it. Runs with a browser attached now get a short section saying it exists and that anything it needs to see or act on goes through those tools. Only when the tools are really there: the flag wires nothing on another agent or the fake driver.
+- e62b60d: Ship a TODO_AGENTS.md format spec the agent can read (#880)
+
+  The backlog had no written layout, so each agent invented one. The package now ships
+  `prompts/todo_format.md`, and the context fragment points at it the same way it already
+  points at the ticket format: by its `node_modules` path, so the layout versions with the
+  package instead of going stale in a committed file.
+
+  The format is a priority-sorted file with `## URGENT`, `## High priority`,
+  `## Medium priority` and `## Low priority` sections. It needs no parser change, because
+  entries are read in file order and headings are skipped, so a priority-sorted file drains
+  in priority order.
+
+- b4dce07: Add the [Do quick-win work] and [Do consensual work] triage presets (#891, #892)
+
+  Both read `tickets/*.md`, pick the tickets matching one filter, and append them to
+  `TODO_AGENTS.md`. They are how the agent queue refills itself from the ticket backlog, where
+  [Quick wins] refills it from the `.plan.md` companions that already exist.
+
+  The pair splits on cost: both are consensual (zero open questions, zero variability), so neither
+  needs a human, and they differ only in whether the work is cheap. Keeping them apart lets the
+  queue be refilled with the cheap batch and the significant batch on separate turns rather than in
+  one indiscriminate sweep.
+
+  Both join the auto-PM rotation, which now runs quick-wins, quick triage, consensual triage, then
+  spike-and-plan: cheapest and readiest first, planning last. Each prompt pins its own session name
+  and aborts when `the-framework/<SESSION_NAME>` already exists, so a firing that lands while the
+  previous triage is still in flight does nothing instead of triaging the same tickets twice.
+
+  Available as preset buttons in the dashboard.
+
+- a47d2d9: The UX preset now rates every UI flow and fixes the low scorers on its own (#962)
+
+  It used to enumerate findings, show them as choices, and stop at `<AWAIT>` for a human to
+  pick from. That made it unusable unattended, and the ratings it produced were mostly 10/10,
+  which is the failure mode where a review reports that everything is fine and changes nothing.
+
+  The new prompt demands 100% coverage of the UI flows, a rated reason for each one, a separate
+  commit per flow it improves, and a closing table of old rating => new rating. It names the
+  all-10s answer as laziness up front, which is the part that makes the ratings honest. It runs
+  to completion, so the launcher button is now labelled "UX (auto)"; a gated sibling that offers
+  its ratings as choices is tracked separately.
+
+### Patch Changes
+
+- 38c8e80: Auto PM no longer spends the last of the quota after a daemon restart (#848)
+
+  The consumption meter measures how much usage has gone up since it started watching,
+  so a restarted daemon had nothing to compare its first reading against and reported
+  zero consumed no matter what the account had actually spent. Auto PM read that as a
+  full budget.
+
+  It now also checks the account's own weekly figure, which is absolute and survives a
+  restart, and refuses when that cannot be read.
+
+- 02619cc: Auto PM now drains the agent queue as well as filling it (#855)
+
+  Auto PM only ever put work into `TODO_AGENTS.md`, and nothing unattended took it out
+  again: the backlog loop is a phase inside a run a human started, and auto PM's own runs
+  go down the prompt path, which never reaches it. So the queue filled once and every
+  later tick refused because it was no longer empty, and the daemon went quiet for good.
+
+  A tick that finds open entries now starts a run for the first one instead of standing
+  down, and goes back to harvesting quick-wins and planning tickets once the queue is dry.
+  A queue that cannot be read at all is still a refusal. The refusal reason is logged each
+  tick, so a wedged sweep no longer looks the same as a healthy idle one.
+
+- ee78ce1: Auto PM now starts runs with the project's own settings (#858)
+
+  An unattended run was started with no options at all, so it ignored the agent, the
+  model, and every other per-project setting a launcher-started run would have honoured.
+  A project configured for Codex had auto PM running Claude.
+
+  The preferences to run-options mapping moved out of the dashboard client into the
+  framework's browser-safe entry, so the daemon and the launcher now share one copy of it
+  rather than two that can drift. `--unattended` is still forced on regardless of what the
+  preferences say: that is a property of nobody watching, not something to configure.
+
+- a0f5a64: Stopping auto PM now stops an in-flight sweep, not just its timer (#983)
+
+  `stop()` only cleared the interval, so a sweep already inside its per-project loop kept
+  going: it finished awaiting the git calls and queue reads, then spawned a run. During
+  shutdown the daemon quiesces the background services and then clears its live-run map,
+  so a run started in that window was tracked by nobody. It was never suspended and never
+  terminated, leaving an orphan process holding a worktree and quota spent on a run that
+  would never be seen.
+
+  The sweep now carries a stopped flag, checked at the top of a tick and again immediately
+  before a run is started, so the awaited window between the two no longer leaks a run.
+
+- 0749c76: Make the logo the way home (#909). Clicking the mark or "The Framework" in the top bar goes to the Overview. It is a real link, so cmd-click and middle-click open a second Overview in a new tab and "copy link address" gives you a URL, while a plain click stays an in-app navigation with no reload.
+- 770591a: Paint the browser preview's first frame. Chrome does not finalize a `multipart/x-mixed-replace` part until the next boundary arrives, so a page that was not repainting left the pane blank while the bridge held a good JPEG. The newest frame now repeats while a viewer is attached, which is the case the preview exists for: a run parked on a login wall is not changing on its own.
+- 788e033: Say the browser protocol's two guidance lines in plain words. Both were written for the agent and read as jargon to everyone else, and users do read the system prompt: one told the agent to reach for the browser "when fetching the HTML would not answer the question", the other to prefer "one page and navigate it, rather than opening a new page per URL". Same two rules, said so a human gets them on the first pass.
+- 2e46392: Announce the browser preview's port on the run's first `session` event instead of before it. The dashboard renders only the tail from the last `session` event, so the announcement was sliced out of the run's view and the `browser preview` line never appeared in the feed.
+- 5904116: The Browser pane recovers from a failed stream instead of latching "not reachable" (#946)
+
+  One img error (e.g. opening the tab before the run's stream endpoint was up) permanently swapped
+  in the failure message until a remount. The failure is now keyed to the exact stream it happened
+  on, so switching runs starts clean, and a Retry button re-requests the stream. The fix lives in
+  the dashboard client, which ships bundled inside this package.
+
+- e41b392: Drop the navbar `New session` button (#772). The button shipped alongside removing the navbar textarea, but the navbar's shape is still being decided, so it comes out until it lands with the rest of the redesign. The rail's Live row already starts a new session in the selected project, so nothing is lost meanwhile.
+- 1589150: Add the tickets view (#697). The dashboard's right rail has a Tickets tab listing the project's `tickets/*.md`: title, TLDR, priority, and whether the agent has already spiked or planned it. A spike or a plan folds into the ticket it belongs to rather than appearing as a ticket of its own.
+
+  Each row can be put on the agent queue with one click, which appends it to `TODO_AGENTS.md` directly rather than spending a session to write one line. An empty `tickets/` offers to import the repo's GitHub issues instead of being a dead end.
+
+  Tickets written before the ticket format still list: a heading, a filename, or neither is enough to get a row.
+
+- 7201a61: Call them sessions, not runs (#771). The user-facing vocabulary now matches claude.ai/code, so the dashboard, the CLI output and `--help` all say session: the Sessions rail, "Start a session", "Message the session to continue it", "Session started/finished" notifications, "a session is already active for this project", and the rest.
+
+  Copy only. No identifier, type, RPC, CLI flag or on-disk name changed: `RunMeta`, `onRuns`, `--run-id`, `run.json` and `runs/` stay as they are, so nothing on anyone's disk moves and no API breaks. "Run" as a verb is left alone too ("run `framework --help`", "npm run dev", "dry run").
+
+- f99424f: Replace the navbar textarea with a `New session` button (#772). The sticky top nav carried a second prompt editor next to the launcher's own, so the dashboard had two textareas competing for the same job. The navbar now holds the de-facto standard button instead: it lands on the selected project's launcher with a fresh Context, and that page's single textarea starts the session.
+- 836b5c7: Replace the projects sidebar with a project dropdown in the top nav (#772). The left-most rail existed to answer one question, which project am I on, and it spent a full column on it while pushing the sessions rail, the main pane and the views rail into what was left. The selection is now a dropdown in the nav: it is shown on every page including the Overview, it keeps the "needs you" badge the rail carried, and `Add project` keeps its trust confirmation. The `New session` button also returns, now that the nav's shape is settled.
+- 136ee9a: Give the room to a big view (#862). The right rail is where the agent's pushed views, its browser and its choice gates are read, and it was a fixed narrow column whatever it held. It now widens for those three, and the sessions rail shrinks to a strip of status dots for as long as they are shown. Hovering the strip, or tabbing into it, brings the sessions back over the main pane rather than pushing it aside, so nothing you are reading moves. A list-shaped tab (files, docs, log) returns both rails to their usual widths.
+- bcb4299: Name the prompt disclosure "Enhanced System Prompt" and give it its two real switches (#863). The line under the prompt now says whether the enhancement is completely on (✅) or not (❌) without being expanded, and expanding it offers the two axes the prompt actually has: the anti-laziness and large-scope planning block, and the integration with The Framework. They write the same preferences the session-options gear does, so the two surfaces cannot disagree.
+
+  The preview also covers the browser section now. It was left out, so a run with Browser on displayed less than it sent, and the point of showing the prompt is that it is the whole prompt.
+
+- 7e77c58: Two small corrections.
+
+  The ticket format now tells a plan to break itself into sub-plans when there is variability (#684), matching the spec.
+
+  The usage panel no longer says the roadmap toggle needs half of every budget free. That rule was removed in #870, so the sentence had been describing behaviour that no longer existed.
+
+- 314995f: Fix a spurious "await limit reached" notice after a live-chat run (#742). `runAwaitRounds` reported the opening prompt's await-round exhaustion even when a live-chat phase followed and the run actually ended because chat was stopped. `runChatPhase` now reports its own settled `exhausted`, and a run that ends on Stop/close after chat is no longer treated as having hit the await limit.
+- 95e6d5a: Never render a timestamp as "Invalid Date" (#759). A project timestamp reaches the UI as a plain string (a LOGS.md heading carries its `at` verbatim), so a missing or unparseable one used to print literally. Every date the dashboard shows now formats through one helper that falls back to a dash, or to "no activity yet" in the Projects sidebar.
+- 12b1653: Fix starting a second run navigating to the previous one (#761). The dashboard adopted the run it had just started by looking for "the run that is running", which was safe while a project could only have one. Since concurrent runs (#736) it is not: the previous run is still running, and the new one has not written its `run.json` yet, so the old run was the only match and the view parked on it.
+
+  `sendStart` now returns the run id the daemon allocated, which it already knows because it names the run's worktree with it, and the dashboard selects that run instead of inferring one. A run with no worktree (the non-git fallback) reports no id and keeps the previous behaviour, which is still correct there because one run at a time still holds.
+
+- a95f52c: Isolate the test suite from the machine's own daemon (#765). The tests read the global state at `$XDG_CONFIG_HOME`, so running them while a daemon was up wired the control watcher and its file follower kept the event loop alive, timing several cases out. The suite now runs against a throwaway config home, so a developer using the dashboard no longer gets false failures.
+- ae9ecd6: Fix a newly started run showing the previous run's logs (#766). A run is resolved to its checkout by looking through the live run state, but for the first seconds of a run there is none: the daemon creates the worktree, spawns the process, and the run writes its `run.json` a beat later. The lookup missed a run that certainly existed and fell back to the project root, whose event log holds an older run's output.
+
+  It stuck because a Telefunc Channel resolves its path once, when the client subscribes, so the feed tailed the wrong file for the life of the subscription rather than correcting a moment later.
+
+  A run is now resolved by its worktree directory, which is named with the run id and exists before the process starts. A run id with no worktree still falls back to the project root, which stays correct for the non-git fallback path and for a run whose worktree has been removed.
+
+- 6412128: Fix a continued run showing as finished (#768). Continuing a stopped run worked — the run went live again and the agent replied — but the dashboard kept rendering its finished replay, so it looked like nothing had happened.
+
+  Every reader deduped a run present in both the live and archived lists by keeping the archived copy. That was right while a run was only ever archived on its way out, so the archive was the final word. A continued run (#762) has an archive from its first leg while being live again, and that archive shadowed the live copy, showing a running run as done.
+
+  The live copy now wins, in the runs list, the activity feed and the project summaries.
+
+- 50a548c: Fix a newly started run briefly showing the previous run's log (#774). On Start the shell followed live until the poll surfaced the new run's row, and during that window the feed subscribed with no run id, which resolves to the project root and its older output. The right log replaced it a moment later, so the run flashed the wrong content first.
+
+  The shell already gets the run id back from Start, so the feed now subscribes to that run immediately and there is no window addressed at the project root. The same id drives the run's controls, so an immediate Stop or message also reaches the right run rather than the project.
+
+- 9069628: Reject `--resume-session` on a run kind that cannot honor it (#782). Only the direct-prompt path resumes an agent conversation; a build run took the flag and dropped it, so the run started fresh and looked like it had continued while having silently lost the context. It now fails with a usage error instead.
+- d2373cb: Never delete work a run left uncommitted (#786). Retiring a finished run removed its worktree with `git worktree remove --force`, so an edit the agent made but never committed was destroyed with the checkout, unrecoverably. Teardown now commits the run's pending work to its own branch first, which outlives the worktree, and keeps the checkout when that commit cannot be made.
+- 726ed95: Make the run-options menu say only what the code delivers (#801).
+
+  - **Autopilot** no longer claims it "also relaxes the maintenance stance". #556 moved that section out of the system prompt, so the choice-gate countdown is its whole effect. Stale comments in `cli.ts` and `run.ts` asserting it steers the prompt are corrected too.
+  - **Eco > Auto maintenance** is gated on Post-merge cleanup. It trims the on-before-mergeable prompt, not the built-in one, so on its own it dropped nothing. The `--eco-auto-maintenance` CLI help said the same wrong thing and now points at the right prompt.
+  - **Browser** is disabled with a reason off Claude Code. The browser is wired through Claude Code's MCP config and other drivers take no MCP servers, so the box was checkable and inert. The CLI already warned via `unguardedNotices`; the dashboard was silent. `collectRunOptions` now also stops sending `browser` for a non-Claude agent, so the disable is real rather than cosmetic.
+
+  Also fixes an Eco sub-row bug found on the way: the sub-drops rendered a `disabledReason` but ignored `disabled`, so a gated one would have looked disabled and still written through on click.
+
+- 7a9699c: Group a session's actions at the end of its action bar (#807). Serve, Stop, Remove and Open session sat at the start of the row, interleaved with the worktree chip, and since each one is conditional the row shifted under the cursor as a session moved through its life. What the session is now reads at the start of the bar; what you can do to it sits at the end, in one place.
+- a7582e1: Per-project settings now actually save (#866). The daemon serves a prebuilt dashboard and so registers each telefunction by hand, and the two per-project preference ones were never added to that list. Every read and write of a project's own settings answered 400, the caller discarded the rejection, and the dashboard went on showing the value you picked, so a setting looked saved until the next reload threw it away. Per-project run options (#800) silently fell back to the global ones.
+
+  A test now holds the registry against the telefunc modules' own exports, so a telefunction that is added but never registered fails the suite instead of failing in the daemon.
+
+- 5b7b2c8: Auto PM now paces itself by your own usage limits (#870). It used to keep a second budget rule of its own, refusing unless half of every window was still free, so there were two sets of limits to reason about and the stricter one was invisible. It now runs while your configured limits are not met and stands down once one is, which is the same line autopilot already stops at.
+
+  It still refuses to start anything when the quota cannot be read at all: an unreadable budget must never stop your own work, but it does stop work nobody asked for.
+
+  The `DEFAULT_MIN_FREE_PERCENT` export and the `minFreePercent` override are gone with the rule.
+
+- afcbfce: The project log survives a multi-line prompt (#897)
+
+  `.the-framework/LOGS.md` is committed history, but a run's entry wrote the prompt straight
+  into the entry's heading. A prompt spanning several lines spilled the rest of itself into the
+  file as loose text, where reading the log dropped it; a prompt containing a line that looked
+  like a heading forged a second entry, and one that looked like a status line rewrote the real
+  one.
+
+  A title and a prompt bullet are now escaped to a single line on write and unescaped on read,
+  so a prompt round-trips whole whatever it contains. Logs written before this still read fine.
+
+- c02f317: Fix Stop doing nothing, and headless runs never exiting (#905)
+
+  A run decided whether it could be steered by asking whether _a daemon was alive on this machine_.
+  That is not a fact about the run, and it was wrong in both directions.
+
+  The daemon spawns every run with `--no-dashboard`, so that check was the only thing wiring their
+  control channel. When the daemon's state file went missing while the daemon was still running (it
+  deletes itself on a stale pid and is never rewritten, #922), spawned runs stopped watching the
+  control channel: every Stop press was written to disk and read by nobody, with no error shown.
+
+  The same check ran the other way too. A run typed into a terminal with `--no-dashboard` picked up a
+  control channel just because a daemon existed somewhere, which handed it the live-chat queue, and
+  it waited forever for a message that terminal could never send.
+
+  Those are now two separate questions. A run is steerable when it has its own dashboard, when a
+  daemon is live (unchanged, so a daemon still steers runs it did not start), or when whoever spawned
+  it gave it a run id, which is what the daemon does and what holds when the state file does not. A
+  run stays open for chat only when someone is actually waiting in it: its own dashboard, or the
+  daemon started it. Stop and choice picks keep working either way.
+
+- 135f210: A synchronously-failing gateway socket factory no longer kills the Discord bot permanently (#942)
+
+  When the socket factory threw synchronously (e.g. a malformed URL), open() logged and returned:
+  no socket exists, so no onClose ever fires and no reconnect is ever scheduled — zero loop instead
+  of the backed-off one reopen() was designed for. The catch now falls through to the same backoff
+  path a failed connection takes; stop() still cancels it.
+
+- 8df2f95: Colour the mark while the AI is working (#875). The hexknot in the top bar, and the tab icon beside it, switch to the brand's animated colour variant for as long as any project has a session running, and back to the black & white mark when nothing does. Hovering the mark says which: "AI is working for you 🚀" or "AI isn't working for you 💤". The shared read-only relay view follows the one run it is watching.
+- daef9a5: Stop a daemon boot from marking live runs as finished. The boot reconcile flipped every run meta still at `running` to `stopped`, on the assumption that a fresh daemon drives no in-flight run. That holds only while exactly one daemon ever boots, so a second one marked genuinely live runs as finished, giving them a no-op Stop in the dashboard. A meta whose recorded pid is alive on this host is now left alone; one that is provably gone, on another host, or from before the pid was recorded is reconciled as before.
+- bf70326: New [Market research] preset (#694)
+
+  Researches the market, writes it to `MARKET_RESEARCH.md`, and queues a follow-up that
+  turns the findings into tickets. Researching and deciding what to build from the research
+  are separate runs, so a human can read the findings before anything is proposed.
+
+  `MARKET_RESEARCH.md` joins the context every run starts with, as a document the agent
+  reads rather than one it folds knowledge back into at merge.
+
+- 728d833: Give the chat log back its scrollbar styling (#914). Our port of shadcn's message-scroller dropped the styling upstream puts on its viewport, because those classes come from a Tailwind plugin we do not have. They are back as three small local utilities on plain `scrollbar-width` / `scrollbar-color` / `scrollbar-gutter`: the log's bar is toned like the rest of the app, its width is reserved so arriving output does not shift the text sideways, and it goes quiet while the log is chasing the live edge. The log's bottom edge now fades out while there is more below it, and the fade is gone at the live edge so the newest line is never dimmed.
+- 9a3327b: Continue a finished session even when its agent conversation is gone (#778). Resuming passes the captured session id to the agent CLI, which refuses it once the conversation has left its history. The driver now retries that turn once without the resume flag, so the session continues as a fresh conversation and says so in the event log, instead of failing with the reason buried there.
+- 513f3ba: Stop the dashboard growing a second, phantom scrollbar (#904). The document itself was scrollable next to the content pane's own scrollbar, and dragging it slid the whole app, header and all, off the top of the window. Visually-hidden labels are absolutely positioned, and with no positioned ancestor they escaped the workspace row's clipping and kept their place deep inside the scrolled content, which is what the browser measured the page against. Only the pane scrolls now.
+- 698bc1f: Report what the post-merge cleanup step did (#835). It used to decline for five reasons, four of them silently, and say so on stdout in the one case that spoke up. A dashboard-started run is spawned with `stdio: 'ignore'`, so turning on Post-merge cleanup and getting nothing was indistinguishable from it having run. The outcome is now a real `on-before-mergeable` event (queued, incomplete, or skipped with the reason), and it fires before the run's event log is archived so it survives into the run's history.
+- 181c7b5: PREFERENCE_KEYS is compiler-enforced complete against Preferences (#944)
+
+  The boolean key list is now derived from a Record over the boolean keys of the Preferences type,
+  so omitting a newly added boolean preference fails the build instead of making
+  sanitizePreferences silently drop it on every save (write-then-vanish). No runtime behavior
+  changes today; this closes the failure shape for every future preference.
+
+- b214e85: Auto PM lands its queue in the checkout instead of re-doing the work forever (#852)
+
+  A run works in its own git worktree, so the queue it wrote lived on a branch the
+  sweep never reads. The checkout still looked empty, and every cooldown auto PM
+  re-derived the same entries onto a new branch, spending real quota each time.
+
+  The daemon now copies `TODO_AGENTS.md` from a finished run's branch into the
+  project checkout, committing only that path. The agent never writes to the
+  checkout, and a checkout with uncommitted queue edits is left alone.
+
+- 92eec90: Point the prompting at `TODO_AGENTS.md`, the queue file the code actually promotes (#885)
+
+  Both `${{ }}` blocks of the system prompt declared `TODO_FILE` as `TODO_<SESSION_NAME>.agent.md`,
+  while the code had already moved to the flat `TODO_AGENTS.md`: that name is `FLAT_TODO_FILE`, the
+  session-scoped one is `LEGACY_TODO_FILE`, and `promoteQueue` carries only the flat file off a run's
+  branch.
+
+  So an agent following the prompt wrote its backlog to a legacy name that nothing promotes, and an
+  unattended run's queue never reached the checkout. The reader tolerates both names, which is why
+  this stayed invisible.
+
+  The two assertions that pinned the old name now derive it from `FLAT_TODO_FILE` instead of
+  hardcoding a literal, so the prompt cannot silently desync from the code again.
+
+- c17e550: Reply-mirror bindings are released once their run is gone (#941)
+
+  Nothing ever unbound a chat-touched run, so every binding stayed in the map for the daemon's
+  lifetime and each 3s poll scanned every project's live metas per bound run — IO that only ever
+  grew. The daemon's conversation reader now answers `undefined` for a run with no live meta
+  anywhere (archived, or its project removed), and after a few consecutive misses the mirror drops
+  the binding and logs it. A transient miss (or a throwing read) still costs one poll, not the
+  binding, and a fresh bind gets the same grace against the meta-not-yet-on-disk race.
+
+- c7803cb: Give the rails and panels a scrollbar you can see (#913). The Sessions rail, the Docs / Tickets / Log panels, the agent's views and choices, and the Overview all scrolled behind the OS scrollbar, which on macOS hides itself: a rail full of sessions looked like a rail with nothing more in it. They now use shadcn's Base UI scroll area, themed from our own tokens, present for as long as the content overflows and darkening under the pointer. A panel whose content fits still shows no bar at all.
+- 2fad888: An agent that names its session "view" is no longer silently ignored (#939)
+
+  slugify's empty-slug fallback was the literal sentinel `view`, and parseSessionName rejected that
+  sentinel, so a legitimate `View` in a set-session-name block was indistinguishable from no name
+  and the rename was dropped. slugify now takes its fallback explicitly: parseSessionName tests for
+  emptiness, and the `view` fallback stays local to the markdown-view ids where it belongs.
+
+- bc5b90d: A malformed request can no longer kill the daemon, the relay, or a preview server (#938)
+
+  Three request paths crashed the process on hostile-but-trivial input: `decodeURIComponent` on the
+  raw path in the dashboard bundle server and the preview fallback server (`GET /%zz` became an
+  unhandled rejection out of a void-dispatched handler), and `new URL(req.url, ...)` in the dashboard
+  and relay request handlers (an absolute-form request target like `GET http://[ HTTP/1.1` throws
+  synchronously; Node passes it through verbatim). The dashboard now treats a malformed escape as an
+  unknown path (the SPA shell), the preview server and relay answer 400, an unparseable request
+  target answers 400 everywhere, and a trailing-slash cwd no longer fails the preview server's
+  path-prefix check.
+
+- 24b900a: An agent CLI that exits before reading its prompt no longer crashes the daemon (#943)
+
+  The shared CLI runner wrote the prompt to the child's stdin with no error listener. A CLI that
+  dies before draining stdin (bad flag, instant crash) surfaces an async EPIPE on the stream, which
+  with no listener is an uncaught exception in the daemon. The write error is now swallowed; the
+  close handler already reports the failed turn with the CLI's own stderr.
+
+- bcecc7b: Stop a status check from unregistering a running daemon. `daemonStatus()` deleted the state file whenever it named a process that was gone, and the daemon only ever wrote that file at startup, so one check against a stale pid left a live daemon invisible for the rest of its life: `framework stop` could not find it, and `framework --daemon` kept spawning a replacement that died on the already-bound port. The read now reports a stale record instead of deleting it, a running daemon re-asserts its record if it goes missing, and the record is written atomically so a torn read is never mistaken for a dead daemon.
+- 30f41ee: Use the numeric priority scale in the TODO_AGENTS.md format spec (#880)
+
+  The shipped spec described named tiers (URGENT / High / Medium / Low). The format was revised to
+  a numeric 0-10 scale — 10 is act-immediately, 0 is only-if-capacity — so the spec now matches.
+
+  Still no parser change: entries are read in file order and headings are skipped, so a
+  priority-sorted file drains in priority order.
+
+- 0f16b3e: Auto PM runs no longer hang on their first choice gate (#846)
+
+  A daemon-spawned run parks each choice gate waiting for a human, and autopilot's
+  auto-accept countdown runs in the browser — so a run started while nobody was
+  watching waited forever. Runs the daemon starts on its own are now marked
+  unattended and take the recommended option, the same fallback a headless run
+  already uses. Stop is unaffected.
+
+- 58786ca: Discord webhook posts are clamped to the 2000-char limit and failures are logged (#940)
+
+  The notification posters (activity, needs-you interventions) sent whatever content they built and
+  never looked at the response. Discord rejects a message over 2000 chars with a 400, so a long
+  needs-you batch silently posted nothing. The shared webhook transport now clamps with the same
+  helper the bot API uses, resolves whether Discord accepted the post, and the daemon logs a failed
+  delivery like its other failures.
+
+- Updated dependencies [6f7cf23]
+- Updated dependencies [66c7aeb]
+  - @gemstack/ai-autopilot@0.11.0
+
 ## 0.9.0
 
 ### Minor Changes

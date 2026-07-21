@@ -1,6 +1,6 @@
 {
   "name": "@gemstack/example-connectors-quickstart",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "private": true,
   "description": "Runnable reference connector built with @gemstack/mcp-connectors: a read-only in-memory source, mounted into an MCP server and exercised with McpTestClient. Copy from this to write a real connector.",
   "type": "module",
