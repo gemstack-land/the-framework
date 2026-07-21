@@ -5,7 +5,7 @@ import { RunOverview } from './RunOverview.js'
 
 // The project home / launcher — what "Live" selects. Always the Start form + preset cards +
 // the current stack overview; it is never consumed by a run. Starting one appends a run to
-// the rail and adds that run's own view (RunLive) alongside — this page stays put, so you can
+// the rail and adds that run's own view (RunView) alongside — this page stays put, so you can
 // launch again. (Actually running several at once lands with git worktrees, #453.)
 export function ProjectHome({
   projectId,
