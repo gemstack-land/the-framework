@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { parse as parseYaml } from 'yaml'
+import { errorMessage } from './error-message.js'
 
 /**
  * The per-repo run defaults persisted in `the-framework.yml` (#204): which Open
@@ -49,7 +50,7 @@ export async function loadFrameworkConfig(
       return parseFrameworkConfig(raw, name)
     } catch (err) {
       // parseFrameworkConfig already prefixes the file name in its message.
-      onWarn?.(`ignoring ${err instanceof Error ? err.message : String(err)}`)
+      onWarn?.(`ignoring ${errorMessage(err)}`)
       return {}
     }
   }

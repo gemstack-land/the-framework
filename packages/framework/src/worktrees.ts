@@ -1,4 +1,5 @@
 import { formatBytes } from './format-bytes.js'
+import { errorMessage } from './error-message.js'
 import {
   listWorktreeDirs,
   listRuns,
@@ -99,7 +100,7 @@ export async function removeProjectWorktree(cwd: string, runId: string): Promise
     await pruneWorktrees(cwd)
     return { ok: true }
   } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : String(err) }
+    return { ok: false, error: errorMessage(err) }
   }
 }
 

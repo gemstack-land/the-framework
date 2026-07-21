@@ -1,3 +1,5 @@
+import { errorMessage } from '../error-message.js'
+
 /**
  * A minimal Discord gateway client (#680): the inbound half of the Discord integration, which
  * until now was outbound-only — a webhook `POST` can notify, but it cannot read a reply (#627).
@@ -373,5 +375,5 @@ function asString(value: unknown): string | undefined {
 }
 
 function errText(err: unknown): string {
-  return err instanceof Error ? err.message : String(err)
+  return errorMessage(err)
 }

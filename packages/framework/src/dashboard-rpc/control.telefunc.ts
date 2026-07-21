@@ -24,6 +24,7 @@ import type {
 import type { ServeTarget } from '../preview.js'
 import type { DashboardContext } from '../dashboard/telefunc-serve.js'
 import type { Preferences } from '../registry.js'
+import { errorMessage } from '../error-message.js'
 
 // The write side behind the new dashboard (#405): steering a live run. The reverse of
 // the event stream — events flow run -> events.jsonl -> Channel -> browser; steering
@@ -111,7 +112,7 @@ export async function sendRemoveWorktree(projectId: string, runId: string): Prom
     await pruneWorktrees(cwd)
     return { ok: true }
   } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : String(err) }
+    return { ok: false, error: errorMessage(err) }
   }
 }
 

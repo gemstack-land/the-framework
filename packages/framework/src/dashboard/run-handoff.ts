@@ -1,6 +1,7 @@
 import { nodeGitRunner, type GitRunner } from '../project.js'
 import { ghPrView, nodeGhRunner, type GhRunner, type LinkedPr, type BranchPrLookup } from './gh.js'
 import { parseNumstat } from './file-diff.js'
+import { errorMessage } from '../error-message.js'
 
 // What a finished session produced, and what is left to do with it (#799).
 //
@@ -202,7 +203,7 @@ export async function pushRunBranch(
  * reason it failed.
  */
 export function gitReason(err: unknown): string {
-  const message = err instanceof Error ? err.message : String(err)
+  const message = errorMessage(err)
   const lines = message.split('\n').map(line => line.trim()).filter(Boolean)
   return lines.find(line => /^(fatal|error|remote):/i.test(line)) ?? lines[0] ?? 'git failed'
 }
@@ -241,6 +242,6 @@ export async function openRunPullRequest(
     const url = out.split('\n').filter(Boolean).at(-1)
     return url ? { ok: true, url } : { ok: true }
   } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : String(err) }
+    return { ok: false, error: errorMessage(err) }
   }
 }

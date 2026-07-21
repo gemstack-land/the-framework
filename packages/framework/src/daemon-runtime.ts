@@ -28,6 +28,7 @@ import { isSafeVia } from './conversations.js'
 import { startPreview, detectServeTargets, type PreviewHandle, type ServeTarget } from './preview.js'
 import { addProject, listProjects, projectId } from './registry.js'
 import { installProject, enumerateGitRepos } from './install.js'
+import { errorMessage } from './error-message.js'
 
 /**
  * The daemon's per-project business logic (#393/#736): spawning runs into worktrees, installing
@@ -230,7 +231,7 @@ export function createProjectRuntime({ cwd, env, binPath }: ProjectRuntimeOption
       await restoreArchivedRun(projectCwd, path, runId).catch(() => false)
       return { cwd: path, runId }
     } catch (err) {
-      console.log(`[framework] could not continue session ${runId} (${err instanceof Error ? err.message : String(err)}); starting a new one`)
+      console.log(`[framework] could not continue session ${runId} (${errorMessage(err)}); starting a new one`)
       return undefined
     }
   }
@@ -254,7 +255,7 @@ export function createProjectRuntime({ cwd, env, binPath }: ProjectRuntimeOption
       await excludeDependencyLinks(projectCwd).catch(() => {})
       return { cwd: worktree.path, runId }
     } catch (err) {
-      console.log(`[framework] no worktree for ${basename(projectCwd)} (${err instanceof Error ? err.message : String(err)}); running in the main checkout`)
+      console.log(`[framework] no worktree for ${basename(projectCwd)} (${errorMessage(err)}); running in the main checkout`)
       return { cwd: projectCwd }
     }
   }
@@ -320,7 +321,7 @@ export function createProjectRuntime({ cwd, env, binPath }: ProjectRuntimeOption
     try {
       realBin = resolveSpawnBin(binPath)
     } catch (err) {
-      return { ok: false, error: err instanceof Error ? err.message : String(err) }
+      return { ok: false, error: errorMessage(err) }
     }
 
     // Continuing an existing run (#762) reuses its id, checkout and log; anything else is new.
@@ -453,7 +454,7 @@ export function createProjectRuntime({ cwd, env, binPath }: ProjectRuntimeOption
       trackPreview(key, handle)
       return { ok: true, url: handle.url, command: handle.command }
     } catch (err) {
-      return { ok: false, error: err instanceof Error ? err.message : String(err) }
+      return { ok: false, error: errorMessage(err) }
     }
   }
   const onStopPreview = async (targetProjectId?: string, runId?: string): Promise<void> => {

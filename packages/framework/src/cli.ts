@@ -74,6 +74,7 @@ import { defaultWhat } from './preset-prompt.js'
 import { renderOnBeforeMergeablePrompt, type OnBeforeMergeableContext } from './on-before-mergeable-prompt.js'
 import { runPrompt } from './prompt-run.js'
 import { presets } from './preset-catalog.js'
+import { errorMessage } from './error-message.js'
 
 /**
  * The default link shown for a live run: the generic Claude Code entry point,
@@ -839,7 +840,7 @@ async function settleRun(
       if (dashboard) await keepDashboardUp(dashboard, io)
       return 0
     }
-    io.err(`\n✗ ${ctx.failLabel} failed: ${err instanceof Error ? err.message : String(err)}`)
+    io.err(`\n✗ ${ctx.failLabel} failed: ${errorMessage(err)}`)
     await dashboard?.close()
     return 1
   } finally {
@@ -878,7 +879,7 @@ async function startRunDashboard(
     io.out(`◆ dashboard${labels.resumed ? ' (resumed)' : ''}: ${dashboard.url}`)
     return dashboard
   } catch (err) {
-    io.err(`could not start dashboard (${err instanceof Error ? err.message : String(err)}); ${labels.headlessNote}`)
+    io.err(`could not start dashboard (${errorMessage(err)}); ${labels.headlessNote}`)
     return undefined
   }
 }
@@ -1315,7 +1316,7 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
         ...(opts.continueRun ? { continueRun: true } : {}),
       })
     } catch (err) {
-      io.err(`could not persist session state (${err instanceof Error ? err.message : String(err)}); continuing without it`)
+      io.err(`could not persist session state (${errorMessage(err)}); continuing without it`)
     }
   }
 
@@ -1352,7 +1353,7 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
         }
       })
     } catch (err) {
-      io.err(`control channel unavailable (${err instanceof Error ? err.message : String(err)}); daemon steering disabled`)
+      io.err(`control channel unavailable (${errorMessage(err)}); daemon steering disabled`)
     }
   }
 
@@ -1361,7 +1362,7 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
   let publisher: RelayPublisher | undefined
   if (opts.share) {
     publisher = relayPublisher(opts.share, randomUUID(), err =>
-      io.err(`relay publish failed (${err instanceof Error ? err.message : String(err)})`),
+      io.err(`relay publish failed (${errorMessage(err)})`),
     )
     io.out(`◆ shared session: ${publisher.url}`)
   }
@@ -1668,7 +1669,7 @@ async function runForegroundDaemonCmd(opts: CliOptions, io: CliIO): Promise<numb
       },
     })
   } catch (err) {
-    io.err(`could not start the dashboard (${err instanceof Error ? err.message : String(err)}).`)
+    io.err(`could not start the dashboard (${errorMessage(err)}).`)
     return 1
   }
   return 0
@@ -1687,7 +1688,7 @@ async function ensureDaemonCmd(opts: CliOptions, io: CliIO): Promise<number> {
   try {
     result = await ensureDaemon(cwd, { port })
   } catch (err) {
-    io.err(`could not start the dashboard daemon (${err instanceof Error ? err.message : String(err)}).`)
+    io.err(`could not start the dashboard daemon (${errorMessage(err)}).`)
     return 1
   }
   // One daemon per machine (#393): when it is already running, `framework` in a new repo
@@ -1901,7 +1902,7 @@ export async function runOnBeforeMergeable(
   try {
     await materializePresets(cwd, fs)
   } catch (err) {
-    io.out(`  ! on-before-mergeable: could not materialize presets (${err instanceof Error ? err.message : String(err)})`)
+    io.out(`  ! on-before-mergeable: could not materialize presets (${errorMessage(err)})`)
   }
   io.out(`\n◆ on-before-mergeable: queueing quality follow-ups for ${tf.session_name}`)
   const ok = await run(renderOnBeforeMergeablePrompt(tf, eco), cwd, binPath, maxCost)
@@ -1936,7 +1937,7 @@ async function resumeRun(opts: CliOptions, io: CliIO): Promise<number> {
   try {
     store = await RunStore.open(cwd, { fresh: false })
   } catch (err) {
-    io.err(`could not open .the-framework/ in ${cwd} (${err instanceof Error ? err.message : String(err)})`)
+    io.err(`could not open .the-framework/ in ${cwd} (${errorMessage(err)})`)
     return 1
   }
   const events = await store.loadEvents()

@@ -32,6 +32,7 @@ import { leaveResumeNote, runTodoLoop, type TodoLoopResult } from './todo-loop.j
 import { continueAfterChoice, decideDeploy, deployWith, domainLoopChecklist, driverBuild, driverChecklist, driverImprove, driverLoopPrompts } from './steps.js'
 import { OPEN_LOOP_MODES, pickedIds, type ChoicePick, type ChoiceRequest, type FrameworkEvent } from './events.js'
 import type { RunMessages } from './run-messages.js'
+import { errorMessage } from './error-message.js'
 
 /**
  * The framework's default full-fledged pass budget. Higher than ai-autopilot's
@@ -1017,7 +1018,7 @@ async function startAppPreview(
       },
     }
   } catch (err) {
-    emit({ kind: 'log', message: `preview: could not boot the app (${err instanceof Error ? err.message : String(err)})` })
+    emit({ kind: 'log', message: `preview: could not boot the app (${errorMessage(err)})` })
     // Leave cleanup to the caller's finally (runner.dispose stops leftovers).
     return undefined
   }

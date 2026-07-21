@@ -1,6 +1,7 @@
 import type { GitRunner } from './project.js'
 import { nodeGitRunner } from './project.js'
 import { FLAT_TODO_FILE } from './tickets.js'
+import { errorMessage } from './error-message.js'
 
 /**
  * Promoting the agent queue out of a finished run's branch and into the project checkout (#852).
@@ -83,6 +84,6 @@ export async function promoteQueue(
     await git(['commit', '-m', promotionMessage(run.id), '--', FLAT_TODO_FILE], projectCwd)
     return { promoted: true, branch }
   } catch (err) {
-    return { promoted: false, reason: err instanceof Error ? err.message : String(err) }
+    return { promoted: false, reason: errorMessage(err) }
   }
 }

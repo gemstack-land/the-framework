@@ -4,6 +4,7 @@ import { CONVERSATIONS_DIR } from './conversations.js'
 import { THE_FRAMEWORK_DIR } from './framework-dir.js'
 import type { GitRunner } from './project.js'
 import { nodeGitRunner } from './project.js'
+import { errorMessage } from './error-message.js'
 
 /**
  * Committing the conversations the daemon records (#912) into the project checkout.
@@ -166,7 +167,7 @@ export async function commitConversations(
     await git(['commit', '-m', commitMessage(files), '--', CONVERSATIONS_PATHSPEC], cwd)
     return { committed: true, files }
   } catch (err) {
-    return { committed: false, reason: err instanceof Error ? err.message : String(err) }
+    return { committed: false, reason: errorMessage(err) }
   }
 }
 

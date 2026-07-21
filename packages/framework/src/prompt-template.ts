@@ -1,3 +1,5 @@
+import { errorMessage } from './error-message.js'
+
 /**
  * The `${{ ... }}` markdown-fragment layer (#350): the #326 system prompt embeds
  * JS expressions (e.g. a ternary on `tf.params.autopilot`), so the verbatim
@@ -36,7 +38,7 @@ export function renderTemplate(template: string, context: Record<string, unknown
     try {
       result = new Function(...names, `'use strict'; return (${expression});`)(...values)
     } catch (err) {
-      throw new TemplateFragmentError(expression, `failed to evaluate: ${err instanceof Error ? err.message : String(err)}`)
+      throw new TemplateFragmentError(expression, `failed to evaluate: ${errorMessage(err)}`)
     }
     if (result === undefined) throw new TemplateFragmentError(expression, 'evaluated to undefined (typo in the expression?)')
     return String(result)
