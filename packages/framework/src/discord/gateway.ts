@@ -197,6 +197,10 @@ export class DiscordGateway {
       socket = factory(url)
     } catch (err) {
       this.log(`could not open the Discord gateway: ${errText(err)}`)
+      // No socket means no onClose will ever fire, so returning here would end reconnection
+      // for the daemon's lifetime (#942). Fall through to the same backoff a failed
+      // connection takes; `stop()` still wins because reopen() checks `stopped`.
+      this.reopen()
       return
     }
     this.socket = socket
