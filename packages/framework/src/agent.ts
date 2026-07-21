@@ -1,21 +1,15 @@
 import { ClaudeCodeDriver, CodexDriver, type ClaudeCodeDriverOptions, type Driver } from './driver/index.js'
+import { AGENT_LABELS, type AgentName } from './agent-names.js'
 
 /**
  * Which agent drives a run (#542). Each is a whole coding-agent CLI the user
  * already pays for, driven on their own subscription with no API key (#495).
  *
- * This is the table `--agent` picks from: adding the third agent is one entry
- * here plus its driver, not another branch at every call site.
+ * The names live in the node-free `agent-names.ts` so the dashboard and the registry read
+ * the same list without touching the driver layer; this module adds what only the node side
+ * needs (binaries, drivers). Historical import sites keep working via these re-exports.
  */
-export const AGENTS = ['claude', 'codex'] as const
-
-/** An agent `--agent` can name. */
-export type AgentName = (typeof AGENTS)[number]
-
-/** Whether `value` names an agent we can drive. */
-export function isAgentName(value: string | undefined): value is AgentName {
-  return value !== undefined && (AGENTS as readonly string[]).includes(value)
-}
+export { AGENTS, isAgentName, agentForDriver, AGENT_LABELS, type AgentName } from './agent-names.js'
 
 /** What we know about an agent before we run it. */
 export interface AgentSpec {
@@ -36,13 +30,13 @@ export interface AgentSpec {
 /** The agents we can drive, and what each can tell us about itself. */
 export const AGENT_SPECS: Record<AgentName, AgentSpec> = {
   claude: {
-    label: 'Claude Code',
+    label: AGENT_LABELS.claude,
     bin: 'claude',
     installHint: 'install Claude Code and make sure `claude` is on your PATH: https://claude.com/claude-code',
     reportsCost: true,
   },
   codex: {
-    label: 'Codex',
+    label: AGENT_LABELS.codex,
     bin: 'codex',
     installHint: 'install the Codex CLI and make sure `codex` is on your PATH: https://developers.openai.com/codex/cli',
     reportsCost: false,

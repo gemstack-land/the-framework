@@ -1,9 +1,7 @@
 import { useRef } from 'react'
 import { Composer, type ComposerHandle } from './Composer.js'
+import { agentForDriver } from '@gemstack/framework/client'
 import { useStartRun } from '../lib/use-start-run.js'
-
-// The run's driver reports itself by driver name; `--agent` takes the agent name (#831).
-const AGENT_OF_DRIVER: Record<string, string> = { 'claude-code': 'claude', codex: 'codex' }
 
 // The finished-run composer (#720): keep talking to a run that has ended. A live run drains
 // messages in-process (RunChat + sendMessage), but a finished run has no process — so sending here
@@ -43,7 +41,8 @@ export function RunResumeChat({
     // A continuation is a `prompt` run seeded with the finished run's session id (#720). It
     // resumes on the run's own agent; the model and the system-prompt options are moot here, since
     // the resumed transcript keeps the framing and model it already had.
-    const agent = driver ? AGENT_OF_DRIVER[driver] : undefined
+    // The run's driver reports itself by driver name; `--agent` takes the agent name (#831).
+    const agent = agentForDriver(driver)
     const result = await start(
       projectId,
       text,
