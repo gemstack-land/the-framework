@@ -3,6 +3,7 @@ import type { ProjectSummary } from './projects.js'
 import { readRunHandoff, runBranchFor, type RunHandoff } from './run-handoff.js'
 import { ghPrList, type OpenPr, type PrLister } from './gh.js'
 import { interventionKey } from './keys.js'
+import { postDiscordWebhook } from './discord-webhook.js'
 
 // Pure identity + diff, in the leaf `keys.ts` so the dashboard shares them rather than copying.
 export { interventionKey, pickNewInterventions } from './keys.js'
@@ -202,9 +203,5 @@ export async function postInterventionsDiscord(
     items.length === 1
       ? `🔔 Needs you (${items[0]!.projectName}): ${interventionLine(items[0]!)}`
       : `🔔 ${items.length} items need you:\n${items.map(i => `• ${interventionLine(i)}`).join('\n')}`
-  await fetchImpl(webhook, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ content }),
-  })
+  await postDiscordWebhook(webhook, content, fetchImpl)
 }
