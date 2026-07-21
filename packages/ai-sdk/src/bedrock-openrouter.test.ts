@@ -2,7 +2,8 @@ import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import { AiRegistry } from './registry.js'
 import { OpenRouterProvider } from './providers/openrouter.js'
-import { BedrockProvider, isAnthropicOnBedrock, mapBedrockAnthropicEvent, type BedrockStreamState } from './providers/bedrock.js'
+import { BedrockProvider, isAnthropicOnBedrock } from './providers/bedrock.js'
+import { mapAnthropicStreamEvent, type AnthropicStreamState } from './providers/anthropic-stream.js'
 import { OpenAIAdapter } from './providers/openai.js'
 
 // ─── OpenRouter ───────────────────────────────────────────
@@ -118,13 +119,13 @@ describe('isAnthropicOnBedrock', () => {
   })
 })
 
-// ─── mapBedrockAnthropicEvent ─────────────────────────────
+// ─── mapAnthropicStreamEvent ─────────────────────────────
 
-describe('mapBedrockAnthropicEvent', () => {
-  const newState = (): BedrockStreamState => ({ lastPromptTokens: 0 })
+describe('mapAnthropicStreamEvent', () => {
+  const newState = (): AnthropicStreamState => ({ lastPromptTokens: 0 })
 
   it('maps text-delta events', () => {
-    const chunks = [...mapBedrockAnthropicEvent({
+    const chunks = [...mapAnthropicStreamEvent({
       type: 'content_block_delta',
       delta: { type: 'text_delta', text: 'Hello' },
     }, newState())]
@@ -132,7 +133,7 @@ describe('mapBedrockAnthropicEvent', () => {
   })
 
   it('maps tool_use start to tool-call-delta', () => {
-    const chunks = [...mapBedrockAnthropicEvent({
+    const chunks = [...mapAnthropicStreamEvent({
       type: 'content_block_start',
       content_block: { type: 'tool_use', id: 'tu_123', name: 'getWeather' },
     }, newState())]
@@ -143,7 +144,7 @@ describe('mapBedrockAnthropicEvent', () => {
   })
 
   it('maps input_json_delta to tool-call-delta with text', () => {
-    const chunks = [...mapBedrockAnthropicEvent({
+    const chunks = [...mapAnthropicStreamEvent({
       type: 'content_block_delta',
       delta: { type: 'input_json_delta', partial_json: '{"city":"' },
     }, newState())]
@@ -151,7 +152,7 @@ describe('mapBedrockAnthropicEvent', () => {
   })
 
   it('maps message_delta with tool_use stop reason', () => {
-    const chunks = [...mapBedrockAnthropicEvent({
+    const chunks = [...mapAnthropicStreamEvent({
       type: 'message_delta',
       delta: { stop_reason: 'tool_use' },
       usage: { output_tokens: 12 },
@@ -162,7 +163,7 @@ describe('mapBedrockAnthropicEvent', () => {
   })
 
   it('maps message_delta with end_turn stop reason', () => {
-    const chunks = [...mapBedrockAnthropicEvent({
+    const chunks = [...mapAnthropicStreamEvent({
       type: 'message_delta',
       delta: { stop_reason: 'end_turn' },
       usage: { output_tokens: 5 },
@@ -171,7 +172,7 @@ describe('mapBedrockAnthropicEvent', () => {
   })
 
   it('maps message_start to a usage chunk', () => {
-    const chunks = [...mapBedrockAnthropicEvent({
+    const chunks = [...mapAnthropicStreamEvent({
       type: 'message_start',
       message: { usage: { input_tokens: 100, output_tokens: 0 } },
     }, newState())]
@@ -181,7 +182,7 @@ describe('mapBedrockAnthropicEvent', () => {
   })
 
   it('emits nothing for unknown event types', () => {
-    const chunks = [...mapBedrockAnthropicEvent({ type: 'ping' }, newState())]
+    const chunks = [...mapAnthropicStreamEvent({ type: 'ping' }, newState())]
     assert.equal(chunks.length, 0)
   })
 
@@ -196,11 +197,11 @@ describe('mapBedrockAnthropicEvent', () => {
 
   it('threads promptTokens from message_start into the finish chunk', () => {
     const state = newState()
-    const startChunks = [...mapBedrockAnthropicEvent({
+    const startChunks = [...mapAnthropicStreamEvent({
       type: 'message_start',
       message: { usage: { input_tokens: 100, output_tokens: 0 } },
     }, state)]
-    const deltaChunks = [...mapBedrockAnthropicEvent({
+    const deltaChunks = [...mapAnthropicStreamEvent({
       type: 'message_delta',
       delta: { stop_reason: 'end_turn' },
       usage: { output_tokens: 42 },

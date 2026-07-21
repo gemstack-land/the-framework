@@ -7,19 +7,14 @@ import type {
 } from '../../types.js'
 import type { OpenAIConfig } from './config.js'
 import { createOpenAIClient } from './client.js'
+import { lazyClient } from '../lazy-client.js'
 
 // ─── Files ──────────────────────────────────────────────
 
 export class OpenAIFileAdapter implements FileAdapter {
-  private client: any = null
-
   constructor(private readonly config: OpenAIConfig) {}
 
-  private async getClient(): Promise<any> {
-    if (this.client) return this.client
-    this.client = await createOpenAIClient(this.config)
-    return this.client
-  }
+  private readonly getClient = lazyClient(() => createOpenAIClient(this.config))
 
   async upload(options: FileUploadOptions): Promise<FileUploadResult> {
     const client = await this.getClient()

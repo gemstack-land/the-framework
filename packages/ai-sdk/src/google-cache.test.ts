@@ -284,7 +284,7 @@ describe('GoogleAdapter cache wiring', () => {
     const { client, counters } = createFakeClient()
     const reg = new GoogleCacheRegistry()
     const adapter = new GoogleAdapter({ apiKey: 'k' }, 'gemini-2.5-flash', reg)
-    ;(adapter as unknown as { client: unknown }).client = client  // bypass the dynamic SDK import
+    ;(adapter as unknown as { getClient: { set(c: unknown): void } }).getClient.set(client)  // bypass the dynamic SDK import
 
     await adapter.generate({
       model: 'gemini-2.5-flash',
@@ -314,7 +314,7 @@ describe('GoogleAdapter cache wiring', () => {
     })
     const reg = new GoogleCacheRegistry()
     const adapter = new GoogleAdapter({ apiKey: 'k' }, 'gemini-2.5-flash', reg)
-    ;(adapter as unknown as { client: unknown }).client = client
+    ;(adapter as unknown as { getClient: { set(c: unknown): void } }).getClient.set(client)
 
     await adapter.generate({
       model: 'gemini-2.5-flash',
@@ -350,7 +350,7 @@ describe('GoogleAdapter cache wiring', () => {
     })
     const reg = new GoogleCacheRegistry()
     const adapter = new GoogleAdapter({ apiKey: 'k' }, 'gemini-2.5-flash', reg)
-    ;(adapter as unknown as { client: unknown }).client = client
+    ;(adapter as unknown as { getClient: { set(c: unknown): void } }).getClient.set(client)
 
     const response = await adapter.generate({
       model: 'gemini-2.5-flash',
@@ -370,7 +370,7 @@ describe('GoogleAdapter cache wiring', () => {
     const { client, counters } = createFakeClient()
     const reg = new GoogleCacheRegistry()
     const adapter = new GoogleAdapter({ apiKey: 'k' }, 'gemini-2.5-flash', reg)
-    ;(adapter as unknown as { client: unknown }).client = client
+    ;(adapter as unknown as { getClient: { set(c: unknown): void } }).getClient.set(client)
 
     await adapter.generate({
       model: 'gemini-2.5-flash',

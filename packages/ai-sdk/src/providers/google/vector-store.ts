@@ -11,6 +11,7 @@ import type {
 import { sleep } from '../../util/sleep.js'
 import type { GoogleConfig } from './config.js'
 import { createGoogleClient } from './client.js'
+import { lazyClient } from '../lazy-client.js'
 
 // ─── Vector Stores (Gemini FileSearchStores, #B8.5) ──────
 //
@@ -44,15 +45,9 @@ import { createGoogleClient } from './client.js'
 //   array shape; booleans coerce to `stringValue: 'true' | 'false'`.
 
 export class GoogleVectorStoreAdapter implements VectorStoreAdapter {
-  private client: any = null
-
   constructor(private readonly config: GoogleConfig) {}
 
-  private async getClient(): Promise<any> {
-    if (this.client) return this.client
-    this.client = await createGoogleClient(this.config)
-    return this.client
-  }
+  private readonly getClient = lazyClient(() => createGoogleClient(this.config))
 
   async create(opts: VectorStoreCreateOptions): Promise<VectorStoreInfo> {
     if (opts.metadata) {

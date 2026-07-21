@@ -14,23 +14,18 @@ import { base64ToUtf8 } from '../../base64.js'
 import { contentToString } from '../../util/content.js'
 import type { OpenAIConfig } from './config.js'
 import { createOpenAIClient } from './client.js'
+import { lazyClient } from '../lazy-client.js'
 import { buildPromptCacheKey } from './prompt-cache.js'
 
 // ─── Adapter (also reused by Ollama) ─────────────────────
 
 export class OpenAIAdapter implements ProviderAdapter {
-  private client: any = null
-
   constructor(
     private readonly config: OpenAIConfig,
     private readonly model: string,
   ) {}
 
-  private async getClient(): Promise<any> {
-    if (this.client) return this.client
-    this.client = await createOpenAIClient(this.config)
-    return this.client
-  }
+  private readonly getClient = lazyClient(() => createOpenAIClient(this.config))
 
   async generate(options: ProviderRequestOptions): Promise<ProviderResponse> {
     const client = await this.getClient()

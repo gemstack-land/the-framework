@@ -135,19 +135,18 @@ describe('toAnthropicTools — web_search hint', () => {
 // ─── Gemini native block emission ─────────────────────────
 
 describe('GoogleAdapter — google_search hint via tools array', () => {
-  // Stub the Gemini SDK client by overriding the lazy client property.
-  // The adapter's getClient() short-circuits on a non-null `this.client`.
+  // Stub the Gemini SDK client so no dynamic SDK import (or network call) runs.
   function adapter(): { adapter: GoogleAdapter; captured: () => Record<string, unknown> | undefined } {
     const a = new GoogleAdapter({ apiKey: 'sk-test' }, 'gemini-2.5-pro')
     let captured: Record<string, unknown> | undefined
-    ;(a as unknown as { client: unknown }).client = {
+    ;(a as unknown as { getClient: { set(c: unknown): void } }).getClient.set({
       models: {
         generateContent: async (payload: Record<string, unknown>) => {
           captured = payload
           return { candidates: [{ content: { parts: [{ text: 'ok' }] }, finishReason: 'STOP' }] }
         },
       },
-    }
+    })
     return { adapter: a, captured: () => captured }
   }
 

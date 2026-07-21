@@ -1,25 +1,16 @@
-import { OpenAIAdapter } from './openai.js'
-import type { ProviderFactory, ProviderAdapter } from '../types.js'
+import { defineOpenAiCompatible } from './openai-compatible.js'
 
 export interface OllamaConfig {
   baseUrl?: string | undefined
 }
 
-export class OllamaProvider implements ProviderFactory {
-  readonly name = 'ollama'
-  private readonly config: OllamaConfig
-
+export class OllamaProvider extends defineOpenAiCompatible<OllamaConfig>({
+  name: 'ollama',
+  defaultBaseUrl: 'http://localhost:11434/v1',
+  // Ollama ignores the key, but the OpenAI SDK refuses to build without one.
+  defaultApiKey: 'ollama',
+}) {
   constructor(config: OllamaConfig = {}) {
-    this.config = config
-  }
-
-  create(model: string): ProviderAdapter {
-    return new OpenAIAdapter(
-      {
-        apiKey: 'ollama',
-        baseUrl: this.config.baseUrl ?? 'http://localhost:11434/v1',
-      },
-      model,
-    )
+    super(config)
   }
 }

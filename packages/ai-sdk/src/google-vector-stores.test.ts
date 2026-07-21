@@ -54,7 +54,7 @@ async function emitToolBlock(schema: ToolDefinitionSchema): Promise<unknown[]> {
       },
     },
   }
-  ;(adapter as unknown as { client: unknown }).client = fakeClient
+  ;(adapter as unknown as { getClient: { set(c: unknown): void } }).getClient.set(fakeClient)
 
   await adapter.generate({
     model:    'gemini-2.5-flash',
@@ -450,7 +450,7 @@ function makeFakeGoogleClient(overrides: {
 function adapterWith(client: any): VectorStoreAdapter {
   const provider = new GoogleProvider({ apiKey: 'k' })
   const adapter  = provider.createVectorStores()
-  ;(adapter as unknown as { client: unknown }).client = client
+  ;(adapter as unknown as { getClient: { set(c: unknown): void } }).getClient.set(client)
   return adapter
 }
 

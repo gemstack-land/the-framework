@@ -38,7 +38,7 @@ describe('google prompt cache — only the regions actually cached are dropped',
   it('still sends the system instruction when the markers did not cache it', async () => {
     const { client, payloads } = fakeGoogleClient()
     const adapter = new GoogleAdapter({ apiKey: 'k' }, 'gemini-2.5-flash', new GoogleCacheRegistry())
-    ;(adapter as unknown as { client: unknown }).client = client
+    ;(adapter as unknown as { getClient: { set(c: unknown): void } }).getClient.set(client)
 
     await adapter.generate({
       model: 'gemini-2.5-flash',
@@ -71,7 +71,7 @@ describe('google streaming finish reason', () => {
       { candidates: [{ content: { parts: [] }, finishReason: 'STOP' }] },
     ])
     const adapter = new GoogleAdapter({ apiKey: 'k' }, 'gemini-2.5-flash')
-    ;(adapter as unknown as { client: unknown }).client = client
+    ;(adapter as unknown as { getClient: { set(c: unknown): void } }).getClient.set(client)
 
     const chunks = await collect(adapter.stream({ model: 'gemini-2.5-flash', messages: [{ role: 'user', content: 'hi' }] }))
     const finish = chunks.find(c => c.type === 'finish') as { finishReason: string } | undefined
@@ -84,7 +84,7 @@ describe('google streaming finish reason', () => {
       { candidates: [{ content: { parts: [{ text: 'partial' }] }, finishReason: 'SAFETY' }] },
     ])
     const adapter = new GoogleAdapter({ apiKey: 'k' }, 'gemini-2.5-flash')
-    ;(adapter as unknown as { client: unknown }).client = client
+    ;(adapter as unknown as { getClient: { set(c: unknown): void } }).getClient.set(client)
 
     const chunks = await collect(adapter.stream({ model: 'gemini-2.5-flash', messages: [{ role: 'user', content: 'hi' }] }))
     const finish = chunks.find(c => c.type === 'finish') as { finishReason: string } | undefined

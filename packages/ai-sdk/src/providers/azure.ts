@@ -1,5 +1,4 @@
-import { OpenAIAdapter } from './openai.js'
-import type { ProviderFactory, ProviderAdapter } from '../types.js'
+import { defineOpenAiCompatible } from './openai-compatible.js'
 
 export interface AzureOpenAIConfig {
   apiKey: string
@@ -7,21 +6,8 @@ export interface AzureOpenAIConfig {
   baseUrl: string
 }
 
-export class AzureOpenAIProvider implements ProviderFactory {
-  readonly name = 'azure'
-  private readonly config: AzureOpenAIConfig
-
-  constructor(config: AzureOpenAIConfig) {
-    this.config = config
-  }
-
-  create(model: string): ProviderAdapter {
-    return new OpenAIAdapter(
-      {
-        apiKey: this.config.apiKey,
-        baseUrl: this.config.baseUrl,
-      },
-      model,
-    )
-  }
-}
+// No default base URL: the endpoint carries the resource and deployment names,
+// so it can only come from the caller.
+export class AzureOpenAIProvider extends defineOpenAiCompatible<AzureOpenAIConfig>({
+  name: 'azure',
+}) {}
