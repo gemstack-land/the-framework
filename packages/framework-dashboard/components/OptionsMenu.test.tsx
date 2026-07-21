@@ -136,21 +136,3 @@ describe('OptionsMenu editor picker (#727)', () => {
     expect(screen.getAllByText('mate').length).toBeGreaterThan(0)
   })
 })
-
-describe('OptionsMenu saved presets (#722)', () => {
-  const base = () => ({ options: mainOptions(), ecoOptions: ecoOptions(), showEco: false, busy: false, ...editorProps })
-
-  test('deletes a saved preset by id', () => {
-    const onDeleteCustomPreset = vi.fn()
-    render(<OptionsMenu {...base()} customPresets={[{ id: 'a', label: 'Deep review', prompt: 'x' }]} onDeleteCustomPreset={onDeleteCustomPreset} />)
-    open()
-    fireEvent.click(screen.getByRole('button', { name: 'Delete preset Deep review' }))
-    expect(onDeleteCustomPreset).toHaveBeenCalledWith('a')
-  })
-
-  test('omits the "Your presets" section when there are none', () => {
-    render(<OptionsMenu {...base()} customPresets={[]} onDeleteCustomPreset={() => {}} />)
-    open()
-    expect(screen.queryByText('Your presets')).toBeNull()
-  })
-})

@@ -20,14 +20,17 @@ import type { SuggestionItem } from './prompt-editor/SuggestionList.js'
 export interface PromptEditorHandle {
   clear: () => void
   focus: () => void
+  /** Load a template (a preset's prompt) into the editor. Returns whether it replaced a draft. */
+  loadTemplate: (text: string) => boolean
 }
 
 interface PromptEditorProps {
   onChange: (markdown: string) => void
   /** Cmd/Ctrl+Enter. */
   onSubmit: () => void
-  /** A preset picked from the `/` menu (so the form can flip to a `prompt` run). */
-  onPreset?: (label: string) => void
+  /** A preset picked from the `/` menu (so the form can flip to a `prompt` run). `replaced` says
+   *  whether a typed draft was overwritten — undo brings it back, and the form's note says so. */
+  onPreset?: (label: string, replaced: boolean) => void
   /** A project referenced via `@` (so the form can add it to the run context). */
   onMentionProject?: (path: string) => void
   /** A file referenced via `#` (so the form can add its repo-relative path to the run context). */
@@ -101,13 +104,15 @@ export const PromptEditor = forwardRef<PromptEditorHandle, PromptEditorProps>(fu
   // Load a template into the live editor and sync the derived state (the empty flag + the
   // markdown out). Takes the editor as an argument so the `/` menu — whose closures are built
   // once, before useEditor resolves — can call it too, not only the imperative handle.
-  const loadTemplateInto = (ed: Editor, text: string): void => {
-    // Loading a preset replaces the whole editor, so guard typed work (#695/U11): a non-empty
-    // editor gets one confirm before its content is discarded. An empty editor loads silently.
-    if (!ed.isEmpty && typeof window !== 'undefined' && !window.confirm('Replace your current prompt with this preset?')) return
+  // Replacing a typed draft loads without a blocking confirm (#948): the replacement is one
+  // undo step (history groups the draft separately after its ~500ms window), and the caller
+  // gets `replaced` back so its note can say "undo brings it back".
+  const loadTemplateInto = (ed: Editor, text: string): boolean => {
+    const replaced = !ed.isEmpty
     applyTemplate(ed, text)
     setIsEmpty(ed.isEmpty)
     onChangeRef.current(ed.storage.markdown.getMarkdown())
+    return replaced
   }
 
   const editor = useEditor({
@@ -151,16 +156,19 @@ export const PromptEditor = forwardRef<PromptEditorHandle, PromptEditorProps>(fu
           if (item.id.startsWith('preset:')) {
             const preset = presetsRef.current.find(p => `preset:${p.id}` === item.id)
             if (preset) {
-              loadTemplateInto(ed, preset.render())
-              onPresetRef.current?.(preset.label)
+              // Drop the `/query` trigger first so it does not count as a replaced draft.
+              ed.chain().focus().deleteRange(range).run()
+              const replaced = loadTemplateInto(ed, preset.render())
+              onPresetRef.current?.(preset.label, replaced)
             }
             return
           }
           if (item.id.startsWith('custom-preset:')) {
             const preset = customPresetsRef.current.find(p => `custom-preset:${p.id}` === item.id)
             if (preset) {
-              loadTemplateInto(ed, preset.prompt)
-              onPresetRef.current?.(preset.label)
+              ed.chain().focus().deleteRange(range).run()
+              const replaced = loadTemplateInto(ed, preset.prompt)
+              onPresetRef.current?.(preset.label, replaced)
             }
             return
           }
@@ -250,6 +258,7 @@ export const PromptEditor = forwardRef<PromptEditorHandle, PromptEditorProps>(fu
       onChangeRef.current('')
     },
     focus: () => editor?.commands.focus('end'),
+    loadTemplate: (text: string) => (editor ? loadTemplateInto(editor, text) : false),
   }))
 
   useEffect(() => {

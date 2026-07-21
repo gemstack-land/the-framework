@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, type KeyboardEvent } from 'react'
 import type { CustomPreset } from '@gemstack/framework'
 import { Button } from './ui/button.js'
 
@@ -35,8 +35,20 @@ export function PresetCreatePanel({
     onSave({ id: newId(), label: trimmedLabel, prompt: trimmedPrompt })
   }
 
+  // Keyboard parity with the composer (#948): Esc cancels, ⌘/Ctrl+Enter saves.
+  const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
+    if (e.key === 'Escape') {
+      e.preventDefault()
+      onCancel()
+    }
+    if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+      e.preventDefault()
+      save()
+    }
+  }
+
   return (
-    <div className="mt-1.5 flex w-full flex-col gap-1.5 rounded-md border border-border p-2">
+    <div className="mt-1.5 flex w-full flex-col gap-1.5 rounded-md border border-border p-2" onKeyDown={onKeyDown}>
       <input
         type="text"
         value={label}

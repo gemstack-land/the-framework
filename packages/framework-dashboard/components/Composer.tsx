@@ -14,6 +14,7 @@ import { useLoaded } from '../lib/use-async.js'
 import { onProjects } from '../server/projects.telefunc.js'
 import { PromptEditor, type PromptEditorHandle } from './PromptEditor.js'
 import { PresetCreatePanel } from './PresetCreatePanel.js'
+import { PresetsMenu } from './PresetsMenu.js'
 import { AgentModelMenu, type AgentOption } from './AgentModelMenu.js'
 import { OptionsMenu, type OptionRow } from './OptionsMenu.js'
 import { ResolvedOptions } from './ResolvedOptions.js'
@@ -73,8 +74,9 @@ export const Composer = forwardRef<ComposerHandle, {
   onSubmit: (text: string, kind: 'build' | 'prompt') => void | Promise<void>
   /** Mirror the live prompt + kind out, so the launcher can drive its disclosure/context UI. */
   onPromptChange?: ((prompt: string, kind: 'build' | 'prompt') => void) | undefined
-  /** A preset was loaded (so the launcher can flag it in its note). */
-  onPreset?: ((label: string) => void) | undefined
+  /** A preset was loaded (so the launcher can flag it in its note); `replaced` says a typed
+   *  draft was overwritten (undo brings it back). */
+  onPreset?: ((label: string, replaced: boolean) => void) | undefined
   busy: boolean
   submitLabel: string
   submitBusyLabel: string
@@ -157,11 +159,18 @@ export const Composer = forwardRef<ComposerHandle, {
     void onSubmit(text, kind)
   }
 
-  // A preset button (or the `/` menu) loads the rendered template into the editor, which chip-ifies
-  // its tags; the run then goes verbatim as a `prompt` kind.
-  const loadPreset = (label: string) => {
+  // A preset (from the `/` menu or the Presets button) loads the rendered template into the
+  // editor, which chip-ifies its tags; the run then goes verbatim as a `prompt` kind.
+  const loadPreset = (label: string, replaced: boolean) => {
     setKind('prompt')
-    onPreset?.(label)
+    onPreset?.(label, replaced)
+  }
+
+  // The Presets button's load path (#948): through the imperative handle rather than the
+  // suggestion plugin, then the same bookkeeping as the `/` menu.
+  const loadPresetFromMenu = (text: string, label: string) => {
+    const replaced = editorRef.current?.loadTemplate(text) ?? false
+    loadPreset(label, replaced)
   }
 
   const onPromptEdit = (value: string) => {
@@ -232,6 +241,19 @@ export const Composer = forwardRef<ComposerHandle, {
           busy={busy}
         />
       )}
+      {/* Presets get a visible surface (#948): load, create and delete in one menu, instead of
+          loading only behind typing `/` and deleting off in the options gear. Not in the compact
+          row, which has no room and no create panel. */}
+      {!compact && (
+        <PresetsMenu
+          presets={presets}
+          customPresets={customPresets}
+          busy={busy}
+          onLoad={loadPresetFromMenu}
+          onNew={() => setAddingPreset(true)}
+          onDelete={id => updatePreferences({ customPresets: customPresets.filter(p => p.id !== id) })}
+        />
+      )}
       <OptionsMenu
         options={mainOptions}
         ecoOptions={ecoOptions}
@@ -240,10 +262,6 @@ export const Composer = forwardRef<ComposerHandle, {
         editor={editor}
         editors={detectedEditors}
         onEditorChange={e => updatePreferences({ editor: e ?? '' })}
-        // Preset loading + "New preset…" moved to the `/` menu (#722); the gear keeps the manage
-        // side, deleting a saved preset.
-        customPresets={customPresets}
-        onDeleteCustomPreset={id => updatePreferences({ customPresets: customPresets.filter(p => p.id !== id) })}
       />
     </>
   )
@@ -308,10 +326,14 @@ export const Composer = forwardRef<ComposerHandle, {
         <PresetCreatePanel
           currentPrompt={prompt}
           busy={busy}
-          onCancel={() => setAddingPreset(false)}
+          onCancel={() => {
+            setAddingPreset(false)
+            editorRef.current?.focus()
+          }}
           onSave={preset => {
             updatePreferences({ customPresets: [...customPresets, preset] })
             setAddingPreset(false)
+            editorRef.current?.focus()
           }}
         />
       )}

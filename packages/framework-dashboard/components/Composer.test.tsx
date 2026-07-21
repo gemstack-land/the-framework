@@ -64,8 +64,9 @@ afterEach(cleanup)
 describe('Composer (#721)', () => {
   test('renders the full control row: agent/model, options gear, and the submit button', () => {
     renderComposer({ submitLabel: 'Start session' })
-    // The standalone Presets dropdown is gone (#722): presets load from the editor's `/` menu.
-    expect(screen.queryByText('Presets')).toBeNull()
+    // Presets have a visible surface again (#948): the `/` menu stays the fast path, the
+    // button is the discoverable one.
+    expect(screen.getByRole('button', { name: /Presets/ })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Session options' })).toBeTruthy()
     expect(screen.getByTitle(/Agent: Claude Code/)).toBeTruthy() // the agent/model trigger
     expect(screen.getByRole('button', { name: /Start session/ })).toBeTruthy()

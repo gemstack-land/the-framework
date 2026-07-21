@@ -95,9 +95,13 @@ export function StartRunForm({
           setPrompt(value)
           if (!value.trim() && note) setNote(null)
         }}
-        onPreset={label => {
+        onPreset={(label, replaced) => {
           reset()
-          setNote(`${label} preset loaded — review or edit, then Start`)
+          setNote(
+            replaced
+              ? `${label} preset loaded over your draft — undo (⌘Z) brings the draft back`
+              : `${label} preset loaded — review or edit, then Start`,
+          )
         }}
         busy={busy}
         submitLabel="Start session"
