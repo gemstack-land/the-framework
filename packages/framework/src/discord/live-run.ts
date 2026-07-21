@@ -1,6 +1,5 @@
-import { join } from 'node:path'
 import type { FrameworkEvent } from '../events.js'
-import { EVENTS_FILE, FRAMEWORK_DIR, nodeStoreFs, readLiveMetas, type StoreFs } from '../store/index.js'
+import { nodeStoreFs, readEventLog, readLiveMetas, type StoreFs } from '../store/index.js'
 import type { Gate, RunSnapshot } from './routing.js'
 
 /**
@@ -8,28 +7,9 @@ import type { Gate, RunSnapshot } from './routing.js'
  *
  * The parked gate needs its options, and those are not on the run meta: `pendingChoice` carries
  * only the gate's id and title, because that is all the dashboard's rail needed. The options live
- * in the `choice` event, so answering "2" from chat means reading the run's event log.
+ * in the `choice` event, so answering "2" from chat means reading the run's event log — through
+ * the store's own reader, so this surface cannot keep a drifted copy of the torn-line policy.
  */
-
-/** Read a run's live event log. Missing/unreadable yields `[]` — never throws. */
-export async function readLiveEvents(runCwd: string, fs: StoreFs = nodeStoreFs()): Promise<FrameworkEvent[]> {
-  const path = join(runCwd, FRAMEWORK_DIR, EVENTS_FILE)
-  try {
-    if (!(await fs.exists(path))) return []
-    const events: FrameworkEvent[] = []
-    for (const line of (await fs.read(path)).split('\n')) {
-      if (!line.trim()) continue
-      try {
-        events.push(JSON.parse(line) as FrameworkEvent)
-      } catch {
-        // A torn last line is normal while a run is writing; skip it.
-      }
-    }
-    return events
-  } catch {
-    return []
-  }
-}
 
 /**
  * The still-open gate with this id, or `undefined` when it was already answered. A gate is open
@@ -68,7 +48,7 @@ export async function snapshotLiveRun(
 
   const snapshot: RunSnapshot = { projectId, runId: running.id }
   if (running.pendingChoice) {
-    const gate = openGate(await readLiveEvents(running.cwd, fs), running.pendingChoice.id)
+    const gate = openGate(await readEventLog(running.cwd, fs), running.pendingChoice.id)
     if (gate) snapshot.gate = gate
   }
   return snapshot

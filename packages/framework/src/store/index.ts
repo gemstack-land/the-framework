@@ -5,6 +5,8 @@ export {
   metaFromEvents,
   listRuns,
   readAllRuns,
+  findRun,
+  readEventLog,
   readLiveMeta,
   reconcileOrphanedRuns,
   loadRunEvents,

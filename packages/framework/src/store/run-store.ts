@@ -310,6 +310,25 @@ async function readMetaFile(fs: StoreFs, path: string): Promise<RunMeta | undefi
   }
 }
 
+/** Write a {@link RunMeta} file. The one owner of the on-disk encoding, symmetric to
+ * {@link readMetaFile} — every meta write in this module goes through it. */
+function writeMetaFile(fs: StoreFs, path: string, meta: RunMeta): Promise<void> {
+  return fs.write(path, JSON.stringify(meta, null, 2) + '\n')
+}
+
+/**
+ * Flip the live run at `dir` to `stopped` and archive it, returning the stopped meta. The
+ * shared tail of every self-heal: a `running` meta whose process is gone must both stop
+ * showing as live and keep its history. Best-effort on both writes — healing must never
+ * make a read throw.
+ */
+async function stopAndArchiveLive(fs: StoreFs, dir: string, meta: RunMeta): Promise<RunMeta> {
+  const stopped: RunMeta = { ...meta, status: 'stopped' }
+  await writeMetaFile(fs, join(dir, META_FILE), stopped).catch(() => {})
+  await archivePriorRun(fs, dir).catch(() => {})
+  return stopped
+}
+
 /** Rebuild {@link RunMeta} from a full event log (used when resuming). */
 export function metaFromEvents(events: readonly FrameworkEvent[], startedAt: string): RunMeta {
   let meta = freshMeta(startedAt)
@@ -430,7 +449,7 @@ export class RunStore {
   }
 
   private writeMeta(): Promise<void> {
-    return this.fs.write(this.metaPath, JSON.stringify(this.meta, null, 2) + '\n')
+    return writeMetaFile(this.fs, this.metaPath, this.meta)
   }
 }
 
@@ -451,7 +470,7 @@ async function archiveRun(fs: StoreFs, dir: string, meta: RunMeta, eventsPath: s
   const out = archivePaths(dir, meta.id)
   const events = (await fs.exists(eventsPath)) ? await fs.read(eventsPath) : ''
   await fs.write(out.events, events)
-  await fs.write(out.meta, JSON.stringify(meta, null, 2) + '\n')
+  await writeMetaFile(fs, out.meta, meta)
 }
 
 /**
@@ -559,12 +578,17 @@ export async function listRuns(cwd: string, fs: StoreFs = nodeStoreFs()): Promis
 }
 
 /**
- * A `running` meta whose owning process is provably still there: same host, live pid (#926).
- * The inverse of {@link isDeadRun} rather than its negation — a meta with no `pid` (it predates
- * the field) is neither, and the boot reconcile is what catches those.
+ * Whether a `running` meta's owning process is provably there, provably gone, or unknowable.
+ *
+ * `'unknown'` is the load-bearing third state (#716/#926): a meta with no `pid` (it predates the
+ * field) or one owned by another host cannot be probed from here. The two callers treat it
+ * differently on purpose — the boot reconcile flips an unknown to `stopped` (a fresh daemon
+ * drives no in-flight run, and there is nothing better to go on), while the self-heal on read
+ * leaves it alone (a routine read must not kill a run another machine may own).
  */
-function isLiveRun(meta: RunMeta, isAlive: (pid: number) => boolean): boolean {
-  return meta.status === 'running' && meta.pid !== undefined && meta.host === hostname() && isAlive(meta.pid)
+function ownerLiveness(meta: RunMeta, isAlive: (pid: number) => boolean): 'live' | 'dead' | 'unknown' {
+  if (meta.status !== 'running' || meta.pid === undefined || meta.host !== hostname()) return 'unknown'
+  return isAlive(meta.pid) ? 'live' : 'dead'
 }
 
 /**
@@ -594,8 +618,8 @@ export async function reconcileOrphanedRuns(
     const path = join(dir, RUNS_DIR, name)
     try {
       const meta = JSON.parse(await fs.read(path)) as RunMeta
-      if (meta.status !== 'running' || isLiveRun(meta, isAlive)) continue
-      await fs.write(path, JSON.stringify({ ...meta, status: 'stopped' }, null, 2) + '\n')
+      if (meta.status !== 'running' || ownerLiveness(meta, isAlive) === 'live') continue
+      await writeMetaFile(fs, path, { ...meta, status: 'stopped' })
       fixed++
     } catch {
       // torn/half-written meta — skip it
@@ -604,10 +628,8 @@ export async function reconcileOrphanedRuns(
   // The live run: flip it, then archive so a crash that skipped close() still
   // leaves the stopped run in the history list.
   const live = await readMetaFile(fs, join(dir, META_FILE))
-  if (live?.status === 'running' && !isLiveRun(live, isAlive)) {
-    const stopped: RunMeta = { ...live, status: 'stopped' }
-    await fs.write(join(dir, META_FILE), JSON.stringify(stopped, null, 2) + '\n').catch(() => {})
-    await archivePriorRun(fs, dir).catch(() => {})
+  if (live?.status === 'running' && ownerLiveness(live, isAlive) !== 'live') {
+    await stopAndArchiveLive(fs, dir, live)
     fixed++
   }
 
@@ -620,8 +642,8 @@ export async function reconcileOrphanedRuns(
     if (!isSafeRunId(name)) continue
     const worktreeDir = join(dir, WORKTREES_DIR, name, FRAMEWORK_DIR)
     const meta = await readMetaFile(fs, join(worktreeDir, META_FILE))
-    if (meta?.status !== 'running' || isLiveRun(meta, isAlive)) continue
-    await fs.write(join(worktreeDir, META_FILE), JSON.stringify({ ...meta, status: 'stopped' }, null, 2) + '\n').catch(() => {})
+    if (meta?.status !== 'running' || ownerLiveness(meta, isAlive) === 'live') continue
+    await writeMetaFile(fs, join(worktreeDir, META_FILE), { ...meta, status: 'stopped' }).catch(() => {})
     await archiveWorktreeRun(join(dir, WORKTREES_DIR, name), cwd, fs).catch(() => undefined)
     fixed++
   }
@@ -642,11 +664,6 @@ export function isPidAlive(pid: number): boolean {
   } catch (err) {
     return (err as NodeJS.ErrnoException).code === 'EPERM'
   }
-}
-
-/** A `running` meta whose owning process is gone (same host, dead pid) — its state is stale (#716). */
-function isDeadRun(meta: RunMeta, isAlive: (pid: number) => boolean): boolean {
-  return meta.status === 'running' && meta.pid !== undefined && meta.host === hostname() && !isAlive(meta.pid)
 }
 
 /**
@@ -671,12 +688,8 @@ export async function readLiveMeta(
   const dir = join(cwd, FRAMEWORK_DIR)
   const meta = await readMetaFile(fs, join(dir, META_FILE))
   if (!meta) return undefined
-  if (isDeadRun(meta, isAlive)) {
-    const stopped: RunMeta = { ...meta, status: 'stopped' }
-    await fs.write(join(dir, META_FILE), JSON.stringify(stopped, null, 2) + '\n').catch(() => {})
-    await archivePriorRun(fs, dir).catch(() => {})
-    return stopped
-  }
+  // Only a provably dead owner heals here — 'unknown' (no pid / another host) is left alone.
+  if (ownerLiveness(meta, isAlive) === 'dead') return stopAndArchiveLive(fs, dir, meta)
   return meta
 }
 
@@ -761,4 +774,29 @@ export async function readAllRuns(cwd: string, fs: StoreFs = nodeStoreFs()): Pro
     readLiveMetas(cwd, fs).catch(() => [] as LiveRun[]),
   ])
   return [...live, ...archived.filter(run => !live.some(l => l.id === run.id))]
+}
+
+/**
+ * One run's meta by id, live copy winning over archived — {@link readAllRuns}'s rule for a
+ * single row. The find-by-id shape the RPCs kept privately rebuilding, for the same reason
+ * the list shape did: the store exported only the halves.
+ */
+export async function findRun(cwd: string, runId: string, fs: StoreFs = nodeStoreFs()): Promise<RunMeta | undefined> {
+  return (await readAllRuns(cwd, fs)).find(run => run.id === runId)
+}
+
+/**
+ * Read a checkout's live event log (`.the-framework/events.jsonl`). Missing or unreadable
+ * yields `[]`, and a torn trailing line is dropped — the same rule as
+ * {@link RunStore.loadEvents}, exported so a reader outside the store (the Discord bot's gate
+ * lookup) cannot keep a second parser with a drifted torn-line policy.
+ */
+export async function readEventLog(cwd: string, fs: StoreFs = nodeStoreFs()): Promise<FrameworkEvent[]> {
+  const path = join(cwd, FRAMEWORK_DIR, EVENTS_FILE)
+  try {
+    if (!(await fs.exists(path))) return []
+    return parseEventLog(await fs.read(path))
+  } catch {
+    return []
+  }
 }

@@ -1,4 +1,4 @@
-import { listRuns, readLiveMetas, readAllRuns, loadRunEvents, listWorktreeDirs, worktreeSize, isSafeRunId, type RunMeta } from '../store/index.js'
+import { findRun, readLiveMetas, readAllRuns, loadRunEvents, listWorktreeDirs, worktreeSize, isSafeRunId, type RunMeta } from '../store/index.js'
 import { readLogs, type LogEntry } from '../logs.js'
 import { readDocs, type WorkspaceDoc } from '../dashboard/docs.js'
 import { readTickets, type WorkspaceTicket } from '../dashboard/tickets.js'
@@ -263,14 +263,7 @@ export async function onGitStatus(projectId: string, runId?: string): Promise<Gi
 export async function onRunHandoff(projectId: string, runId: string): Promise<RunHandoff | null> {
   const cwd = await resolveProjectPath(projectId)
   if (!cwd || !isSafeRunId(runId)) return null
-  const run = await runMetaFor(cwd, runId)
+  const run = await findRun(cwd, runId).catch(() => undefined)
   if (!run) return null
   return (await readRunHandoff(cwd, runBranchFor(run)).catch(() => undefined)) ?? null
-}
-
-/** One run's meta, live or archived (live wins, as in {@link onRuns}). */
-async function runMetaFor(cwd: string, runId: string): Promise<RunMeta | undefined> {
-  const live = (await readLiveMetas(cwd).catch(() => [])).find(run => run.id === runId)
-  if (live) return live
-  return (await listRuns(cwd).catch(() => [])).find(run => run.id === runId)
 }
