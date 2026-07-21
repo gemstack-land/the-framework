@@ -1,9 +1,9 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import { detectFramework } from './detect.js'
-import { vikePreset, nextPreset, builtinPresets } from './library.js'
+import { vikePreset, nextPreset, builtinFrameworkPresets } from './library.js'
 
-const presets = builtinPresets()
+const presets = builtinFrameworkPresets()
 
 describe('detectFramework', () => {
   it('detects Vike from its dependency', () => {

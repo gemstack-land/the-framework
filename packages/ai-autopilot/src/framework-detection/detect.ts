@@ -1,4 +1,4 @@
-import type { FrameworkDetection, FrameworkSignals, Preset, PresetScore } from './types.js'
+import type { FrameworkDetection, FrameworkSignals, FrameworkPreset, FrameworkPresetScore } from './types.js'
 
 /** Weight of a matched dependency vs a matched file — deps are the stronger signal. */
 const DEP_WEIGHT = 2
@@ -17,13 +17,13 @@ function depNames(deps: FrameworkSignals['dependencies']): Set<string> {
  * caller decides the fallback (usually the flagship preset).
  */
 export function detectFramework(
-  presets: readonly Preset[],
+  presets: readonly FrameworkPreset[],
   signals: FrameworkSignals,
 ): FrameworkDetection {
   const deps = depNames(signals.dependencies)
   const files = signals.files ?? []
 
-  const scores: PresetScore[] = presets.map(preset => {
+  const scores: FrameworkPresetScore[] = presets.map(preset => {
     const reasons: string[] = []
     let score = 0
 

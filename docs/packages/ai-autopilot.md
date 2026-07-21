@@ -12,7 +12,7 @@ pnpm add @gemstack/ai-autopilot @gemstack/ai-sdk
 
 The Supervisor (below) is the seed topology. Built up from it, the package is a full framework for building software with agents — the state layer and the loop are the moat, not the prompts:
 
-- **Presets** — framework detection (Vike flagship, Next.js) from a project's dependencies.
+- **Framework presets** — framework detection (Vike flagship, Next.js) from a project's dependencies.
 - **Runner** — a pluggable sandbox seam (`FakeRunner` + a real `LocalRunner`) where agents build and run an app; expose it to an agent with `runnerTools`.
 - **Surfaces** — the same run in a terminal, an in-page UI, or a detached background handle, over one replayable event stream (`launchAutopilot`).
 - **Decisions ledger** — durable memory of rejected ideas + settled choices (round-trips `DECISIONS.md`) so a run stops re-pitching what was turned down.

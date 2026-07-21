@@ -14,10 +14,6 @@ import type { Prompt } from '../prompts/types.js'
  * A preset is authored in code with {@link defineDomainPreset} or loaded from a
  * directory of `.md` files with {@link loadDomainPreset}. Presets compose
  * ({@link composeDomainPresets}), so presets-of-presets falls out for free.
- *
- * This is deliberately distinct from the framework `Preset` in `presets/` (a
- * project *detector*) — that one is skipped for the Open Loop MVP; this is the
- * user-picked domain bundle.
  */
 export interface DomainPreset {
   /** Stable kebab-case id (e.g. `software-development`). */

@@ -4,7 +4,7 @@ import {
   LocalRunner,
   LoopEngine,
   dockerAvailable,
-  builtinPresetRegistry,
+  builtinFrameworkPresetRegistry,
   mergeChecklists,
   serveCheck,
   type BootstrapEvent,
@@ -285,7 +285,7 @@ export async function runFramework(opts: RunFrameworkOptions): Promise<RunFramew
   // ("Detected Vike") and rides the result — nothing about it reaches the agent's
   // prompt (#547).
   const signals = opts.signals ?? {}
-  const { preset, detection } = builtinPresetRegistry().select(signals)
+  const { preset, detection } = builtinFrameworkPresetRegistry().select(signals)
   const domainPreset = opts.preset
   // The built-in #326 system prompt + any user SYSTEM.md are the whole prompt. Only
   // the template's system half is used here: each Bootstrap step composes its own

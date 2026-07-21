@@ -1,9 +1,9 @@
-import { definePreset } from './define.js'
+import { defineFrameworkPreset } from './define.js'
 import { detectFramework } from './detect.js'
-import type { FrameworkDetection, FrameworkSignals, Preset } from './types.js'
+import type { FrameworkDetection, FrameworkSignals, FrameworkPreset } from './types.js'
 
 /** The flagship preset: Vike (Vite + SSR), renderer-agnostic. */
-export const vikePreset: Preset = definePreset({
+export const vikePreset: FrameworkPreset = defineFrameworkPreset({
   name: 'vike',
   framework: 'Vike',
   signals: {
@@ -13,7 +13,7 @@ export const vikePreset: Preset = definePreset({
 })
 
 /** The second preset: Next.js (App Router + React Server Components). */
-export const nextPreset: Preset = definePreset({
+export const nextPreset: FrameworkPreset = defineFrameworkPreset({
   name: 'next',
   framework: 'Next.js',
   signals: {
@@ -23,33 +23,34 @@ export const nextPreset: Preset = definePreset({
 })
 
 /** The built-in presets, in a stable order (flagship first). */
-export function builtinPresets(): Preset[] {
+export function builtinFrameworkPresets(): FrameworkPreset[] {
   return [vikePreset, nextPreset]
 }
 
 /**
- * A set of {@link Preset}s with detection. Register the built-ins (or your own),
- * then {@link select} the preset for a project by its {@link FrameworkSignals}.
+ * A set of {@link FrameworkPreset}s with detection. Register the built-ins (or
+ * your own), then {@link select} the preset for a project by its
+ * {@link FrameworkSignals}.
  */
-export class PresetRegistry {
-  private readonly byName = new Map<string, Preset>()
+export class FrameworkPresetRegistry {
+  private readonly byName = new Map<string, FrameworkPreset>()
 
-  constructor(presets: readonly Preset[] = builtinPresets()) {
+  constructor(presets: readonly FrameworkPreset[] = builtinFrameworkPresets()) {
     for (const p of presets) this.byName.set(p.name, p)
   }
 
   /** The preset with this name, or `undefined`. */
-  get(name: string): Preset | undefined {
+  get(name: string): FrameworkPreset | undefined {
     return this.byName.get(name)
   }
 
   /** All presets, in registration order. */
-  all(): Preset[] {
+  all(): FrameworkPreset[] {
     return [...this.byName.values()]
   }
 
   /** Add or replace a preset (e.g. a project's own framework). Returns `this`. */
-  add(preset: Preset): this {
+  add(preset: FrameworkPreset): this {
     this.byName.set(preset.name, preset)
     return this
   }
@@ -64,15 +65,15 @@ export class PresetRegistry {
    * flagship, first-registered preset) when nothing matched — so a run always has
    * a preset even on an empty or unrecognized project.
    */
-  select(signals: FrameworkSignals, fallback?: Preset): { preset: Preset; detection: FrameworkDetection } {
+  select(signals: FrameworkSignals, fallback?: FrameworkPreset): { preset: FrameworkPreset; detection: FrameworkDetection } {
     const detection = this.detect(signals)
     const preset = detection.preset ?? fallback ?? this.all()[0]
-    if (!preset) throw new Error('[ai-autopilot] PresetRegistry.select: no presets registered')
+    if (!preset) throw new Error('[ai-autopilot] FrameworkPresetRegistry.select: no presets registered')
     return { preset, detection }
   }
 }
 
-/** The built-in presets as a ready-to-use {@link PresetRegistry}. */
-export function builtinPresetRegistry(): PresetRegistry {
-  return new PresetRegistry(builtinPresets())
+/** The built-in presets as a ready-to-use {@link FrameworkPresetRegistry}. */
+export function builtinFrameworkPresetRegistry(): FrameworkPresetRegistry {
+  return new FrameworkPresetRegistry(builtinFrameworkPresets())
 }

@@ -9,7 +9,7 @@ import {
   LoopEngine,
   definePrompt,
   defineLoop,
-  builtinPresetRegistry,
+  builtinFrameworkPresetRegistry,
   CodeOverviewMaintainer,
   FakeRunner,
   runnerTools,
@@ -170,8 +170,8 @@ export async function runCapstone(write: (line: string) => void = () => {}): Pro
   const fake = AiFake.fake()
   scriptModel(fake)
   try {
-    // 0. Preset: detect the framework from the project's deps to brief the workers.
-    const { preset, detection } = builtinPresetRegistry().select({ dependencies: PROJECT_DEPS })
+    // 0. FrameworkPreset: detect the framework from the project's deps to brief the workers.
+    const { preset, detection } = builtinFrameworkPresetRegistry().select({ dependencies: PROJECT_DEPS })
 
     // Runner: an in-memory sandbox seeded with a minimal project. `wrangler` is
     // simulated (prints a live-looking URL) so the real cloudflareTarget adapter

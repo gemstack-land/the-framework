@@ -77,17 +77,17 @@
  * - {@link agentOverview} / {@link overviewLoopPrompt} — regenerate with an agent,
  *   and wire the maintainer into the loop
  *
- * Presets are the web-app layer: detect the app's framework (Vike flagship,
- * Next.js second), on top of the agnostic core. A preset is a pure detector.
+ * Framework presets are the web-app layer: detect the app's framework (Vike
+ * flagship, Next.js second), on top of the agnostic core. A framework preset is a
+ * pure detector.
  *
- * - {@link PresetRegistry} — register presets, {@link PresetRegistry.select} one
- * - {@link detectFramework} — score a project's deps/files against presets
+ * - {@link FrameworkPresetRegistry} — register framework presets, {@link FrameworkPresetRegistry.select} one
+ * - {@link detectFramework} — score a project's deps/files against framework presets
  * - {@link vikePreset} / {@link nextPreset} — the built-ins
  *
  * Domain presets are the Open Loop bundle unit (#204): one selectable, composable
  * bundle of {loops, prompts}. Author in code or load a directory of `.md` files;
- * compose several into one (presets-of-presets). Distinct from the framework
- * `Preset` above — this is the user-picked domain, not a detector.
+ * compose several into one (presets-of-presets).
  *
  * - {@link defineDomainPreset} / {@link loadDomainPreset} — author, or load from a directory
  * - {@link composeDomainPresets} — merge presets into one (later wins on prompt id)
@@ -274,21 +274,21 @@ export {
   type OverviewEvent,
 } from './overview/index.js'
 export {
-  definePreset,
-  PresetError,
+  defineFrameworkPreset,
+  FrameworkPresetError,
   detectFramework,
   vikePreset,
   nextPreset,
-  builtinPresets,
-  PresetRegistry,
-  builtinPresetRegistry,
-  type Preset,
-  type PresetSpec,
-  type PresetSignals,
+  builtinFrameworkPresets,
+  FrameworkPresetRegistry,
+  builtinFrameworkPresetRegistry,
+  type FrameworkPreset,
+  type FrameworkPresetSpec,
+  type FrameworkPresetSignals,
   type FrameworkSignals,
-  type PresetScore,
+  type FrameworkPresetScore,
   type FrameworkDetection,
-} from './presets/index.js'
+} from './framework-detection/index.js'
 export {
   defineDomainPreset,
   DomainPresetError,

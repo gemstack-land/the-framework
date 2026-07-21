@@ -9,7 +9,7 @@ import {
   LoopEngine,
   definePrompt,
   defineLoop,
-  builtinPresetRegistry,
+  builtinFrameworkPresetRegistry,
   CodeOverviewMaintainer,
   LocalRunner,
   runnerTools,
@@ -133,8 +133,8 @@ async function snapshot(session: RunnerSession): Promise<Record<string, string>>
 export async function runLiveCapstone(write: (line: string) => void = () => {}): Promise<CapstoneResult> {
   registerModel()
 
-  // 0. Preset: detect the framework from the project's deps to brief the workers.
-  const { preset, detection } = builtinPresetRegistry().select({ dependencies: PROJECT_DEPS })
+  // 0. FrameworkPreset: detect the framework from the project's deps to brief the workers.
+  const { preset, detection } = builtinFrameworkPresetRegistry().select({ dependencies: PROJECT_DEPS })
 
   // Runner: a REAL isolated workspace on the host filesystem, seeded with a minimal project.
   const runner = new LocalRunner()
