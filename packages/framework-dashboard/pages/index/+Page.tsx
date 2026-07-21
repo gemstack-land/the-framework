@@ -181,7 +181,7 @@ export default function Page() {
   // (#440) read one shared Telefunc Channel. Hooks run before the relay early return below.
   // The run whose feed and controls are in play is simply the one in the URL; in the no-id
   // fallback there is none yet, and a null id resolves to the project root, as before.
-  const events = useLiveEvents(projectId, runId, runStart.tick)
+  const { events, lost } = useLiveEvents(projectId, runId, runStart.tick)
   const choices = projectId ? pendingChoices(events) : []
   const views = projectId ? agentViews(events) : []
 
@@ -218,7 +218,7 @@ export default function Page() {
     if (runId === null) {
       // Just pressed Start on a project with no worktree: follow the live output until the poll
       // surfaces the run and the effect above adopts its id.
-      if (adopting) return <RunLive projectId={projectId} runId={null} events={events} files={files} addContext={addContext} />
+      if (adopting) return <RunLive projectId={projectId} runId={null} events={events} files={files} addContext={addContext} lost={lost} />
       return (
         <ProjectHome
           projectId={projectId}
@@ -236,7 +236,7 @@ export default function Page() {
       // list we have not read yet. Both are live views; only a session that is genuinely absent
       // from a list we did read is gone.
       if (runId === runStart.id || !runsLoaded)
-        return <RunLive projectId={projectId} runId={runId} events={events} files={files} addContext={addContext} />
+        return <RunLive projectId={projectId} runId={runId} events={events} files={files} addContext={addContext} lost={lost} />
       return (
         <NotFound
           title="This session is gone"
@@ -247,7 +247,7 @@ export default function Page() {
       )
     }
     if (selectedRun.status === 'running')
-      return <RunLive projectId={projectId} runId={runId} events={events} files={files} addContext={addContext} />
+      return <RunLive projectId={projectId} runId={runId} events={events} files={files} addContext={addContext} lost={lost} />
     return <RunReplay projectId={projectId} runId={runId} files={files} addContext={addContext} onRunStarted={onRunStarted} />
   }
 

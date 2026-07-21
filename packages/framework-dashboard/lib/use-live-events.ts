@@ -3,6 +3,7 @@ import type { FrameworkEvent } from '@gemstack/framework'
 import type { ClientChannel } from 'telefunc'
 import { onEvents } from '../server/events.telefunc.js'
 import { currentRunEvents } from './live-state.js'
+import { stampReceived } from './event-times.js'
 
 // The live run feed (#405), shared. The dashboard is a projection of the selected project's
 // `.the-framework/events.jsonl`, streamed over a Telefunc Channel that pushes one
@@ -14,8 +15,24 @@ import { currentRunEvents } from './live-state.js'
 // so the selected run id picks the log to follow. Changing it resubscribes, which is what makes
 // selecting run A vs run B show different output. Omitted (the relay, or a Start whose id has not
 // been adopted yet) falls back to the project root.
-export function useLiveEvents(projectId: string | null, runId?: string | null, resetKey?: unknown): FrameworkEvent[] {
+
+/** The live feed plus whether its channel is currently down (#948). */
+export interface LiveEvents {
+  events: FrameworkEvent[]
+  /** True while the stream is lost and being retried — the feed may be behind reality. */
+  lost: boolean
+}
+
+/** Retry delays for a lost stream: quick first, then settle at a slow poll. */
+const RETRY_DELAYS_MS = [1000, 2000, 4000, 8000]
+
+function retryDelay(attempt: number): number {
+  return RETRY_DELAYS_MS[Math.min(attempt, RETRY_DELAYS_MS.length - 1)] as number
+}
+
+export function useLiveEvents(projectId: string | null, runId?: string | null, resetKey?: unknown): LiveEvents {
   const [events, setEvents] = useState<FrameworkEvent[]>([])
+  const [lost, setLost] = useState(false)
 
   // Drop the accumulated feed at a run boundary the caller knows about (a fresh Start bumps
   // `resetKey`), WITHOUT tearing down the subscription. The new run truncates events.jsonl a
@@ -29,19 +46,50 @@ export function useLiveEvents(projectId: string | null, runId?: string | null, r
 
   useEffect(() => {
     setEvents([])
+    setLost(false)
     if (!projectId) return
     let channel: ClientChannel<never, FrameworkEvent> | undefined
     let cancelled = false
-    void onEvents(projectId, runId ?? undefined).then(ch => {
-      if (cancelled) {
-        void ch.close()
-        return
-      }
-      channel = ch
-      ch.listen(event => setEvents(prev => [...prev, event]))
-    })
+    let attempt = 0
+    let timer: ReturnType<typeof setTimeout> | undefined
+
+    // A dead stream used to be silent: the daemon restarts, events just stop, and "the agent
+    // went quiet" is indistinguishable from "the feed died" (#948). Now an errored close (or a
+    // failed subscribe) flips `lost` and retries with backoff. A clean close is the server being
+    // done with the channel on purpose (relay stream ended, unknown project) — not an outage —
+    // so it neither retries nor alarms, matching the old behavior.
+    const retry = () => {
+      if (cancelled) return
+      setLost(true)
+      timer = setTimeout(subscribe, retryDelay(attempt++))
+    }
+
+    const subscribe = () => {
+      void onEvents(projectId, runId ?? undefined).then(ch => {
+        if (cancelled) {
+          void ch.close()
+          return
+        }
+        channel = ch
+        attempt = 0
+        setLost(false)
+        // The tail replays the whole log on subscribe, so a reconnect starts from an empty
+        // buffer rather than appending a duplicate history.
+        setEvents([])
+        ch.listen(event => {
+          stampReceived(event)
+          setEvents(prev => [...prev, event])
+        })
+        ch.onClose(err => {
+          if (err) retry()
+        })
+      }, retry)
+    }
+
+    subscribe()
     return () => {
       cancelled = true
+      if (timer) clearTimeout(timer)
       void channel?.close()
     }
     // runId is a dependency: selecting another run must resubscribe to that run's log (#749).
@@ -50,5 +98,6 @@ export function useLiveEvents(projectId: string | null, runId?: string | null, r
   // Scope the accumulated feed to the run in progress. The subscription lives across run
   // boundaries (it only resets on a project switch), so without this a second run would show
   // the previous run's log until it finished. See {@link currentRunEvents}.
-  return useMemo(() => currentRunEvents(events), [events])
+  const scoped = useMemo(() => currentRunEvents(events), [events])
+  return { events: scoped, lost }
 }
