@@ -1,5 +1,6 @@
 import type { AiMessage, ToolCall } from './types.js'
 import type { CacheAdapter } from './cache-adapter.js'
+import { CachedRunStoreBase, InMemoryRunStoreBase } from './run-store-base.js'
 
 /**
  * Discriminator for the kind of pause a snapshot represents. Determines
@@ -107,29 +108,7 @@ export interface SubAgentRunStore {
  * Loses state across restarts and worker processes — for any multi-worker
  * deployment, use {@link CachedSubAgentRunStore} or a custom backend.
  */
-export class InMemorySubAgentRunStore implements SubAgentRunStore {
-  private readonly snapshots = new Map<string, SubAgentRunSnapshot>()
-
-  async store(subRunId: string, snapshot: SubAgentRunSnapshot): Promise<void> {
-    this.snapshots.set(subRunId, snapshot)
-  }
-
-  async consume(subRunId: string): Promise<SubAgentRunSnapshot | null> {
-    const snapshot = this.snapshots.get(subRunId)
-    if (!snapshot) return null
-    this.snapshots.delete(subRunId)
-    return snapshot
-  }
-
-  async load(subRunId: string): Promise<SubAgentRunSnapshot | null> {
-    return this.snapshots.get(subRunId) ?? null
-  }
-
-  /** Test helper — clears all snapshots without consuming. */
-  clear(): void {
-    this.snapshots.clear()
-  }
-}
+export class InMemorySubAgentRunStore extends InMemoryRunStoreBase<SubAgentRunSnapshot> implements SubAgentRunStore {}
 
 // ─── Cache-backed store (bring your own CacheAdapter) ───────
 
@@ -155,33 +134,8 @@ export interface CachedSubAgentRunStoreOptions {
  * few client tool calls, short enough that abandoned runs garbage-collect
  * promptly and the storage bill stays bounded.
  */
-export class CachedSubAgentRunStore implements SubAgentRunStore {
-  private readonly cache:      CacheAdapter
-  private readonly keyPrefix:  string
-  private readonly ttlSeconds: number
-
+export class CachedSubAgentRunStore extends CachedRunStoreBase<SubAgentRunSnapshot> implements SubAgentRunStore {
   constructor(opts: CachedSubAgentRunStoreOptions) {
-    if (!opts?.cache) {
-      throw new Error('[ai-sdk] CachedSubAgentRunStore requires a cache adapter: new CachedSubAgentRunStore({ cache }).')
-    }
-    this.cache      = opts.cache
-    this.keyPrefix  = opts.keyPrefix  ?? 'gemstack:ai:sub-agent-run:'
-    this.ttlSeconds = opts.ttlSeconds ?? 5 * 60
-  }
-
-  async store(subRunId: string, snapshot: SubAgentRunSnapshot): Promise<void> {
-    await this.cache.set(this.keyPrefix + subRunId, snapshot, this.ttlSeconds)
-  }
-
-  async consume(subRunId: string): Promise<SubAgentRunSnapshot | null> {
-    const key = this.keyPrefix + subRunId
-    const snapshot = await this.cache.get<SubAgentRunSnapshot>(key)
-    if (!snapshot) return null
-    await this.cache.forget(key)
-    return snapshot
-  }
-
-  async load(subRunId: string): Promise<SubAgentRunSnapshot | null> {
-    return this.cache.get<SubAgentRunSnapshot>(this.keyPrefix + subRunId)
+    super(opts, { keyPrefix: 'gemstack:ai:sub-agent-run:', storeName: 'CachedSubAgentRunStore' })
   }
 }

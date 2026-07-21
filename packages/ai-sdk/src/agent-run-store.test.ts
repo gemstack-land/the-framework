@@ -7,6 +7,7 @@ import {
   newAgentRunId,
   type AgentRunState,
 } from './agent-run-store.js'
+import type { CacheAdapter } from './cache-adapter.js'
 
 function clientToolState(over: Partial<AgentRunState> = {}): AgentRunState {
   return {
@@ -184,6 +185,17 @@ describe('CachedAgentRunStore', () => {
     const store = new CachedAgentRunStore({ cache: fakeCache() })
     assert.equal(await store.load('missing'), null)
     assert.equal(await store.consume('missing'), null)
+  })
+
+  it('normalises an undefined cache miss to null', async () => {
+    // some CacheAdapter impls resolve `undefined` rather than `null` on a miss
+    const cache = {
+      async get() { return undefined },
+      async set() {},
+      async forget() {},
+    } as unknown as CacheAdapter
+    const store = new CachedAgentRunStore({ cache })
+    assert.equal(await store.load('missing'), null)
   })
 
   it('throws when constructed without a cache adapter', () => {

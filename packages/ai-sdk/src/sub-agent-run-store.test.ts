@@ -6,6 +6,7 @@ import {
   CachedSubAgentRunStore,
   type SubAgentRunSnapshot,
 } from './sub-agent-run-store.js'
+import type { CacheAdapter } from './cache-adapter.js'
 
 function clientToolSnapshot(over: Partial<SubAgentRunSnapshot> = {}): SubAgentRunSnapshot {
   return {
@@ -101,6 +102,17 @@ describe('CachedSubAgentRunStore.load', () => {
 
   it('returns null for an unknown id', async () => {
     const cache = fakeCache()
+    const store = new CachedSubAgentRunStore({ cache })
+    assert.equal(await store.load('missing'), null)
+  })
+
+  it('normalises an undefined cache miss to null', async () => {
+    // some CacheAdapter impls resolve `undefined` rather than `null` on a miss
+    const cache = {
+      async get() { return undefined },
+      async set() {},
+      async forget() {},
+    } as unknown as CacheAdapter
     const store = new CachedSubAgentRunStore({ cache })
     assert.equal(await store.load('missing'), null)
   })
