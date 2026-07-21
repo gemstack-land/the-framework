@@ -41,4 +41,13 @@ describe('BrowserPanel failure recovery (#946)', () => {
     rerender(<BrowserPanel projectId="p" runId="r2" />)
     expect(frame().getAttribute('src')).toContain('/browser/p/r2/stream')
   })
+
+  test('returning to a previously failed run tries again instead of replaying the failure', () => {
+    const { rerender } = render(<BrowserPanel projectId="p" runId="r1" />)
+    fireEvent.error(frame())
+    rerender(<BrowserPanel projectId="p" runId="r2" />)
+    // Back to r1: its stream may be up by now, so the failure must not be remembered.
+    rerender(<BrowserPanel projectId="p" runId="r1" />)
+    expect(frame().getAttribute('src')).toContain('/browser/p/r1/stream')
+  })
 })

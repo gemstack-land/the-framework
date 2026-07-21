@@ -18,6 +18,15 @@ export function BrowserPanel({ projectId, runId }: { projectId: string; runId: s
   // early onError (the tab opened before the run's stream endpoint was up) must not be terminal.
   const [failedKey, setFailedKey] = useState<string | undefined>(undefined)
   const base = `/browser/${encodeURIComponent(projectId)}/${encodeURIComponent(runId)}`
+  // Coming back to a run whose earlier stream failed must try again, not replay the stale
+  // failure: the stream may have come up since. Adjust-during-render is the sanctioned way
+  // to reset state on a prop change without a remount.
+  const [lastBase, setLastBase] = useState(base)
+  if (lastBase !== base) {
+    setLastBase(base)
+    setAttempt(0)
+    setFailedKey(undefined)
+  }
   const streamKey = `${base}#${attempt}`
   const failed = failedKey === streamKey
 
