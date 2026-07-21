@@ -6,6 +6,7 @@ import { agentDeploy, FakeDeployTarget } from './deploy.js'
 import { Bootstrap } from './bootstrap.js'
 import { LoopEngine } from '../loop/loop.js'
 import { definePrompt, defineLoop } from '../loop/define.js'
+import { defaultLoops, LOOP_PROMPTS } from '../loop/policy.js'
 import type { BootstrapEvent } from './types.js'
 import type { SupervisorEvent } from '../types.js'
 import type { BuildContext, LoopPassContext } from './types.js'
@@ -74,6 +75,15 @@ describe('loopChecklist / loopImprove (default full-fledged loop steps)', () => 
     assert.match(verdict.blockers[0]!, /did not return a verdict/)
   })
 
+  it('defaults to an event kind defaultLoops() actually defines (#974)', async () => {
+    const loop = new LoopEngine({
+      loops: defaultLoops(),
+      prompts: [definePrompt({ id: LOOP_PROMPTS.productionGrade, run: () => '```json\n{ "blockers": [] }\n```' })],
+    })
+    const verdict = await loopChecklist({ loop })(passCtx())
+    assert.deepEqual(verdict.blockers, [])
+  })
+
   it('fires the change events so the review chain runs', async () => {
     let reviewRan = 0
     const loop = new LoopEngine({
@@ -86,6 +96,32 @@ describe('loopChecklist / loopImprove (default full-fledged loop steps)', () => 
 })
 
 describe('Bootstrap end-to-end with the default steps (offline)', () => {
+  it('reaches productionGrade on the documented default path: defaultLoops() + no explicit kind (#974)', async () => {
+    const loop = new LoopEngine({
+      loops: defaultLoops(),
+      prompts: [definePrompt({ id: LOOP_PROMPTS.productionGrade, run: () => '```json\n{ "blockers": [] }\n```' })],
+    })
+    const boot = new Bootstrap({
+      steps: {
+        scope: () => ({ scope: 'full', intent: 'a bookstore' }),
+        build: () => ({
+          text: 'built',
+          plan: [],
+          results: [],
+          usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+          stoppedEarly: false,
+        }),
+        checklist: loopChecklist({ loop }),
+      },
+    })
+
+    const result = await boot.run()
+
+    assert.equal(result.productionGrade, true)
+    assert.deepEqual(result.blockers, [])
+    assert.equal(result.passes, 1) // the gate cleared on the first check, no improve rounds
+  })
+
   it('runs scope → build → full-fledged loop against real primitives', async () => {
     const fake = AiFake.fake()
     try {

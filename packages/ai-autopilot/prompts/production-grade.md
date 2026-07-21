@@ -6,6 +6,7 @@ metadata:
   title: Production-grade checklist
   loopId: production-grade
   passes: 1
+  event: production-check
 ---
 
 You are the production-grade **gate** for a Vike + universal-orm app. Judge the

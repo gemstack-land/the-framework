@@ -212,7 +212,7 @@ command-driven and not run-on-every-PR.
 import { LoopEngine, definePrompt, defaultLoops } from '@gemstack/ai-autopilot'
 
 const loop = new LoopEngine({
-  loops: defaultLoops(),                 // major-change → [review, code-quality, security]; ui-flow → [qa, ux]
+  loops: defaultLoops(),                 // major-change → [review, code-quality, security]; ui-flow → [qa, ux]; production-check → [production-grade]
   prompts: [
     definePrompt({ id: 'review', passes: 2, run: ctx => runReview(ctx.event) }),
     definePrompt({ id: 'code-quality', run: ctx => runQuality(ctx.event) }),
@@ -261,7 +261,7 @@ import { LoopEngine, defaultLoops, builtinLibrary, loopPromptsFor, runnerTools }
 
 const library = await builtinLibrary()          // the shipped bodies
 const loop = new LoopEngine({
-  loops: defaultLoops(),                     // review / code-quality / security / qa / ux ids
+  loops: defaultLoops(),                     // review / code-quality / security / qa / ux / production-grade ids
   prompts: loopPromptsFor(library, ctx =>        // a FRESH agent per pass
     agent({ instructions: ctx.instructions, tools: runnerTools(session) })),
   ledger,                                         // ctx.instructions already includes the decisions briefing

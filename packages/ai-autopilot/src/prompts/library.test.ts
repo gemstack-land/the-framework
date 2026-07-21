@@ -24,6 +24,7 @@ describe('builtin prompts', () => {
     assert.ok(majorIds.includes('security'))
     const uiIds = library.byEvent(LOOP_EVENTS.uiFlow).map(p => p.id)
     assert.deepEqual(uiIds.sort(), ['qa', 'ux'])
+    assert.deepEqual(library.byEvent(LOOP_EVENTS.productionCheck).map(p => p.id), [LOOP_PROMPTS.productionGrade])
   })
 
   it('also ships the standalone bodies (refactor, knowledge-base, tldr)', async () => {
