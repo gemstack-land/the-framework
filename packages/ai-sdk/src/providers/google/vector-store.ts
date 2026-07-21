@@ -10,6 +10,7 @@ import type {
 } from '../../types.js'
 import { sleep } from '../../util/sleep.js'
 import type { GoogleConfig } from './config.js'
+import { createGoogleClient } from './client.js'
 
 // ─── Vector Stores (Gemini FileSearchStores, #B8.5) ──────
 //
@@ -49,9 +50,7 @@ export class GoogleVectorStoreAdapter implements VectorStoreAdapter {
 
   private async getClient(): Promise<any> {
     if (this.client) return this.client
-    const sdk: any = await import(/* @vite-ignore */ '@google/genai')
-    const GoogleGenAI = sdk.GoogleGenAI ?? sdk.default
-    this.client = new GoogleGenAI({ apiKey: this.config.apiKey })
+    this.client = await createGoogleClient(this.config)
     return this.client
   }
 
