@@ -12,8 +12,14 @@ import { useRef, useState } from 'react'
  */
 export function BrowserPanel({ projectId, runId }: { projectId: string; runId: string }) {
   const img = useRef<HTMLImageElement>(null)
-  const [failed, setFailed] = useState(false)
+  const [attempt, setAttempt] = useState(0)
+  // The failure is keyed to the exact stream it happened on, so a different run or a Retry
+  // starts clean instead of inheriting a latched "not reachable" until remount (#946): one
+  // early onError (the tab opened before the run's stream endpoint was up) must not be terminal.
+  const [failedKey, setFailedKey] = useState<string | undefined>(undefined)
   const base = `/browser/${encodeURIComponent(projectId)}/${encodeURIComponent(runId)}`
+  const streamKey = `${base}#${attempt}`
+  const failed = failedKey === streamKey
 
   /**
    * Where the click landed on the real page. The frame is capped at 1280x720 by the screencast
@@ -39,10 +45,20 @@ export function BrowserPanel({ projectId, runId }: { projectId: string; runId: s
 
   if (failed) {
     return (
-      <p className="p-3 text-xs text-muted-foreground">
-        The preview is not reachable. It ends with the run, and a run only has one when it was started with Browser
-        on.
-      </p>
+      <div className="p-3 text-xs text-muted-foreground">
+        <p>
+          The preview is not reachable. It ends with the run, and a run only has one when it was started with Browser
+          on.
+        </p>
+        {/* The stream may simply not be up yet (the tab can open before the run's endpoint does). */}
+        <button
+          type="button"
+          className="mt-2 rounded border border-border px-2 py-1 hover:bg-muted"
+          onClick={() => setAttempt(a => a + 1)}
+        >
+          Retry
+        </button>
+      </div>
     )
   }
 
@@ -52,11 +68,11 @@ export function BrowserPanel({ projectId, runId }: { projectId: string; runId: s
         {/* tabIndex makes the frame focusable so keystrokes have somewhere to land. */}
         <img
           ref={img}
-          src={`${base}/stream`}
+          src={`${base}/stream?r=${attempt}`}
           alt="The run's browser"
           tabIndex={0}
           className="w-full cursor-crosshair rounded border border-border bg-muted"
-          onError={() => setFailed(true)}
+          onError={() => setFailedKey(streamKey)}
           onClick={event => send({ type: 'click', ...toPageCoords(event) })}
           onWheel={event => send({ type: 'scroll', ...toPageCoords(event), deltaY: event.deltaY })}
           onKeyDown={event => {
