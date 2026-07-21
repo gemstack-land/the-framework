@@ -25,7 +25,7 @@ const worked = {
   merged: false,
 }
 
-// The same composition RunReplay uses: the verdict and the next step in the action bar, the
+// The same composition RunView uses: the verdict and the next step in the action bar, the
 // commits and files behind the bar's disclosure.
 function Harness({ open = true }: { open?: boolean }) {
   const state = useRunHandoff('p1', 'run-1')

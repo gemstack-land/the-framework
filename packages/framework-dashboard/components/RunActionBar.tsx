@@ -14,8 +14,8 @@ import { CopyButton } from './ui/copy-button.js'
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from './ui/tooltip.js'
 
 // One run's action bar: Serve, Stop, and Open session as a single row of icon buttons with
-// tooltips, instead of three stacked labeled rows. Shared by the live view (RunLive) and the
-// finished replay (RunReplay), so the controls stay put when a run reaches Done. Serve is a
+// tooltips, instead of three stacked labeled rows. One bar for the session whether it is running
+// or finished (RunView), so the controls stay put when a run reaches Done. Serve is a
 // project-level action (always available); Stop shows only while the run is active; Open session
 // appears once the run has reported one (honestly labeled — see describeSessionLink). A finished
 // run that kept its worktree (#737) also gets a Remove.
@@ -62,17 +62,20 @@ export function RunActionBar({
   const session = describeSessionLink(info)
 
   return (
-    <div className="flex flex-wrap items-center gap-2 border-b border-border px-4 py-2">
+    // One row, always (#1026). The branch and its summary give up width as the row fills; the
+    // buttons never drop under them, because a bar that reflows moves everything below it.
+    <div className="@container flex items-center gap-2 overflow-hidden border-b border-border px-4 py-2">
       <TooltipProvider delay={300} closeDelay={0}>
         {/* Where this session is working (#798/#809): the same status the project home shows,
             read from this session's own worktree — its branch, whether it is holding uncommitted
             work, its size on disk, and the PR its branch has. */}
         <GitStatusBar projectId={projectId} runId={runId} inline summary={summary} expanded={expanded} onToggle={onToggle} />
-        {error && <span className="text-xs text-danger">{error}</span>}
+        {error && <span className="truncate text-xs text-danger">{error}</span>}
         {/* What the session IS sits at the start of the bar; what you can DO to it sits at the end,
             so the buttons keep one home as the row's contents come and go (Stop only while it runs,
             Remove only on a retained worktree, Open session only once one is reported). */}
         <div className="min-w-0 flex-1" />
+        <div className="flex shrink-0 items-center gap-2">
         {/* The handoff's next step sits before the workspace icons: it is the one thing here that
             moves the session forward rather than just opening it somewhere. */}
         {actions}
@@ -125,6 +128,7 @@ export function RunActionBar({
             <TooltipContent>{session.label.replace(' ↗', '')}</TooltipContent>
           </Tooltip>
         )}
+        </div>
       </TooltipProvider>
     </div>
   )

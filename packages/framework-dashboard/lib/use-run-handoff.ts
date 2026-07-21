@@ -19,14 +19,15 @@ export type RunHandoffState = {
 // The handoff read lifted out of its panel: the same answer now feeds two places — the summary and
 // the actions in the run's action bar, and the commits/files detail the bar expands. Reading it
 // once keeps them from disagreeing and halves the polling.
-export function useRunHandoff(projectId: string, runId: string): RunHandoffState {
+export function useRunHandoff(projectId: string, runId: string | null | undefined, enabled = true): RunHandoffState {
   // Polled rather than read once: a push or a PR opened from here (or from a terminal) changes
-  // what to offer, and `reload` makes the bar's own actions land immediately.
+  // what to offer, and `reload` makes the bar's own actions land immediately. Not read while the
+  // run is live (#1026): a branch still being written to has nothing to hand off yet.
   const { value: handoff, reload, loaded } = usePolled<RunHandoff | null>(
-    () => onRunHandoff(projectId, runId),
+    enabled && runId ? () => onRunHandoff(projectId, runId) : null,
     null,
     15_000,
-    [projectId, runId],
+    [projectId, runId, enabled],
   )
   const { busy, error, run } = useAction()
   const [pending, setPending] = useState<'push' | 'pr' | null>(null)

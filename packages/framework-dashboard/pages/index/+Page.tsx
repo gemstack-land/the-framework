@@ -10,8 +10,7 @@ import { Button } from '../../components/ui/button.js'
 import { RunHistory } from '../../components/RunHistory.js'
 import { ProjectHome } from '../../components/ProjectHome.js'
 import { DashboardPage } from '../../components/DashboardPage.js'
-import { RunLive } from '../../components/RunLive.js'
-import { RunReplay } from '../../components/RunReplay.js'
+import { RunView } from '../../components/RunView.js'
 import { RightRail } from '../../components/RightRail.js'
 import { RelayView } from '../../components/RelayView.js'
 import { NotFound } from '../../components/NotFound.js'
@@ -44,8 +43,8 @@ const EMPTY_ACTIVITY: Activity[] = []
 // The dashboard shell (#405 phase 2): Sessions | main | Docs/Log rail, with the project
 // selection in the top nav as a dropdown since #772 (it used to be a rail of its own). The main pane
 // is one of three views chosen by the selection: the project home/launcher (Live, the default —
-// Start form + cards), a running run's own live output (RunLive), or a finished run's replay
-// (RunReplay). Everything over the wire is Telefunc. A projection of the same .the-framework
+// Start form + cards) or one session's own view (RunView), live or finished — the same frame
+// either way (#1026). Everything over the wire is Telefunc. A projection of the same .the-framework
 // files the daemon writes.
 //
 // The selection IS the URL (#784): `/` the Overview, `/{projectId}` the project home,
@@ -223,7 +222,7 @@ export default function Page() {
     if (runId === null) {
       // Just pressed Start on a project with no worktree: follow the live output until the poll
       // surfaces the run and the effect above adopts its id.
-      if (adopting) return <RunLive projectId={projectId} runId={null} events={events} files={files} addContext={addContext} removeContext={removeContext} lost={lost} onRunStarted={onRunStarted} />
+      if (adopting) return <RunView projectId={projectId} runId={null} events={events} live files={files} addContext={addContext} removeContext={removeContext} lost={lost} onRunStarted={onRunStarted} />
       return (
         <ProjectHome
           projectId={projectId}
@@ -242,7 +241,7 @@ export default function Page() {
       // list we have not read yet. Both are live views; only a session that is genuinely absent
       // from a list we did read is gone.
       if (runId === runStart.id || !runsLoaded)
-        return <RunLive projectId={projectId} runId={runId} events={events} files={files} addContext={addContext} removeContext={removeContext} lost={lost} onRunStarted={onRunStarted} />
+        return <RunView projectId={projectId} runId={runId} events={events} live files={files} addContext={addContext} removeContext={removeContext} lost={lost} onRunStarted={onRunStarted} />
       return (
         <NotFound
           title="This session is gone"
@@ -252,9 +251,21 @@ export default function Page() {
         />
       )
     }
-    if (selectedRun.status === 'running')
-      return <RunLive projectId={projectId} runId={runId} events={events} files={files} addContext={addContext} removeContext={removeContext} lost={lost} onRunStarted={onRunStarted} />
-    return <RunReplay projectId={projectId} runId={runId} files={files} addContext={addContext} removeContext={removeContext} onRunStarted={onRunStarted} />
+    // Live and finished are the same view (#1026): only `live` changes, so a run ending swaps
+    // what the bar, feed and composer say without remounting any of them.
+    return (
+      <RunView
+        projectId={projectId}
+        runId={runId}
+        events={events}
+        live={selectedRun.status === 'running'}
+        files={files}
+        addContext={addContext}
+        removeContext={removeContext}
+        lost={lost}
+        onRunStarted={onRunStarted}
+      />
+    )
   }
 
   return (

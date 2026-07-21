@@ -60,7 +60,7 @@ export interface ComposerHandle {
 
 // The shared run composer (#721): the Tiptap editor (`/` `<` `@` `#` triggers, presets, mentions)
 // plus the control row — agent/model select, presets menu, Global-options gear, and the submit
-// button. Factored out of the launcher (StartRunForm) so the run-view chat (RunChat) gets the exact
+// button. Factored out of the launcher (StartRunForm) so the run-view chat (RunComposer) gets the exact
 // same surface, wired to the same data (files, presets, prefs). The caller owns what happens on
 // submit: the launcher starts a run (with collected options), the chat sends a message. The `@`
 // picker's project list is Composer's own concern, so it loads it here (#743) rather than making

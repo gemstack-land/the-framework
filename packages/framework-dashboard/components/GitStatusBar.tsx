@@ -59,7 +59,7 @@ export function GitStatusBar({
 
   const facts = (
     <>
-      <span className="flex min-w-0 items-center gap-1.5 text-muted-foreground">
+      <span className="flex min-w-0 items-center gap-1.5 overflow-hidden text-muted-foreground">
         {/* The chevron only appears where there is something to open, so a bar without a
             disclosure doesn't advertise one. */}
         {onToggle && (
@@ -67,13 +67,14 @@ export function GitStatusBar({
         )}
         <GitBranch className="h-3.5 w-3.5 shrink-0" />
         <span
-          className="max-w-[14rem] truncate font-medium text-foreground"
+          // Never squeezed to nothing: below this it stops being a branch name (#1026).
+          className="min-w-[5rem] max-w-[14rem] truncate font-medium text-foreground"
           title={worktree ? `${branch ?? 'no branch'}\n${worktree.path}` : `branch ${branch}`}
         >
           {branch ?? 'no branch'}
         </span>
       </span>
-      <span className="flex items-center gap-1.5">
+      <span className="flex shrink-0 items-center gap-1.5">
         {/* Clean is neutral, not green. Green means "added / new / done" everywhere else, so a
             green dot for "nothing changed" sat one pane away from the file tree's green dot for
             "this folder HAS changes": the same colour for opposite facts. A clean tree is the
@@ -86,11 +87,14 @@ export function GitStatusBar({
       </span>
       {/* Only a worktree has a size worth showing, and only once nothing is writing to it (#798). */}
       {size && (
-        <span className="text-muted-foreground" title="This session's worktree on disk">
+        <span className="hidden shrink-0 text-muted-foreground @2xl:inline" title="This session's worktree on disk">
           {size}
         </span>
       )}
-      {summary}
+      {/* The branch is the only part that gives up width (#1026): it truncates with an ellipsis
+          and still reads, where a half-cut "0 files · me" does not. The facts furthest from the
+          branch drop out first as the bar narrows, so it stays one line without colliding. */}
+      <span className="hidden shrink-0 @3xl:inline">{summary}</span>
     </>
   )
 
@@ -103,7 +107,7 @@ export function GitStatusBar({
           type="button"
           onClick={onToggle}
           aria-expanded={expanded}
-          className="flex min-w-0 items-center gap-2 rounded text-left hover:text-foreground"
+          className="flex min-w-0 items-center gap-2 overflow-hidden rounded text-left hover:text-foreground"
         >
           {facts}
         </button>
@@ -116,7 +120,7 @@ export function GitStatusBar({
           href={status.pr.url}
           target="_blank"
           rel="noreferrer"
-          className={cn('flex items-center gap-1.5 text-primary hover:underline', !inline && 'ml-auto')}
+          className={cn('flex shrink-0 items-center gap-1.5 text-primary hover:underline', !inline && 'ml-auto')}
           title={status.pr.title}
         >
           <span>PR #{status.pr.number}</span>
@@ -128,7 +132,9 @@ export function GitStatusBar({
     </>
   )
 
-  if (inline) return <span className="flex min-w-0 items-center gap-2 text-xs">{content}</span>
+  // `overflow-hidden`: on a pane too narrow for even the branch, it is cut off rather than
+  // painted over the buttons beside it (#1026).
+  if (inline) return <span className="flex min-w-0 items-center gap-2 overflow-hidden text-xs">{content}</span>
 
   return <div className="flex items-center gap-2 border-b border-border px-4 py-2 text-xs">{content}</div>
 }

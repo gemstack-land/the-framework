@@ -36,7 +36,7 @@ export function HandoffSummary({ handoff }: { handoff: RunHandoff | null }) {
   const commits = `${handoff.commits.length} commit${handoff.commits.length === 1 ? '' : 's'}`
   const files = `${handoff.files.length} file${handoff.files.length === 1 ? '' : 's'}`
   return (
-    <span className="flex flex-wrap items-center gap-x-2 text-muted-foreground">
+    <span className="flex items-center gap-x-2 whitespace-nowrap text-muted-foreground">
       <span>{commits}</span>
       <span>·</span>
       <span>{files}</span>
