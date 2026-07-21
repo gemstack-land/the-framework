@@ -4,10 +4,10 @@ import { cliRunner, type CliRunner } from '../cli-exec.js'
  * The `gh` CLI, in one place: the two JSON reads the dashboard makes and the runner its write
  * actions use.
  *
- * There were four separate `gh` adapters across three modules — a PR lookup for the current
- * branch, the same lookup for a named branch, an open-PR list, and a generic runner — each
- * hand-rolling `execFile` + `JSON.parse` + a swallowed failure, and each spelling the 8s read
- * timeout again. The first two differed only in whether a branch was passed.
+ * There were four separate `gh` adapters across three modules. Three were reads that each
+ * hand-rolled `execFile` + `JSON.parse` + a swallowed failure and each spelled the 8s timeout
+ * again, and two of those differed only in whether a branch positional was passed; the fourth was
+ * a generic runner for the write actions, which rejects with stderr and waits longer.
  */
 
 /** Runs `gh`, resolving stdout and rejecting with the CLI's own stderr on failure. */

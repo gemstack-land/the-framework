@@ -1,4 +1,4 @@
-import { basename } from 'node:path'
+import { basename, resolve } from 'node:path'
 import { listProjects, projectId, readPreferences, readProjectPreferences, resolvePreferences, type Preferences } from './registry.js'
 import { discordNotificationEnabled, notificationEnabled } from './preference-defaults.js'
 import { runOptionsFromPreferences, preferencesFromFileConfig } from './run-options.js'
@@ -83,7 +83,7 @@ function readPrefs(env: NodeJS.ProcessEnv): Promise<Preferences> {
  * differ only in who asked for it. An unreadable tier falls back to empty rather than failing the
  * start: the defaults are what the run would have used anyway.
  */
-export async function resolveProjectRunOptions(id: string, env: NodeJS.ProcessEnv): Promise<StartRunOptions> {
+async function resolveProjectRunOptions(id: string, env: NodeJS.ProcessEnv): Promise<StartRunOptions> {
   const global = await readPrefs(env)
   const project = await readProjectPreferences(id, undefined, env).catch(() => undefined)
   const path = (await listProjects(undefined, env).catch(() => [])).find(p => p.id === id)?.path
@@ -182,7 +182,9 @@ export function startBackgroundServices(deps: BackgroundServiceDeps): Background
   // message so the toggle takes effect without a restart. Unset token means no bot.
   const botToken = env.DISCORD_BOT_TOKEN
   const botEnabled = async () => notificationEnabled(await prefs(), 'discordBot')
-  const homeId = projectId(deps.cwd)
+  // `resolve` matters: projectId hashes the path string, and `--cwd` reaches us verbatim, so a
+  // relative path would hash to an id no project lookup can resolve. Same derivation the runtime uses.
+  const homeId = projectId(resolve(deps.cwd))
   const projectPath = async (id: string) => (await projects()).find(p => p.id === id)?.path ?? deps.cwd
 
   // Send a session's answers back to the channel that asked (#932). The committed conversation
@@ -202,7 +204,8 @@ export function startBackgroundServices(deps: BackgroundServiceDeps): Background
         },
         post: (channelId, text) => postMessage(botToken, channelId, text),
         enabled: botEnabled,
-        onLog: log,
+        // The discord modules do not prefix their own lines, so the daemon does it for them.
+        onLog: message => log(`[framework] ${message}`),
       })
     : undefined
 
@@ -227,7 +230,7 @@ export function startBackgroundServices(deps: BackgroundServiceDeps): Background
         ...(replyMirror ? { onRunBound: (runId, channelId) => replyMirror.bind(runId, channelId) } : {}),
         enabled: botEnabled,
         ...(env.DISCORD_CHANNEL_ID ? { channelId: env.DISCORD_CHANNEL_ID } : {}),
-        onLog: log,
+        onLog: message => log(`[framework] ${message}`),
       })
     : undefined
 

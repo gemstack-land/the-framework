@@ -64,8 +64,6 @@ export const DAEMON_STATE_FILE = 'the-framework-daemon.json'
 /** The default dashboard port the daemon binds. Matches the per-run dashboard. */
 export const DEFAULT_DAEMON_PORT = 4200
 
-// The resume prompt moved beside the resume itself (#923); re-exported so this stays its import site.
-export { RESUME_PROMPT } from './daemon-services.js'
 
 /** What a running daemon writes so a later `framework` invocation can find it. */
 export interface DaemonState {
@@ -502,7 +500,7 @@ export async function runDaemon(cwd: string, opts: RunDaemonOptions = {}): Promi
   // background beside serving the dashboard: the Discord watchers, auto PM, the conversation
   // committer, and the chatbot. Fire-and-forget: a resume that fails must not stop the daemon
   // coming up, and there is nothing to return to.
-  void resumeSuspendedRuns(env, startRun, console.log)
+  void resumeSuspendedRuns(env, startRun, console.log).catch(err => console.log(`[framework] could not resume suspended sessions: ${err}`))
   const services = startBackgroundServices({
     cwd,
     env,

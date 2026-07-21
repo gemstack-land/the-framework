@@ -1,6 +1,6 @@
 import { strict as assert } from 'node:assert'
 import { test } from 'node:test'
-import { presets } from './preset-catalog.js'
+import { presets, LAUNCHER_PRESETS } from './preset-catalog.js'
 import { presetFilePath } from './preset-registry.js'
 
 // One test file for the whole catalog, matching the one module that now defines it. What used to
@@ -29,9 +29,24 @@ const PARAMLESS = [
   presets.triageConsensual,
 ] as const
 
-test('every preset has a distinct run-kind name', () => {
-  const names = Object.values(presets).map(p => p.name)
-  assert.equal(new Set(names).size, names.length, `duplicate preset name in ${names.join(', ')}`)
+test('every preset keeps its exact run-kind name', () => {
+  // Pinned, not just checked for uniqueness: the name is the id the launcher keys on and the stem
+  // `presetFilePath` resolves, so a rename silently breaks the button and the queued TODO's path.
+  assert.deepEqual(
+    Object.values(presets).map(p => p.name).sort(),
+    [
+      'drain-queue', 'maintainability', 'maintenance', 'market-research', 'quick-wins',
+      'readability', 'research', 'security-audit', 'spike-and-plan', 'suggest-new-tickets',
+      'suggest-tickets-to-work-on', 'triage-consensual', 'triage-quick', 'ux',
+    ],
+  )
+})
+
+test('the launcher offers every preset except the daemon-only one', () => {
+  const offered = LAUNCHER_PRESETS.map(p => p.name)
+  assert.equal(offered.includes('drain-queue'), false, 'drain-queue is fired by the daemon only')
+  assert.equal(offered.length, Object.keys(presets).length - 1)
+  for (const preset of LAUNCHER_PRESETS) assert.ok(preset.label, `${preset.name} needs a label`)
 })
 
 test('a parameterized preset takes one `what`, falls back to the default, and leaves no placeholder', () => {

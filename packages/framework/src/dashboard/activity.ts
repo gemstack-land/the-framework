@@ -1,6 +1,5 @@
 import { readAllRuns, type RunMeta, type RunStatus } from '../store/index.js'
 import type { ProjectSummary } from './projects.js'
-import { activityKey } from './keys.js'
 
 // The identity + diff live in the leaf `keys.ts` so the dashboard can share them (they are pure);
 // re-exported here so this stays the import site for anything that already reads them from the

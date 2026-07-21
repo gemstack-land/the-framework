@@ -47,7 +47,7 @@ export interface KeyedWatcherOptions<T> {
   keyOf: (item: T) => string
   /** Called with the genuinely-new items each poll (empty polls are skipped). */
   onNew: (items: T[]) => void | Promise<void>
-  /** Poll cadence, ms. Default 60s — the watched things change slowly and a poll can spawn `gh` per project. */
+  /** Poll cadence, ms. Default 60s: the watched things change slowly and a poll costs a read per project. */
   intervalMs?: number
 }
 

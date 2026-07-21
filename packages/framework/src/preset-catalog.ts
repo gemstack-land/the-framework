@@ -39,22 +39,22 @@ export const presets = {
   research: definePreset({ name: 'research', template: PRESETS_RESEARCH, what: 'What to measure problem variability of', label: 'Research' }),
 
   /**
-   * [Maintainability] (#326): deliberately minimal, so its performance can be judged before a
+   * [Maintainability] (#361): deliberately minimal, so its performance can be judged before a
    * more explicit prompt is written. Keep it in sync with the issue rather than growing it here.
    */
   maintainability: definePreset({ name: 'maintainability', template: PRESETS_MAINTAINABILITY, what: 'What to refactor for maintainability', label: 'Maintainability' }),
 
-  /** [Readability] (#326): the reader's-eye pass — seams, altitude, and one commit per refactor. */
+  /** [Readability] (#360): the reader's-eye pass — seams, altitude, and one commit per refactor. */
   readability: definePreset({ name: 'readability', template: PRESETS_READABILITY, what: 'What to refactor for readability', label: 'Readability' }),
 
-  /** [Security audit] (#326). */
+  /** [Security audit] (#461). */
   securityAudit: definePreset({ name: 'security-audit', template: PRESETS_SECURITY_AUDIT, what: 'What to security-audit', label: 'Security audit' }),
 
-  /** [UX review] (#326). */
+  /** [UX review] (#472). */
   ux: definePreset({ name: 'ux', template: PRESETS_UX, what: 'What to review the UX of', label: 'UX' }),
 
   /**
-   * [Maintenance] (#882): the periodic codebase sweep. Note `${{ }}` fragments cannot nest (the
+   * [Maintenance] (#881/#882): the periodic codebase sweep. Note `${{ }}` fragments cannot nest (the
    * scanner stops at the first `}}`), which is why its target is a plain blank.
    */
   maintenance: definePreset({ name: 'maintenance', template: PRESETS_MAINTENANCE, what: 'What to analyze for refactor opportunities', label: 'Maintenance', tooltip: 'Queue maintainability + security work per codebase subset (TODO_AGENTS.md)' }),
@@ -63,7 +63,7 @@ export const presets = {
   // there is no blank for a user to fill.
 
   /**
-   * [Market research] (#874). Its prompt defines `<SESSION_NAME>` itself rather than reading
+   * [Market research] (#694). Its prompt defines `<SESSION_NAME>` itself rather than reading
    * `${{ tf.session_name }}`: the session name does not exist yet when a preset renders.
    */
   marketResearch: definePreset({ name: 'market-research', template: PRESETS_MARKET_RESEARCH, label: 'Market research' }),
@@ -79,7 +79,7 @@ export const presets = {
   /** [Spike & plan] (#685): turn tickets into costed plans. */
   spikeAndPlan: definePreset({ name: 'spike-and-plan', template: PRESETS_SPIKE_AND_PLAN, label: 'Spike & plan' }),
 
-  /** [Suggest new tickets] (#683): the dashboard prefills this one line and the user edits it freely. */
+  /** [Suggest new tickets] (#462/#683): the dashboard prefills this one line and the user edits it freely. */
   suggestNewTickets: definePreset({ name: 'suggest-new-tickets', template: PRESETS_SUGGEST_NEW_TICKETS, label: 'Suggest new tickets' }),
 
   /**
@@ -89,7 +89,7 @@ export const presets = {
    */
   suggestTicketsToWorkOn: definePreset({ name: 'suggest-tickets-to-work-on', template: PRESETS_SUGGEST_TICKETS_TO_WORK_ON, label: 'Suggest tickets to work on', tooltip: 'Add tickets to queue (TODO_AGENTS.md)' }),
 
-  /** [Drain queue] (#852): work the entries already on `TODO_AGENTS.md`. */
+  /** [Drain queue] (#855): work the entries already on `TODO_AGENTS.md`. */
   drainQueue: definePreset({ name: 'drain-queue', template: PRESETS_DRAIN_QUEUE, label: 'Drain queue' }),
 
   /**

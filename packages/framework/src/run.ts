@@ -552,10 +552,9 @@ function agentAwaitGate(
     // its own question. (The prompt paths differ here — they resolve to the recommended pick.)
     if (!requestChoice) return run
 
-    const drained = await drainGates(run, { ...deps, emitTurnSignals }, async (question, answer) => {
-      run = await continueAfterChoice(session, ctx, question, answer)
-      return run
-    })
+    const drained = await drainGates(run, { ...deps, emitTurnSignals }, (question, answer) =>
+      continueAfterChoice(session, ctx, question, answer),
+    )
     // A declined plan (#358) ends the build here rather than re-prompting: the user takes over
     // with fresh instructions (e.g. a new run from the dashboard).
     if (drained.declined) deps.onDecline?.()

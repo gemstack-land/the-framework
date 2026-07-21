@@ -13,8 +13,8 @@ import type { Preferences } from './registry.js'
  *   call site, in three different spellings, with a comment warning the reader not to copy the
  *   sibling's polarity. That warning is what a default with one home does not need.
  *
- * `registry.ts` is the type source and imports nothing from here at runtime, so there is no cycle:
- * the `Preferences` import is type-only and erases.
+ * No cycle: `registry.ts` re-exports the key list from here, and the `Preferences` import going the
+ * other way is type-only, so it erases.
  */
 
 /**
