@@ -4,7 +4,10 @@
 // `/server/preferences.telefunc.ts` — the exact key the daemon registers the impls under (see
 // framework's dashboard-rpc/register.ts). The telefunc Vite transform turns these named
 // re-exports into client RPC stubs.
-export {
+// Imported then exported, not re-exported (#1014): telefunc's dev transform appends
+// `__decorateTelefunction(<name>, ...)` per export, which needs a local binding. An
+// `export ... from` creates none, so `pnpm dev` died with `<name> is not defined`.
+import {
   onPreferences,
   savePreferences,
   onProjectPreferences,
@@ -12,4 +15,13 @@ export {
   onEditors,
   onNotifyChannels,
 } from '@gemstack/framework/dashboard-rpc'
+
+export {
+  onPreferences,
+  savePreferences,
+  onProjectPreferences,
+  saveProjectPreferences,
+  onEditors,
+  onNotifyChannels,
+}
 export type { EditorInfo, NotifyChannels } from '@gemstack/framework/dashboard-rpc'
