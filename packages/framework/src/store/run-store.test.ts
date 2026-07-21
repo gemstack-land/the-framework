@@ -546,3 +546,27 @@ test('restoreArchivedRun puts a torn-down run history back in its worktree (#762
   // Nothing archived, nothing to do.
   assert.equal(await restoreArchivedRun(CWD, join(CWD, 'nope'), 'r404', memFs()), false)
 })
+
+test('updatedAt tracks the last event, not the run start (settledAt likewise)', async () => {
+  // The regression: the open timestamp was reused for every append, so a run that had been going
+  // for hours still reported updatedAt === startedAt. Everything that orders by recency — the
+  // overview's active runs, the activity feed, the interventions queue — sorted on that.
+  const ticks = ['2026-01-01T00:00:10.000Z', '2026-01-01T00:00:20.000Z']
+  let tick = 0
+  const store = await RunStore.open('/w', {
+    fs: memFs(),
+    fresh: true,
+    now: AT,
+    clock: () => ticks[Math.min(tick++, ticks.length - 1)]!,
+  })
+
+  assert.equal(store.snapshot().startedAt, AT)
+  assert.equal(store.snapshot().updatedAt, AT, 'nothing appended yet')
+
+  await store.append({ kind: 'log', message: 'first' })
+  assert.equal(store.snapshot().updatedAt, ticks[0])
+
+  await store.append({ kind: 'log', message: 'second' })
+  assert.equal(store.snapshot().updatedAt, ticks[1], 'each event advances it')
+  assert.equal(store.snapshot().startedAt, AT, 'the start is still the start')
+})

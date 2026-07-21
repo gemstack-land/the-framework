@@ -7,7 +7,7 @@ import { serveClientBundle } from './static.js'
 import { BROWSER_PROXY_PREFIX, handleBrowserProxy } from './browser-proxy.js'
 import { makeTelefuncMount } from './telefunc-serve.js'
 import type { AddProjectResult, PreviewResult, PreviewStatus, StartRunKind, StartRunOptions, StartRunResult } from './types.js'
-import type { ServeTarget } from '../preview.js'
+import type { PreviewHandlers } from './telefunc-serve.js'
 
 /** Options for {@link startDashboard}. */
 export interface DashboardOptions {
@@ -41,20 +41,17 @@ export interface DashboardOptions {
    */
   onAddProject?: (path: string, directory: boolean) => Promise<AddProjectResult> | AddProjectResult
   /**
-   * Called when the browser opens a project's Preview (#475): serve its built result on
-   * demand (dev script, else a static server) and return the URL. Idempotent per project —
-   * calling it while a preview is up returns the running one. Omit to disable Preview (the
-   * per-run dashboard and the relay never serve one). {@link onStopPreview} tears it down and
-   * {@link onPreviewStatus} rehydrates the button after a reload.
+   * The Preview handler set (#475): serve a project's built result on demand, list its servable
+   * apps, stop it, and report whether one is running. Omit to disable Preview (the per-run
+   * dashboard and the relay never serve one).
+   *
+   * One field of the shared {@link PreviewHandlers} type rather than four separate callbacks: the
+   * four were re-declared here without their `runId` parameter, so the per-session Preview (#797)
+   * reached the daemon only because this file happened to pass each function straight through by
+   * reference. One wrapper added for a log line or a guard would have dropped `runId` silently,
+   * with nothing for the compiler or a test to catch.
    */
-  onPreview?: (projectId?: string, targetId?: string) => PreviewResult | Promise<PreviewResult>
-  /** Called to list a project's servable apps (#651) so the Serve button can offer a picker in a
-   * multi-package repo. Omit alongside {@link onPreview} to disable Preview entirely. */
-  onServeTargets?: (projectId?: string) => ServeTarget[] | Promise<ServeTarget[]>
-  /** Called when the browser stops a project's Preview (#475). No-op when none is running. */
-  onStopPreview?: (projectId?: string) => void | Promise<void>
-  /** Called on load to reflect whether a project's Preview is already running (#475). */
-  onPreviewStatus?: (projectId?: string) => PreviewStatus | Promise<PreviewStatus>
+  preview?: PreviewHandlers
   /**
    * The user-preferences store (#410): the `onPreferences` / `savePreferences` telefunctions
    * read/write it through the request context. Defaults to the real registry file (the daemon
@@ -109,16 +106,6 @@ export function startDashboard(opts: DashboardOptions = {}): Promise<Dashboard> 
     return listenDashboard(server, host, port, () => closeServer(server))
   }
 
-  // Bundle the three Preview callbacks (#475) into one context handler set, present only
-  // when the host wired a Preview (the daemon does; the relay/per-run dashboard do not).
-  const preview = opts.onPreview
-    ? {
-        start: opts.onPreview,
-        targets: opts.onServeTargets ?? (() => []),
-        stop: opts.onStopPreview ?? (() => {}),
-        status: opts.onPreviewStatus ?? (() => ({ running: false })),
-      }
-    : undefined
   // The usage panel polls for the dashboard's whole life, not just during a run:
   // it has to show where the account stands while nothing is running (#533).
   const quota = opts.quota ?? defaultQuotaSource()
@@ -129,7 +116,7 @@ export function startDashboard(opts: DashboardOptions = {}): Promise<Dashboard> 
     ...(opts.onStart ? { startRun: opts.onStart } : {}),
     ...(opts.projects ? { projects: opts.projects } : {}),
     ...(opts.onAddProject ? { addProject: opts.onAddProject } : {}),
-    ...(preview ? { preview } : {}),
+    ...(opts.preview ? { preview: opts.preview } : {}),
     preferences: opts.preferences ?? registryPreferencesStore(),
     quota,
   })

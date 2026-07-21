@@ -4,6 +4,7 @@ export {
   applyEventToMeta,
   metaFromEvents,
   listRuns,
+  readAllRuns,
   readLiveMeta,
   reconcileOrphanedRuns,
   loadRunEvents,

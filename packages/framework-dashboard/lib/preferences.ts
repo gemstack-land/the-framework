@@ -1,6 +1,6 @@
 import { useEffect, useSyncExternalStore } from 'react'
 import type { FrameworkFileConfig, Preferences, ProjectPreferences, ProjectSummary } from '@gemstack/framework'
-import { preferencesFromFileConfig } from '@gemstack/framework/client'
+import { preferencesFromFileConfig, notificationEnabled, PROJECT_PREFERENCE_KEYS } from '@gemstack/framework/client'
 import {
   onPreferences,
   savePreferences,
@@ -24,20 +24,7 @@ import { parseRoute } from './route.js'
 /** Run options a project owns; the rest of {@link Preferences} is global (#840). Mirrors
  * PROJECT_PREFERENCE_KEYS in the framework's registry.ts, kept local so the client bundle does
  * not import the package root (and with it, node). */
-const PROJECT_KEYS = new Set<string>([
-  'autopilot',
-  'technical',
-  'vanilla',
-  'eco',
-  'ecoPlanning',
-  'ecoResearch',
-  'ecoMaintenance',
-  'onBeforeMergeableQuality',
-  'browser',
-  'transparent',
-  'model',
-  'agent',
-])
+const PROJECT_KEYS = new Set<string>(PROJECT_PREFERENCE_KEYS)
 
 const EMPTY: Preferences = {}
 const EMPTY_FILE: FrameworkFileConfig = {}
@@ -276,34 +263,31 @@ export function resolvedDark(theme: ThemePreference, systemDark: boolean): boole
   return theme === 'dark' || (theme === 'system' && systemDark)
 }
 
-/** Browser notifications default on (#627); the browser permission is still the real gate. */
+// The five notification defaults are the framework's (#627), not the dashboard's: the daemon acts
+// on the same values, and the polarities are not uniform, so a second copy here is how the two
+// sides drift. These stay as named readers because the call sites read better for it.
+
+/** Browser notifications; the browser permission is still the real gate. */
 export function notificationsEnabled(preferences: Preferences): boolean {
-  return preferences.notifyBrowser ?? true
+  return notificationEnabled(preferences, 'notifyBrowser')
 }
 
-/** Discord notifications default off (#627): they reach you with no dashboard open, so opt-in.
- * The daemon's `DISCORD_WEBHOOK` is the other gate (where to post; this is whether to). */
+/** Discord delivery. The daemon's `DISCORD_WEBHOOK` is the other gate (where to post; this is whether to). */
 export function discordEnabled(preferences: Preferences): boolean {
-  return preferences.notifyDiscord ?? false
+  return notificationEnabled(preferences, 'notifyDiscord')
 }
 
-/** The Discord chatbot (#680) defaults off, and for a stronger reason than the toggles around it:
- * those post outward, this one takes in messages that start and steer sessions. The daemon's
- * `DISCORD_BOT_TOKEN` is the other gate (how to connect; this is whether to). */
+/** The Discord chatbot (#680). The daemon's `DISCORD_BOT_TOKEN` is the other gate. */
 export function discordBotEnabled(preferences: Preferences): boolean {
-  return preferences.discordBot ?? false
+  return notificationEnabled(preferences, 'discordBot')
 }
 
-/** "New activity" notifications default off (#627): the category that pings on a run starting or
- * finishing, not just on things that need you. Composes with the method toggles above — activity
- * reaches the browser when {@link notificationsEnabled}, Discord when {@link discordEnabled}. */
+/** The "New activity" category: pings on a run starting or finishing. Composes with the methods above. */
 export function newActivityEnabled(preferences: Preferences): boolean {
-  return preferences.notifyNewActivity ?? false
+  return notificationEnabled(preferences, 'notifyNewActivity')
 }
 
-/** The "needs you" category (#627): a run awaiting your answer, or a PR to review. Composes with
- * the method toggles like {@link newActivityEnabled}, but **defaults on** — these are the baseline
- * notifications, so an unset preference keeps them firing. */
+/** The "needs you" category: a run awaiting your answer, or a PR to review. */
 export function humanInterventionEnabled(preferences: Preferences): boolean {
-  return preferences.notifyHumanIntervention ?? true
+  return notificationEnabled(preferences, 'notifyHumanIntervention')
 }

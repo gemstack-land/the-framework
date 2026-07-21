@@ -548,26 +548,19 @@ function agentAwaitGate(
     const emitTurnSignals = createTurnSignalEmitter(emit)
     let run = await base(ctx)
     emitTurnSignals(run.text)
+    // Headless: nobody to ask, so the build's turn stands as it is rather than auto-answering
+    // its own question. (The prompt paths differ here — they resolve to the recommended pick.)
     if (!requestChoice) return run
 
-    for (let round = 0; round < MAX_AWAIT_ROUNDS; round++) {
-      const gate = parseAwaitGate(run.text)
-      if (!gate) return run // the agent finished instead of asking — the common case
-      const answer = await resolveAwaitGate(gate, round, deps)
-      if (isDeclinedConfirmation(gate, answer)) {
-        // A declined plan (#358) ends the build here rather than re-prompting: the
-        // user takes over with fresh instructions (e.g. a new run from the dashboard).
-        emit({ kind: 'log', message: PLAN_DECLINED_MESSAGE })
-        deps.onDecline?.()
-        return run
-      }
-      emit({ kind: 'log', message: `Continuing with your choice: ${answer}` })
-      run = await continueAfterChoice(session, ctx, gate.title, answer)
-      emitTurnSignals(run.text)
-    }
+    const drained = await drainGates(run, { ...deps, emitTurnSignals }, (question, answer) =>
+      continueAfterChoice(session, ctx, question, answer),
+    )
+    // A declined plan (#358) ends the build here rather than re-prompting: the user takes over
+    // with fresh instructions (e.g. a new run from the dashboard).
+    if (drained.declined) deps.onDecline?.()
     // The agent kept asking past the limit: proceed with the latest turn rather than loop.
-    emit({ kind: 'log', message: 'Proceeding with the build (await limit reached).' })
-    return run
+    else if (drained.exhausted) emit({ kind: 'log', message: 'Proceeding with the build (await limit reached).' })
+    return drained.turn
   }
 }
 
@@ -714,13 +707,22 @@ interface AwaitTurnDeps {
 }
 
 /**
- * Resolve the await gates (#337/#339) a turn ended on: pick the answer, re-prompt with
+ * Resolve the await gates (#337/#339) a turn ended on: pick the answer, continue with
  * it, repeat until the agent stops asking or the {@link MAX_AWAIT_ROUNDS} cap trips. A
  * declined plan (#358) stops here. Returns the settled turn plus whether it declined /
- * was still asking at the cap. Shared by the opening prompt and each chat message.
+ * was still asking at the cap.
+ *
+ * Every path that runs gates shares this loop: the opening prompt, each chat message, and
+ * the build's {@link agentAwaitGate}. They differ only in how a turn is continued — a raw
+ * `session.prompt`, or a supervisor pass that carries a `SupervisorRun` — which is what
+ * `continueWith` is. Keeping one loop is what stopped the per-turn signal emission from
+ * having to be added to each copy by hand (#563).
  */
-async function drainGates(session: DriverSession, turn: DriverTurn, deps: AwaitTurnDeps): Promise<{ turn: DriverTurn; declined: boolean; exhausted: boolean }> {
-  const signalOpt = deps.signal ? { signal: deps.signal } : {}
+async function drainGates<T extends { text: string }>(
+  turn: T,
+  deps: AwaitTurnDeps,
+  continueWith: (question: string, answer: string) => Promise<T>,
+): Promise<{ turn: T; declined: boolean; exhausted: boolean }> {
   let gate = parseAwaitGate(turn.text)
   for (let round = 0; round < MAX_AWAIT_ROUNDS && gate; round++) {
     const answer = await resolveAwaitGate(gate, round, deps)
@@ -729,11 +731,17 @@ async function drainGates(session: DriverSession, turn: DriverTurn, deps: AwaitT
       return { turn, declined: true, exhausted: false }
     }
     deps.emit({ kind: 'log', message: `Continuing with your choice: ${answer}` })
-    turn = await session.prompt(continuationPrompt(gate.title, answer), signalOpt)
+    turn = await continueWith(gate.title, answer)
     deps.emitTurnSignals(turn.text)
     gate = parseAwaitGate(turn.text)
   }
   return { turn, declined: false, exhausted: gate !== undefined }
+}
+
+/** Continue a plain driver session from a gate answer: the raw-prompt half of {@link drainGates}. */
+function promptContinuation(session: DriverSession, deps: AwaitTurnDeps): (question: string, answer: string) => Promise<DriverTurn> {
+  const signalOpt = deps.signal ? { signal: deps.signal } : {}
+  return (question, answer) => session.prompt(continuationPrompt(question, answer), signalOpt)
 }
 
 /**
@@ -761,7 +769,7 @@ export async function runChatPhase(session: DriverSession, messages: RunMessages
     deps.recordMessage?.('user', message.text, message.via)
     turn = await session.prompt(message.text, { ...signalOpt, resume: true })
     deps.emitTurnSignals(turn.text)
-    const drained = await drainGates(session, turn, deps)
+    const drained = await drainGates(turn, deps, promptContinuation(session, deps))
     turn = drained.turn
     exhausted = drained.exhausted
     // The settled text, so the recorded reply is what the user actually read (#908). Attributed to
@@ -782,9 +790,6 @@ export async function runChatPhase(session: DriverSession, messages: RunMessages
  * Every turn here is a turn like any other, so each one's signals are emitted. That is the
  * point of sharing this: the direct prompt path and the backlog loop each had their own copy
  * of these rounds, and the emission had to be added to each by hand (#563).
- *
- * The build's {@link agentAwaitGate} is deliberately not this: it wraps a supervisor pass
- * rather than a raw prompt, and skips gates entirely when headless.
  */
 export async function runAwaitRounds(opts: AwaitRoundsOptions): Promise<AwaitRoundsResult> {
   const { session, emit, emitTurnSignals, messages } = opts
@@ -803,7 +808,7 @@ export async function runAwaitRounds(opts: AwaitRoundsOptions): Promise<AwaitRou
   opts.recordMessage?.('user', opts.prompt)
   const opening = await session.prompt(opts.prompt, { ...signalOpt, ...(opts.resume ? { resume: true } : {}) })
   emitTurnSignals(opening.text)
-  const drained = await drainGates(session, opening, deps)
+  const drained = await drainGates(opening, deps, promptContinuation(session, deps))
   opts.recordMessage?.('agent', drained.turn.text)
   if (drained.declined) return { text: drained.turn.text, declined: true, exhausted: false }
 

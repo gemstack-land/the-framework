@@ -1,5 +1,10 @@
-import { listRuns, readLiveMetas, type LiveRun, type RunMeta, type RunStatus } from '../store/index.js'
+import { readAllRuns, type RunMeta, type RunStatus } from '../store/index.js'
 import type { ProjectSummary } from './projects.js'
+
+// The identity + diff live in the leaf `keys.ts` so the dashboard can share them (they are pure);
+// re-exported here so this stays the import site for anything that already reads them from the
+// module that defines `Activity`.
+export { activityKey, pickNewActivity } from './keys.js'
 
 // The "New activity" feed (#627): the cross-project stream of run lifecycle transitions that
 // do NOT need the human — a run started, a run finished. It is the default-off notification
@@ -39,20 +44,6 @@ export interface ActivityDeps {
   readRuns?: (cwd: string) => Promise<RunMeta[]>
 }
 
-/** A project's runs, live prepended to the archived history. Forgiving: a failed read is `[]`. */
-async function readAllRuns(cwd: string): Promise<RunMeta[]> {
-  const [archived, live] = await Promise.all([
-    listRuns(cwd).catch(() => [] as RunMeta[]),
-    readLiveMetas(cwd).catch(() => [] as LiveRun[]),
-  ])
-  // Skip a live run already archived under the same id, so it is not counted twice.
-  // Live wins over archived (#768). The dedup used to drop the live copy, which was right while
-  // "archived" meant "finished for good": a run was only ever copied into `runs/` on its way out.
-  // Continuing a run (#762) breaks that — the run has an archived copy from its first leg AND is
-  // live again — and keeping the archive showed a running run as finished.
-  return [...live, ...archived.filter(run => !live.some(l => l.id === run.id))]
-}
-
 /** Map one run to its current activity item: `started` while running, else `finished`. */
 function activityFor(project: ProjectSummary, run: RunMeta): Activity {
   const kind = run.status === 'running' ? 'started' : 'finished'
@@ -88,22 +79,33 @@ export async function buildActivity(projects: ProjectSummary[], deps: ActivityDe
   return items
 }
 
-/**
- * The stable identity of an activity item: its kind + project + run. The kind is part of the key
- * so a run's `started` and `finished` are two separate announcements (one when it kicks off, one
- * when it lands), each firing exactly once.
- */
-export function activityKey(item: Activity): string {
-  return `${item.kind}:${item.projectId}:${item.runId}`
-}
 
 /**
- * The activity items in `current` not already in `seen` (by {@link activityKey}) — the transitions
- * that just happened. Drives both the browser hook and the daemon's Discord watcher: each keeps the
- * keys it has already announced, so only genuinely new transitions notify. (The dashboard keeps a
- * client-side copy of this; it can't import runtime values from this package without dragging
- * Node-only modules into the browser bundle.)
+ * How one activity item reads on Discord: a started run, or a finished one tagged by its outcome.
+ * Beside {@link Activity} for the same reason {@link interventionLine} sits beside `Intervention`
+ * — it switches on the kind, so it belongs with the type that declares the kinds.
  */
-export function pickNewActivity(seen: ReadonlySet<string>, current: Activity[]): Activity[] {
-  return current.filter(item => !seen.has(activityKey(item)))
+export function activityLine(item: Activity): string {
+  const what = item.title ?? 'a session'
+  if (item.kind === 'started') return `▶️ started: ${what}`
+  const mark = item.status === 'failed' ? '❌' : item.status === 'stopped' ? '⏹️' : '✅'
+  return `${mark} finished: ${what}`
+}
+
+/** Post the given activity items to a Discord webhook as one message. `fetch` is injectable for tests. */
+export async function postActivityDiscord(
+  webhook: string,
+  items: Activity[],
+  fetchImpl: typeof fetch = fetch,
+): Promise<void> {
+  if (items.length === 0) return
+  const content =
+    items.length === 1
+      ? `📣 Activity (${items[0]!.projectName}): ${activityLine(items[0]!)}`
+      : `📣 ${items.length} session updates:\n${items.map(i => `• ${i.projectName}: ${activityLine(i)}`).join('\n')}`
+  await fetchImpl(webhook, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ content }),
+  })
 }

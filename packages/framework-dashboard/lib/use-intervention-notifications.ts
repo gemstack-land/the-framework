@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 import type { Intervention } from '@gemstack/framework'
-import { interventionKey, pickNewInterventions } from './interventions.js'
+import { interventionKey, pickNewInterventions } from '@gemstack/framework/client'
 
 // Browser notifications for the "needs you" queue (#627). The interventions list is already
 // polled once in the shell; this watches it and fires a notification when a new PR lands. Two

@@ -1,6 +1,7 @@
 import { strict as assert } from 'node:assert'
 import { test } from 'node:test'
-import { buildInterventions, interventionKey, type OpenPr } from './interventions.js'
+import { buildInterventions, interventionKey } from './interventions.js'
+import type { OpenPr } from './gh.js'
 import type { RunHandoff } from './run-handoff.js'
 import type { ProjectSummary } from './projects.js'
 import type { LiveRun, RunMeta } from '../store/index.js'

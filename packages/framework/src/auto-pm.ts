@@ -1,14 +1,5 @@
 import type { QuotaBoundaryStatus } from './quota-boundary.js'
-import { renderSpikeAndPlanPrompt, SPIKE_AND_PLAN_PRESET_NAME } from './spike-and-plan-preset.js'
-import { renderQuickWinsPrompt, QUICK_WINS_PRESET_NAME } from './quick-wins-preset.js'
-import { renderDrainQueuePrompt, DRAIN_QUEUE_PRESET_NAME } from './drain-queue-preset.js'
-import { renderMaintenancePrompt, MAINTENANCE_PRESET_NAME } from './maintenance-preset.js'
-import {
-  renderTriageQuickPrompt,
-  TRIAGE_QUICK_PRESET_NAME,
-  renderTriageConsensualPrompt,
-  TRIAGE_CONSENSUAL_PRESET_NAME,
-} from './triage-presets.js'
+import { presets } from './preset-catalog.js'
 
 /**
  * Auto PM (#685): spend leftover subscription quota on product management instead of
@@ -162,14 +153,14 @@ export interface AutoPmJob {
  * idle tick tries the next job instead of retrying a job that is already running.
  */
 export const AUTO_PM_JOBS: readonly AutoPmJob[] = [
-  { name: QUICK_WINS_PRESET_NAME, prompt: renderQuickWinsPrompt(), describe: 'harvesting quick-wins from the plans' },
-  { name: TRIAGE_QUICK_PRESET_NAME, prompt: renderTriageQuickPrompt(), describe: 'triaging quick-win tickets' },
+  { name: presets.quickWins.name, prompt: presets.quickWins.render(), describe: 'harvesting quick-wins from the plans' },
+  { name: presets.triageQuick.name, prompt: presets.triageQuick.render(), describe: 'triaging quick-win tickets' },
   {
-    name: TRIAGE_CONSENSUAL_PRESET_NAME,
-    prompt: renderTriageConsensualPrompt(),
+    name: presets.triageConsensual.name,
+    prompt: presets.triageConsensual.render(),
     describe: 'triaging consensual tickets',
   },
-  { name: SPIKE_AND_PLAN_PRESET_NAME, prompt: renderSpikeAndPlanPrompt(), describe: 'spiking & planning tickets' },
+  { name: presets.spikeAndPlan.name, prompt: presets.spikeAndPlan.render(), describe: 'spiking & planning tickets' },
 ]
 
 /**
@@ -178,8 +169,8 @@ export const AUTO_PM_JOBS: readonly AutoPmJob[] = [
  * the thing to do.
  */
 export const AUTO_PM_DRAIN_JOB: AutoPmJob = {
-  name: DRAIN_QUEUE_PRESET_NAME,
-  prompt: renderDrainQueuePrompt(),
+  name: presets.drainQueue.name,
+  prompt: presets.drainQueue.render(),
   describe: 'draining the first open queue entry',
 }
 
@@ -197,8 +188,8 @@ export const AUTO_PM_DRAIN_JOB: AutoPmJob = {
  * default of the entire codebase, which is exactly this job's scope.
  */
 export const AUTO_PM_MAINTENANCE_JOB: AutoPmJob = {
-  name: MAINTENANCE_PRESET_NAME,
-  prompt: renderMaintenancePrompt(),
+  name: presets.maintenance.name,
+  prompt: presets.maintenance.render(),
   describe: 'sweeping the codebase for maintenance work',
 }
 

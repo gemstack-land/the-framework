@@ -1,21 +1,6 @@
 import { forwardRef, useImperativeHandle, useMemo, useRef, useState, type FormEvent } from 'react'
 import type { ProjectSummary } from '@gemstack/framework'
-import type { PresetRenderContext } from '@gemstack/framework/client'
-import {
-  renderResearchPrompt,
-  renderReadabilityPrompt,
-  renderMaintainabilityPrompt,
-  renderSecurityAuditPrompt,
-  renderUxPrompt,
-  renderSuggestNewTicketsPrompt,
-  renderSuggestTicketsToWorkOnPrompt,
-  renderSpikeAndPlanPrompt,
-  renderQuickWinsPrompt,
-  renderMarketResearchPrompt,
-  renderMaintenancePrompt,
-  renderTriageQuickPrompt,
-  renderTriageConsensualPrompt,
-} from '@gemstack/framework/client'
+import { LAUNCHER_PRESETS } from '@gemstack/framework/client'
 import {
   usePreferences,
   updatePreferences,
@@ -36,43 +21,9 @@ import { ClaudeLogo, CodexLogo } from './agent-logos.js'
 import { Button } from './ui/button.js'
 
 // The presets (#353/#433): each PREFILLS the editor with a rendered prompt and runs it verbatim
-// (`kind: 'prompt'`). Emptying the box falls back to a normal `build` run.
-const PRESETS: { id: string; label: string; render: (what?: string, ctx?: PresetRenderContext) => string; tooltip?: string }[] = [
-  { id: 'research', label: 'Research', render: renderResearchPrompt },
-  { id: 'readability', label: 'Readability', render: renderReadabilityPrompt },
-  { id: 'maintainability', label: 'Maintainability', render: renderMaintainabilityPrompt },
-  { id: 'security-audit', label: 'Security audit', render: renderSecurityAuditPrompt },
-  { id: 'ux', label: 'UX', render: renderUxPrompt },
-  { id: 'suggest-new-tickets', label: 'Suggest new tickets', render: renderSuggestNewTicketsPrompt },
-  {
-    id: 'suggest-tickets-to-work-on',
-    label: 'Suggest tickets to work on',
-    render: renderSuggestTicketsToWorkOnPrompt,
-    tooltip: 'Add tickets to queue (TODO_AGENTS.md)',
-  },
-  { id: 'spike-and-plan', label: 'Spike & plan', render: renderSpikeAndPlanPrompt },
-  { id: 'quick-wins', label: 'Quick wins', render: renderQuickWinsPrompt },
-  { id: 'market-research', label: 'Market research', render: renderMarketResearchPrompt },
-  {
-    id: 'maintenance',
-    label: 'Maintenance',
-    render: renderMaintenancePrompt,
-    tooltip: 'Queue maintainability + security work per codebase subset (TODO_AGENTS.md)',
-  },
-  {
-    id: 'triage-quick',
-    label: 'Do quick-win work',
-    render: renderTriageQuickPrompt,
-    tooltip: 'Add `tickets/*.md` to queue (TODO_AGENTS.md), only quick-win and consensual tickets',
-  },
-  {
-    id: 'triage-consensual',
-    label: 'Do consensual work',
-    render: renderTriageConsensualPrompt,
-    tooltip: 'Add `tickets/*.md` to queue (TODO_AGENTS.md), only significant (no quick-wins) and consensual tickets',
-  },
-]
-
+// (`kind: 'prompt'`). Emptying the box falls back to a normal `build` run. The list, its order and
+// each preset's label live with the presets themselves (#874), so a preset's run-kind name and the
+// button that starts it cannot drift apart across the package boundary.
 // The agent + model tree (#650/#656/#658): each agent lists ONLY its own models, since `--model`
 // passes straight through to that agent's CLI. Picking a model in an agent's submenu sets both, so
 // an incompatible pair can't be chosen. Empty value = the agent's own default (no `--model` flag).
@@ -165,8 +116,10 @@ export const Composer = forwardRef<ComposerHandle, {
   // default falls through to the whole codebase.
   const presets = useMemo(
     () =>
-      PRESETS.map(p => ({
-        ...p,
+      LAUNCHER_PRESETS.map(p => ({
+        id: p.name,
+        label: p.label,
+        ...(p.tooltip ? { tooltip: p.tooltip } : {}),
         render: () => p.render(undefined, { session_name: sessionName, settings: { technical_control: technical } }),
       })),
     [sessionName, technical],

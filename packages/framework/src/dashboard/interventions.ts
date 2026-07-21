@@ -1,6 +1,11 @@
 import { listRuns, readLiveMetas, type LiveRun, type RunMeta } from '../store/index.js'
 import type { ProjectSummary } from './projects.js'
 import { readRunHandoff, runBranchFor, type RunHandoff } from './run-handoff.js'
+import { ghPrList, type OpenPr, type PrLister } from './gh.js'
+import { interventionKey } from './keys.js'
+
+// Pure identity + diff, in the leaf `keys.ts` so the dashboard shares them rather than copying.
+export { interventionKey, pickNewInterventions } from './keys.js'
 
 // The interventions queue (#632, part of the Queue #624): the cross-project "needs you" list.
 // Rom's design (#624): proposals and finished work are both just PRs, so the bulk of what
@@ -39,37 +44,6 @@ export interface Intervention {
   createdAt?: string
 }
 
-/** An open PR as the lister reports it. */
-export interface OpenPr {
-  number: number
-  title: string
-  url: string
-  /** Draft PRs are not ready for review, so they are left off the queue. */
-  isDraft: boolean
-  createdAt?: string
-}
-
-/** Lists a checkout's open PRs; resolves `[]` when there is no remote / gh is unavailable. */
-export type PrLister = (cwd: string) => Promise<OpenPr[]>
-
-/** A {@link PrLister} via the `gh` CLI; resolves `[]` when gh is missing/unauthed or there is no remote. */
-export function nodeGhPrLister(): PrLister {
-  return cwd =>
-    new Promise(resolve => {
-      void import('node:child_process').then(({ execFile }) => {
-        const args = ['pr', 'list', '--state', 'open', '--limit', '50', '--json', 'number,title,url,isDraft,createdAt']
-        execFile('gh', args, { cwd, timeout: 8_000 }, (err, stdout) => {
-          if (err) return resolve([])
-          try {
-            resolve(JSON.parse(String(stdout)) as OpenPr[])
-          } catch {
-            resolve([])
-          }
-        })
-      })
-    })
-}
-
 /** Injectable seam so {@link buildInterventions} is unit-testable off disk. */
 export interface InterventionsDeps {
   prs?: PrLister
@@ -106,7 +80,7 @@ export async function buildInterventions(
   projects: ProjectSummary[],
   deps: InterventionsDeps = {},
 ): Promise<Intervention[]> {
-  const prs = deps.prs ?? nodeGhPrLister()
+  const prs = deps.prs ?? ghPrList
   const liveRuns = deps.liveRuns ?? readLiveMetas
   const items: Intervention[] = []
   for (const project of projects) {
@@ -200,23 +174,37 @@ async function unpushedFor(project: ProjectSummary, deps: InterventionsDeps): Pr
 }
 
 /**
- * The stable identity of an intervention. A PR is its url (survives title edits and re-sorts);
- * the other two are keyed on the project plus the thing waiting — the gate id, or the run whose
- * branch is unpushed — since their url is the shared dashboard URL and would otherwise collide.
+ * How one intervention reads on Discord. Beside {@link Intervention} rather than inside the
+ * watcher that posts it: it switches on every `kind`, so adding a kind is a change here, not in
+ * a transport module that has no other opinion about what an intervention is.
+ *
+ * A PR reads `#123 Title — url`; a paused run (#636) has no number and only the dashboard url,
+ * so it reads `Title — awaiting your answer` with the link appended when the daemon knows it.
+ * Unpushed work (#860) names the branch, since that is the actionable part.
  */
-export function interventionKey(item: Intervention): string {
-  if (item.kind === 'awaiting') return `awaiting:${item.projectId}:${item.awaitId ?? ''}`
-  if (item.kind === 'unpushed') return `unpushed:${item.projectId}:${item.runId ?? ''}`
-  return item.url
+export function interventionLine(item: Intervention): string {
+  if (item.kind === 'awaiting') return `${item.title} — awaiting your answer${item.url ? ` — ${item.url}` : ''}`
+  if (item.kind === 'unpushed') {
+    const count = item.commits === 1 ? '1 commit' : `${item.commits ?? 0} commits`
+    return `${item.title} — ${count} on ${item.branch ?? ''}, never pushed${item.url ? ` — ${item.url}` : ''}`
+  }
+  return `#${item.number} ${item.title} — ${item.url}`
 }
 
-/**
- * The interventions in `current` not already in `seen` (by {@link interventionKey}) — the ones
- * that just landed on the queue. Drives the daemon's Discord watcher (#627): the watcher keeps
- * the keys it has already announced, so only genuinely new items notify. (The dashboard keeps a
- * client-side copy of this for browser notifications; it can't import runtime values from this
- * package without dragging Node-only modules into the browser bundle.)
- */
-export function pickNewInterventions(seen: ReadonlySet<string>, current: Intervention[]): Intervention[] {
-  return current.filter(item => !seen.has(interventionKey(item)))
+/** Post the given interventions to a Discord webhook as one message. `fetch` is injectable for tests. */
+export async function postInterventionsDiscord(
+  webhook: string,
+  items: Intervention[],
+  fetchImpl: typeof fetch = fetch,
+): Promise<void> {
+  if (items.length === 0) return
+  const content =
+    items.length === 1
+      ? `🔔 Needs you (${items[0]!.projectName}): ${interventionLine(items[0]!)}`
+      : `🔔 ${items.length} items need you:\n${items.map(i => `• ${interventionLine(i)}`).join('\n')}`
+  await fetchImpl(webhook, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ content }),
+  })
 }

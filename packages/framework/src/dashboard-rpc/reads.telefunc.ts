@@ -1,4 +1,4 @@
-import { listRuns, readLiveMetas, loadRunEvents, listWorktreeDirs, worktreeSize, isSafeRunId, type RunMeta } from '../store/index.js'
+import { listRuns, readLiveMetas, readAllRuns, loadRunEvents, listWorktreeDirs, worktreeSize, isSafeRunId, type RunMeta } from '../store/index.js'
 import { readLogs, type LogEntry } from '../logs.js'
 import { readDocs, type WorkspaceDoc } from '../dashboard/docs.js'
 import { readTickets, type WorkspaceTicket } from '../dashboard/tickets.js'
@@ -55,13 +55,7 @@ async function withProject<T>(projectId: string, read: (cwd: string) => Promise<
 export async function onRuns(projectId: string): Promise<RunMeta[]> {
   const cwd = await resolveProjectPath(projectId)
   if (!cwd) return []
-  const archived = await listRuns(cwd).catch(() => [])
-  const live = await readLiveMetas(cwd).catch(() => [])
-  // Live wins over archived (#768). The dedup used to drop the live copy, which was right while
-  // "archived" meant "finished for good": a run was only ever copied into `runs/` on its way out.
-  // Continuing a run (#762) breaks that — the run has an archived copy from its first leg AND is
-  // live again — and keeping the archive showed a running run as finished.
-  return [...live, ...archived.filter(run => !live.some(l => l.id === run.id))]
+  return readAllRuns(cwd)
 }
 
 /**

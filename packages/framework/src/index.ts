@@ -126,7 +126,7 @@ export {
   type SweepDeps,
   type MaintenanceFs,
 } from './maintenance.js'
-export { startDashboard, summarizeProject, defaultProjectsProvider, readDocs, type Dashboard, type DashboardOptions, type StartRunKind, type StartRunResult, type AddProjectResult, type PreviewResult, type PreviewStatus, type RunWorktree, type ProjectSummary, type ProjectsProvider, type SummarizeDeps, type WorkspaceDoc, readTickets, type WorkspaceTicket, type ProjectQueue, type QueueItem, type Overview, type ActiveRun, type RecentProject, type DashboardData, type ProjectStat, type ActivityDay, type GitStatus, type LinkedPr, type FileDiff, type FileChange, type FileContent, type RunHandoff, type HandoffCommit, type HandoffFile, type HandoffResult, buildInterventions, nodeGhPrLister, type Intervention, type OpenPr, type PrLister, type InterventionsDeps, buildActivity, activityKey, pickNewActivity, type Activity, type ActivityDeps } from './dashboard/index.js'
+export { startDashboard, summarizeProject, defaultProjectsProvider, readDocs, type Dashboard, type DashboardOptions, type StartRunKind, type StartRunResult, type AddProjectResult, type PreviewResult, type PreviewStatus, type RunWorktree, type ProjectSummary, type ProjectsProvider, type SummarizeDeps, type WorkspaceDoc, readTickets, type WorkspaceTicket, type ProjectQueue, type QueueItem, type Overview, type ActiveRun, type RecentProject, type DashboardData, type ProjectStat, type ActivityDay, type GitStatus, type LinkedPr, type FileDiff, type FileChange, type FileContent, type RunHandoff, type HandoffCommit, type HandoffFile, type HandoffResult, buildInterventions, type Intervention, type OpenPr, type PrLister, type InterventionsDeps, buildActivity, activityKey, pickNewActivity, type Activity, type ActivityDeps } from './dashboard/index.js'
 export { startPreview, detectDevScript, detectServeTargets, parsePreviewUrl, PREVIEW_SCRIPTS, type PreviewHandle, type StartPreviewOptions, type ServeTarget } from './preview.js'
 export {
   RunStore,
@@ -328,82 +328,6 @@ export {
   type TodoLoopResult,
   type TodoLoopReason,
 } from './todo-loop.js'
-export {
-  renderResearchPrompt,
-  RESEARCH_PRESET_NAME,
-  RESEARCH_PROMPT_TEMPLATE,
-  RESEARCH_PARAMS,
-} from './research-preset.js'
-export {
-  renderReadabilityPrompt,
-  READABILITY_PRESET_NAME,
-  READABILITY_PROMPT_TEMPLATE,
-  READABILITY_PARAMS,
-} from './readability-preset.js'
-export {
-  renderMaintainabilityPrompt,
-  MAINTAINABILITY_PRESET_NAME,
-  MAINTAINABILITY_PROMPT_TEMPLATE,
-  MAINTAINABILITY_PARAMS,
-} from './maintainability-preset.js'
-export {
-  renderSecurityAuditPrompt,
-  SECURITY_AUDIT_PRESET_NAME,
-  SECURITY_AUDIT_PROMPT_TEMPLATE,
-  SECURITY_AUDIT_PARAMS,
-} from './security-audit-preset.js'
-export {
-  renderUxPrompt,
-  UX_PRESET_NAME,
-  UX_PROMPT_TEMPLATE,
-  UX_PARAMS,
-} from './ux-preset.js'
-export {
-  renderSuggestNewTicketsPrompt,
-  SUGGEST_NEW_TICKETS_PRESET_NAME,
-  SUGGEST_NEW_TICKETS_PROMPT_TEMPLATE,
-  SUGGEST_NEW_TICKETS_PARAMS,
-} from './suggest-new-tickets-preset.js'
-export {
-  renderSuggestTicketsToWorkOnPrompt,
-  SUGGEST_TICKETS_TO_WORK_ON_PRESET_NAME,
-  SUGGEST_TICKETS_TO_WORK_ON_PROMPT_TEMPLATE,
-  SUGGEST_TICKETS_TO_WORK_ON_PARAMS,
-} from './suggest-tickets-to-work-on-preset.js'
-export {
-  renderSpikeAndPlanPrompt,
-  SPIKE_AND_PLAN_PRESET_NAME,
-  SPIKE_AND_PLAN_PROMPT_TEMPLATE,
-  SPIKE_AND_PLAN_PARAMS,
-} from './spike-and-plan-preset.js'
-export {
-  renderQuickWinsPrompt,
-  QUICK_WINS_PRESET_NAME,
-  QUICK_WINS_PROMPT_TEMPLATE,
-  QUICK_WINS_PARAMS,
-} from './quick-wins-preset.js'
-export {
-  renderMaintenancePrompt,
-  MAINTENANCE_PRESET_NAME,
-  MAINTENANCE_PROMPT_TEMPLATE,
-  MAINTENANCE_PARAMS,
-} from './maintenance-preset.js'
-export {
-  renderTriageQuickPrompt,
-  TRIAGE_QUICK_PRESET_NAME,
-  TRIAGE_QUICK_PROMPT_TEMPLATE,
-  TRIAGE_QUICK_PARAMS,
-  renderTriageConsensualPrompt,
-  TRIAGE_CONSENSUAL_PRESET_NAME,
-  TRIAGE_CONSENSUAL_PROMPT_TEMPLATE,
-  TRIAGE_CONSENSUAL_PARAMS,
-} from './triage-presets.js'
-export {
-  renderMarketResearchPrompt,
-  MARKET_RESEARCH_PRESET_NAME,
-  MARKET_RESEARCH_PROMPT_TEMPLATE,
-  MARKET_RESEARCH_PARAMS,
-} from './market-research-preset.js'
 export { runOptionsFromPreferences, autopilotEnabled, preferencesFromFileConfig } from './run-options.js'
 export {
   startAutoPm,
@@ -427,6 +351,10 @@ export {
   presetContext,
   materializePresets,
 } from './presets.js'
+export { presets, LAUNCHER_PRESETS, type PresetKey } from './preset-catalog.js'
+export { NOTIFICATION_DEFAULTS, notificationEnabled, discordNotificationEnabled } from './preference-defaults.js'
+export { interventionKey, pickNewInterventions } from './dashboard/keys.js'
+export { definePreset, defaultWhat, DEFAULT_WHAT, type PresetDef, type PresetParam, type PresetRenderContext } from './preset-prompt.js'
 export {
   fakeDriver,
   FAKE_INTENT,

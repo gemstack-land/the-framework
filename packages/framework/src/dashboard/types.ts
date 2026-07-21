@@ -1,4 +1,4 @@
-import type { LinkedPr } from './git-status.js'
+import type { LinkedPr } from './gh.js'
 import type { EcoOptions } from '../system-prompt.js'
 
 // The dashboard's request/result vocabulary (#345/#396/#475): the shapes the Start / Add /
