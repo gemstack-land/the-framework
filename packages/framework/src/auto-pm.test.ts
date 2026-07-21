@@ -9,6 +9,7 @@ import {
   AUTO_PM_MAINTENANCE_JOB,
   type AutoPmDeps,
   type AutoPmJob,
+  type AutoPmLoop,
   type AutoPmProject,
 } from './auto-pm.js'
 import { quotaBoundaryStatus, type QuotaBoundaryStatus } from './quota-boundary.js'
@@ -401,6 +402,37 @@ test('a queue with work in it is drained rather than swept (#882)', async () => 
   await loop.tick()
   loop.stop()
   assert.deepEqual(ran, [AUTO_PM_DRAIN_JOB.name])
+})
+
+test('a sweep stopped mid-flight starts nothing (#983)', async () => {
+  // stop() used to only clear the timer, so a tick already inside its per-project loop kept
+  // awaiting (git calls, the queue read) and then spawned a run anyway. By then the daemon has
+  // quiesced and cleared its live-run map, so that run is tracked by nobody: an orphan holding a
+  // worktree, and quota spent on a run nobody will ever see.
+  const both: AutoPmProject[] = [
+    { id: 'p1', path: '/repo' },
+    { id: 'p2', path: '/other' },
+  ]
+  let loop!: AutoPmLoop
+  const h = harness({
+    projects: async () => both,
+    // The daemon shutting down while the sweep sits between its readings and the spawn.
+    backlogEmpty: async () => {
+      loop.stop()
+      return true
+    },
+  })
+  loop = h.loop
+  await loop.tick()
+  // p2 neither: stopping is a verdict on the whole sweep, not on one project.
+  assert.deepEqual(h.started, [])
+})
+
+test('a stopped sweep does not tick again (#983)', async () => {
+  const { loop, started } = harness()
+  loop.stop()
+  await loop.tick()
+  assert.deepEqual(started, [])
 })
 
 test('an unreadable sweep schedule falls back to the rotation (#882)', async () => {
