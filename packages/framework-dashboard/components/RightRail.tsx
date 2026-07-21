@@ -123,10 +123,14 @@ export function RightRail({
         wide ? 'w-[32rem]' : 'w-80',
       )}
     >
-      <div className="flex gap-1 border-b border-border p-2">
+      {/* flex-wrap: up to 7 tabs share a w-80 rail, and without it the tail clipped (#948).
+          Announced as the tabset it visually is. */}
+      <div role="tablist" aria-label="Rail panels" className="flex flex-wrap gap-1 border-b border-border p-2">
         {tabs.map(t => (
           <Button
             key={t}
+            role="tab"
+            aria-selected={tab === t}
             variant="ghost"
             size="sm"
             className={cn('h-7 gap-1.5 text-xs', tab === t && 'bg-accent text-accent-foreground')}

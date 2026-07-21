@@ -50,7 +50,7 @@ describe('RightRail wide mode (#862)', () => {
   test('leaving the view gives the room back', () => {
     const onWideChange = vi.fn()
     const { container } = render(<RightRail {...baseProps} views={[view]} onWideChange={onWideChange} />)
-    fireEvent.click(screen.getByRole('button', { name: /docs/i }))
+    fireEvent.click(screen.getByRole('tab', { name: /docs/i }))
     expect(rail(container).className).toContain('w-80')
     expect(onWideChange).toHaveBeenLastCalledWith(false)
   })

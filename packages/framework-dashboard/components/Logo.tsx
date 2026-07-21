@@ -49,6 +49,11 @@ export function logoLabel(working: boolean): string {
   return working ? 'AI is working for you 🚀' : "AI isn't working for you 💤"
 }
 
+/** The label without the emoji (#948): a screen reader saying "rocket" helps nobody. */
+export function logoSpokenLabel(working: boolean): string {
+  return working ? 'AI is working for you' : "AI isn't working for you"
+}
+
 /** The hue `steps` along the cycle, wrapping. */
 function hue(steps: number): string {
   return HUES[((steps % HUES.length) + HUES.length) % HUES.length]!
@@ -69,7 +74,7 @@ export function Logo({ className, working = false }: { className?: string; worki
       viewBox="-289 -326 578 651.9"
       className={className}
       role="img"
-      aria-label={label}
+      aria-label={logoSpokenLabel(working)}
     >
       {/* Hovering the mark is the only place the label reads as prose. */}
       <title>{label}</title>

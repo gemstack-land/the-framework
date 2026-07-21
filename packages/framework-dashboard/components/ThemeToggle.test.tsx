@@ -35,12 +35,12 @@ describe('ThemeToggle (#754)', () => {
   test('the trigger shows the current theme, so the header says which is on', () => {
     usePreferences.mockReturnValue({ theme: 'dark' })
     render(<ThemeToggle />)
-    expect(screen.getByRole('button', { name: /theme/i }).getAttribute('title')).toBe('Theme: dark')
+    expect(screen.getByRole('button', { name: /theme/i }).getAttribute('title')).toBe('Theme: Dark')
   })
 
   test('an unset preference reads as system, the default', () => {
     usePreferences.mockReturnValue({})
     render(<ThemeToggle />)
-    expect(screen.getByRole('button', { name: /theme/i }).getAttribute('title')).toBe('Theme: system')
+    expect(screen.getByRole('button', { name: /theme/i }).getAttribute('title')).toBe('Theme: System')
   })
 })

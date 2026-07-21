@@ -22,13 +22,14 @@ export function ThemeToggle() {
   const preferences = usePreferences()
   const theme = themePreference(preferences)
   // The trigger wears the current choice, so the header says which theme is on without opening it.
-  const Current = (THEME_OPTIONS.find(t => t.value === theme) ?? THEME_OPTIONS[0]!).icon
+  const current = THEME_OPTIONS.find(t => t.value === theme) ?? THEME_OPTIONS[0]!
+  const Current = current.icon
 
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
         className={cn(buttonVariants({ variant: 'ghost', size: 'icon-sm' }), 'shrink-0 text-muted-foreground')}
-        title={`Theme: ${theme}`}
+        title={`Theme: ${current.label}`}
         aria-label="Theme"
       >
         <Current className="h-4 w-4" />

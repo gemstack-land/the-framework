@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from 'vitest'
 import { cleanup, render, screen } from '@testing-library/react'
-import { Logo, logoLabel } from './Logo.js'
+import { Logo, logoLabel, logoSpokenLabel } from './Logo.js'
 
 afterEach(cleanup)
 
@@ -37,6 +37,6 @@ describe('Logo', () => {
     expect(logoLabel(true)).toBe('AI is working for you 🚀')
     expect(logoLabel(false)).toBe("AI isn't working for you 💤")
     render(<Logo working />)
-    expect(screen.getByRole('img', { name: logoLabel(true) })).toBeTruthy()
+    expect(screen.getByRole('img', { name: logoSpokenLabel(true) })).toBeTruthy()
   })
 })
