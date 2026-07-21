@@ -11,6 +11,7 @@ import { RunHistory } from '../../components/RunHistory.js'
 import { ProjectHome } from '../../components/ProjectHome.js'
 import { DashboardPage } from '../../components/DashboardPage.js'
 import { RunView } from '../../components/RunView.js'
+import { runLabel } from '../../lib/run-label.js'
 import { RightRail } from '../../components/RightRail.js'
 import { RelayView } from '../../components/RelayView.js'
 import { NotFound } from '../../components/NotFound.js'
@@ -222,7 +223,7 @@ export default function Page() {
     if (runId === null) {
       // Just pressed Start on a project with no worktree: follow the live output until the poll
       // surfaces the run and the effect above adopts its id.
-      if (adopting) return <RunView projectId={projectId} runId={null} events={events} live files={files} addContext={addContext} removeContext={removeContext} lost={lost} onRunStarted={onRunStarted} />
+      if (adopting) return <RunView projectId={projectId} runId={null} events={events} live label={runStart.intent || undefined} files={files} addContext={addContext} removeContext={removeContext} lost={lost} onRunStarted={onRunStarted} />
       return (
         <ProjectHome
           projectId={projectId}
@@ -241,7 +242,7 @@ export default function Page() {
       // list we have not read yet. Both are live views; only a session that is genuinely absent
       // from a list we did read is gone.
       if (runId === runStart.id || !runsLoaded)
-        return <RunView projectId={projectId} runId={runId} events={events} live files={files} addContext={addContext} removeContext={removeContext} lost={lost} onRunStarted={onRunStarted} />
+        return <RunView projectId={projectId} runId={runId} events={events} live label={runStart.intent || undefined} files={files} addContext={addContext} removeContext={removeContext} lost={lost} onRunStarted={onRunStarted} />
       return (
         <NotFound
           title="This session is gone"
@@ -259,6 +260,7 @@ export default function Page() {
         runId={runId}
         events={events}
         live={selectedRun.status === 'running'}
+        label={runLabel(selectedRun)}
         files={files}
         addContext={addContext}
         removeContext={removeContext}

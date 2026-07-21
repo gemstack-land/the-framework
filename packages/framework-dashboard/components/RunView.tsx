@@ -28,6 +28,7 @@ export function RunView({
   runId,
   events,
   live,
+  label,
   files,
   addContext,
   removeContext,
@@ -41,6 +42,10 @@ export function RunView({
   events: FrameworkEvent[]
   /** Whether the run is still running. */
   live: boolean
+  /** The session's own name — the same label the rail shows (#1030). It leads the action bar as
+   * the stable identity, so the branch renaming itself near the end of a run (#736) reads as a
+   * detail changing rather than the whole view changing. */
+  label?: string | undefined
   files: string[]
   addContext: (path: string) => void
   removeContext?: ((path: string) => void) | undefined
@@ -78,7 +83,11 @@ export function RunView({
   const shown = live ? events : (archived ?? events)
   const session = sessionInfo(shown)
   const progress = runProgress(shown)
-  const canExpand = live ? changes.count > 0 : handoffExpandable(handoff.handoff)
+  // Until the handoff has actually loaded, a just-stopped run keeps showing the file counts it
+  // ended with (#1030): the summary swaps once, from the live counts to the handoff, instead of
+  // blanking for the beat the handoff read takes. Same for the chevron, so it does not blink out.
+  const showHandoff = !live && handoff.loaded
+  const canExpand = showHandoff ? handoffExpandable(handoff.handoff) : changes.count > 0
 
   return (
     <>
@@ -86,16 +95,17 @@ export function RunView({
         projectId={projectId}
         runId={runId}
         events={shown}
+        label={label ?? progress.sessionName}
         retainedWorktree={hasWorktree}
         onWorktreeRemoved={onWorktreeRemoved}
         summary={
-          live ? (
-            <ChangesSummary {...changes} />
-          ) : (
+          showHandoff ? (
             <>
               <HandoffSummary handoff={handoff.handoff} />
               {handoff.error && <span className="text-danger">{handoff.error}</span>}
             </>
+          ) : (
+            <ChangesSummary {...changes} />
           )
         }
         expanded={open}

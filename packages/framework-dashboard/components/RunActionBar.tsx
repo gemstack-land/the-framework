@@ -25,6 +25,7 @@ export function RunActionBar({
   events,
   retainedWorktree = false,
   onWorktreeRemoved,
+  label,
   summary,
   expanded = false,
   onToggle,
@@ -34,6 +35,8 @@ export function RunActionBar({
   /** Which run Stop addresses (#749); absent falls back to the project's own control log. */
   runId?: string | null | undefined
   events: FrameworkEvent[]
+  /** The session's name — leads the bar, so the branch is git context, not the identity (#1030). */
+  label?: string | undefined
   /** True when this finished run still has a worktree on disk, so it can be removed (#737). */
   retainedWorktree?: boolean
   /** Told after that worktree is removed, so the button goes. */
@@ -69,12 +72,14 @@ export function RunActionBar({
         {/* Where this session is working (#798/#809): the same status the project home shows,
             read from this session's own worktree — its branch, whether it is holding uncommitted
             work, its size on disk, and the PR its branch has. */}
-        <GitStatusBar projectId={projectId} runId={runId} inline summary={summary} expanded={expanded} onToggle={onToggle} />
-        {error && <span className="truncate text-xs text-danger">{error}</span>}
+        <GitStatusBar projectId={projectId} runId={runId} inline label={label} summary={summary} expanded={expanded} onToggle={onToggle} />
+        {error && <span className="shrink-0 truncate text-xs text-danger">{error}</span>}
         {/* What the session IS sits at the start of the bar; what you can DO to it sits at the end,
             so the buttons keep one home as the row's contents come and go (Stop only while it runs,
-            Remove only on a retained worktree, Open session only once one is reported). */}
-        <div className="min-w-0 flex-1" />
+            Remove only on a retained worktree, Open session only once one is reported). The spacer
+            grows to fill but never shrinks (#1030), so a tight row takes its width from the label
+            (which truncates) rather than from the spacer collapsing and the label surviving whole. */}
+        <div className="grow shrink-0" />
         <div className="flex shrink-0 items-center gap-2">
         {/* The handoff's next step sits before the workspace icons: it is the one thing here that
             moves the session forward rather than just opening it somewhere. */}
