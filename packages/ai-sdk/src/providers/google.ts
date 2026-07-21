@@ -25,6 +25,7 @@ import type {
   VectorStoreListOptions,
   VectorStoreList,
   VectorStoreFileList,
+  FinishReason,
 } from '../types.js'
 import type { FileSearchFilter } from '../file-search.js'
 import { base64ToUtf8 } from '../base64.js'
@@ -135,13 +136,21 @@ export class GoogleAdapter implements ProviderAdapter {
     }
 
     if (cacheName) {
-      // Drop tools / system from the request — they're inherited from the cache resource.
+      // Drop only what the cache resource actually absorbed. The markers above
+      // gate what went in, so a set like `{ messages: 2 }` caches neither the
+      // system instruction nor the tools, and both must still go on the wire.
       const { fresh } = splitContentsAtCache(contents, options.cache)
       const configForCachedRequest: Record<string, unknown> = { ...config }
-      delete configForCachedRequest['tools']
+      if (options.cache?.tools) delete configForCachedRequest['tools']
       configForCachedRequest['cachedContent'] = cacheName
+      const systemIsCached = Boolean(options.cache?.instructions && system)
       return {
-        payload: { model: this.model, contents: fresh, config: configForCachedRequest },
+        payload: {
+          model: this.model,
+          contents: fresh,
+          ...(system && !systemIsCached ? { systemInstruction: { parts: [{ text: system }] } } : {}),
+          config: configForCachedRequest,
+        },
         cacheKey,
       }
     }
@@ -193,6 +202,11 @@ export class GoogleAdapter implements ProviderAdapter {
       }
     }
 
+    // Gemini reports `STOP` even when the turn is a function call, so the finish
+    // reason has to be derived from what was actually streamed — same rule as
+    // `fromGeminiResponse`, which keys off `toolCalls.length`.
+    let sawFunctionCall = false
+
     for await (const chunk of response) {
       const candidate = chunk.candidates?.[0]
       if (!candidate) continue
@@ -202,6 +216,7 @@ export class GoogleAdapter implements ProviderAdapter {
           yield { type: 'text-delta', text: part.text }
         }
         if (part.functionCall) {
+          sawFunctionCall = true
           yield {
             type: 'tool-call',
             toolCall: {
@@ -216,7 +231,7 @@ export class GoogleAdapter implements ProviderAdapter {
       if (candidate.finishReason) {
         yield {
           type: 'finish',
-          finishReason: candidate.finishReason === 'STOP' ? 'stop' : 'tool_calls',
+          finishReason: mapGeminiFinishReason(candidate.finishReason, sawFunctionCall),
           usage: chunk.usageMetadata ? {
             promptTokens: chunk.usageMetadata.promptTokenCount ?? 0,
             completionTokens: chunk.usageMetadata.candidatesTokenCount ?? 0,
@@ -225,6 +240,25 @@ export class GoogleAdapter implements ProviderAdapter {
         }
       }
     }
+  }
+}
+
+/**
+ * Map a Gemini candidate finish reason onto the neutral {@link FinishReason}.
+ * A function-call turn reports `STOP`, so that case is decided by the caller
+ * having seen a `functionCall` part rather than by the reason itself.
+ */
+export function mapGeminiFinishReason(reason: string, sawFunctionCall: boolean): FinishReason {
+  if (sawFunctionCall) return 'tool_calls'
+  switch (reason) {
+    case 'MAX_TOKENS': return 'length'
+    case 'SAFETY':
+    case 'RECITATION':
+    case 'BLOCKLIST':
+    case 'PROHIBITED_CONTENT':
+    case 'SPII':
+      return 'content_filter'
+    default: return 'stop'
   }
 }
 

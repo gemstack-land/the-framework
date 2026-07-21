@@ -164,7 +164,7 @@ export function splitSystemMessages(messages: AiMessage[]): { system: string | u
   const systemMsgs = messages.filter(m => m.role === 'system')
   const rest = messages.filter(m => m.role !== 'system')
   const system = systemMsgs.length > 0
-    ? systemMsgs.map(m => m.content).join('\n\n')
+    ? systemMsgs.map(m => contentToString(m.content)).join('\n\n')
     : undefined
   return { system, messages: rest }
 }
