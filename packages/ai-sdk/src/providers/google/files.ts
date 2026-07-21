@@ -6,19 +6,14 @@ import type {
 } from '../../types.js'
 import type { GoogleConfig } from './config.js'
 import { createGoogleClient } from './client.js'
+import { lazyClient } from '../lazy-client.js'
 
 // ─── Files ──────────────────────────────────────────────
 
 export class GoogleFileAdapter implements FileAdapter {
-  private client: any = null
-
   constructor(private readonly config: GoogleConfig) {}
 
-  private async getClient(): Promise<any> {
-    if (this.client) return this.client
-    this.client = await createGoogleClient(this.config)
-    return this.client
-  }
+  private readonly getClient = lazyClient(() => createGoogleClient(this.config))
 
   async upload(options: FileUploadOptions): Promise<FileUploadResult> {
     const client = await this.getClient()

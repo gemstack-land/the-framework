@@ -5,6 +5,7 @@ import type {
 } from '../../types.js'
 import type { OpenAIConfig } from './config.js'
 import { createOpenAIClient } from './client.js'
+import { lazyClient } from '../lazy-client.js'
 
 // ─── Image Generation Adapter ────────────────────────────
 
@@ -15,18 +16,12 @@ const IMAGE_SIZE_MAP: Record<string, string> = {
 }
 
 export class OpenAIImageAdapter implements ImageGenerationAdapter {
-  private client: any = null
-
   constructor(
     private readonly config: OpenAIConfig,
     private readonly model: string,
   ) {}
 
-  private async getClient(): Promise<any> {
-    if (this.client) return this.client
-    this.client = await createOpenAIClient(this.config)
-    return this.client
-  }
+  private readonly getClient = lazyClient(() => createOpenAIClient(this.config))
 
   async generate(options: ImageGenerationOptions): Promise<ImageGenerationResult> {
     const client = await this.getClient()

@@ -16,10 +16,25 @@ import type {
 } from '../types.js'
 import { base64ToUtf8 } from '../base64.js'
 import { contentToString } from '../util/content.js'
+import { mapAnthropicStreamEvent, newAnthropicStreamState } from './anthropic-stream.js'
+import { lazyClient } from './lazy-client.js'
 
 export interface AnthropicConfig {
   apiKey: string
   baseUrl?: string | undefined
+}
+
+/**
+ * Builds the `@anthropic-ai/sdk` client. The import is dynamic so the SDK stays
+ * an optional dependency that is only resolved once an Anthropic adapter is used.
+ */
+async function createAnthropicClient(config: AnthropicConfig): Promise<any> {
+  const sdk = await import(/* @vite-ignore */ '@anthropic-ai/sdk')
+  const Anthropic = sdk.default ?? sdk.Anthropic
+  return new Anthropic({
+    apiKey: config.apiKey,
+    ...(config.baseUrl ? { baseURL: config.baseUrl } : {}),
+  })
 }
 
 export class AnthropicProvider implements ProviderFactory {
@@ -42,23 +57,12 @@ export class AnthropicProvider implements ProviderFactory {
 // ─── Adapter ──────────────────────────────────────────────
 
 class AnthropicAdapter implements ProviderAdapter {
-  private client: any = null
-
   constructor(
     private readonly config: AnthropicConfig,
     private readonly model: string,
   ) {}
 
-  private async getClient(): Promise<any> {
-    if (this.client) return this.client
-    const sdk = await import(/* @vite-ignore */ '@anthropic-ai/sdk')
-    const Anthropic = sdk.default ?? sdk.Anthropic
-    this.client = new Anthropic({
-      apiKey: this.config.apiKey,
-      ...(this.config.baseUrl ? { baseURL: this.config.baseUrl } : {}),
-    })
-    return this.client
-  }
+  private readonly getClient = lazyClient(() => createAnthropicClient(this.config))
 
   async generate(options: ProviderRequestOptions): Promise<ProviderResponse> {
     const client = await this.getClient()
@@ -107,53 +111,9 @@ class AnthropicAdapter implements ProviderAdapter {
 
     const stream = await client.messages.stream(params, options.signal ? { signal: options.signal } : undefined)
 
-    // Anthropic's stream protocol splits usage across two events:
-    //   - `message_start.message.usage.input_tokens` carries the prompt count
-    //   - `message_delta.usage.output_tokens` carries the completion count
-    // Track the prompt count from message_start so we can emit a complete
-    // `finish` usage object — without this the finish chunk reports
-    // `promptTokens: 0`, the agent loop's last-wins aggregation overwrites
-    // the correct earlier value, and consumers (billing, withBudget) silently
-    // undercharge for streamed calls.
-    let lastPromptTokens = 0
-
+    const state = newAnthropicStreamState()
     for await (const event of stream) {
-      if (event.type === 'content_block_delta') {
-        if (event.delta.type === 'text_delta') {
-          yield { type: 'text-delta', text: event.delta.text }
-        } else if (event.delta.type === 'input_json_delta') {
-          yield { type: 'tool-call-delta', text: event.delta.partial_json }
-        }
-      } else if (event.type === 'content_block_start' && event.content_block.type === 'tool_use') {
-        yield {
-          type: 'tool-call-delta',
-          toolCall: { id: event.content_block.id, name: event.content_block.name },
-        }
-      } else if (event.type === 'message_delta') {
-        const completionTokens = event.usage?.output_tokens ?? 0
-        yield {
-          type: 'finish',
-          finishReason: event.delta.stop_reason === 'tool_use' ? 'tool_calls' : 'stop',
-          usage: {
-            promptTokens: lastPromptTokens,
-            completionTokens,
-            totalTokens: lastPromptTokens + completionTokens,
-          },
-        }
-      } else if (event.type === 'message_start' && event.message?.usage) {
-        lastPromptTokens = event.message.usage.input_tokens ?? 0
-        // output_tokens at message_start is the SDK's initial counter (~0/1),
-        // not the final completion total — don't claim a totalTokens here.
-        // The `finish` chunk above carries the authoritative final usage.
-        yield {
-          type: 'usage',
-          usage: {
-            promptTokens: lastPromptTokens,
-            completionTokens: 0,
-            totalTokens: lastPromptTokens,
-          },
-        }
-      }
+      yield* mapAnthropicStreamEvent(event, state)
     }
   }
 }
@@ -362,20 +322,9 @@ export function fromAnthropicResponse(response: any): ProviderResponse {
 // ─── Files ──────────────────────────────────────────────
 
 class AnthropicFileAdapter implements FileAdapter {
-  private client: any = null
-
   constructor(private readonly config: AnthropicConfig) {}
 
-  private async getClient(): Promise<any> {
-    if (this.client) return this.client
-    const sdk = await import(/* @vite-ignore */ '@anthropic-ai/sdk')
-    const Anthropic = sdk.default ?? sdk.Anthropic
-    this.client = new Anthropic({
-      apiKey: this.config.apiKey,
-      ...(this.config.baseUrl ? { baseURL: this.config.baseUrl } : {}),
-    })
-    return this.client
-  }
+  private readonly getClient = lazyClient(() => createAnthropicClient(this.config))
 
   async upload(options: FileUploadOptions): Promise<FileUploadResult> {
     const client = await this.getClient()

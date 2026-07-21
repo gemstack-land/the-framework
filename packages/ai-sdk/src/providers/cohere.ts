@@ -10,9 +10,20 @@ import type {
   RerankingOptions,
   RerankingResult,
 } from '../types.js'
+import { lazyClient } from './lazy-client.js'
 
 export interface CohereConfig {
   apiKey: string
+}
+
+/**
+ * Builds the `cohere-ai` SDK client. The import is dynamic so the SDK stays an
+ * optional dependency that is only resolved once a Cohere adapter is used.
+ */
+async function createCohereClient(config: CohereConfig): Promise<any> {
+  const sdk: any = await import(/* @vite-ignore */ 'cohere-ai' as string)
+  const CohereClientV2 = sdk.CohereClientV2 ?? sdk.default?.CohereClientV2
+  return new CohereClientV2({ token: config.apiKey })
 }
 
 export class CohereProvider implements ProviderFactory {
@@ -39,20 +50,12 @@ export class CohereProvider implements ProviderFactory {
 // ─── Reranking ───────────────────────────────────────────
 
 class CohereRerankingAdapter implements RerankingAdapter {
-  private client: any = null
-
   constructor(
     private readonly config: CohereConfig,
     private readonly model: string,
   ) {}
 
-  private async getClient(): Promise<any> {
-    if (this.client) return this.client
-    const sdk: any = await import(/* @vite-ignore */ 'cohere-ai' as string)
-    const CohereClientV2 = sdk.CohereClientV2 ?? sdk.default?.CohereClientV2
-    this.client = new CohereClientV2({ token: this.config.apiKey })
-    return this.client
-  }
+  private readonly getClient = lazyClient(() => createCohereClient(this.config))
 
   async rerank(options: RerankingOptions): Promise<RerankingResult> {
     const client = await this.getClient()
@@ -77,20 +80,12 @@ class CohereRerankingAdapter implements RerankingAdapter {
 // ─── Embeddings ──────────────────────────────────────────
 
 class CohereEmbeddingAdapter implements EmbeddingAdapter {
-  private client: any = null
-
   constructor(
     private readonly config: CohereConfig,
     private readonly model: string,
   ) {}
 
-  private async getClient(): Promise<any> {
-    if (this.client) return this.client
-    const sdk: any = await import(/* @vite-ignore */ 'cohere-ai' as string)
-    const CohereClientV2 = sdk.CohereClientV2 ?? sdk.default?.CohereClientV2
-    this.client = new CohereClientV2({ token: this.config.apiKey })
-    return this.client
-  }
+  private readonly getClient = lazyClient(() => createCohereClient(this.config))
 
   async embed(input: string | string[], _model: string): Promise<EmbeddingResult> {
     const client = await this.getClient()

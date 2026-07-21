@@ -11,6 +11,7 @@ import type {
 import { sleep } from '../../util/sleep.js'
 import type { OpenAIConfig } from './config.js'
 import { createOpenAIClient } from './client.js'
+import { lazyClient } from '../lazy-client.js'
 
 // ─── OpenAI Vector Stores (#B8 Phase 1) ──────────────────
 
@@ -28,15 +29,9 @@ import { createOpenAIClient } from './client.js'
  * a file id pass `{ fileId }` directly.
  */
 export class OpenAIVectorStoreAdapter implements VectorStoreAdapter {
-  private client: any = null
-
   constructor(private readonly config: OpenAIConfig) {}
 
-  private async getClient(): Promise<any> {
-    if (this.client) return this.client
-    this.client = await createOpenAIClient(this.config)
-    return this.client
-  }
+  private readonly getClient = lazyClient(() => createOpenAIClient(this.config))
 
   async create(opts: VectorStoreCreateOptions): Promise<VectorStoreInfo> {
     const client = await this.getClient()
