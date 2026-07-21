@@ -4,6 +4,8 @@ import { cn } from '../../lib/utils.js'
 // The floating command/reference menu (#470) the `/` and `@` triggers open. A shadcn-style
 // popover surface driven imperatively by @tiptap/suggestion (which owns positioning), so it
 // is a plain list here: arrow keys move, Enter/Tab pick, and items may carry a group header.
+// It reads as a listbox to assistive tech (#948): options carry ids the editor's
+// aria-activedescendant points at, since focus never leaves the contenteditable.
 export interface SuggestionItem {
   id: string
   label: string
@@ -17,20 +19,35 @@ export interface SuggestionItem {
 export interface SuggestionListProps {
   items: SuggestionItem[]
   command: (item: SuggestionItem) => void
+  /** Shown when there are no items on a fresh trigger (nothing typed yet) — an empty source
+   *  (projects/files not loaded, or none exist) otherwise looks like the feature is broken. */
+  emptyNote?: string | undefined
+  /** The highlighted option's DOM id, for the editor's aria-activedescendant (#948). */
+  onActiveChange?: ((id: string | null) => void) | undefined
 }
 
 export interface SuggestionListRef {
   onKeyDown: (event: KeyboardEvent) => boolean
 }
 
+/** The DOM id for an option row; unique within the one menu that can be open at a time. */
+function optionDomId(index: number): string {
+  return `prompt-suggestion-option-${index}`
+}
+
 export const SuggestionList = forwardRef<SuggestionListRef, SuggestionListProps>(function SuggestionList(
-  { items, command },
+  { items, command, emptyNote, onActiveChange },
   ref,
 ) {
   const [selected, setSelected] = useState(0)
 
   // Reset the highlight whenever the filtered list changes so it never points past the end.
   useEffect(() => setSelected(0), [items])
+
+  // Mirror the highlight out for aria-activedescendant on the editor.
+  useEffect(() => {
+    onActiveChange?.(items.length > 0 ? optionDomId(selected) : null)
+  }, [items, selected, onActiveChange])
 
   useImperativeHandle(ref, () => ({
     onKeyDown: event => {
@@ -53,15 +70,17 @@ export const SuggestionList = forwardRef<SuggestionListRef, SuggestionListProps>
   }))
 
   if (items.length === 0) {
+    // Only rendered when the trigger has an emptyNote and nothing was typed yet (suggestion.ts
+    // hides the portal otherwise), so a mistyped query still just closes the menu.
     return (
-      <div className="w-64 rounded-md border border-border bg-card p-2 text-sm text-muted-foreground shadow-md">
-        No matches
+      <div role="status" className="w-64 rounded-md border border-border bg-card p-2 text-sm text-muted-foreground shadow-md">
+        {emptyNote ?? 'No matches'}
       </div>
     )
   }
 
   return (
-    <div className="max-h-72 w-64 overflow-y-auto rounded-md border border-border bg-card p-1 text-sm shadow-md">
+    <div role="listbox" aria-label="Suggestions" className="max-h-72 w-64 overflow-y-auto rounded-md border border-border bg-card p-1 text-sm shadow-md">
       {items.map((item, i) => (
         <div key={item.id}>
           {item.group && (i === 0 || items[i - 1]?.group !== item.group) && (
@@ -71,6 +90,9 @@ export const SuggestionList = forwardRef<SuggestionListRef, SuggestionListProps>
           )}
           <button
             type="button"
+            id={optionDomId(i)}
+            role="option"
+            aria-selected={i === selected}
             {...(item.title ? { title: item.title } : {})}
             onMouseDown={e => {
               e.preventDefault()

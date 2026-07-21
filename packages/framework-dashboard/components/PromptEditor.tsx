@@ -237,6 +237,7 @@ export const PromptEditor = forwardRef<PromptEditorHandle, PromptEditorProps>(fu
       makeTrigger({
         char: '@',
         key: 'at',
+        emptyNote: 'No projects to reference yet.',
         items: query =>
           projectsRef.current
             .filter(p => p.name.toLowerCase().includes(query))
@@ -255,6 +256,7 @@ export const PromptEditor = forwardRef<PromptEditorHandle, PromptEditorProps>(fu
       makeTrigger({
         char: '#',
         key: 'hash',
+        emptyNote: 'No files indexed here yet.',
         items: query =>
           filesRef.current
             .filter(f => f.toLowerCase().includes(query.toLowerCase()))
