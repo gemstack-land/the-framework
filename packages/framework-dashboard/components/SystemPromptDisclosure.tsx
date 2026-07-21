@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { composeRunSystem, type EcoOptions } from '@gemstack/framework/client'
 import { DisclosureToggle } from './DisclosureToggle.js'
+import { Checkbox } from './ui/checkbox.js'
+import { cn } from '../lib/utils.js'
 
 /**
  * "Enhanced System Prompt" (#863, was "See actual prompt sent" #520): the built-in system
@@ -67,14 +69,20 @@ export function SystemPromptDisclosure({
   // `vanilla` says — the row has to read the way the run will actually behave.
   const antiLazyOn = !disabled && !transparent
   const integrationOn = !transparent
-  // ✅ only when *completely* enabled (#863): either axis off is a ❌, even though a run with
-  // only the built-in block off still sends the emit protocols.
+  // Lit only when *completely* enabled (#863): either axis off dims the dot, even though a run
+  // with only the built-in block off still sends the emit protocols.
   const fullyOn = antiLazyOn && integrationOn
 
   return (
     <div className="mt-3 text-xs">
       <DisclosureToggle open={open} onToggle={() => setOpen(o => !o)}>
-        <span aria-hidden>{fullyOn ? '✅' : '❌'}</span> Enhanced System Prompt
+        {/* A status dot, like every other state in the app. This was a ✅/❌ pair, which sat at
+            emoji size and colour next to 12px text and matched nothing else on the page. */}
+        <span
+          className={cn('h-1.5 w-1.5 shrink-0 rounded-full', fullyOn ? 'bg-success' : 'bg-muted-foreground')}
+          aria-hidden
+        />
+        Enhanced System Prompt
         <span className="sr-only">{fullyOn ? ' (fully enabled)' : ' (not fully enabled)'}</span>
       </DisclosureToggle>
 
@@ -85,25 +93,24 @@ export function SystemPromptDisclosure({
             your prompt) in order to enable long-running autonomous agents.
           </p>
 
-          <label className="flex w-fit cursor-pointer items-center gap-1.5">
-            <input
-              type="checkbox"
+          <label className="flex w-fit cursor-pointer items-center gap-2">
+            <Checkbox
               checked={antiLazyOn}
-              onChange={e => onDisabledChange(!e.target.checked)}
+              onCheckedChange={checked => onDisabledChange(!checked)}
               disabled={busy || transparent}
-              title={transparent ? 'Off while the framework integration is off' : undefined}
-            />{' '}
+              {...(transparent ? { title: 'Off while the framework integration is off' } : {})}
+            />
             Anti-laziness and improved large-scope planning
           </label>
 
-          <label className="flex w-fit cursor-pointer items-center gap-1.5">
-            <input
-              type="checkbox"
+          <label className="flex w-fit cursor-pointer items-center gap-2">
+            <Checkbox
               checked={integrationOn}
-              onChange={e => onTransparentChange?.(!e.target.checked)}
+              onCheckedChange={checked => onTransparentChange?.(!checked)}
               disabled={busy || !onTransparentChange}
-            />{' '}
-            Integration with The Framework (⚠️ Some functionalities won&apos;t work)
+            />
+            Integration with The Framework
+            <span className="text-muted-foreground/80">(some functionality stops working)</span>
           </label>
 
           {text ? (

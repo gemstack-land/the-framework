@@ -10,6 +10,7 @@ import { Composer, type ComposerHandle } from './Composer.js'
 import { ContextFiles } from './ContextFiles.js'
 import { DisclosureToggle } from './DisclosureToggle.js'
 import { SystemPromptDisclosure } from './SystemPromptDisclosure.js'
+import { Checkbox } from './ui/checkbox.js'
 
 // Start a run in the selected project (#405): the one write that goes through the daemon's own
 // `startRun` (with its one-run-per-project busy guard), posted over Telefunc. The editor + control
@@ -121,7 +122,7 @@ export function StartRunForm({
 
       {/* Feedback right where the action is (#948): the error used to render below the (possibly
           expanded, tall) Context disclosure, past the fold from the Start button that caused it. */}
-      {error && <p role="alert" className="mt-2 text-xs text-red-500">{error}</p>}
+      {error && <p role="alert" className="mt-2 text-xs text-danger">{error}</p>}
       {note && !error && <p role="status" className="mt-2 text-xs text-muted-foreground">{note}</p>}
 
       <SystemPromptDisclosure
@@ -159,7 +160,7 @@ export function StartRunForm({
                   <div className="flex flex-col gap-1">
                     {otherProjects.map(p => (
                       <label key={p.id} className="flex cursor-pointer items-center gap-1.5" title={p.path}>
-                        <input type="checkbox" checked={context.has(p.path)} onChange={() => toggleContext(p.path)} disabled={busy} />
+                        <Checkbox checked={context.has(p.path)} onCheckedChange={() => toggleContext(p.path)} disabled={busy} />
                         <span className="truncate">{p.name}</span>
                       </label>
                     ))}

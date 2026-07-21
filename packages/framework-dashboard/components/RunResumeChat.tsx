@@ -102,7 +102,7 @@ export function RunResumeChat({
         sessionName={sessionName}
         placeholder="Message the session to continue it…  ( / commands · < tags · @ projects · # files )"
       />
-      {error && <p className="mt-1 text-xs text-red-500">{error}</p>}
+      {error && <p className="mt-1 text-xs text-danger">{error}</p>}
     </div>
   )
 }

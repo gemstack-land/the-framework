@@ -71,10 +71,6 @@ export default function Page() {
   // be known.
   const [adopting, setAdopting] = useState(false)
 
-  // The right rail is showing something worth reading wide (#862), so the sessions rail gives up
-  // its column for it. Owned here because it is the two rails' shared layout, not either's state.
-  const [wideRail, setWideRail] = useState(false)
-
   const { runs, reload, loaded: runsLoaded } = useRuns(projectId)
 
   // The run Context set lives in the shell (#492/#504) so the two surfaces that feed it share
@@ -289,7 +285,7 @@ export default function Page() {
         </div>
       </header>
       {!healthy && (
-        <div role="alert" className="flex items-center gap-2 border-b border-border bg-amber-500/10 px-4 py-2 text-xs text-amber-600 dark:text-amber-400">
+        <div role="alert" className="flex items-center gap-2 border-b border-border bg-warning/10 px-4 py-2 text-xs text-warning">
           <TriangleAlert className="h-3.5 w-3.5 shrink-0" aria-hidden />
           The daemon is not answering — retrying. Everything on this page is frozen until it returns.
         </div>
@@ -310,7 +306,6 @@ export default function Page() {
           startTick={runStart.tick}
           startIntent={runStart.intent}
           followLive={adopting}
-          collapsed={wideRail}
         />
         <main className="flex min-w-0 flex-1 flex-col">{renderMain()}</main>
         <RightRail
@@ -322,7 +317,6 @@ export default function Page() {
           context={context}
           toggleContext={toggleContext}
           hasBrowser={selectedRun?.status === 'running' && selectedRun.browserStreamPort !== undefined}
-          onWideChange={setWideRail}
           onRunStarted={onRunStarted}
         />
       </div>

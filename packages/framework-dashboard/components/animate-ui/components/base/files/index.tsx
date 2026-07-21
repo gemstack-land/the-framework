@@ -68,9 +68,9 @@ function FolderTrigger({
             <div
               className={cn(
                 'flex items-center gap-2',
-                gitStatus === 'untracked' && 'text-green-400',
-                gitStatus === 'modified' && 'text-amber-400',
-                gitStatus === 'deleted' && 'text-red-400',
+                gitStatus === 'untracked' && 'text-success',
+                gitStatus === 'modified' && 'text-warning',
+                gitStatus === 'deleted' && 'text-danger',
               )}
             >
               <FolderIconPrimitive
@@ -89,9 +89,9 @@ function FolderTrigger({
               <span
                 className={cn(
                   'rounded-full size-2',
-                  gitStatus === 'untracked' && 'bg-green-400',
-                  gitStatus === 'modified' && 'bg-amber-400',
-                  gitStatus === 'deleted' && 'bg-red-400',
+                  gitStatus === 'untracked' && 'bg-success',
+                  gitStatus === 'modified' && 'bg-warning',
+                  gitStatus === 'deleted' && 'bg-danger',
                 )}
               />
             )}
@@ -129,9 +129,9 @@ function FileItem({
       <FilePrimitive
         className={cn(
           'flex items-center justify-between gap-2 p-2 pointer-events-none',
-          gitStatus === 'untracked' && 'text-green-400',
-          gitStatus === 'modified' && 'text-amber-400',
-          gitStatus === 'deleted' && 'text-red-400',
+          gitStatus === 'untracked' && 'text-success',
+          gitStatus === 'modified' && 'text-warning',
+          gitStatus === 'deleted' && 'text-danger',
         )}
       >
         <div className="flex items-center gap-2">

@@ -26,7 +26,7 @@ export function ContextFiles({
             onClick={() => onRemove(file)}
             title={`Remove ${file}`}
             aria-label={`Remove ${file} from context`}
-            className="flex h-3.5 w-3.5 items-center justify-center rounded text-muted-foreground hover:text-red-500 disabled:opacity-50"
+            className="flex h-3.5 w-3.5 items-center justify-center rounded text-muted-foreground hover:text-danger disabled:opacity-50"
           >
             <X className="h-3.5 w-3.5" />
           </button>

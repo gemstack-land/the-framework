@@ -168,7 +168,7 @@ export function PreviewBar({
     return (
       <>
         {controls}
-        {error && <p className="w-full text-xs text-red-500">{error}</p>}
+        {error && <p className="w-full text-xs text-danger">{error}</p>}
       </>
     )
   }
@@ -178,7 +178,7 @@ export function PreviewBar({
       <span className="font-semibold uppercase tracking-wide text-muted-foreground">Serve</span>
       {!url && <span className="text-muted-foreground">Serve this project's built result</span>}
       <span className="ml-auto flex items-center gap-2">{controls}</span>
-      {error && <p className="w-full text-red-500">{error}</p>}
+      {error && <p className="w-full text-danger">{error}</p>}
     </div>
   )
 }

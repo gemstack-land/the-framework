@@ -20,8 +20,8 @@ const IMPORT_PROMPT =
 
 /** How a priority reads, for the ones the format names. */
 const PRIORITY_TONE: Record<string, string> = {
-  urgent: 'text-red-500',
-  high: 'text-amber-500',
+  urgent: 'text-danger',
+  high: 'text-warning',
   medium: 'text-muted-foreground',
   low: 'text-muted-foreground',
 }
@@ -72,7 +72,7 @@ export function TicketsPanel({
           No tickets yet. Tickets live in <code className="rounded bg-muted px-1">tickets/</code> and are what the agent
           plans from.
         </p>
-        {error && <p className="text-xs text-red-500">{error}</p>}
+        {error && <p className="text-xs text-danger">{error}</p>}
         <Button size="sm" variant="outline" disabled={busy} onClick={() => void importFromGithub()}>
           {busy ? 'Starting…' : 'Import tickets from GitHub'}
         </Button>
@@ -82,7 +82,7 @@ export function TicketsPanel({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      {error && <p className="border-b border-border p-2 text-xs text-red-500">{error}</p>}
+      {error && <p className="border-b border-border p-2 text-xs text-danger">{error}</p>}
       <ScrollArea className="min-h-0 flex-1">
         <div className="p-2">
         {tickets.map(ticket => (

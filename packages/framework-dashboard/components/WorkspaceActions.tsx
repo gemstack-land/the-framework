@@ -75,7 +75,7 @@ export function WorkspaceActions({
       </Tooltip>
       {/* Serve (#475) the checkout this bar is about: the project's, or the session's own (#797). */}
       <PreviewBar projectId={projectId} runId={runId} inline />
-      {error && <span className="text-xs text-red-500">{error}</span>}
+      {error && <span className="text-xs text-danger">{error}</span>}
     </>
   )
 }

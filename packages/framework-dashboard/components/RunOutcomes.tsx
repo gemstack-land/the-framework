@@ -4,9 +4,9 @@ import type { RunStatus } from '@gemstack/framework'
 // critical), so every segment ships with a written label and count — identity is never
 // carried by colour alone. Zero-count outcomes are dropped from the bar but still listed.
 const OUTCOMES: { key: Exclude<RunStatus, 'running'>; label: string; fill: string; dot: string }[] = [
-  { key: 'done', label: 'Done', fill: 'bg-emerald-500', dot: 'bg-emerald-500' },
-  { key: 'failed', label: 'Failed', fill: 'bg-red-500', dot: 'bg-red-500' },
-  { key: 'stopped', label: 'Stopped', fill: 'bg-amber-500', dot: 'bg-amber-500' },
+  { key: 'done', label: 'Done', fill: 'bg-success', dot: 'bg-success' },
+  { key: 'failed', label: 'Failed', fill: 'bg-danger', dot: 'bg-danger' },
+  { key: 'stopped', label: 'Stopped', fill: 'bg-warning', dot: 'bg-warning' },
 ]
 
 export function RunOutcomes({ counts }: { counts: Record<RunStatus, number> }) {
