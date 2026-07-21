@@ -27,7 +27,7 @@ export type {
 // Express, Connect, etc. The SDK-wiring runtime primitives (createSdkServer,
 // startStdio, createWebRequestHandler) live at `@gemstack/mcp/runtime` so the
 // main entry doesn't pull `@modelcontextprotocol/sdk` into the boot path.
-export { createMcpHttpHandler } from './runtime/node-handler.js'
+export { createMcpHttpHandler, type McpHttpHandler } from './runtime/node-handler.js'
 export { McpTestClient } from './testing.js'
 export type { McpTestClientOptions } from './testing.js'
 export type { McpObserverEvent, McpObserver, McpObserverRegistry } from './observers.js'

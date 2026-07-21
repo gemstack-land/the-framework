@@ -6,7 +6,7 @@
 // stable.
 
 export { createSdkServer, startStdio } from './runtime/sdk-server.js'
-export { createWebRequestHandler, type WebRequestHandlerOptions } from './runtime/web-handler.js'
-export { createMcpHttpHandler } from './runtime/node-handler.js'
+export { createWebRequestHandler, type WebRequestHandlerOptions, type WebRequestHandler } from './runtime/web-handler.js'
+export { createMcpHttpHandler, type McpHttpHandler } from './runtime/node-handler.js'
 export { consumeToolReturn } from './runtime/consume-tool-return.js'
 export { resolveOrConstruct, resolveHandleDeps, isRegistered, filterRegistered } from './runtime/handle-deps.js'
