@@ -31,7 +31,7 @@ import {
  */
 export const presets = {
   /**
-   * [Research] (#331): Rom's problem-variability review, shipped as a direct prompt (see
+   * [Research] (#331): the problem-variability review, shipped as a direct prompt (see
    * `runPrompt`) rather than a build run — research reviews existing code, so it skips the
    * scope -> build scaffolding. `showMultiSelect()` + `<AWAIT>` becomes a live turn-boundary
    * gate (#339/#340) the dashboard resolves.

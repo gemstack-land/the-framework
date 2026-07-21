@@ -1,5 +1,6 @@
 import { basename, dirname, join, resolve } from 'node:path'
 import { nodeFs } from './node-fs.js'
+import { PROJECT_PREFERENCE_KEYS, type ProjectPreferences } from './preference-defaults.js'
 
 /**
  * The multi-project registry (#390): the list of projects the user has
@@ -120,23 +121,10 @@ export interface Preferences {
  * file rather than the committed `the-framework.yml` because `model` and `agent` name what
  * this machine runs, which is not something to impose on everyone who clones the repo.
  */
-export const PROJECT_PREFERENCE_KEYS = [
-  'autopilot',
-  'technical',
-  'vanilla',
-  'eco',
-  'ecoPlanning',
-  'ecoResearch',
-  'ecoMaintenance',
-  'onBeforeMergeableQuality',
-  'browser',
-  'transparent',
-  'model',
-  'agent',
-] as const
-
-/** What one project overrides: a subset of {@link Preferences}, storing only the keys it sets. */
-export type ProjectPreferences = Pick<Preferences, (typeof PROJECT_PREFERENCE_KEYS)[number]>
+// The key list lives in the leaf `preference-defaults.ts` so the dashboard reads the same one
+// (a second copy there erased the type link, see that module); re-exported so this stays the
+// import site for everything that already reads it beside `Preferences`.
+export { PROJECT_PREFERENCE_KEYS, type ProjectPreferences } from './preference-defaults.js'
 
 /**
  * The persisted registry file shape (#410): the project list plus the user preferences.

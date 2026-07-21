@@ -41,6 +41,7 @@ import { startPreview, detectServeTargets, type PreviewHandle, type ServeTarget 
 import { resolveDashboardBundle } from './dashboard/bundle.js'
 import { isActivated } from './project.js'
 import { addProject, listProjects, projectId, readPreferences, readProjectPreferences, resolvePreferences } from './registry.js'
+import { discordNotificationEnabled, notificationEnabled } from './preference-defaults.js'
 import { runOptionsFromPreferences, preferencesFromFileConfig } from './run-options.js'
 import { loadFrameworkConfig } from './config.js'
 import { installProject, enumerateGitRepos } from './install.js'
@@ -582,11 +583,7 @@ export async function runDaemon(cwd: string, opts: RunDaemonOptions = {}): Promi
       build: projects => buildInterventions(projects, { dashboardUrl: dashboard.url }),
       keyOf: interventionKey,
       onNew: async items => {
-        const prefs = await readPrefs()
-        // Double-gated like activity below: the method (`notifyDiscord`) AND the category
-        // (`notifyHumanIntervention`) must both be on. The category defaults on, so `?? true` —
-        // do NOT copy activity's plain `!prefs.x`, which would silence the baseline by default.
-        if (!prefs.notifyDiscord || (prefs.notifyHumanIntervention ?? true) === false) return
+        if (!discordNotificationEnabled(await readPrefs(), 'notifyHumanIntervention')) return
         await postInterventionsDiscord(webhook, items).catch(() => {})
       },
     })
@@ -598,8 +595,7 @@ export async function runDaemon(cwd: string, opts: RunDaemonOptions = {}): Promi
       build: buildActivity,
       keyOf: activityKey,
       onNew: async items => {
-        const prefs = await readPrefs()
-        if (!prefs.notifyDiscord || !prefs.notifyNewActivity) return
+        if (!discordNotificationEnabled(await readPrefs(), 'notifyNewActivity')) return
         await postActivityDiscord(webhook, items).catch(() => {})
       },
     })
@@ -664,7 +660,7 @@ export async function runDaemon(cwd: string, opts: RunDaemonOptions = {}): Promi
   // ignore every message, which reads as broken rather than as off.
   if (botToken) {
     void readPrefs().then(prefs => {
-      if (prefs.discordBot !== true) {
+      if (!notificationEnabled(prefs, 'discordBot')) {
         console.log('[framework] Discord bot: DISCORD_BOT_TOKEN is set but the `discordBot` preference is off, so it will not answer.')
       }
     })
@@ -688,7 +684,7 @@ export async function runDaemon(cwd: string, opts: RunDaemonOptions = {}): Promi
           return []
         },
         post: (channelId, text) => postMessage(botToken, channelId, text),
-        enabled: async () => (await readPrefs()).discordBot === true,
+        enabled: async () => notificationEnabled(await readPrefs(), 'discordBot'),
         onLog: message => console.log(`[framework] ${message}`),
       })
     : undefined
@@ -716,7 +712,7 @@ export async function runDaemon(cwd: string, opts: RunDaemonOptions = {}): Promi
         sendChoice: (id, gateId, pick, runId) => sendChoice(id, gateId, pick, 'user', runId),
         sendStop: (id, runId) => sendStop(id, runId),
         ...(replyMirror ? { onRunBound: (runId, channelId) => replyMirror.bind(runId, channelId) } : {}),
-        enabled: async () => (await readPrefs()).discordBot === true,
+        enabled: async () => notificationEnabled(await readPrefs(), 'discordBot'),
         ...(env.DISCORD_CHANNEL_ID ? { channelId: env.DISCORD_CHANNEL_ID } : {}),
         onLog: message => console.log(`[framework] ${message}`),
       })

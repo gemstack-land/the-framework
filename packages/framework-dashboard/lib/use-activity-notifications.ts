@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 import type { Activity } from '@gemstack/framework'
-import { activityKey, pickNewActivity } from './activity.js'
+import { activityKey, pickNewActivity } from '@gemstack/framework/client'
 
 // Browser notifications for the "New activity" category (#627). Mirrors use-intervention-
 // notifications.ts: the activity feed is polled once in the shell; this watches it and fires a

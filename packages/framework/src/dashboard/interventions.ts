@@ -2,6 +2,10 @@ import { listRuns, readLiveMetas, type LiveRun, type RunMeta } from '../store/in
 import type { ProjectSummary } from './projects.js'
 import { readRunHandoff, runBranchFor, type RunHandoff } from './run-handoff.js'
 import { ghPrList, type OpenPr, type PrLister } from './gh.js'
+import { interventionKey } from './keys.js'
+
+// Pure identity + diff, in the leaf `keys.ts` so the dashboard shares them rather than copying.
+export { interventionKey, pickNewInterventions } from './keys.js'
 
 // The interventions queue (#632, part of the Queue #624): the cross-project "needs you" list.
 // Rom's design (#624): proposals and finished work are both just PRs, so the bulk of what
@@ -167,28 +171,6 @@ async function unpushedFor(project: ProjectSummary, deps: InterventionsDeps): Pr
     })
   }
   return items
-}
-
-/**
- * The stable identity of an intervention. A PR is its url (survives title edits and re-sorts);
- * the other two are keyed on the project plus the thing waiting — the gate id, or the run whose
- * branch is unpushed — since their url is the shared dashboard URL and would otherwise collide.
- */
-export function interventionKey(item: Intervention): string {
-  if (item.kind === 'awaiting') return `awaiting:${item.projectId}:${item.awaitId ?? ''}`
-  if (item.kind === 'unpushed') return `unpushed:${item.projectId}:${item.runId ?? ''}`
-  return item.url
-}
-
-/**
- * The interventions in `current` not already in `seen` (by {@link interventionKey}) — the ones
- * that just landed on the queue. Drives the daemon's Discord watcher (#627): the watcher keeps
- * the keys it has already announced, so only genuinely new items notify. (The dashboard keeps a
- * client-side copy of this for browser notifications; it can't import runtime values from this
- * package without dragging Node-only modules into the browser bundle.)
- */
-export function pickNewInterventions(seen: ReadonlySet<string>, current: Intervention[]): Intervention[] {
-  return current.filter(item => !seen.has(interventionKey(item)))
 }
 
 /**

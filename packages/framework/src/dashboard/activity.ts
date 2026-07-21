@@ -1,5 +1,11 @@
 import { listRuns, readLiveMetas, type LiveRun, type RunMeta, type RunStatus } from '../store/index.js'
 import type { ProjectSummary } from './projects.js'
+import { activityKey } from './keys.js'
+
+// The identity + diff live in the leaf `keys.ts` so the dashboard can share them (they are pure);
+// re-exported here so this stays the import site for anything that already reads them from the
+// module that defines `Activity`.
+export { activityKey, pickNewActivity } from './keys.js'
 
 // The "New activity" feed (#627): the cross-project stream of run lifecycle transitions that
 // do NOT need the human — a run started, a run finished. It is the default-off notification
@@ -88,25 +94,6 @@ export async function buildActivity(projects: ProjectSummary[], deps: ActivityDe
   return items
 }
 
-/**
- * The stable identity of an activity item: its kind + project + run. The kind is part of the key
- * so a run's `started` and `finished` are two separate announcements (one when it kicks off, one
- * when it lands), each firing exactly once.
- */
-export function activityKey(item: Activity): string {
-  return `${item.kind}:${item.projectId}:${item.runId}`
-}
-
-/**
- * The activity items in `current` not already in `seen` (by {@link activityKey}) — the transitions
- * that just happened. Drives both the browser hook and the daemon's Discord watcher: each keeps the
- * keys it has already announced, so only genuinely new transitions notify. (The dashboard keeps a
- * client-side copy of this; it can't import runtime values from this package without dragging
- * Node-only modules into the browser bundle.)
- */
-export function pickNewActivity(seen: ReadonlySet<string>, current: Activity[]): Activity[] {
-  return current.filter(item => !seen.has(activityKey(item)))
-}
 
 /**
  * How one activity item reads on Discord: a started run, or a finished one tagged by its outcome.
