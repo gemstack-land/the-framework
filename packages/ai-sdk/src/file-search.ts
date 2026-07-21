@@ -14,8 +14,8 @@
  *
  * Other providers see the tool as a regular function-call tool with the
  * placeholder `{ query: string }` schema — without an `execute` they pause
- * for client tools, which is degraded. Phase 3 will add a `fallback` opt
- * that installs an `execute` delegating to `similaritySearch` over a local
+ * for client tools, which is degraded. Set the {@link FileSearchOptions.fallback}
+ * opt to install an `execute` delegating to `similaritySearch` over a local
  * pgvector model.
  *
  * # Wiring

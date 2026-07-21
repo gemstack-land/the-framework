@@ -155,7 +155,7 @@ async function loadBroadcast(): Promise<BroadcastFn | null>  { return _broadcast
 
 async function defaultLoadDispatch(): Promise<DispatchFn> {
   throw new Error(
-    '[ai-sdk] agent.queue() needs a queue adapter. Register one at startup with configureAiQueue({ dispatch }). Rudder apps get this automatically via their AI provider.',
+    '[ai-sdk] agent.queue() needs a queue adapter. Register one at startup with configureAiQueue({ dispatch }); a host framework may wire this for you.',
   )
 }
 

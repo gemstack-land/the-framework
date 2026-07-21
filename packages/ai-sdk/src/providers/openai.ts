@@ -285,7 +285,7 @@ export function normalizeToolTranscript(messages: AiMessage[]): AiMessage[] {
           out.push({
             role:       'tool',
             toolCallId: tc.id,
-            content:    '[Rudder] tool result missing — synthesized to satisfy the OpenAI tool-call/tool-result protocol.',
+            content:    '[ai-sdk] tool result missing — synthesized to satisfy the OpenAI tool-call/tool-result protocol.',
           })
         }
       }

@@ -39,16 +39,15 @@ export async function tryWithFailover<T>(
  * Shared singleton store routed through `globalThis` so the registry survives
  * the case where `@gemstack/ai-sdk` is loaded twice — typical in a Vite-bundled
  * server where the framework bundles `@gemstack/ai-sdk` inline (any agent
- * resolution path reads `AiRegistry`), but `AiProvider.boot()` runs from a
- * `node_modules` copy of `@gemstack/ai-sdk/server` resolved via the provider
- * auto-discovery manifest. Without a shared store, provider factories
+ * resolution path reads `AiRegistry`), but the host's provider bootstrap runs
+ * from a `node_modules` copy resolved via its own discovery.
+ * Without a shared store, provider factories
  * registered from the externalized copy would never be visible to
  * `AiRegistry.resolve()` from inside the bundle — every agent call would
  * throw "Unknown AI provider".
  *
- * Defensive migration per the #499 static-state singleton audit. Same pattern
- * applied to other process-wide registries (model registry, pennant, cache,
- * queue, mail, storage, hash).
+ * Defensive migration per the #499 static-state singleton audit. The same
+ * pattern applies to every process-wide registry here.
  */
 interface AiRegistryStore {
   factories: Map<string, ProviderFactory>

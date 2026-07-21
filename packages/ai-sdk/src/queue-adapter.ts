@@ -2,8 +2,8 @@
  * Neutral job-dispatch contract behind `agent.queue('...').send()`.
  *
  * `@gemstack/ai-sdk` does not bundle or depend on any queue implementation.
- * Register one once at startup via {@link configureAiQueue}; Rudder apps get
- * this wired automatically by Rudder's `AiProvider`.
+ * Register one once at startup via {@link configureAiQueue}. A host framework
+ * may wire this for you; check its AI integration docs.
  *
  * `dispatch` enqueues `fn` to run later on a worker.
  */

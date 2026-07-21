@@ -14,6 +14,9 @@ import type { ProviderHint } from './types.js'
  * and removes `<script>`/`<style>` element *content* (not just the tags) so it
  * never leaks into the extracted text.
  */
+/** Sent by the `web_search` / `web_fetch` fallbacks. */
+const USER_AGENT = 'gemstack-ai-sdk/1.0'
+
 export function htmlToText(html: string): string {
   const lower = html.toLowerCase()
   let out = ''
@@ -106,10 +109,9 @@ export class WebSearch {
       try {
         const url = new URL('https://html.duckduckgo.com/html/')
         url.searchParams.set('q', query + (domains ? ` site:${domains.join(' OR site:')}` : ''))
-        const res = await fetch(url.toString(), { headers: { 'User-Agent': 'Rudder/1.0' } })
+        const res = await fetch(url.toString(), { headers: { 'User-Agent': USER_AGENT } })
         const html = await res.text()
-        const text = html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 2000)
-        return { results: text }
+        return { results: htmlToText(html).slice(0, 2000) }
       } catch {
         return { error: 'Web search unavailable' }
       }
@@ -151,7 +153,7 @@ export class WebFetch {
     }).server(async ({ url: targetUrl }) => {
       try {
         const res = await fetch(targetUrl, {
-          headers: { 'User-Agent': 'Rudder/1.0' },
+          headers: { 'User-Agent': USER_AGENT },
           signal: AbortSignal.timeout(10000),
         })
         const html = await res.text()

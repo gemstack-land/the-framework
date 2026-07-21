@@ -1,12 +1,12 @@
 /**
  * `@gemstack/ai-sdk/computer-use` — Anthropic computer-use abstraction (#A7).
  *
- * Phase 1 (this entry) ships the action vocabulary + Playwright
- * executor. Phase 2 will add `computerUseTool({ page })` — the agent
- * tool factory that maps to Anthropic's native `computer_20250124`
- * tool block and routes execution through the executor here.
+ * Ships the action vocabulary, the Playwright executor, and
+ * {@link computerUseTool} — the agent tool factory that maps to Anthropic's
+ * native `computer_20250124` tool block and routes execution through that
+ * executor.
  *
- * # Quick example (manual / phase-1 surface)
+ * # Quick example (driving the executor directly)
  *
  * ```ts
  * import { chromium } from 'playwright'
@@ -26,7 +26,7 @@
  * await executeComputerAction(page, { action: 'left_click', coordinate: [400, 200] }, state)
  * ```
  *
- * Phase 2 will collapse this to:
+ * Or let an agent drive it:
  *
  * ```ts
  * import { computerUseTool } from '@gemstack/ai-sdk/computer-use'
@@ -40,7 +40,7 @@
  * # Anthropic-only in v1
  *
  * The action vocabulary mirrors Anthropic's `computer_20250124` schema
- * verbatim. Phase 2's tool factory throws `ComputerUseProviderError` at
+ * verbatim. The tool factory throws `ComputerUseProviderError` at
  * agent boot for non-Anthropic models — see plan
  * `docs/plans/2026-05-10-ai-computer-use.md`.
  */

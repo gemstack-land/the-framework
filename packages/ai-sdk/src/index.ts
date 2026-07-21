@@ -23,6 +23,9 @@ export type {
   ClientTool,
   ConversationStore,
   ConversationStoreMeta,
+  ConversationStoreListEntry,
+  ConversationalSpec,
+  ConversationalOverride,
   MemoryEntry,
   RemembersOverride,
   RemembersSpec,
@@ -37,6 +40,7 @@ export type {
   PrepareStepResult,
   ProviderAdapter,
   ProviderFactory,
+  ProviderHint,
   ProviderRequestOptions,
   ProviderResponse,
   ServerTool,
@@ -111,8 +115,8 @@ export {
   pauseForApproval,
   isPauseForApprovalChunk,
 } from './tool.js'
-export type { PauseForClientToolsChunk, PauseForApprovalChunk } from './tool.js'
-export { zodToJsonSchema } from './zod-to-json-schema.js'
+export type { PauseForClientToolsChunk, PauseForApprovalChunk, ServerToolBuilder } from './tool.js'
+export { zodToJsonSchema, type SchemaIo } from './zod-to-json-schema.js'
 
 // Scoped / multi-capability tools — collapse a discriminated union of
 // capability branches into one flat function-call schema.
@@ -258,7 +262,7 @@ export type {
 
 // File Search agent tool (#B8 Phase 2 — provider-native RAG)
 export { fileSearch, isFileSearchTool, FILE_SEARCH_MARKER, FILE_SEARCH_TOOL_NAME, normalizeWhere } from './file-search.js'
-export type { FileSearchOptions, FileSearchTool, FileSearchFilter, FileSearchWhereSugar } from './file-search.js'
+export type { FileSearchOptions, FileSearchTool, FileSearchFilter, FileSearchWhereSugar, FileSearchFallback } from './file-search.js'
 
 // Cached Embeddings
 export { CachedEmbeddingAdapter, type CachedEmbeddingOptions } from './cached-embedding.js'
@@ -270,6 +274,7 @@ export type {
   SimilarityHit,
   SimilaritySearchModel,
   SimilaritySearchQueryBuilder,
+  SimilaritySearchWhereOperator,
 } from './similarity-search.js'
 
 // Budget / pricing (#A6 — full pricing catalog + per-user spend caps)

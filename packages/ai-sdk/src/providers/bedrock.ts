@@ -19,8 +19,8 @@ import {
 /**
  * AWS Bedrock — managed access to foundation models on AWS infrastructure.
  *
- * v1 supports **Anthropic Claude models on Bedrock** (the dominant case for
- * Rudder users on AWS). Other model families on Bedrock (Llama, Nova, etc.)
+ * v1 supports **Anthropic Claude models on Bedrock** (the dominant case on
+ * AWS). Other model families on Bedrock (Llama, Nova, etc.)
  * surface a clear error pointing at the supported set — they can be added in
  * follow-up PRs as demand justifies.
  *

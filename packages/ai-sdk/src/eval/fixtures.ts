@@ -107,7 +107,7 @@ export async function readFixture(
   if (parsed.version !== 1) {
     throw new Error(
       `[ai-sdk] Fixture ${file} is version ${String(parsed.version)}; expected 1. ` +
-      `Re-record with \`pnpm rudder ai:eval --record\`.`,
+      `Re-record it with your host's eval record command, or rewrite it with \`writeFixture()\`.`,
     )
   }
   return parsed
