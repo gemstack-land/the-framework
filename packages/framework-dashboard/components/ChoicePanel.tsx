@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { ChoiceRequest } from '@gemstack/framework'
 import { sendChoice } from '../server/control.telefunc.js'
+import { useAction } from '../lib/use-action.js'
 import { usePreferences, updatePreferences, autopilotEnabled } from '../lib/preferences.js'
 import { Button } from './ui/button.js'
 import { cn } from '../lib/utils.js'
@@ -25,22 +26,30 @@ export function ChoicePanel({
   choice: ChoiceRequest
   active?: boolean
 }) {
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const { busy, error, run } = useAction()
+  // Posted and accepted by the daemon; the panel stays parked (buttons off, status shown)
+  // until the `choice-resolved` event unmounts it (#948) — before, the buttons just greyed
+  // out with no word on why.
+  const [sent, setSent] = useState(false)
   const [checked, setChecked] = useState<Set<string>>(
     () => new Set(choice.multi ? choice.options.filter(o => o.default).map(o => o.id) : []),
   )
+  // The countdown's auto-accept fires from a closure captured when the countdown started;
+  // the ref keeps it reading the boxes as they are at fire time (#948).
+  const checkedRef = useRef(checked)
+  checkedRef.current = checked
   const autopilot = autopilotEnabled(usePreferences())
   const [secondsLeft, setSecondsLeft] = useState<number | null>(null)
   const [cancelled, setCancelled] = useState(false)
 
+  const parked = busy || sent
+
   const post = (pick: string | string[], by: 'user' | 'autopilot' = 'user') => {
-    setBusy(true)
-    setError(null)
-    void sendChoice(projectId, choice.id, pick, by, runId ?? undefined).catch(() => {
-      setBusy(false)
-      setError('Could not send your choice — try again.')
-    })
+    void run(() => sendChoice(projectId, choice.id, pick, by, runId ?? undefined), 'Could not send your choice — try again.').then(
+      result => {
+        if (result !== undefined) setSent(true)
+      },
+    )
   }
 
   const toggle = (id: string) =>
@@ -55,7 +64,7 @@ export function ChoicePanel({
 
   // What Accept picks: the checked subset for a multi-select, else the recommended option
   // (an Approve for a confirm gate). Shared by the button, the countdown, and Ctrl+Enter.
-  const autoPick = (): string | string[] => (choice.multi ? [...checked] : (approveId ?? ''))
+  const autoPick = (): string | string[] => (choice.multi ? [...checkedRef.current] : (approveId ?? ''))
   const accept = (by: 'user' | 'autopilot' = 'user') => post(autoPick(), by)
 
   // Any mouse movement cancels the auto-accept — the human is here, so let them pick.
@@ -70,7 +79,7 @@ export function ChoicePanel({
   useEffect(() => {
     if (!active) return
     const onKey = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter' && !busy) {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter' && !parked) {
         e.preventDefault()
         accept()
       }
@@ -78,12 +87,12 @@ export function ChoicePanel({
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [active, busy, checked])
+  }, [active, parked])
 
   // The countdown: tick down once a second while autopilot is on and uncancelled, then
   // auto-accept. Restarts if autopilot is toggled back on before a pick is made.
   useEffect(() => {
-    if (!autopilot || cancelled || busy) {
+    if (!autopilot || cancelled || parked) {
       setSecondsLeft(null)
       return
     }
@@ -101,12 +110,12 @@ export function ChoicePanel({
     }, 1000)
     return () => clearInterval(timer)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autopilot, cancelled, busy])
+  }, [autopilot, cancelled, parked])
 
   const toggleAutopilot = (on: boolean) => updatePreferences({ autopilot: on }) // shared with the Start form (#410)
 
   return (
-    <section className="border-b border-border bg-accent/40 p-4">
+    <section role="region" aria-label={choice.title} className="border-b border-border bg-accent/40 p-4">
       <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Your call</div>
       <h2 className="mb-3 text-sm font-medium">{choice.title}</h2>
 
@@ -114,7 +123,7 @@ export function ChoicePanel({
         <div className="flex gap-2">
           <Button
             className="bg-emerald-600 text-white hover:bg-emerald-600 hover:opacity-90"
-            disabled={busy || !approveId}
+            disabled={parked || !approveId}
             onClick={() => approveId && post(approveId)}
           >
             Approve
@@ -122,7 +131,7 @@ export function ChoicePanel({
           <Button
             variant="outline"
             className="border-red-500/50 text-red-500 hover:bg-red-500/10 hover:text-red-500"
-            disabled={busy || !declineId}
+            disabled={parked || !declineId}
             onClick={() => declineId && post(declineId)}
           >
             Decline
@@ -134,7 +143,7 @@ export function ChoicePanel({
             {choice.options.map(o => (
               <li key={o.id}>
                 <label className="flex cursor-pointer items-start gap-2 text-sm">
-                  <input type="checkbox" className="mt-1" checked={checked.has(o.id)} onChange={() => toggle(o.id)} disabled={busy} />
+                  <input type="checkbox" className="mt-1" checked={checked.has(o.id)} onChange={() => toggle(o.id)} disabled={parked} />
                   <span>
                     {o.label}
                     {o.detail && <span className="block text-xs text-muted-foreground">{o.detail}</span>}
@@ -143,8 +152,9 @@ export function ChoicePanel({
               </li>
             ))}
           </ul>
-          <Button disabled={busy} onClick={() => post([...checked])}>
-            Accept
+          {/* The label says what Accept will post, so an empty pick is a choice, not a surprise. */}
+          <Button disabled={parked} onClick={() => post([...checked])}>
+            {checked.size === 0 ? 'Accept none' : `Accept ${checked.size} selected`}
           </Button>
         </>
       ) : (
@@ -154,10 +164,13 @@ export function ChoicePanel({
               key={o.id}
               variant={o.id === choice.recommended ? 'default' : 'outline'}
               className={cn('h-auto flex-col items-start gap-0.5 py-2 text-left')}
-              disabled={busy}
+              disabled={parked}
               onClick={() => post(o.id)}
             >
-              <span className="font-medium">{o.label}</span>
+              <span className="font-medium">
+                {o.label}
+                {o.id === choice.recommended && <span className="ml-2 text-xs font-normal opacity-80">Recommended</span>}
+              </span>
               {o.detail && <span className="text-xs font-normal opacity-80">{o.detail}</span>}
             </Button>
           ))}
@@ -167,17 +180,23 @@ export function ChoicePanel({
       {error && <p className="mt-2 text-xs text-red-500">{error}</p>}
 
       <div className="mt-3 flex items-center gap-3 text-xs text-muted-foreground">
-        <label className="flex cursor-pointer items-center gap-1.5">
-          <input type="checkbox" checked={autopilot} onChange={e => toggleAutopilot(e.target.checked)} disabled={busy} /> Autopilot
-        </label>
-        {autopilot && !busy && (
-          <span>
-            {cancelled
-              ? 'Auto accept canceled — pick manually'
-              : secondsLeft !== null && `● Auto accept in ${secondsLeft}s — move the mouse to cancel`}
-          </span>
+        {parked ? (
+          <span role="status">{busy ? 'Sending your choice…' : 'Choice sent — waiting for the session to pick it up…'}</span>
+        ) : (
+          <>
+            <label className="flex cursor-pointer items-center gap-1.5">
+              <input type="checkbox" checked={autopilot} onChange={e => toggleAutopilot(e.target.checked)} /> Autopilot
+            </label>
+            {autopilot && (
+              <span className={cn(secondsLeft !== null && !cancelled && 'font-medium text-foreground')}>
+                {cancelled
+                  ? 'Auto accept canceled — pick manually'
+                  : secondsLeft !== null && `● Auto accept in ${secondsLeft}s — move the mouse to cancel`}
+              </span>
+            )}
+            {active && <span className="ml-auto">Ctrl+Enter to accept</span>}
+          </>
         )}
-        {active && !busy && <span className="ml-auto">Ctrl+Enter to accept</span>}
       </div>
     </section>
   )
