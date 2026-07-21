@@ -135,9 +135,13 @@ export function startDashboard(opts: DashboardOptions = {}): Promise<Dashboard> 
     // The browser preview (#813) is proxied, not Telefunc'd: it is an endless MJPEG body and a
     // raw input POST, neither of which is an RPC.
     if (pathname.startsWith(`${BROWSER_PROXY_PREFIX}/`)) {
-      void handleBrowserProxy(req, res).then(handled => {
-        if (!handled) void serveClientBundle(req, res, clientBundleDir)
-      })
+      void handleBrowserProxy(req, res)
+        .then(handled => {
+          if (!handled) void serveClientBundle(req, res, clientBundleDir)
+        })
+        // Whatever the proxy throws must not become an unhandled rejection that kills the
+        // daemon (#938); tear the socket down rather than leave the request hanging.
+        .catch(() => res.destroy())
       return
     }
     void serveClientBundle(req, res, clientBundleDir)

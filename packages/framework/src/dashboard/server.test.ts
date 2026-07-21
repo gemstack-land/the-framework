@@ -109,6 +109,24 @@ test('a malformed percent-encoded path serves the SPA shell and the server survi
   }
 })
 
+test('a malformed escape inside a browser-proxy path serves the shell and the server survives (#938)', async () => {
+  const bundle = await fakeBundle()
+  const dash = await startDashboard({ port: 0, clientBundleDir: bundle })
+  try {
+    // Passes the pathname guard (the URL parses), enters the proxy dispatch, and only explodes
+    // at decode time inside parseBrowserRoute — the crash the round-2 pass live-repro'd.
+    const bad = await fetchText(dash.url + '/browser/p/%zz/stream')
+    assert.equal(bad.status, 200)
+    assert.match(bad.body, /<div id="root">/)
+
+    const after = await fetchText(dash.url + '/')
+    assert.equal(after.status, 200)
+  } finally {
+    await dash.close()
+    await rm(bundle, { recursive: true, force: true })
+  }
+})
+
 test('an unparseable absolute-form request target gets a 400 and the server survives (#938)', async () => {
   const bundle = await fakeBundle()
   const dash = await startDashboard({ port: 0, clientBundleDir: bundle })

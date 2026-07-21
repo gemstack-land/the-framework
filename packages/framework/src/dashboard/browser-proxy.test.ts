@@ -31,6 +31,13 @@ test('parseBrowserRoute keeps a query string out of the leg', () => {
   assert.equal(parseBrowserRoute('/browser/proj/run/stream?t=1')?.leg, 'stream')
 })
 
+test('parseBrowserRoute survives a malformed escape or target instead of throwing (#938)', () => {
+  // `%zz` passes URL parsing and only explodes at decode time; a throw here escapes the
+  // void-dispatched proxy handler and kills the daemon.
+  assert.equal(parseBrowserRoute('/browser/proj/%zz/stream'), undefined)
+  assert.equal(parseBrowserRoute('http://['), undefined)
+})
+
 /** A stand-in for the run's bridge, recording what reached it. */
 async function fakeBridge(): Promise<{ port: number; hits: { url: string; body: string }[]; close: () => void }> {
   const hits: { url: string; body: string }[] = []
