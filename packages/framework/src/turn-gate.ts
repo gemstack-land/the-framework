@@ -130,13 +130,13 @@ export interface ParsedMarkdownView {
   markdown: string
 }
 
-/** Slugify a title into a stable id, or `view` when it has no usable characters. */
-function slugify(title: string): string {
+/** Slugify a title into a stable id, or `fallback` when it has no usable characters. */
+function slugify(title: string, fallback: string): string {
   const slug = title
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
-  return slug || 'view'
+  return slug || fallback
 }
 
 /**
@@ -157,7 +157,7 @@ export function parseMarkdownViews(text: string): ParsedMarkdownView[] {
     const title = heading ? heading[1]!.trim() : 'Note'
     const markdown = (heading ? lines.slice(1).join('\n') : body).trim()
     if (!markdown) continue
-    const id = slugify(title)
+    const id = slugify(title, 'view')
     byId.set(id, { id, title, markdown })
   }
   return [...byId.values()]
@@ -174,8 +174,10 @@ export function parseSessionName(text: string): string | undefined {
   let name: string | undefined
   for (const m of text.matchAll(re)) {
     const line = (m[1] ?? '').split('\n').map(l => l.trim()).find(Boolean)
-    const slug = line ? slugify(line) : ''
-    if (slug && slug !== 'view') name = slug
+    // Emptiness is tested directly rather than via a fallback sentinel: a sentinel made a
+    // session legitimately named `view` indistinguishable from no name at all (#939).
+    const slug = line ? slugify(line, '') : ''
+    if (slug) name = slug
   }
   return name
 }

@@ -168,6 +168,11 @@ export function runAgentCli(opts: RunAgentCliOptions): Promise<DriverTurn> {
 
     // Feed the prompt over stdin so long prompts never hit arg-length limits.
     if (child.stdin) {
+      // A CLI that exits before reading stdin (bad flag, instant crash) surfaces an async
+      // EPIPE on the stream; with no listener that is an uncaught exception in the daemon
+      // (#943). The close handler already reports the failed turn, so the error carries
+      // nothing the caller needs.
+      child.stdin.on('error', () => {})
       child.stdin.write(opts.prompt)
       child.stdin.end()
     }

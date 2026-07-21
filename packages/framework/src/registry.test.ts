@@ -15,6 +15,7 @@ import {
   writePreferences,
   writeProjectPreferences,
   REGISTRY_FILE,
+  type Preferences,
   type ProjectRecord,
   type RegistryFs,
 } from './registry.js'
@@ -164,6 +165,36 @@ test('readRegistry reads the object form with preferences and drops unknown/non-
     preferences: { autopilot: false, eco: true, onBeforeMergeableQuality: true, browser: true }, // ecoPlanning (non-boolean) + bogus dropped
     projectPreferences: {},
   })
+})
+
+test('every boolean preference survives a save; the sanitizer cannot silently drop one (#944)', async () => {
+  // `allOn` is typed over the boolean keys computed from `Preferences` itself, so adding a
+  // boolean preference without listing it here is a compile error in this test — and a key the
+  // sanitizer's list misses fails the round-trip below, the write-then-vanish shape #944 closes.
+  type BooleanKey = {
+    [K in keyof Preferences]-?: NonNullable<Preferences[K]> extends boolean ? K : never
+  }[keyof Preferences]
+  const allOn: Record<BooleanKey, boolean> = {
+    autopilot: true,
+    technical: true,
+    vanilla: true,
+    eco: true,
+    ecoPlanning: true,
+    ecoResearch: true,
+    ecoMaintenance: true,
+    onBeforeMergeableQuality: true,
+    browser: true,
+    transparent: true,
+    notifyBrowser: true,
+    notifyDiscord: true,
+    discordBot: true,
+    notifyNewActivity: true,
+    notifyHumanIntervention: true,
+    autoPm: true,
+  }
+  const fs = memFs()
+  await writePreferences(allOn, fs, ENV)
+  assert.deepEqual(await readPreferences(fs, ENV), allOn)
 })
 
 // Per-project run options (#840): a project overrides only what it sets, the rest falls through.

@@ -93,16 +93,19 @@ export function activityLine(item: Activity): string {
   return `${mark} finished: ${what}`
 }
 
-/** Post the given activity items to a Discord webhook as one message. `fetch` is injectable for tests. */
+/**
+ * Post the given activity items to a Discord webhook as one message, resolving whether Discord
+ * accepted it (#940). `fetch` is injectable for tests.
+ */
 export async function postActivityDiscord(
   webhook: string,
   items: Activity[],
   fetchImpl: typeof fetch = fetch,
-): Promise<void> {
-  if (items.length === 0) return
+): Promise<boolean> {
+  if (items.length === 0) return true
   const content =
     items.length === 1
       ? `📣 Activity (${items[0]!.projectName}): ${activityLine(items[0]!)}`
       : `📣 ${items.length} session updates:\n${items.map(i => `• ${i.projectName}: ${activityLine(i)}`).join('\n')}`
-  await postDiscordWebhook(webhook, content, fetchImpl)
+  return postDiscordWebhook(webhook, content, fetchImpl)
 }

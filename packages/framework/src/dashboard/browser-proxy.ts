@@ -35,14 +35,22 @@ export const BROWSER_PROXY_PREFIX = '/browser'
  */
 export function parseBrowserRoute(url: string | undefined): BrowserRoute | undefined {
   if (!url) return undefined
-  const { pathname } = new URL(url, 'http://localhost')
-  if (!pathname.startsWith(`${BROWSER_PROXY_PREFIX}/`)) return undefined
-  const parts = pathname.slice(BROWSER_PROXY_PREFIX.length + 1).split('/')
-  if (parts.length !== 3) return undefined
-  const [projectId, runId, leg] = parts
-  if (!projectId || !runId) return undefined
-  if (leg !== 'stream' && leg !== 'input') return undefined
-  return { projectId, runId: decodeURIComponent(runId), leg }
+  // Parse and decode defensively: a malformed target or escape (`/browser/p/%zz/stream`) names
+  // no run, and a throw here would escape the void-dispatched proxy handler as an unhandled
+  // rejection that kills the daemon (#938). Unparseable falls through to the bundle like any
+  // other unrecognized shape.
+  try {
+    const { pathname } = new URL(url, 'http://localhost')
+    if (!pathname.startsWith(`${BROWSER_PROXY_PREFIX}/`)) return undefined
+    const parts = pathname.slice(BROWSER_PROXY_PREFIX.length + 1).split('/')
+    if (parts.length !== 3) return undefined
+    const [projectId, runId, leg] = parts
+    if (!projectId || !runId) return undefined
+    if (leg !== 'stream' && leg !== 'input') return undefined
+    return { projectId, runId: decodeURIComponent(runId), leg }
+  } catch {
+    return undefined
+  }
 }
 
 /** How the proxy finds the run's bridge. Injectable so a test needs no registry and no run. */

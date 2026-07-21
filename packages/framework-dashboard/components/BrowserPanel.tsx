@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
 import { Button } from './ui/button.js'
 
 /**
@@ -13,16 +13,23 @@ import { Button } from './ui/button.js'
  */
 export function BrowserPanel({ projectId, runId }: { projectId: string; runId: string }) {
   const img = useRef<HTMLImageElement>(null)
-  const [failed, setFailed] = useState(false)
-  // Bumped by Retry to remount the stream URL: one transient img error (opening the tab
-  // before the stream endpoint is up) used to latch "not reachable" until a remount (#946).
   const [attempt, setAttempt] = useState(0)
+  // The failure is keyed to the exact stream it happened on, so a different run or a Retry
+  // starts clean instead of inheriting a latched "not reachable" until remount (#946): one
+  // early onError (the tab opened before the run's stream endpoint was up) must not be terminal.
+  const [failedKey, setFailedKey] = useState<string | undefined>(undefined)
   const base = `/browser/${encodeURIComponent(projectId)}/${encodeURIComponent(runId)}`
-
-  // A new session gets a fresh verdict; the failure belongs to the stream it came from.
-  useEffect(() => {
-    setFailed(false)
-  }, [projectId, runId])
+  // Coming back to a run whose earlier stream failed must try again, not replay the stale
+  // failure: the stream may have come up since. Adjust-during-render is the sanctioned way
+  // to reset state on a prop change without a remount.
+  const [lastBase, setLastBase] = useState(base)
+  if (lastBase !== base) {
+    setLastBase(base)
+    setAttempt(0)
+    setFailedKey(undefined)
+  }
+  const streamKey = `${base}#${attempt}`
+  const failed = failedKey === streamKey
 
   /**
    * Where the click landed on the real page. The frame is capped at 1280x720 by the screencast
@@ -53,14 +60,7 @@ export function BrowserPanel({ projectId, runId }: { projectId: string; runId: s
           The preview is not reachable. It ends with the session, and a session only has one when it was started with
           Browser on. If it just started, the stream may not be up yet.
         </p>
-        <Button
-          variant="outline"
-          size="xs"
-          onClick={() => {
-            setFailed(false)
-            setAttempt(a => a + 1)
-          }}
-        >
+        <Button variant="outline" size="xs" onClick={() => setAttempt(a => a + 1)}>
           Retry
         </Button>
       </div>
@@ -73,13 +73,12 @@ export function BrowserPanel({ projectId, runId }: { projectId: string; runId: s
         {/* tabIndex makes the frame focusable so keystrokes have somewhere to land; the ring
             shows where they will land. */}
         <img
-          key={attempt}
           ref={img}
-          src={`${base}/stream${attempt > 0 ? `?retry=${attempt}` : ''}`}
+          src={`${base}/stream?r=${attempt}`}
           alt="The session's browser"
           tabIndex={0}
           className="w-full cursor-crosshair rounded border border-border bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)]"
-          onError={() => setFailed(true)}
+          onError={() => setFailedKey(streamKey)}
           onClick={event => send({ type: 'click', ...toPageCoords(event) })}
           onWheel={event => send({ type: 'scroll', ...toPageCoords(event), deltaY: event.deltaY })}
           onKeyDown={event => {

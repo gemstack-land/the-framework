@@ -332,10 +332,21 @@ async function startStaticServer(cwd: string): Promise<PreviewHandle> {
 
 /** Serve one file from `root`, defaulting `/` to `index.html`, refusing path traversal. */
 async function serveStaticFile(root: string, urlPath: string, res: ServerResponse): Promise<void> {
-  const rel = normalize(decodeURIComponent(urlPath.split('?')[0]!)).replace(/^(\.\.[/\\])+/, '')
-  const target = join(root, rel === '/' || rel === '.' || rel === '' ? 'index.html' : rel)
+  // A malformed escape (`/%zz`) must not throw: this runs void-dispatched, so an
+  // exception here would be an unhandled rejection that takes the process down (#938).
+  let decoded: string
+  try {
+    decoded = decodeURIComponent(urlPath.split('?')[0]!)
+  } catch {
+    res.writeHead(400, { 'content-type': 'text/plain' }).end('bad request')
+    return
+  }
+  const rel = normalize(decoded).replace(/^(\.\.[/\\])+/, '')
+  // `join(root, '.')` drops a trailing separator, so a `dir/`-shaped cwd cannot fail the prefix check.
+  const base = join(root, '.')
+  const target = join(base, rel === '/' || rel === '.' || rel === '' ? 'index.html' : rel)
   // Refuse anything that escaped the root after normalization.
-  if (target !== root && !target.startsWith(root + sep)) {
+  if (target !== base && !target.startsWith(base + sep)) {
     res.writeHead(403, { 'content-type': 'text/plain' }).end('forbidden')
     return
   }

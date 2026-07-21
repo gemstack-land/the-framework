@@ -215,24 +215,38 @@ function dedupeProjects(values: unknown[]): ProjectRecord[] {
   return projects
 }
 
-const PREFERENCE_KEYS = [
-  'autopilot',
-  'technical',
-  'vanilla',
-  'eco',
-  'ecoPlanning',
-  'ecoResearch',
-  'ecoMaintenance',
-  'onBeforeMergeableQuality',
-  'browser',
-  'transparent',
-  'notifyBrowser',
-  'notifyDiscord',
-  'discordBot',
-  'notifyNewActivity',
-  'notifyHumanIntervention',
-  'autoPm',
-] as const
+/** The boolean keys of {@link Preferences}, computed so the table below cannot drift from the type. */
+type BooleanPreferenceKey = {
+  [K in keyof Preferences]-?: NonNullable<Preferences[K]> extends boolean ? K : never
+}[keyof Preferences]
+
+/**
+ * Every boolean preference, as a `Record` over {@link BooleanPreferenceKey} so the compiler
+ * enforces completeness in both directions (#944): a typo fails as an unknown property, and
+ * omitting a newly added boolean preference fails as a missing one. A plain `as const` array
+ * only caught the first — an omission made {@link sanitizePreferences} silently drop the new
+ * preference on every save, the write-then-vanish failure shape for a settings file.
+ */
+const BOOLEAN_PREFERENCES: Record<BooleanPreferenceKey, true> = {
+  autopilot: true,
+  technical: true,
+  vanilla: true,
+  eco: true,
+  ecoPlanning: true,
+  ecoResearch: true,
+  ecoMaintenance: true,
+  onBeforeMergeableQuality: true,
+  browser: true,
+  transparent: true,
+  notifyBrowser: true,
+  notifyDiscord: true,
+  discordBot: true,
+  notifyNewActivity: true,
+  notifyHumanIntervention: true,
+  autoPm: true,
+}
+
+const PREFERENCE_KEYS = Object.keys(BOOLEAN_PREFERENCES) as BooleanPreferenceKey[]
 
 /** Keep only the known preference fields, so a hand-edited or browser-supplied
  * object never lands junk (or the wrong type) in the user's home file. */

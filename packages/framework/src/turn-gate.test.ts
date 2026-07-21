@@ -176,6 +176,21 @@ test('parseSessionName keeps the later block when the agent renames mid-turn (#3
   assert.equal(parseSessionName('```set-session-name\nfirst\n```\nthen\n```set-session-name\nsecond\n```'), 'second')
 })
 
+test('a session legitimately named "view" is kept, not dropped as a sentinel (#939)', () => {
+  // `view` used to be slugify's fallback sentinel, and parseSessionName rejected it, so an
+  // agent that wrote View had its rename silently ignored.
+  assert.equal(parseSessionName('```set-session-name\nView\n```'), 'view')
+  assert.equal(parseSessionName('```set-session-name\nview\n```'), 'view')
+})
+
+test('a name with no usable characters is still no name (#939)', () => {
+  assert.equal(parseSessionName('```set-session-name\n!!! ***\n```'), undefined)
+  // The markdown-view fallback is unaffected: a heading with no usable characters still ids as `view`.
+  assert.deepEqual(parseMarkdownViews('```show-markdown\n# !!!\nbody\n```'), [
+    { id: 'view', title: '!!!', markdown: 'body' },
+  ])
+})
+
 test('parseReadyForMerge is true only when a ready-for-merge block is present (#326)', () => {
   assert.equal(parseReadyForMerge('Still building the feature.'), false)
   assert.equal(parseReadyForMerge('All done.\n```ready-for-merge\n```'), true)
