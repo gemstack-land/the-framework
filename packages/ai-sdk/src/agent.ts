@@ -406,7 +406,10 @@ export abstract class Agent {
     return new ConversableAgent(this).forUser(userId)
   }
 
-  /** Continue an existing conversation */
+  /**
+   * Continue an existing conversation. Chain it after `forUser()` when the
+   * thread has an owner — resuming one as another user is refused (#984).
+   */
   continue(conversationId: string): ConversableAgent {
     return new ConversableAgent(this).continue(conversationId)
   }
@@ -1004,6 +1007,10 @@ export class ConversableAgent {
    * into a {@link ConversationalSpec}. The explicit chain bypasses the
    * agent's `conversational()` declaration entirely — `forUser` always
    * wins over class defaults.
+   *
+   * A bare `continue()` still yields an empty user rather than throwing: it
+   * is a legal call for threads that have no owner, and one whose owner
+   * check refuses it for every thread that does (#984).
    */
   private toSpec(): ConversationalSpec {
     if (this._conversationId) return { user: this._userId ?? '', id: this._conversationId }

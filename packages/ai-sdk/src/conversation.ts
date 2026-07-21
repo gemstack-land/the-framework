@@ -55,6 +55,8 @@ export class MemoryConversationStore implements ConversationStore {
         createdAt: conv.createdAt,
         updatedAt: conv.updatedAt,
         ...(conv.meta?.agent ? { agent: conv.meta.agent } : {}),
+        // Reported so the resume-by-id owner check can see it (#984).
+        ...(conv.meta?.userId ? { userId: conv.meta.userId } : {}),
       }))
       .sort((a, b) => b.updatedAt!.getTime() - a.updatedAt!.getTime())
   }

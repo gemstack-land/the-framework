@@ -4,8 +4,8 @@ import assert from 'node:assert/strict'
 import { Agent, setConversationStore } from './agent.js'
 import { AiFake } from './fake.js'
 import { MemoryConversationStore } from './conversation.js'
-import { resolveAutoPersistSpec } from './conversation-persistence.js'
-import type { AgentResponse, AiMessage, ConversationalSpec } from './types.js'
+import { ConversationOwnershipError, resolveAutoPersistSpec } from './conversation-persistence.js'
+import type { AgentResponse, AiMessage, ConversationalSpec, ConversationStore } from './types.js'
 
 // Test agents with declarative conversational() opts-in. Each class stores
 // the user it was created with on the instance so tests can drive different
@@ -304,15 +304,147 @@ describe('Explicit forUser / continue precedence', () => {
   it('continue() loads the exact thread regardless of conversational()', async () => {
     const store = new MemoryConversationStore()
     setConversationStore(store)
-    const id = await store.create(undefined, { userId: 'someone-else' })
+    const id = await store.create(undefined, { userId: 'u-owner' })
     await store.append(id, [{ role: 'user', content: 'old' }])
 
     fake.respondWith('continued')
     ChatAgent.lastUser = 'u-class'  // class would route to u-class
-    const r = await new ChatAgent().continue(id).prompt('next')
+    const r = await new ChatAgent().forUser('u-owner').continue(id).prompt('next')
 
     assert.equal(r.conversationId, id, 'continue(id) wins over class declaration')
     const messages = await store.load(id)
     assert.deepStrictEqual(messages.map(m => m.content), ['old', 'next', 'continued'])
+  })
+})
+
+// ─── Ownership of a resumed thread (#984) ─────────────────
+
+describe('Resume-by-id owner check', () => {
+  let fake: AiFake
+
+  beforeEach(() => {
+    fake = AiFake.fake()
+    ChatAgent.lastUser = undefined
+    setConversationStore(undefined as unknown as never)
+  })
+
+  /** Seed a thread owned by `userId` holding one message. */
+  async function seed(store: MemoryConversationStore, userId?: string): Promise<string> {
+    const id = await store.create(undefined, userId ? { userId, agent: 'ChatAgent' } : undefined)
+    await store.append(id, [{ role: 'user', content: 'bob-secret' }])
+    return id
+  }
+
+  it('forUser(alice).continue(bobsThread) is refused and leaves the thread untouched', async () => {
+    const store = new MemoryConversationStore()
+    setConversationStore(store)
+    fake.respondWith('leaked?')
+    const bobs = await seed(store, 'bob')
+
+    await assert.rejects(
+      () => new ChatAgent().forUser('alice').continue(bobs).prompt('what did bob say?'),
+      /is owned by a different user/,
+    )
+
+    // Neither read into the run nor appended to.
+    assert.equal(fake.getCalls().length, 0, 'the provider never saw bob history')
+    const messages = await store.load(bobs)
+    assert.deepStrictEqual(messages.map(m => m.content), ['bob-secret'])
+  })
+
+  it('rejects with ConversationOwnershipError carrying the id and the scoped user', async () => {
+    const store = new MemoryConversationStore()
+    setConversationStore(store)
+    fake.respondWith('leaked?')
+    const bobs = await seed(store, 'bob')
+
+    const err = await new ChatAgent().forUser('alice').continue(bobs).prompt('hi').then(
+      () => null,
+      (e: unknown) => e,
+    )
+    assert.ok(err instanceof ConversationOwnershipError, `expected ConversationOwnershipError, got ${String(err)}`)
+    assert.equal(err.conversationId, bobs)
+    assert.equal(err.userId, 'alice')
+    assert.ok(!err.message.includes('bob'), 'the message must not name the real owner')
+  })
+
+  it('per-call { conversation: { user, id } } is refused across users too', async () => {
+    const store = new MemoryConversationStore()
+    setConversationStore(store)
+    fake.respondWith('leaked?')
+    const bobs = await seed(store, 'bob')
+
+    await assert.rejects(
+      () => new StatelessAgent().prompt('what did bob say?', { conversation: { user: 'alice', id: bobs } }),
+      /is owned by a different user/,
+    )
+    assert.equal(fake.getCalls().length, 0)
+  })
+
+  it('streaming refuses before any chunk is produced', async () => {
+    const store = new MemoryConversationStore()
+    setConversationStore(store)
+    fake.respondWith('leaked?')
+    const bobs = await seed(store, 'bob')
+
+    const { stream, response } = new ChatAgent().forUser('alice').continue(bobs).stream('hi')
+    await assert.rejects(async () => { for await (const _c of stream) { void _c } }, /is owned by a different user/)
+    await assert.rejects(() => response, /is owned by a different user/)
+    assert.equal(fake.getCalls().length, 0)
+  })
+
+  it('the owner still resumes their own thread by id', async () => {
+    const store = new MemoryConversationStore()
+    setConversationStore(store)
+    fake.respondWith('welcome back')
+    const bobs = await seed(store, 'bob')
+
+    const r = await new ChatAgent().forUser('bob').continue(bobs).prompt('me again')
+    assert.equal(r.conversationId, bobs)
+    const messages = await store.load(bobs)
+    assert.deepStrictEqual(messages.map(m => m.content), ['bob-secret', 'me again', 'welcome back'])
+  })
+
+  it('a thread with no stored owner stays resumable by a bare continue()', async () => {
+    const store = new MemoryConversationStore()
+    setConversationStore(store)
+    fake.respondWith('still open')
+    const orphan = await seed(store)  // pre-#984 row: created without meta
+
+    const r = await new ChatAgent().continue(orphan).prompt('resume me')
+    assert.equal(r.conversationId, orphan)
+    const messages = await store.load(orphan)
+    assert.deepStrictEqual(messages.map(m => m.content), ['bob-secret', 'resume me', 'still open'])
+  })
+
+  it('a bare continue() on an owned thread is refused like any other mismatch', async () => {
+    const store = new MemoryConversationStore()
+    setConversationStore(store)
+    fake.respondWith('leaked?')
+    const bobs = await seed(store, 'bob')
+
+    await assert.rejects(
+      () => new ChatAgent().continue(bobs).prompt('no user here'),
+      /chain forUser\(ownerId\)/,
+    )
+  })
+
+  it('a store that does not report userId keeps its old permissive behavior', async () => {
+    // The check reads the owner off list() entries, so a store that omits it
+    // cannot be enforced — it must not start failing closed instead.
+    const store = new MemoryConversationStore()
+    const bobs = await seed(store, 'bob')
+    const blind: ConversationStore = {
+      create: (t, m) => store.create(t, m),
+      load:   id => store.load(id),
+      append: (id, m) => store.append(id, m),
+      setTitle: (id, t) => store.setTitle(id, t),
+      list: async userId => (await store.list(userId)).map(({ userId: _drop, ...rest }) => rest),
+    }
+    setConversationStore(blind)
+    fake.respondWith('as before')
+
+    const r = await new ChatAgent().forUser('alice').continue(bobs).prompt('hi')
+    assert.equal(r.conversationId, bobs)
   })
 })
