@@ -11,11 +11,12 @@ import type { Gate, RunSnapshot } from './routing.js'
  * the store's own reader, so this surface cannot keep a drifted copy of the torn-line policy.
  *
  * Known constraint (#945): chat models ONE live run per project. A project can run several
- * sessions at once since #736, and `snapshotLiveRun` picks whichever running meta lists first,
- * so a chat message routes to an arbitrary one of them. This is an accepted MVP limit of the
- * chat surface, not an oversight — lifting it means letting the bot list and target runs, which
- * is #945's real fix. Do not "fix" the pick order here; a deterministic-but-wrong run is no
- * better than an arbitrary one.
+ * sessions at once since #736, and `snapshotLiveRun` picks the first running meta the store
+ * lists — the newest by id, since `readLiveMetas` sorts newest-first — so a chat message always
+ * routes to the newest running run, which is not necessarily the one the user means. This is an
+ * accepted MVP limit of the chat surface, not an oversight — lifting it means letting the bot
+ * list and target runs, which is #945's real fix. Do not "fix" the pick order here; a different
+ * deterministic pick is no better when the user cannot choose.
  */
 
 /**
