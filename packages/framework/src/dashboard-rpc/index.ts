@@ -12,7 +12,9 @@ export {
   onProjectPreferences,
   saveProjectPreferences,
   onEditors,
+  onNotifyChannels,
   type SavePreferencesResult,
+  type NotifyChannels,
 } from './preferences.telefunc.js'
 export { type EditorInfo } from '../dashboard/open-in-app.js'
 export { onQuota } from './quota.telefunc.js'

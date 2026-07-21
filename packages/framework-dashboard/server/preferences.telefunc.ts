@@ -10,5 +10,6 @@ export {
   onProjectPreferences,
   saveProjectPreferences,
   onEditors,
+  onNotifyChannels,
 } from '@gemstack/framework/dashboard-rpc'
-export type { EditorInfo } from '@gemstack/framework/dashboard-rpc'
+export type { EditorInfo, NotifyChannels } from '@gemstack/framework/dashboard-rpc'

@@ -68,3 +68,26 @@ export async function onEditors(): Promise<EditorInfo[]> {
   if (!contextPreferences()) return []
   return detectEditors().catch(() => [])
 }
+
+/** Which notification channels the daemon can actually deliver on (#948). */
+export interface NotifyChannels {
+  /** `DISCORD_WEBHOOK` is set, so Discord delivery can fire. */
+  discordWebhook: boolean
+  /** `DISCORD_BOT_TOKEN` is set, so the Discord chatbot can answer. */
+  discordBot: boolean
+}
+
+/**
+ * Whether the daemon has the Discord env vars (#948). The toggles are per-user preferences,
+ * but delivery needs `DISCORD_WEBHOOK` / `DISCORD_BOT_TOKEN` on the daemon — without this
+ * read the dashboard let you switch on a channel that delivers nothing and lit the bell for
+ * it. Only presence is reported, never the values. Gated like the other preference RPCs, so
+ * a public host reports both absent.
+ */
+export async function onNotifyChannels(): Promise<NotifyChannels> {
+  if (!contextPreferences()) return { discordWebhook: false, discordBot: false }
+  return {
+    discordWebhook: Boolean(process.env.DISCORD_WEBHOOK),
+    discordBot: Boolean(process.env.DISCORD_BOT_TOKEN),
+  }
+}

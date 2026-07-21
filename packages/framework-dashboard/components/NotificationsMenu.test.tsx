@@ -1,8 +1,11 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { Preferences } from '@gemstack/framework'
 
 const updatePreferences = vi.hoisted(() => vi.fn())
+// The daemon's channel capability (#948): both configured unless a test overrides it.
+const onNotifyChannels = vi.hoisted(() => vi.fn(async () => ({ discordWebhook: true, discordBot: true })))
+vi.mock('../server/preferences.telefunc.js', () => ({ onNotifyChannels }))
 let prefs: Preferences = {}
 vi.mock('../lib/preferences.js', () => ({
   usePreferences: () => prefs,
@@ -101,5 +104,27 @@ describe('NotificationsMenu (#676)', () => {
     prefs = { discordBot: true, notifyBrowser: false, notifyDiscord: false }
     render(<NotificationsMenu />)
     expect(screen.getByRole('button', { name: /notifications/i }).getAttribute('title')).toBe('Notifications')
+  })
+
+  // #948: the toggle is a preference; delivery needs the daemon env var. An unconfigured
+  // channel must neither light the bell nor read as if it will page you.
+  test('Discord on without DISCORD_WEBHOOK does not light the bell and says why', async () => {
+    onNotifyChannels.mockResolvedValueOnce({ discordWebhook: false, discordBot: false })
+    prefs = { notifyDiscord: true, notifyBrowser: false }
+    render(<NotificationsMenu />)
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /notifications/i }).getAttribute('title')).toBe('Notifications'),
+    )
+    open()
+    expect(screen.getByText('Not configured — DISCORD_WEBHOOK is not set on the daemon')).toBeTruthy()
+    expect(screen.getByText('Not configured — DISCORD_BOT_TOKEN is not set on the daemon')).toBeTruthy()
+  })
+
+  test('a configured webhook keeps the bell lit for Discord delivery', async () => {
+    prefs = { notifyDiscord: true, notifyBrowser: false }
+    render(<NotificationsMenu />)
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /notifications/i }).getAttribute('title')).toBe('Notifications on'),
+    )
   })
 })
