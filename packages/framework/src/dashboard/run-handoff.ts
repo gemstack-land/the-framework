@@ -1,5 +1,6 @@
 import { nodeGitRunner, type GitRunner } from '../project.js'
 import { ghPrView, nodeGhRunner, type GhRunner, type LinkedPr, type BranchPrLookup } from './gh.js'
+import { parseNumstat } from './file-diff.js'
 
 // What a finished session produced, and what is left to do with it (#799).
 //
@@ -107,23 +108,9 @@ function parseCommits(out: string): HandoffCommit[] {
     })
 }
 
-/** Parse `git diff --numstat`, where a binary file reports `-` for both counts. */
-function parseNumstat(out: string): HandoffFile[] {
-  const files: HandoffFile[] = []
-  for (const line of out.split('\n')) {
-    const parts = line.split('\t')
-    if (parts.length < 3) continue
-    const [added = '', removed = '', path = ''] = parts
-    if (!path) continue
-    const binary = added === '-' || removed === '-'
-    files.push({
-      path,
-      insertions: binary ? 0 : Number(added) || 0,
-      deletions: binary ? 0 : Number(removed) || 0,
-      binary,
-    })
-  }
-  return files
+/** `git diff --numstat` as {@link HandoffFile}s, via the shared parser in file-diff.ts. */
+function parseHandoffFiles(out: string): HandoffFile[] {
+  return parseNumstat(out).map(({ path, added, removed, binary }) => ({ path, insertions: added, deletions: removed, binary }))
 }
 
 /**
@@ -163,7 +150,7 @@ export async function readRunHandoff(
   ])
 
   const commits = parseCommits(commitsOut)
-  const files = parseNumstat(numstatOut)
+  const files = parseHandoffFiles(numstatOut)
   const pr = await (deps.pr ?? ghPrView)(cwd, branch).catch(() => undefined)
 
   return {
