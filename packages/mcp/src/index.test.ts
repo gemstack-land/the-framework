@@ -1408,6 +1408,97 @@ describe('registerOAuth2Metadata', () => {
   })
 })
 
+// ─── oauth2 challenge — forwarded headers and header injection ──
+
+describe('oauth2McpMiddleware — the WWW-Authenticate challenge is not client-steerable', () => {
+  function mockRes() {
+    const calls: { status?: number; body?: unknown; headers: Record<string, string> } = { headers: {} }
+    const res = {
+      status(code: number) { calls.status = code; return res },
+      header(key: string, value: string) { calls.headers[key.toLowerCase()] = value; return res },
+      json(data: unknown) { calls.body = data },
+    }
+    return { res, calls }
+  }
+
+  async function challengeFor(
+    req: Record<string, unknown>,
+    options: Record<string, unknown> = {},
+    mcpPath = '/mcp/secure',
+  ): Promise<string> {
+    const { oauth2McpMiddleware } = await import('./auth/oauth2.js')
+    const mw = oauth2McpMiddleware(mcpPath, options)
+    const { res, calls } = mockRes()
+    await mw(req as never, res as never, async () => {})
+    return calls.headers['www-authenticate'] ?? ''
+  }
+
+  it('ignores X-Forwarded-Host by default, so discovery cannot be pointed at an attacker', async () => {
+    const header = await challengeFor({
+      headers: { host: 'app.test', 'x-forwarded-host': 'evil.attacker.test' },
+    })
+    assert.ok(header.includes('resource_metadata="http://app.test/.well-known/oauth-protected-resource/mcp/secure"'),
+      `expected the real host in the challenge, got: ${header}`)
+    assert.ok(!header.includes('evil.attacker.test'), `attacker host leaked into: ${header}`)
+  })
+
+  it('ignores X-Forwarded-Proto by default, so the scheme cannot be downgraded to http', async () => {
+    const header = await challengeFor({
+      headers: { host: 'app.test', 'x-forwarded-proto': 'http' },
+      protocol: 'https',
+    })
+    assert.ok(header.includes('resource_metadata="https://app.test/'), `scheme downgraded: ${header}`)
+  })
+
+  it('honours X-Forwarded-Host and X-Forwarded-Proto once trustProxy is opted into', async () => {
+    const header = await challengeFor(
+      { headers: { host: 'internal:3000', 'x-forwarded-host': 'api.example.com', 'x-forwarded-proto': 'https' } },
+      { trustProxy: true },
+    )
+    assert.ok(header.includes('resource_metadata="https://api.example.com/.well-known/oauth-protected-resource/mcp/secure"'),
+      `expected the forwarded host, got: ${header}`)
+  })
+
+  it('rejects a forwarded host that is not a bare host[:port], even with trustProxy on', async () => {
+    const header = await challengeFor(
+      { headers: { host: 'app.test', 'x-forwarded-host': 'a", error="insufficient_scope", scope="admin' } },
+      { trustProxy: true },
+    )
+    assert.ok(header.includes('resource_metadata="http://app.test/'), `bad host was used: ${header}`)
+    assert.equal(header.match(/error="/g)?.length, 1, `injected an extra error param: ${header}`)
+    assert.ok(!header.includes('scope="admin"'), `injected a scope param: ${header}`)
+  })
+
+  it('escapes resource_metadata so a quote in the URL cannot inject auth-params', async () => {
+    const header = await challengeFor(
+      { headers: { host: 'app.test' } },
+      {},
+      '/mcp/a", error="insufficient_scope", scope="admin',
+    )
+    // The quote must survive only as an escaped one inside the quoted-string.
+    assert.ok(!/resource_metadata="[^"\\]*"\s*,\s*error="insufficient_scope"/.test(header),
+      `resource_metadata broke out of its quoted-string: ${header}`)
+    assert.ok(header.includes('\\"'), `expected an escaped quote, got: ${header}`)
+    assert.equal(header.match(/error="/g)?.length, 1, `injected an extra error param: ${header}`)
+  })
+
+  it('the metadata document ignores X-Forwarded-Host by default too', async () => {
+    const { registerOAuth2Metadata } = await import('./auth/oauth2.js')
+    type Handler = (req: unknown, res: unknown) => unknown
+    let registeredHandler: Handler | null = null
+    const router = { get(_path: string, handler: Handler) { registeredHandler = handler } }
+    registerOAuth2Metadata(router, '/mcp/secure', {})
+
+    let body: Record<string, unknown> | null = null
+    const req = { headers: { host: 'app.test', 'x-forwarded-host': 'evil.attacker.test' } }
+    ;(registeredHandler as unknown as Handler)(req, { json: (d: Record<string, unknown>) => { body = d } })
+
+    const b = body as unknown as Record<string, unknown>
+    assert.equal(b['resource'], 'http://app.test/mcp/secure')
+    assert.deepStrictEqual(b['authorization_servers'], ['http://app.test'])
+  })
+})
+
 describe('Mcp servers registry on globalThis', () => {
   it('state lives on globalThis so it survives a second copy of @gemstack/mcp', () => {
     // Vite-bundled server apps inline `@gemstack/mcp` (the route mounter

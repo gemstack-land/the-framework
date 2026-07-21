@@ -166,6 +166,19 @@ registerOAuth2Metadata(app, '/mcp', options)
 
 On success the verified claims are attached to the request as `req.mcpAuth` (`{ sub?, scopes?, claims }`). Missing required `scopes` yields a `403 insufficient_scope`; a missing/invalid token yields `401 invalid_token`.
 
+### Behind a reverse proxy
+
+The metadata URL in the `WWW-Authenticate` challenge (and the `resource` in the metadata document) is derived from the request's host and scheme. `X-Forwarded-Host` and `X-Forwarded-Proto` are **ignored by default**, because a client can send them itself and thereby point another client's discovery at a host of its choosing. If the endpoint is only reachable through a proxy that overwrites those headers, opt in:
+
+```ts
+const options = {
+  // ...as above
+  trustProxy: true,
+}
+```
+
+Only the client-facing (first) value of each header is read, and a forwarded host that is not a bare `host[:port]` is discarded in favour of the real one.
+
 ## Testing
 
 `McpTestClient` exercises a server's tools/resources/prompts in-process, with no transport:

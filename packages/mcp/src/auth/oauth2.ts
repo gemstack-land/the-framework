@@ -41,6 +41,13 @@ export interface OAuth2McpOptions {
   scopesSupported?: string[]
   /** Token verifier. Required for the endpoint to accept any token (see {@link VerifyToken}). */
   verifyToken?: VerifyToken
+  /**
+   * Honour `X-Forwarded-Host` / `X-Forwarded-Proto` when building the metadata
+   * URL. Off by default: those headers are client-supplied unless a trusted
+   * proxy overwrites them, and the URL is what clients follow to authenticate.
+   * Enable it only when this endpoint is reachable solely through such a proxy.
+   */
+  trustProxy?: boolean
 }
 
 /** Minimal Connect-style request shape the middleware reads. */
@@ -80,7 +87,7 @@ export function oauth2McpMiddleware(mcpPath: string, options: OAuth2McpOptions =
 
   return async function OAuth2McpMiddleware(req, res, next) {
     const authHeader = getHeader(req, 'authorization')
-    const metadataUrl = absoluteUrl(req, metadataPath)
+    const metadataUrl = absoluteUrl(req, metadataPath, options.trustProxy === true)
 
     if (!authHeader?.startsWith('Bearer ')) {
       challenge(res, metadataUrl, 'invalid_token', 'Bearer token required.')
@@ -147,7 +154,7 @@ export function registerOAuth2Metadata(
   const metadataPath = `/.well-known/oauth-protected-resource${mcpPath}`
 
   router.get(metadataPath, (req: unknown, res: unknown) => {
-    const origin = absoluteUrl(req as OAuth2Request, '')
+    const origin = absoluteUrl(req as OAuth2Request, '', options.trustProxy === true)
     const resource = options.resource ?? `${origin}${mcpPath}`
     const authServers = options.authorizationServers && options.authorizationServers.length > 0
       ? options.authorizationServers
@@ -168,16 +175,43 @@ export function registerOAuth2Metadata(
 
 // ─── helpers ──────────────────────────────────────────────
 
-function absoluteUrl(req: OAuth2Request, path: string): string {
-  const host = getHeader(req, 'x-forwarded-host')
-    ?? req.host
-    ?? getHeader(req, 'host')
-    ?? req.hostname
+/** A bare `host[:port]`, either a registered name / IPv4 or a bracketed IPv6 literal. */
+const HOST_PATTERN = /^(?:[a-zA-Z0-9._-]+|\[[0-9a-fA-F:.]+\])(?::\d{1,5})?$/
+
+function absoluteUrl(req: OAuth2Request, path: string, trustProxy: boolean): string {
+  const host = (trustProxy ? validHost(firstValue(getHeader(req, 'x-forwarded-host'))) : undefined)
+    ?? validHost(req.host)
+    ?? validHost(getHeader(req, 'host'))
+    ?? validHost(req.hostname)
     ?? 'localhost'
-  const proto = getHeader(req, 'x-forwarded-proto')
-    ?? req.protocol
+  const proto = (trustProxy ? validProto(firstValue(getHeader(req, 'x-forwarded-proto'))) : undefined)
+    ?? validProto(req.protocol)
     ?? 'http'
   return `${proto}://${host}${path}`
+}
+
+/** A chain of proxies appends to `X-Forwarded-*`; the client-facing hop is first. */
+function firstValue(raw: string | undefined): string | undefined {
+  return raw?.split(',')[0]?.trim() || undefined
+}
+
+function validHost(raw: string | undefined): string | undefined {
+  return raw !== undefined && HOST_PATTERN.test(raw) ? raw : undefined
+}
+
+function validProto(raw: string | undefined): string | undefined {
+  const proto = raw?.replace(/:$/, '').toLowerCase()
+  return proto === 'http' || proto === 'https' ? proto : undefined
+}
+
+/**
+ * Escape a value for an RFC 7235 quoted-string. Backslashes go BEFORE quotes:
+ * otherwise a value ending in `\` would let the trailing backslash escape the
+ * closing quote and inject extra auth-params. Order matters, `\` → `\\`, then
+ * `"` → `\"`.
+ */
+function escapeQuoted(value: string): string {
+  return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
 }
 
 function getHeader(req: OAuth2Request, name: string): string | undefined {
@@ -193,15 +227,9 @@ function challenge(
   description: string,
   scope?: string,
 ): void {
-  const parts: string[] = [`resource_metadata="${metadataUrl}"`, `error="${error}"`]
-  // Escape backslashes BEFORE quotes — otherwise a description ending in `\`
-  // would let the trailing backslash escape the closing quote and break out of
-  // the RFC 7235 quoted-string. Order matters: `\` → `\\`, then `"` → `\"`.
-  if (description) {
-    const escaped = description.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
-    parts.push(`error_description="${escaped}"`)
-  }
-  if (scope) parts.push(`scope="${scope}"`)
+  const parts: string[] = [`resource_metadata="${escapeQuoted(metadataUrl)}"`, `error="${error}"`]
+  if (description) parts.push(`error_description="${escapeQuoted(description)}"`)
+  if (scope) parts.push(`scope="${escapeQuoted(scope)}"`)
   res.header?.('WWW-Authenticate', `Bearer ${parts.join(', ')}`)
 
   const statusCode = error === 'insufficient_scope' ? 403 : 401
