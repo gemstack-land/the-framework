@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 
 import { sendAddProject } from '../server/projects.telefunc.js'
 import { useAction } from '../lib/use-action.js'
 import { Button } from './ui/button.js'
+import { Checkbox } from './ui/checkbox.js'
 
 // Add project(s) (#396/#433): install a single repo, or every git repo directly under a
 // directory, and register each so it joins the list. The daemon does the work; this posts
@@ -125,7 +126,7 @@ export function AddProjectPanel({ onAdded, onClose }: { onAdded: () => void; onC
               Adding it lets the agent read its files. Hidden instructions in an untrusted repo can hijack the agent
               (prompt injection), so only add repos you trust.
             </p>
-            {error && <p className="mb-2 text-xs text-red-500">{error}</p>}
+            {error && <p className="mb-2 text-xs text-danger">{error}</p>}
             <div className="flex justify-end gap-2">
               <Button type="button" variant="ghost" size="sm" disabled={busy} onClick={() => setConfirming(false)}>
                 Back
@@ -148,10 +149,10 @@ export function AddProjectPanel({ onAdded, onClose }: { onAdded: () => void; onC
               className="mb-2 w-full rounded-md border border-border bg-transparent px-2 py-1 text-sm outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)]"
             />
             <label className="mb-2 flex cursor-pointer items-center gap-1.5 text-xs text-muted-foreground">
-              <input type="checkbox" checked={directory} onChange={e => setDirectory(e.target.checked)} disabled={busy} />{' '}
+              <Checkbox checked={directory} onCheckedChange={setDirectory} disabled={busy} />
               It&apos;s a folder of repos
             </label>
-            {error && <p className="mb-2 text-xs text-red-500">{error}</p>}
+            {error && <p className="mb-2 text-xs text-danger">{error}</p>}
             <div className="flex justify-end gap-2">
               <Button type="button" variant="ghost" size="sm" disabled={busy} onClick={onClose}>
                 Cancel

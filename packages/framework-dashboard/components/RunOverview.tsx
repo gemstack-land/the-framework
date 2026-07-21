@@ -25,13 +25,13 @@ export function RunOverview({ events, showSessionLink = true }: { events: Framew
   const stopped = outcome?.stopped === true
   const hasProgress = Boolean(progress.sessionName) || progress.readyForMerge || failed || stopped
   const status = failed
-    ? { dot: 'bg-red-500', label: outcome?.detail ? `failed — ${outcome.detail}` : 'failed', tone: 'text-red-500' }
+    ? { dot: 'bg-danger', label: outcome?.detail ? `failed — ${outcome.detail}` : 'failed', tone: 'text-danger' }
     : stopped
-      ? { dot: 'bg-amber-500', label: 'stopped', tone: 'text-amber-600 dark:text-amber-400' }
+      ? { dot: 'bg-warning', label: 'stopped', tone: 'text-warning' }
       : progress.readyForMerge
-        ? { dot: 'bg-green-500', label: 'ready for merge', tone: 'text-muted-foreground' }
+        ? { dot: 'bg-success', label: 'ready for merge', tone: 'text-muted-foreground' }
         : active
-          ? { dot: 'animate-pulse bg-amber-500', label: 'building…', tone: 'text-muted-foreground' }
+          ? { dot: 'animate-pulse bg-warning', label: 'building…', tone: 'text-muted-foreground' }
           : { dot: 'bg-muted-foreground', label: 'finished', tone: 'text-muted-foreground' }
 
   // The "Open session" link, labeled honestly: a headless Claude Code run has no per-session
@@ -65,7 +65,8 @@ export function RunOverview({ events, showSessionLink = true }: { events: Framew
             <ul className="space-y-0.5 text-xs">
               {loop.blockers.map((b, i) => (
                 <li key={i} className="text-foreground">
-                  <span className="text-muted-foreground">☐</span> {b}
+                  <span className="mr-1.5 inline-block h-1 w-1 shrink-0 rounded-full bg-muted-foreground align-middle" aria-hidden />
+                  {b}
                 </li>
               ))}
             </ul>

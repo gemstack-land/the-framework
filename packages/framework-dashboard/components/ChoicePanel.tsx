@@ -4,6 +4,7 @@ import { sendChoice } from '../server/control.telefunc.js'
 import { useAction } from '../lib/use-action.js'
 import { usePreferences, updatePreferences, autopilotEnabled } from '../lib/preferences.js'
 import { Button } from './ui/button.js'
+import { Checkbox } from './ui/checkbox.js'
 import { cn } from '../lib/utils.js'
 
 // "Your call" — the interactive gate the run parks on (#304/#332), rendered from the
@@ -122,7 +123,9 @@ export function ChoicePanel({
       {choice.confirm ? (
         <div className="flex gap-2">
           <Button
-            className="bg-emerald-600 text-white hover:bg-emerald-600 hover:opacity-90"
+            /* `text-background`, not white: the success token is dark on the light canvas and light
+               on the dark one, so the label has to invert with it to stay legible on both. */
+            className="bg-success text-background hover:bg-success hover:opacity-90"
             disabled={parked || !approveId}
             onClick={() => approveId && post(approveId)}
           >
@@ -130,7 +133,7 @@ export function ChoicePanel({
           </Button>
           <Button
             variant="outline"
-            className="border-red-500/50 text-red-500 hover:bg-red-500/10 hover:text-red-500"
+            className="border-danger/50 text-danger hover:bg-danger/10 hover:text-danger"
             disabled={parked || !declineId}
             onClick={() => declineId && post(declineId)}
           >
@@ -143,7 +146,7 @@ export function ChoicePanel({
             {choice.options.map(o => (
               <li key={o.id}>
                 <label className="flex cursor-pointer items-start gap-2 text-sm">
-                  <input type="checkbox" className="mt-1" checked={checked.has(o.id)} onChange={() => toggle(o.id)} disabled={parked} />
+                  <Checkbox className="mt-0.5" checked={checked.has(o.id)} onCheckedChange={() => toggle(o.id)} disabled={parked} />
                   <span>
                     {o.label}
                     {o.detail && <span className="block text-xs text-muted-foreground">{o.detail}</span>}
@@ -177,7 +180,7 @@ export function ChoicePanel({
         </div>
       )}
 
-      {error && <p className="mt-2 text-xs text-red-500">{error}</p>}
+      {error && <p className="mt-2 text-xs text-danger">{error}</p>}
 
       <div className="mt-3 flex items-center gap-3 text-xs text-muted-foreground">
         {parked ? (
@@ -185,7 +188,7 @@ export function ChoicePanel({
         ) : (
           <>
             <label className="flex cursor-pointer items-center gap-1.5">
-              <input type="checkbox" checked={autopilot} onChange={e => toggleAutopilot(e.target.checked)} /> Autopilot
+              <Checkbox checked={autopilot} onCheckedChange={toggleAutopilot} /> Autopilot
             </label>
             {autopilot && (
               <span className={cn(secondsLeft !== null && !cancelled && 'font-medium text-foreground')}>

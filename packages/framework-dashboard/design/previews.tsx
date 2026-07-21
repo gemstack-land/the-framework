@@ -48,6 +48,10 @@ const TOKENS = [
   ['--primary-foreground', 'Text on primary'],
   ['--accent', 'Hover fill'],
   ['--accent-foreground', 'Text on accent'],
+  ['--success', 'Done, passing'],
+  ['--warning', 'Stopped, dirty'],
+  ['--danger', 'Failed, destructive'],
+  ['--info', 'Unpushed, neutral note'],
 ] as const
 
 function ColorTokens() {
@@ -69,19 +73,20 @@ function ColorTokens() {
   )
 }
 
-// The status hues are raw palette values today (no token backs them), which is why they are
-// shown apart from the token grid: this card is the evidence for that gap, not a blessing of it.
+// The status vocabulary, now tokenised. Each is tuned per theme against that theme's canvas
+// rather than picked once from the middle of a palette ramp.
 const STATUS = [
-  ['Done / passing', 'bg-emerald-500', 'emerald-500'],
-  ['Failed / destructive', 'bg-red-500', 'red-500'],
-  ['Stopped / warning', 'bg-amber-500', 'amber-500'],
+  ['Done / passing', 'bg-success', '--success'],
+  ['Failed / destructive', 'bg-danger', '--danger'],
+  ['Stopped / warning', 'bg-warning', '--warning'],
+  ['Unpushed / informational', 'bg-info', '--info'],
   ['Running / live', 'bg-primary', '--primary'],
 ] as const
 
 function StatusPalette() {
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
         {STATUS.map(([label, fill, value]) => (
           <div key={label} className="flex items-center gap-2.5">
             <span className={`h-8 w-8 shrink-0 rounded-md ${fill}`} />
@@ -93,8 +98,8 @@ function StatusPalette() {
         ))}
       </div>
       <p className="text-xs text-muted-foreground">
-        Three of the four are raw Tailwind palette values with no semantic token behind them, so a
-        theme change cannot reach them and nothing stops a fifth green appearing.
+        One token per meaning. Before these existed &quot;good&quot; was six different greens and
+        <code> amber-500</code> meant both &quot;stopped&quot; and &quot;building, fine&quot;.
       </p>
     </div>
   )
@@ -188,9 +193,9 @@ function Badges() {
         <Badge>end</Badge>
       </Row>
       <Row label="Status (as used today)">
-        <Badge className="border-transparent bg-emerald-500/15 text-emerald-600">DONE</Badge>
-        <Badge className="border-transparent bg-red-500/15 text-red-600">FAILED</Badge>
-        <Badge className="border-transparent bg-amber-500/15 text-amber-600">STOPPED</Badge>
+        <Badge className="border-transparent bg-success/15 text-success">DONE</Badge>
+        <Badge className="border-transparent bg-danger/15 text-danger">FAILED</Badge>
+        <Badge className="border-transparent bg-warning/15 text-warning">STOPPED</Badge>
         <Badge className="border-transparent bg-primary/15 text-primary">RUNNING</Badge>
       </Row>
       <p className="text-xs text-muted-foreground">
@@ -343,7 +348,7 @@ export const PREVIEWS: Preview[] = [
     path: 'foundations/color-tokens.html',
     group: 'Foundations',
     name: 'Color tokens',
-    subtitle: '11 semantic tokens, light + dark',
+    subtitle: '15 semantic tokens, light + dark',
     width: 900,
     node: <ColorTokens />,
   },
@@ -351,7 +356,7 @@ export const PREVIEWS: Preview[] = [
     path: 'foundations/status-palette.html',
     group: 'Foundations',
     name: 'Status palette',
-    subtitle: 'Done / failed / stopped / running — 3 of 4 untokenised',
+    subtitle: 'One token per meaning, tuned per theme',
     width: 900,
     node: <StatusPalette />,
   },

@@ -57,7 +57,7 @@ export function RunActionBar({
             read from this session's own worktree — its branch, whether it is holding uncommitted
             work, its size on disk, and the PR its branch has. */}
         <GitStatusBar projectId={projectId} runId={runId} inline />
-        {error && <span className="text-xs text-red-500">{error}</span>}
+        {error && <span className="text-xs text-danger">{error}</span>}
         {/* What the session IS sits at the start of the bar; what you can DO to it sits at the end,
             so the buttons keep one home as the row's contents come and go (Stop only while it runs,
             Remove only on a retained worktree, Open session only once one is reported). */}

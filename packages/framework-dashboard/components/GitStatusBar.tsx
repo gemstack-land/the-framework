@@ -56,7 +56,7 @@ export function GitStatusBar({
       </span>
       <span className="flex items-center gap-1.5">
         <span
-          className={cn('h-2 w-2 rounded-full', status.dirty ? 'bg-amber-500' : 'bg-emerald-500')}
+          className={cn('h-2 w-2 rounded-full', status.dirty ? 'bg-warning' : 'bg-success')}
           title={status.dirty ? dirtyLabel : 'Clean'}
         />
         <span className="text-muted-foreground">{status.dirty ? 'dirty' : 'clean'}</span>

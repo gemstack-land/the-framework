@@ -56,7 +56,7 @@ export function RunHandoffPanel({ projectId, runId }: { projectId: string; runId
         </span>
         <Summary handoff={handoff} />
         <div className="min-w-0 flex-1" />
-        {error && <span className="text-red-500">{error}</span>}
+        {error && <span className="text-danger">{error}</span>}
         <Actions handoff={handoff} busy={busy} pending={pending} act={act} projectId={projectId} runId={runId} />
       </div>
       {!handoff.empty && handoff.exists && (

@@ -75,7 +75,7 @@ export function RunChat({
           Queued — the session reads it between turns: &ldquo;{queued}&rdquo;
         </p>
       )}
-      {(error ?? startError) && <p role="alert" className="mb-1 px-2 text-xs text-red-500">{error ?? startError}</p>}
+      {(error ?? startError) && <p role="alert" className="mb-1 px-2 text-xs text-danger">{error ?? startError}</p>}
       <Composer
         ref={composerRef}
         files={files}

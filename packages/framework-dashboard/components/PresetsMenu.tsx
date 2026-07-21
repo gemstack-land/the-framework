@@ -90,7 +90,7 @@ export function PresetsMenu({
                   }}
                   title={`Delete "${p.label}"`}
                   aria-label={`Delete preset ${p.label}`}
-                  className="rounded p-0.5 text-[var(--color-muted-foreground)] hover:text-red-500"
+                  className="rounded p-0.5 text-[var(--color-muted-foreground)] hover:text-danger"
                 >
                   <X className="h-3.5 w-3.5" aria-hidden />
                 </button>

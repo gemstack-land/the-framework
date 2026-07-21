@@ -9,7 +9,7 @@ function openDisclosure() {
   fireEvent.click(screen.getByText(/Enhanced System Prompt/))
 }
 
-/** The summary line, which carries the ✅/❌ state (#863). */
+/** The summary line, whose dot + screen-reader text carry the state (#863). */
 function summary(): string {
   return screen.getAllByRole('button')[0]?.textContent ?? ''
 }
@@ -41,25 +41,26 @@ describe('SystemPromptDisclosure transparent mode (#625)', () => {
 })
 
 describe('Enhanced System Prompt summary (#863)', () => {
-  test('✅ only when every axis is on', () => {
+  test('reads as fully enabled only when every axis is on', () => {
     render(<SystemPromptDisclosure {...baseProps} disabled={false} />)
-    expect(summary()).toContain('✅')
+    expect(summary()).toContain('fully enabled')
+    expect(summary()).not.toContain('not fully enabled')
   })
 
-  test('❌ when the built-in block is off, even though the protocols still ship', () => {
+  test('not fully enabled when the built-in block is off, even though the protocols still ship', () => {
     render(<SystemPromptDisclosure {...baseProps} disabled />)
-    expect(summary()).toContain('❌')
+    expect(summary()).toContain('not fully enabled')
     openDisclosure()
     // Not "completely enabled", but the channel is not empty either.
     expect(screen.queryByText(/No extra system prompt/)).toBeNull()
   })
 
-  test('❌ when the framework integration is off', () => {
+  test('not fully enabled when the framework integration is off', () => {
     render(<SystemPromptDisclosure {...baseProps} disabled={false} transparent />)
-    expect(summary()).toContain('❌')
+    expect(summary()).toContain('not fully enabled')
   })
 
-  test('the state is not carried by the glyph alone', () => {
+  test('the state is not carried by the dot alone', () => {
     render(<SystemPromptDisclosure {...baseProps} disabled={false} />)
     expect(summary()).toContain('fully enabled')
   })

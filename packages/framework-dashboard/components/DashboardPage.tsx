@@ -145,8 +145,8 @@ function NeedsYou({ items, onSelectProject }: { items: Intervention[]; onSelectP
                     className="flex w-full items-center gap-2 py-2 text-left hover:opacity-80"
                     title="Open the session to answer"
                   >
-                    <MessageCircleQuestion className="h-4 w-4 shrink-0 text-amber-500" />
-                    <span className="shrink-0 text-xs font-medium text-amber-500">Awaiting</span>
+                    <MessageCircleQuestion className="h-4 w-4 shrink-0 text-warning" />
+                    <span className="shrink-0 text-xs font-medium text-warning">Awaiting</span>
                     <span className="truncate font-medium">{item.title}</span>
                     <span className="ml-auto shrink-0 text-xs text-muted-foreground">{item.projectName}</span>
                   </button>
@@ -157,8 +157,8 @@ function NeedsYou({ items, onSelectProject }: { items: Intervention[]; onSelectP
                     className="flex w-full items-center gap-2 py-2 text-left hover:opacity-80"
                     title={`Open the session: work on ${item.branch ?? ''} was never pushed`}
                   >
-                    <GitBranch className="h-4 w-4 shrink-0 text-sky-500" />
-                    <span className="shrink-0 text-xs font-medium text-sky-500">Unpushed</span>
+                    <GitBranch className="h-4 w-4 shrink-0 text-info" />
+                    <span className="shrink-0 text-xs font-medium text-info">Unpushed</span>
                     <span className="truncate font-medium">{item.title}</span>
                     {/* An unknown count says nothing rather than the contradictory "0 commits". */}
                     {item.commits !== undefined && item.commits > 0 && (
@@ -176,7 +176,7 @@ function NeedsYou({ items, onSelectProject }: { items: Intervention[]; onSelectP
                     className="flex items-center gap-2 py-2 hover:opacity-80"
                     title={`Open PR #${item.number} on GitHub`}
                   >
-                    <GitPullRequest className="h-4 w-4 shrink-0 text-emerald-500" />
+                    <GitPullRequest className="h-4 w-4 shrink-0 text-success" />
                     <span className="shrink-0 text-xs font-medium tabular-nums text-muted-foreground">#{item.number}</span>
                     <span className="truncate font-medium">{item.title}</span>
                     <span className="ml-auto shrink-0 text-xs text-muted-foreground">{item.projectName}</span>
@@ -233,7 +233,7 @@ function WorkingNow({ active, onSelectProject }: { active: ActiveRun[]; onSelect
               {/* Decorative dot + sr-only status (#695/U33): color alone reaches no screen reader. */}
               <span
                 aria-hidden
-                className={cn('h-2 w-2 shrink-0 rounded-full', run.readyForMerge ? 'bg-emerald-500' : 'animate-pulse bg-amber-500')}
+                className={cn('h-2 w-2 shrink-0 rounded-full', run.readyForMerge ? 'bg-success' : 'animate-pulse bg-warning')}
                 title={run.readyForMerge ? 'Ready for merge' : 'Building'}
               />
               <span className="sr-only">{run.readyForMerge ? 'Ready for merge' : 'Building'}: </span>
@@ -322,7 +322,7 @@ function ProjectsTable({ projects, onSelectProject }: { projects: ProjectStat[];
                     aria-hidden
                     className={cn(
                       'h-2 w-2 shrink-0 rounded-full',
-                      p.running ? 'animate-pulse bg-primary' : p.activated ? 'bg-emerald-500' : 'bg-muted-foreground',
+                      p.running ? 'animate-pulse bg-primary' : p.activated ? 'bg-success' : 'bg-muted-foreground',
                     )}
                     title={p.running ? 'Running' : p.activated ? 'Activated' : 'Not activated'}
                   />

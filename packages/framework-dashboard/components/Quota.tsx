@@ -5,6 +5,7 @@ import { useQuota } from '../lib/quota.js'
 import { usePreferences, updatePreferences } from '../lib/preferences.js'
 import { weekTicks, quotaTone, limitPercent, TONE_NOTE, type QuotaTone } from '../lib/quota-bar.js'
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card.js'
+import { Checkbox } from './ui/checkbox.js'
 import { cn } from '../lib/utils.js'
 
 // The usage bar (#960): one week-long track, so "am I ahead or behind?" is a glance rather than a
@@ -18,10 +19,10 @@ import { cn } from '../lib/utils.js'
 
 /** The bar's colour per tone. Fill and marker share a scale so the comparison reads at a glance. */
 const TONE_FILL: Record<QuotaTone, string> = {
-  under: 'bg-emerald-500',
-  near: 'bg-blue-500',
-  over: 'bg-orange-500',
-  full: 'bg-red-500',
+  under: 'bg-success',
+  near: 'bg-info',
+  over: 'bg-warning',
+  full: 'bg-danger',
 }
 
 /** The account's own week: the window the bar is about. */
@@ -221,11 +222,9 @@ export function Quota() {
         {view ? (
           <div className="space-y-1 border-t border-border pt-3">
             <label className="flex cursor-pointer items-center gap-1.5 text-sm">
-              <input
-                type="checkbox"
-                className="accent-[var(--color-primary)]"
+              <Checkbox
                 checked={preferences.autoPm ?? false}
-                onChange={e => updatePreferences({ autoPm: e.target.checked })}
+                onCheckedChange={checked => updatePreferences({ autoPm: checked })}
               />
               <span className="font-medium text-foreground">Spend what's left on the roadmap</span>
             </label>

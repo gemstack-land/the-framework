@@ -28,9 +28,9 @@ const LABEL: Record<FileChange['status'], string> = {
 }
 
 const TONE: Record<FileChange['status'], string> = {
-  untracked: 'text-green-400',
-  modified: 'text-amber-400',
-  deleted: 'text-red-400',
+  untracked: 'text-success',
+  modified: 'text-warning',
+  deleted: 'text-danger',
 }
 
 function ChangeRow({ projectId, runId, change }: { projectId: string; runId: string; change: FileChange }) {

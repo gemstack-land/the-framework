@@ -19,7 +19,7 @@ export function RunFeed({
   lost?: boolean
 }) {
   const lostBanner = lost && (
-    <div role="status" className="flex items-center gap-2 border-b border-border bg-amber-500/10 px-4 py-2 text-xs text-amber-600 dark:text-amber-400">
+    <div role="status" className="flex items-center gap-2 border-b border-border bg-warning/10 px-4 py-2 text-xs text-warning">
       <TriangleAlert className="h-3.5 w-3.5 shrink-0" aria-hidden />
       Live stream lost — reconnecting. The session keeps running; this view may be behind.
     </div>
