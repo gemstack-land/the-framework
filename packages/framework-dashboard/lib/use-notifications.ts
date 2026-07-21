@@ -70,7 +70,9 @@ const INTERVENTIONS: NotificationSpec<Intervention> = {
   label: item => {
     if (item.kind === 'awaiting') return item.title
     if (item.kind === 'unpushed') {
-      return `${item.title} — ${item.commits === 1 ? '1 commit' : `${item.commits ?? 0} commits`} not pushed`
+      return item.commits === undefined || item.commits === 0
+        ? `${item.title} — work not pushed`
+        : `${item.title} — ${item.commits === 1 ? '1 commit' : `${item.commits} commits`} not pushed`
     }
     return `#${item.number} ${item.title}`
   },

@@ -9,7 +9,7 @@ import { UsagePanel } from './UsagePanel.js'
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card.js'
 import { usePolled } from '../lib/use-async.js'
 import { cn } from '../lib/utils.js'
-import { formatDate } from '../lib/format-date.js'
+import { formatDateTime, formatRelative } from '../lib/format-date.js'
 import { ScrollArea } from './ui/scroll-area.js'
 
 // The Overview dashboard page (#471). What used to be a cramped, collapsible section in the
@@ -155,9 +155,12 @@ function NeedsYou({ items, onSelectProject }: { items: Intervention[]; onSelectP
                     <GitBranch className="h-4 w-4 shrink-0 text-sky-500" />
                     <span className="shrink-0 text-xs font-medium text-sky-500">Unpushed</span>
                     <span className="truncate font-medium">{item.title}</span>
-                    <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
-                      {item.commits === 1 ? '1 commit' : `${item.commits ?? 0} commits`}
-                    </span>
+                    {/* An unknown count says nothing rather than the contradictory "0 commits". */}
+                    {item.commits !== undefined && item.commits > 0 && (
+                      <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
+                        {item.commits === 1 ? '1 commit' : `${item.commits} commits`}
+                      </span>
+                    )}
                     <span className="ml-auto shrink-0 text-xs text-muted-foreground">{item.projectName}</span>
                   </button>
                 ) : (
@@ -269,7 +272,7 @@ function Backlog({ queue, onSelectProject }: { queue: ProjectQueue[]; onSelectPr
                   <span className="truncate" title={item.text}>{item.text}</span>
                 </li>
               ))}
-            {q.open > 3 && <li className="pl-5 text-xs text-muted-foreground/60">+{q.open - 3} more</li>}
+            {q.open > 3 && <li className="pl-5 text-xs text-muted-foreground">+{q.open - 3} more</li>}
           </ul>
         </li>
       ))}
@@ -324,8 +327,8 @@ function ProjectsTable({ projects, onSelectProject }: { projects: ProjectStat[];
               </td>
               <td className="py-2 pr-4 text-right tabular-nums">{p.runs}</td>
               <td className="py-2 pr-4 text-right tabular-nums">{p.openTodos || '—'}</td>
-              <td className="py-2 text-right text-xs text-muted-foreground">
-                {formatDate(p.lastActivityAt)}
+              <td className="py-2 text-right text-xs text-muted-foreground" title={formatDateTime(p.lastActivityAt, '')}>
+                {formatRelative(p.lastActivityAt)}
               </td>
             </tr>
           ))}
