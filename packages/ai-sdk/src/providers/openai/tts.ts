@@ -4,6 +4,7 @@ import type {
   TextToSpeechResult,
 } from '../../types.js'
 import type { OpenAIConfig } from './config.js'
+import { createOpenAIClient } from './client.js'
 
 // ─── TTS Adapter ─────────────────────────────────────────
 
@@ -14,14 +15,7 @@ export class OpenAITtsAdapter implements TextToSpeechAdapter {
 
   private async getClient(): Promise<any> {
     if (this.client) return this.client
-    const sdk = await import(/* @vite-ignore */ 'openai')
-    const OpenAI = sdk.default ?? sdk.OpenAI
-    this.client = new OpenAI({
-      apiKey: this.config.apiKey,
-      ...(this.config.baseUrl ? { baseURL: this.config.baseUrl } : {}),
-      ...(this.config.organization ? { organization: this.config.organization } : {}),
-      ...(this.config.defaultHeaders ? { defaultHeaders: this.config.defaultHeaders } : {}),
-    })
+    this.client = await createOpenAIClient(this.config)
     return this.client
   }
 
