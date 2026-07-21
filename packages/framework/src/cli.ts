@@ -71,10 +71,9 @@ import {
   formatWorktreeList,
 } from './worktrees.js'
 import { defaultWhat } from './preset-prompt.js'
-import { renderMaintainabilityPrompt } from './maintainability-preset.js'
 import { renderOnBeforeMergeablePrompt, type OnBeforeMergeableContext } from './on-before-mergeable-prompt.js'
 import { runPrompt } from './prompt-run.js'
-import { renderResearchPrompt } from './research-preset.js'
+import { presets } from './preset-catalog.js'
 
 /**
  * The default link shown for a live run: the generic Claude Code entry point,
@@ -1506,7 +1505,7 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
     const { userSystemPrompt, noBuiltinPrompt, eco } = promptConfig
     return settleRun(epilogue(isResearch ? 'research' : 'prompt session'), async () => {
       await runPrompt({
-        prompt: isResearch ? renderResearchPrompt(intent) : intent,
+        prompt: isResearch ? presets.research.render(intent) : intent,
         driver,
         cwd,
         onEvent,
@@ -1800,7 +1799,7 @@ function describeReview(r: RepoReview): string {
 function spawnMaintenanceRun(review: RepoReview, binPath: string, maxCost?: number): Promise<boolean> {
   // Scope the maintainability pass to the un-reviewed range so the agent knows what to look at.
   const what = review.reviewedSha ? `the changes in ${short(review.reviewedSha)}..${short(review.headSha)}` : 'the recent changes'
-  return spawnPromptRun(renderMaintainabilityPrompt(what), review.path, binPath, maxCost)
+  return spawnPromptRun(presets.maintainability.render(what), review.path, binPath, maxCost)
 }
 
 /**

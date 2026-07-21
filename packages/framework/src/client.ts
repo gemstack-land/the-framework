@@ -34,18 +34,7 @@ export {
 // What a preset can read beyond its params (#874), so the dashboard can render a preset against
 // the session it was launched from. Pure string work, like the renderers below.
 export { defaultWhat, DEFAULT_WHAT, type PresetRenderContext } from './preset-prompt.js'
-export { renderResearchPrompt } from './research-preset.js'
-export { renderReadabilityPrompt } from './readability-preset.js'
-export { renderMaintainabilityPrompt } from './maintainability-preset.js'
-export { renderSecurityAuditPrompt } from './security-audit-preset.js'
-export { renderUxPrompt } from './ux-preset.js'
-export { renderSuggestNewTicketsPrompt } from './suggest-new-tickets-preset.js'
-export { renderSuggestTicketsToWorkOnPrompt } from './suggest-tickets-to-work-on-preset.js'
-export { renderSpikeAndPlanPrompt } from './spike-and-plan-preset.js'
-export { renderQuickWinsPrompt } from './quick-wins-preset.js'
-export { renderMaintenancePrompt } from './maintenance-preset.js'
-export { renderTriageQuickPrompt, renderTriageConsensualPrompt } from './triage-presets.js'
+export { presets, type PresetKey } from './preset-catalog.js'
 // The preferences -> run options mapping (#858), shared with the daemon so an unattended run
 // starts with the same settings a launcher-started one would. Pure field logic, no Node imports.
 export { runOptionsFromPreferences, autopilotEnabled, preferencesFromFileConfig } from './run-options.js'
-export { renderMarketResearchPrompt } from './market-research-preset.js'

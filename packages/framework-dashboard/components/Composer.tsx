@@ -1,21 +1,7 @@
 import { forwardRef, useImperativeHandle, useMemo, useRef, useState, type FormEvent } from 'react'
 import type { ProjectSummary } from '@gemstack/framework'
 import type { PresetRenderContext } from '@gemstack/framework/client'
-import {
-  renderResearchPrompt,
-  renderReadabilityPrompt,
-  renderMaintainabilityPrompt,
-  renderSecurityAuditPrompt,
-  renderUxPrompt,
-  renderSuggestNewTicketsPrompt,
-  renderSuggestTicketsToWorkOnPrompt,
-  renderSpikeAndPlanPrompt,
-  renderQuickWinsPrompt,
-  renderMarketResearchPrompt,
-  renderMaintenancePrompt,
-  renderTriageQuickPrompt,
-  renderTriageConsensualPrompt,
-} from '@gemstack/framework/client'
+import { presets } from '@gemstack/framework/client'
 import {
   usePreferences,
   updatePreferences,
@@ -38,37 +24,37 @@ import { Button } from './ui/button.js'
 // The presets (#353/#433): each PREFILLS the editor with a rendered prompt and runs it verbatim
 // (`kind: 'prompt'`). Emptying the box falls back to a normal `build` run.
 const PRESETS: { id: string; label: string; render: (what?: string, ctx?: PresetRenderContext) => string; tooltip?: string }[] = [
-  { id: 'research', label: 'Research', render: renderResearchPrompt },
-  { id: 'readability', label: 'Readability', render: renderReadabilityPrompt },
-  { id: 'maintainability', label: 'Maintainability', render: renderMaintainabilityPrompt },
-  { id: 'security-audit', label: 'Security audit', render: renderSecurityAuditPrompt },
-  { id: 'ux', label: 'UX', render: renderUxPrompt },
-  { id: 'suggest-new-tickets', label: 'Suggest new tickets', render: renderSuggestNewTicketsPrompt },
+  { id: 'research', label: 'Research', render: presets.research.render },
+  { id: 'readability', label: 'Readability', render: presets.readability.render },
+  { id: 'maintainability', label: 'Maintainability', render: presets.maintainability.render },
+  { id: 'security-audit', label: 'Security audit', render: presets.securityAudit.render },
+  { id: 'ux', label: 'UX', render: presets.ux.render },
+  { id: 'suggest-new-tickets', label: 'Suggest new tickets', render: presets.suggestNewTickets.render },
   {
     id: 'suggest-tickets-to-work-on',
     label: 'Suggest tickets to work on',
-    render: renderSuggestTicketsToWorkOnPrompt,
+    render: presets.suggestTicketsToWorkOn.render,
     tooltip: 'Add tickets to queue (TODO_AGENTS.md)',
   },
-  { id: 'spike-and-plan', label: 'Spike & plan', render: renderSpikeAndPlanPrompt },
-  { id: 'quick-wins', label: 'Quick wins', render: renderQuickWinsPrompt },
-  { id: 'market-research', label: 'Market research', render: renderMarketResearchPrompt },
+  { id: 'spike-and-plan', label: 'Spike & plan', render: presets.spikeAndPlan.render },
+  { id: 'quick-wins', label: 'Quick wins', render: presets.quickWins.render },
+  { id: 'market-research', label: 'Market research', render: presets.marketResearch.render },
   {
     id: 'maintenance',
     label: 'Maintenance',
-    render: renderMaintenancePrompt,
+    render: presets.maintenance.render,
     tooltip: 'Queue maintainability + security work per codebase subset (TODO_AGENTS.md)',
   },
   {
     id: 'triage-quick',
     label: 'Do quick-win work',
-    render: renderTriageQuickPrompt,
+    render: presets.triageQuick.render,
     tooltip: 'Add `tickets/*.md` to queue (TODO_AGENTS.md), only quick-win and consensual tickets',
   },
   {
     id: 'triage-consensual',
     label: 'Do consensual work',
-    render: renderTriageConsensualPrompt,
+    render: presets.triageConsensual.render,
     tooltip: 'Add `tickets/*.md` to queue (TODO_AGENTS.md), only significant (no quick-wins) and consensual tickets',
   },
 ]

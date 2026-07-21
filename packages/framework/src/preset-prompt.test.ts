@@ -9,7 +9,7 @@ test('the default is a template, not a literal, so it can read the session (#874
   // The regression this guards: a `${{ }}` inside the default used to reach the prompt verbatim,
   // because the default was the one string never passed through the evaluator.
   assert.match(DEFAULT_WHAT, /^\$\{\{/)
-  assert.equal(preset.params[0].default, DEFAULT_WHAT)
+  assert.equal(preset.params[0]!.default, DEFAULT_WHAT)
   assert.equal(preset.render().includes('${{'), false)
 })
 
