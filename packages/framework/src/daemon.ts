@@ -9,7 +9,7 @@ import { defaultQuotaSource } from './dashboard/quota.js'
 import { startBackgroundServices, resumeSuspendedRuns } from './daemon-services.js'
 import { resolveDashboardBundle } from './dashboard/bundle.js'
 import { isActivated } from './project.js'
-import { addProject, listProjects } from './registry.js'
+import { addProject, ensureDaemonToken, listProjects } from './registry.js'
 import { JsonlTailer } from './jsonl-tail.js'
 
 /**
@@ -38,6 +38,17 @@ export const DAEMON_STATE_FILE = 'the-framework-daemon.json'
 /** The default dashboard port the daemon binds. Matches the per-run dashboard. */
 export const DEFAULT_DAEMON_PORT = 4200
 
+/** The default bind host (#1051): localhost only, so the daemon is unreachable off the machine. */
+export const DEFAULT_DAEMON_HOST = '127.0.0.1'
+
+/**
+ * True when `host` is a loopback address the browser reaches without leaving the machine (#1051).
+ * A bind-all (`0.0.0.0`, `::`) or a routable address is not, and gates behind the shared token.
+ */
+export function isLoopbackHost(host: string): boolean {
+  return host === 'localhost' || host === '::1' || host === '[::1]' || host.startsWith('127.')
+}
+
 /** What a running daemon writes so a later `framework` invocation can find it. */
 export interface DaemonState {
   /** The daemon process id. */
@@ -48,6 +59,8 @@ export interface DaemonState {
   url: string
   /** ISO timestamp the daemon started. */
   startedAt: string
+  /** The host the dashboard is bound to (#1051); absent in state files written before this shipped. */
+  host?: string
 }
 
 /** The `.the-framework/` directory for a workspace. */
@@ -94,7 +107,14 @@ export async function readDaemonState(env: NodeJS.ProcessEnv = process.env): Pro
     const raw = await readFile(daemonStatePath(env), 'utf8')
     const data = JSON.parse(raw) as Partial<DaemonState>
     if (typeof data.pid === 'number' && typeof data.port === 'number' && typeof data.url === 'string') {
-      return { pid: data.pid, port: data.port, url: data.url, startedAt: data.startedAt ?? '' }
+      return {
+        pid: data.pid,
+        port: data.port,
+        url: data.url,
+        startedAt: data.startedAt ?? '',
+        // #1051: only present once an upgraded daemon wrote it; an older file reads as no host.
+        ...(typeof data.host === 'string' ? { host: data.host } : {}),
+      }
     }
   } catch {
     // absent / unreadable / malformed -> treat as no daemon
@@ -196,6 +216,9 @@ export interface EnsureResult {
 export interface EnsureDaemonOptions {
   /** Port to bind when spawning. Default {@link DEFAULT_DAEMON_PORT}. */
   port?: number
+  /** Host to bind when spawning (#1051). Default {@link DEFAULT_DAEMON_HOST}; a non-loopback address
+   * generates and requires the shared token. */
+  host?: string
   /** How long to wait for a freshly spawned daemon to report itself, ms. Default 5000. */
   timeoutMs?: number
   /** The CLI entry script to re-invoke for the child. Default `process.argv[1]`. */
@@ -216,7 +239,10 @@ export async function ensureDaemon(cwd: string, opts: EnsureDaemonOptions = {}):
   if (existing) return { state: existing, alreadyRunning: true }
 
   const port = opts.port ?? DEFAULT_DAEMON_PORT
-  spawnDetached(resolveSpawnBin(opts.binPath), ['--daemon-serve', '--cwd', cwd, '--port', String(port)])
+  const args = ['--daemon-serve', '--cwd', cwd, '--port', String(port)]
+  // #1051: forward a non-loopback bind to the detached child, which generates the token there.
+  if (opts.host !== undefined) args.push('--host', opts.host)
+  spawnDetached(resolveSpawnBin(opts.binPath), args)
 
   const state = await waitForDaemon(opts.env, opts.timeoutMs ?? 5000)
   if (!state) throw new Error('the daemon did not come up in time')
@@ -270,6 +296,9 @@ export class EventTailer extends JsonlTailer<FrameworkEvent> {}
 export interface RunDaemonOptions {
   /** Port to bind. Default {@link DEFAULT_DAEMON_PORT}; pass `0` for an ephemeral port. */
   port?: number
+  /** Host to bind (#1051). Default {@link DEFAULT_DAEMON_HOST}; a non-loopback address generates and
+   * requires the shared token, and every route is then gated behind it. */
+  host?: string
   /** Shut the daemon down when this aborts (in addition to SIGINT/SIGTERM). For tests. */
   signal?: AbortSignal
   /** The CLI entry script to re-invoke for a dashboard-started run (#345). Default `process.argv[1]`. */
@@ -292,7 +321,12 @@ export interface RunDaemonOptions {
  */
 export async function runDaemon(cwd: string, opts: RunDaemonOptions = {}): Promise<void> {
   const port = opts.port ?? DEFAULT_DAEMON_PORT
+  const host = opts.host ?? DEFAULT_DAEMON_HOST
   const env = opts.env ?? process.env
+  // #1051: a non-loopback bind reaches the network, where a daemon that spawns processes is RCE for
+  // anyone who finds the port, so generate + persist the shared token the request guard requires. A
+  // loopback bind needs none, so the local zero-config path stays byte-identical.
+  const token = isLoopbackHost(host) ? undefined : await ensureDaemonToken(undefined, env)
   // Steering (#344): the daemon owns no run, so its Stop button and choice picks
   // append to `.the-framework/control.jsonl`; the live run tails that file. Appends
   // are best-effort — a full disk must not take the dashboard down with it.
@@ -326,11 +360,13 @@ export async function runDaemon(cwd: string, opts: RunDaemonOptions = {}): Promi
   // long-lived meter the usage panel draws, and a second poller would double a rate-limited read.
   const quota = defaultQuotaSource()
   const dashboard: Dashboard = await startDashboard({
+    host,
     port,
     quota,
     onStart: runtime.onStart,
     onAddProject: runtime.onAddProject,
     preview: runtime.preview,
+    ...(token ? { token } : {}),
     ...(clientBundleDir ? { clientBundleDir } : {}),
   })
 
@@ -339,7 +375,7 @@ export async function runDaemon(cwd: string, opts: RunDaemonOptions = {}): Promi
   let selfHeal: DaemonStateHeartbeat | undefined
   try {
     const actualPort = Number(new URL(dashboard.url).port) || port
-    const state: DaemonState = { pid: process.pid, port: actualPort, url: dashboard.url, startedAt: new Date().toISOString() }
+    const state: DaemonState = { pid: process.pid, port: actualPort, host, url: dashboard.url, startedAt: new Date().toISOString() }
     await writeDaemonState(state, env)
     opts.onListening?.(state)
     selfHeal = startDaemonStateHeartbeat(state, env, opts.heartbeatMs ?? DAEMON_STATE_HEARTBEAT_MS)

@@ -54,11 +54,11 @@ import type { RecordMessage } from './await-gate.js'
 import { preflight } from './preflight.js'
 import { RunStore, currentBranch, nodeStoreFs, renameRunBranch, runBranchName, type StoreFs } from './store/index.js'
 import { materializePresets } from './presets.js'
-import { daemonStatus, ensureDaemon, registerHomeProject, runDaemon, stopDaemon, DEFAULT_DAEMON_PORT } from './daemon.js'
+import { daemonStatus, ensureDaemon, isLoopbackHost, registerHomeProject, runDaemon, stopDaemon, DEFAULT_DAEMON_HOST, DEFAULT_DAEMON_PORT } from './daemon.js'
 import { resetControl, watchControl, type ControlWatcher } from './control.js'
 import { RunMessageQueue } from './run-messages.js'
 import { nodeGitRunner } from './project.js'
-import { listProjects, readPreferences } from './registry.js'
+import { ensureDaemonToken, listProjects, readDaemonToken, readPreferences } from './registry.js'
 import { startConsumptionGuard } from './consumption-guard.js'
 import {
   planMaintenanceSweep,
@@ -235,6 +235,10 @@ Options:
   --dokploy-url <url>    Dokploy instance URL (required for --deploy dokploy).
   --dokploy-app <id>     Dokploy application id (required for --deploy dokploy).
   --port <n>             Dashboard port (default: 4200); with the relay, the relay port (4488).
+  --host <addr>          Daemon bind address (default: 127.0.0.1, localhost only). A non-loopback
+                         address (e.g. 0.0.0.0) exposes the daemon to your network and generates a
+                         shared token; the printed URL carries it, and any request without it gets
+                         401. Exposing a process spawner to the network is a security decision (#806).
   --no-dashboard         Do not start the localhost dashboard.
   --share <relay-url>    Publish this session to a relay (from "framework relay") so
                          teammates can watch it live; prints the shareable URL.
@@ -326,6 +330,9 @@ export interface CliOptions {
   servePath?: string | undefined
   sandbox?: 'local' | 'docker' | undefined
   port?: number
+  /** `--host <addr>` (#1051): the daemon's bind address. Default loopback; a non-loopback address
+   * exposes the daemon to the network and gates it behind the generated shared token. */
+  host?: string | undefined
   dashboard: boolean
   relayServe: boolean
   share?: string | undefined
@@ -601,6 +608,9 @@ export function parseArgs(argv: string[]): CliOptions {
         if (n !== undefined) opts.port = n
         break
       }
+      case '--host':
+        opts.host = argv[++i]
+        break
       default:
         if (arg.startsWith('-')) opts.error = `unknown option: ${arg}`
         else words.push(arg)
@@ -1171,7 +1181,10 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
   // `--daemon-serve` is the detached child's own entry: it *is* the persistent dashboard,
   // serving until signalled. Internal — the background `--daemon` path spawns it (#456).
   if (opts.daemonServe) {
-    await runDaemon(opts.cwd ?? process.cwd(), opts.port !== undefined ? { port: opts.port } : {})
+    await runDaemon(opts.cwd ?? process.cwd(), {
+      ...(opts.port !== undefined ? { port: opts.port } : {}),
+      ...(opts.host !== undefined ? { host: opts.host } : {}),
+    })
     return 0
   }
 
@@ -1707,17 +1720,25 @@ async function runBuild(opts: CliOptions, io: CliIO): Promise<number> {
 async function runForegroundDaemonCmd(opts: CliOptions, io: CliIO): Promise<number> {
   const cwd = opts.cwd ?? process.cwd()
   const port = opts.port ?? DEFAULT_DAEMON_PORT
+  const host = opts.host
   const existing = await daemonStatus()
   if (existing) {
     io.out(`◆ dashboard already running in the background: ${existing.url}`)
     io.out('  Stop it with `framework stop`, or open the URL above.')
     return 0
   }
+  // #1051: pre-generate the shared token for a non-loopback bind so onListening (sync) can print
+  // the reachable URL; runDaemon reuses the same persisted token.
+  const token = host !== undefined && !isLoopbackHost(host) ? await ensureDaemonToken() : undefined
   try {
     await runDaemon(cwd, {
       port,
+      ...(host !== undefined ? { host } : {}),
       onListening: state => {
         io.out(`◆ dashboard running: ${state.url}`)
+        if (!isLoopbackHost(state.host ?? DEFAULT_DAEMON_HOST)) {
+          printNonLoopbackAccess(io, state.host ?? DEFAULT_DAEMON_HOST, state.url, token)
+        }
         io.out('  Ctrl+C to stop. Server logs stream below.')
       },
     })
@@ -1726,6 +1747,20 @@ async function runForegroundDaemonCmd(opts: CliOptions, io: CliIO): Promise<numb
     return 1
   }
   return 0
+}
+
+/**
+ * The loud one-line warning and the token-bearing URL printed on any non-loopback daemon bind
+ * (#1051). A daemon that spawns processes is code execution for anyone who reaches the port, and
+ * the shared token is the only guard, so this says so before the daemon is left running. The bound
+ * host is a bind-all like `0.0.0.0`, so the user swaps it for the machine's actual reachable
+ * address (a Tailscale/LAN hostname); the token rides the URL for the first hop, then the cookie.
+ */
+function printNonLoopbackAccess(io: CliIO, host: string, url: string, token: string | undefined): void {
+  io.err(`⚠ SECURITY: bound to ${host} (non-loopback). This exposes code execution to your network; the shared token is the only guard (#1051).`)
+  if (!token) return
+  io.out(`  Open with the token (swap ${host} for this machine's reachable address, e.g. a Tailscale hostname):`)
+  io.out(`    ${url}/?token=${token}`)
 }
 
 /**
@@ -1739,7 +1774,7 @@ async function ensureDaemonCmd(opts: CliOptions, io: CliIO): Promise<number> {
   const port = opts.port ?? DEFAULT_DAEMON_PORT
   let result
   try {
-    result = await ensureDaemon(cwd, { port })
+    result = await ensureDaemon(cwd, { port, ...(opts.host !== undefined ? { host: opts.host } : {}) })
   } catch (err) {
     io.err(`could not start the dashboard daemon (${errorMessage(err)}).`)
     return 1
@@ -1751,6 +1786,10 @@ async function ensureDaemonCmd(opts: CliOptions, io: CliIO): Promise<number> {
 
   const { state, alreadyRunning } = result
   io.out(`◆ dashboard ${alreadyRunning ? 'already running' : 'started'}: ${state.url}`)
+  // #1051: warn + print the token URL when the daemon is actually bound non-loopback. Keyed off the
+  // host that is bound, not the flag, so re-reporting an already-running loopback daemon stays quiet.
+  const boundHost = state.host ?? DEFAULT_DAEMON_HOST
+  if (!isLoopbackHost(boundHost)) printNonLoopbackAccess(io, boundHost, state.url, await readDaemonToken())
   io.out('')
   io.out('Type a prompt on the dashboard to start a session, or use:')
   io.out('  framework "<what to build>"   Build (streams to the dashboard)')
