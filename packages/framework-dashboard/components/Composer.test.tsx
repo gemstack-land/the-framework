@@ -77,6 +77,8 @@ describe('Composer (#721)', () => {
     expect(screen.getByRole('button', { name: /Presets/ })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Session options' })).toBeTruthy()
     expect(screen.getByTitle(/Agent: Claude Code/)).toBeTruthy() // the agent/model trigger
+    // The submit button appears only once the prompt has text (#721).
+    fireEvent.change(screen.getByLabelText('prompt'), { target: { value: 'x' } })
     expect(screen.getByRole('button', { name: /Start session/ })).toBeTruthy()
   })
 
@@ -132,11 +134,12 @@ describe('Composer (#721)', () => {
     expect(screen.getByText(/only applies while Post-merge cleanup is on/)).toBeTruthy()
   })
 
-  test('the submit button is disabled until the editor has text, then fires onSubmit', () => {
+  test('the submit button is hidden until the editor has text, then appears and fires onSubmit', () => {
     const { onSubmit } = renderComposer()
-    const submit = screen.getByRole('button', { name: 'Send' })
-    expect(submit.hasAttribute('disabled')).toBe(true)
+    // Empty prompt: nothing to send, so the button is not in the DOM (#721).
+    expect(screen.queryByRole('button', { name: 'Send' })).toBeNull()
     fireEvent.change(screen.getByLabelText('prompt'), { target: { value: 'ship it' } })
+    const submit = screen.getByRole('button', { name: 'Send' })
     expect(submit.hasAttribute('disabled')).toBe(false)
     fireEvent.click(submit)
     expect(onSubmit).toHaveBeenCalledWith('ship it', 'build', { newSession: false })

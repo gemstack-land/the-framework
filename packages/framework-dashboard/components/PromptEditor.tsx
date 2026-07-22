@@ -313,18 +313,29 @@ export const PromptEditor = forwardRef<PromptEditorHandle, PromptEditorProps>(fu
     editor?.setEditable(!disabled)
   }, [editor, disabled])
 
+  // The placeholder is absolutely positioned, so it must share the editor's padding to sit exactly
+  // where the first typed character will (#721). The full composer breathes with more room; the
+  // compact navbar row stays tight.
+  const pad = compact ? 'px-2 py-1.5' : 'px-4 pt-4 pb-3'
+  const placeholderInset = compact ? 'left-2 top-1.5' : 'left-4 top-4'
   return (
     <div className="relative">
       <EditorContent
         editor={editor}
-        className={`w-full overflow-y-auto rounded-md border border-border bg-transparent px-2 py-1.5 text-sm focus-within:ring-2 focus-within:ring-[var(--color-primary)] ${
+        className={`w-full overflow-y-auto bg-transparent text-sm ${pad} ${
           // The resting height is deliberately short (#756): the editor grows with its content up
           // to max-h, so the tall empty box was reserving room for text nobody had typed yet.
-          compact ? 'max-h-32 min-h-8' : 'max-h-64 min-h-[2.75rem]'
+          // Compact (navbar) keeps its own border+ring; the full composer's border lives on the
+          // surrounding composer box (#721) so the editor and its controls read as one surface.
+          compact
+            ? 'max-h-32 min-h-8 rounded-md border border-border focus-within:ring-2 focus-within:ring-[var(--color-primary)]'
+            : 'max-h-64 min-h-[2.75rem]'
         }`}
       />
       {isEmpty && (
-        <span className="pointer-events-none absolute left-2 top-1.5 text-sm text-muted-foreground">{placeholder}</span>
+        <span className={`pointer-events-none absolute text-sm text-muted-foreground ${placeholderInset}`}>
+          {placeholder}
+        </span>
       )}
     </div>
   )
