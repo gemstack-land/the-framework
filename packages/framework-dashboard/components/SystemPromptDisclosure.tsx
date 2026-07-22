@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { ChevronDown } from 'lucide-react'
 import { composeRunSystem, type EcoOptions } from '@gemstack/framework/client'
-import { DisclosureToggle } from './DisclosureToggle.js'
+import { Popover, PopoverTrigger, PopoverContent } from './ui/popover.js'
 import { Checkbox } from './ui/checkbox.js'
 import { cn } from '../lib/utils.js'
 
@@ -54,8 +54,6 @@ export function SystemPromptDisclosure({
   user?: string | null | undefined
   busy: boolean
 }) {
-  const [open, setOpen] = useState(false)
-
   const text = composeRunSystem({
     antiLazyPill: !disabled,
     ...(transparent ? { transparent: true } : {}),
@@ -74,8 +72,14 @@ export function SystemPromptDisclosure({
   const fullyOn = antiLazyOn && integrationOn
 
   return (
-    <div className="mt-3 text-xs">
-      <DisclosureToggle open={open} onToggle={() => setOpen(o => !o)}>
+    // A dropdown, matching the Context / preset menus on this row (#1046). No top margin: the
+    // launcher's "In play" row owns the spacing.
+    <Popover>
+      <PopoverTrigger
+        className={cn(
+          'flex items-center gap-1.5 rounded-md px-2 py-1 text-xs text-muted-foreground outline-none hover:text-foreground',
+        )}
+      >
         {/* A status dot, like every other state in the app. This was a ✅/❌ pair, which sat at
             emoji size and colour next to 12px text and matched nothing else on the page. */}
         <span
@@ -84,10 +88,10 @@ export function SystemPromptDisclosure({
         />
         Enhanced System Prompt
         <span className="sr-only">{fullyOn ? ' (fully enabled)' : ' (not fully enabled)'}</span>
-      </DisclosureToggle>
-
-      {open && (
-        <div className="mt-2 space-y-2 rounded border border-border p-3 text-muted-foreground">
+        <ChevronDown className="h-3.5 w-3.5 opacity-70" aria-hidden />
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-[min(42rem,calc(100vw-2rem))] text-xs text-muted-foreground">
+        <div className="space-y-2">
           <p>
             The Framework wraps your prompt with a so-called &quot;system prompt&quot; (it&apos;s just a prompt wrapping
             your prompt) in order to enable long-running autonomous agents.
@@ -129,7 +133,7 @@ export function SystemPromptDisclosure({
             </p>
           )}
         </div>
-      )}
-    </div>
+      </PopoverContent>
+    </Popover>
   )
 }

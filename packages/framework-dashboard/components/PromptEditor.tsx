@@ -7,6 +7,7 @@ import type { Editor, Range } from '@tiptap/core'
 import { Token, MACRO_TOKENS, ACTION_TOKENS, type TokenSpec } from './prompt-editor/tokens.js'
 import { makeTrigger } from './prompt-editor/suggestion.js'
 import { tokenizeEditorDoc } from './prompt-editor/tokenize.js'
+import { ScrollArea } from './ui/scroll-area.js'
 import type { SuggestionItem } from './prompt-editor/SuggestionList.js'
 // The same entry the Presets button renders: the `/` menu is the other face of that one list,
 // so it reads the shape rather than restating it structurally.
@@ -338,18 +339,19 @@ export const PromptEditor = forwardRef<PromptEditorHandle, PromptEditorProps>(fu
   const placeholderInset = compact ? 'left-2 top-1.5' : 'left-4 top-4'
   return (
     <div className="relative">
-      <EditorContent
-        editor={editor}
-        className={`w-full overflow-y-auto bg-transparent text-sm ${pad} ${
-          // The resting height is deliberately short (#756): the editor grows with its content up
-          // to max-h, so the tall empty box was reserving room for text nobody had typed yet.
-          // Compact (navbar) keeps its own border+ring; the full composer's border lives on the
-          // surrounding composer box (#721) so the editor and its controls read as one surface.
-          compact
-            ? 'max-h-32 min-h-8 rounded-md border border-border focus-within:ring-2 focus-within:ring-[var(--color-primary)]'
-            : 'max-h-64 min-h-[2.75rem]'
-        }`}
-      />
+      {/* The scroll rides a ScrollArea (#1046) so a long prompt shows our thin overlay bar, not the
+          OS one. The resting height is deliberately short (#756): the editor grows with its content
+          up to max-h, so the tall empty box no longer reserves room for text nobody has typed.
+          Compact (navbar) keeps its own border+ring; the full composer's border lives on the
+          surrounding composer box (#721) so the editor and its controls read as one surface. */}
+      <ScrollArea
+        className={compact ? 'rounded-md border border-border focus-within:ring-2 focus-within:ring-[var(--color-primary)]' : ''}
+        // The height cap goes on the viewport (the scroller), not the Root — a Root max-h cannot be
+        // resolved by the viewport's height, so the editor would grow instead of scrolling.
+        viewportClassName={compact ? 'max-h-32 min-h-8' : 'max-h-64 min-h-[2.75rem]'}
+      >
+        <EditorContent editor={editor} className={`w-full bg-transparent text-sm ${pad}`} />
+      </ScrollArea>
       {isEmpty && (
         <span className={`pointer-events-none absolute text-sm text-muted-foreground ${placeholderInset}`}>
           {placeholder}

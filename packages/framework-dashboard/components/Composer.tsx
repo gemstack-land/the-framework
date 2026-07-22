@@ -1,4 +1,4 @@
-import { forwardRef, useImperativeHandle, useMemo, useRef, useState, type FormEvent } from 'react'
+import { forwardRef, useImperativeHandle, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { ArrowUp, Loader2 } from 'lucide-react'
 import type { ProjectSummary } from '@gemstack/framework'
 import { AGENTS, AGENT_LABELS, LAUNCHER_PRESETS, type AgentName } from '@gemstack/framework/client'
@@ -104,8 +104,15 @@ export const Composer = forwardRef<ComposerHandle, {
    *  that session by default, instead of the whole codebase. Absent at the launcher, where no
    *  session exists yet. */
   sessionName?: string | undefined
+  /** A control the launcher hangs in the composer control row (#1046): the Context picker. Only the
+   *  launcher passes one; in-session there is no launcher row. */
+  contextControl?: ReactNode
+  /** What the launcher puts at the start of the "In play" row (#1046): the Enhanced System Prompt
+   *  disclosure, so it shares that row with the resolved-options strip. Its own expandable panel
+   *  drops full-width below. Only the launcher passes one. */
+  resolvedRowStart?: ReactNode
 }>(function Composer(
-  { files, addContext, removeContext, onSubmit, onPromptChange, onPreset, busy, submitLabel, submitBusyLabel, placeholder, compact = false, showAgentModel = true, inSession = false, sessionName },
+  { files, addContext, removeContext, onSubmit, onPromptChange, onPreset, busy, submitLabel, submitBusyLabel, placeholder, compact = false, showAgentModel = true, inSession = false, sessionName, contextControl, resolvedRowStart },
   ref,
 ) {
   const [prompt, setPrompt] = useState('')
@@ -267,33 +274,33 @@ export const Composer = forwardRef<ComposerHandle, {
       busy={busy}
     />
   )
-  const secondaryControls = (
-    <>
-      {/* Presets get a visible surface (#948): load, create and delete in one menu, instead of
-          loading only behind typing `/` and deleting off in the options gear. Not in the compact
-          row, which has no room and no create panel. */}
-      {!compact && (
-        <PresetsMenu
-          presets={presets}
-          customPresets={customPresets}
-          projectPresets={projectPresets}
-          busy={busy}
-          onLoad={loadPresetFromMenu}
-          onNew={() => setAddingPreset(true)}
-          onDelete={id => updatePreferences({ customPresets: customPresets.filter(p => p.id !== id) })}
-          onDeleteProject={id => saveProjectPresetList(projectPresets.filter(p => p.id !== id))}
-        />
-      )}
-      <OptionsMenu
-        // In-session (#833): the run options were baked into the session at spawn, so offering
-        // them here only rewrote the next session's defaults while reading as session state.
-        options={inSession ? [] : mainOptions}
-        ecoOptions={inSession ? [] : ecoOptions}
-        showEco={!inSession && eco && !ecoDisabled}
-        busy={busy}
-        {...(inSession ? { label: 'Preferences' } : {})}
-      />
-    </>
+  {/* Presets get a visible surface (#948): load, create and delete in one menu, instead of
+      loading only behind typing `/` and deleting off in the options gear. Not in the compact
+      row, which has no room and no create panel. */}
+  const presetsEl = !compact && (
+    <PresetsMenu
+      presets={presets}
+      customPresets={customPresets}
+      projectPresets={projectPresets}
+      busy={busy}
+      onLoad={loadPresetFromMenu}
+      onNew={() => setAddingPreset(true)}
+      onDelete={id => updatePreferences({ customPresets: customPresets.filter(p => p.id !== id) })}
+      onDeleteProject={id => saveProjectPresetList(projectPresets.filter(p => p.id !== id))}
+    />
+  )
+  // The options gear sits with the agent/model select and submit at the end of the row (#1046), so
+  // the three run controls read as one cluster.
+  const optionsGearEl = (
+    <OptionsMenu
+      // In-session (#833): the run options were baked into the session at spawn, so offering
+      // them here only rewrote the next session's defaults while reading as session state.
+      options={inSession ? [] : mainOptions}
+      ecoOptions={inSession ? [] : ecoOptions}
+      showEco={!inSession && eco && !ecoDisabled}
+      busy={busy}
+      {...(inSession ? { label: 'Preferences' } : {})}
+    />
   )
 
   // The submit is a single icon button that only shows once the prompt has text (#721): an empty
@@ -319,7 +326,9 @@ export const Composer = forwardRef<ComposerHandle, {
         'h-8 w-8 shrink-0 transition-[margin,opacity,transform] duration-150 ease-out',
         hasPrompt
           ? 'ml-0 translate-x-0 opacity-100 disabled:opacity-100'
-          : 'pointer-events-none -ml-8 translate-x-2 opacity-0 disabled:opacity-0',
+          // -2.375rem = the button's own w-8 (2rem) plus the row's gap-1.5 (0.375rem), so a hidden
+          // submit leaves the gear flush to the box edge — bottom and right padding stay equal.
+          : 'pointer-events-none -ml-[2.375rem] translate-x-2 opacity-0 disabled:opacity-0',
       )}
     >
       {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowUp className="h-4 w-4" />}
@@ -333,7 +342,7 @@ export const Composer = forwardRef<ComposerHandle, {
       <div className="flex items-start gap-1.5">
         <div className="min-w-0 flex-1">{editorEl}</div>
         {agentModelEl}
-        {secondaryControls}
+        {optionsGearEl}
         {submitButton}
       </div>
     )
@@ -346,21 +355,28 @@ export const Composer = forwardRef<ComposerHandle, {
           borderless here (its border moved out to this box); controls sit tucked below it. */}
       <div className="rounded-lg border border-border bg-transparent focus-within:border-muted-foreground/40">
         {editorEl}
-        {/* Run controls (#649/#650/#654/#668): presets and the options gear at the start, then the
-            agent+model select paired with submit at the end. */}
+        {/* Run controls (#649/#650/#654/#668): presets then the Context picker at the start (#1046),
+            the agent+model select, the options gear and submit clustered at the end. */}
         <div className="flex flex-wrap items-center gap-1.5 px-2 pb-2">
-          {secondaryControls}
+          {presetsEl}
+          {contextControl}
           <div className="ml-auto flex items-center gap-1.5">
             {agentModelEl}
+            {optionsGearEl}
             {submitButton}
           </div>
         </div>
       </div>
 
-      {/* What the session resolves to, without opening the gear (#842). Off in the compact row
-          above, which is one line on purpose, and in-session (#833), where it described the
-          *global* options rather than the ones this session actually runs with. */}
-      {!inSession && <ResolvedOptions options={mainOptions} sources={sources} fileConfig={fileConfig} />}
+      {/* The "In play" row (#842/#1046): the Enhanced System Prompt dropdown at the start, the
+          resolved-options strip at the end. Off in the compact row (one line) and in-session
+          (#833), where the strip described the *global* options rather than this session's. */}
+      {!inSession && (
+        <div className="mt-2 flex items-center justify-between gap-3">
+          {resolvedRowStart}
+          <ResolvedOptions options={mainOptions} sources={sources} fileConfig={fileConfig} />
+        </div>
+      )}
 
       {addingPreset && (
         <PresetCreatePanel

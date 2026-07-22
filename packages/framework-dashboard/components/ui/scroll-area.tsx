@@ -22,17 +22,27 @@ export function ScrollArea({
   className,
   children,
   viewportRef,
+  viewportClassName,
   ...props
 }: ScrollAreaPrimitive.Root.Props & {
   /** The scrolled element, for a rail that scrolls itself (ViewsRail, ChoicesRail). */
   viewportRef?: Ref<HTMLDivElement>
+  /** Extra classes on the viewport — where the height cap belongs when the Root has no definite
+   *  height. A `max-h-*` on the Root only caps the box; the viewport's `h-full` cannot resolve
+   *  against a parent's max-height, so the content grows instead of scrolling. Put the cap here. */
+  viewportClassName?: string
 }) {
   return (
     <ScrollAreaPrimitive.Root data-slot="scroll-area" className={cn('relative', className)} {...props}>
       <ScrollAreaPrimitive.Viewport
         ref={viewportRef}
         data-slot="scroll-area-viewport"
-        className="size-full rounded-[inherit] outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)]"
+        className={cn(
+          'w-full rounded-[inherit] outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)]',
+          // Default: fill a definite-height Root. A caller that caps the viewport (a dropdown, the
+          // editor) passes its own `max-h-*` here instead of relying on the Root.
+          viewportClassName ?? 'h-full',
+        )}
       >
         {children}
       </ScrollAreaPrimitive.Viewport>

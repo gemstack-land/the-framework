@@ -29,7 +29,7 @@ export function ResolvedOptions({
   ]
   if (!chips.length) return null
   return (
-    <div className="mt-1.5 flex flex-wrap items-center gap-1 text-[11px] text-muted-foreground">
+    <div className="flex flex-wrap items-center gap-1 text-[11px] text-muted-foreground">
       <span className="mr-0.5">In play:</span>
       {chips.map(chip => (
         <span

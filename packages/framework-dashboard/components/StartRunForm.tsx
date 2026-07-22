@@ -7,10 +7,8 @@ import { usePreferences, updatePreferences, autopilotEnabled } from '../lib/pref
 import { useStartRun } from '../lib/use-start-run.js'
 import { useLoaded } from '../lib/use-async.js'
 import { Composer, type ComposerHandle } from './Composer.js'
-import { ContextFiles } from './ContextFiles.js'
-import { DisclosureToggle } from './DisclosureToggle.js'
+import { ContextMenu } from './ContextMenu.js'
 import { SystemPromptDisclosure } from './SystemPromptDisclosure.js'
-import { Checkbox } from './ui/checkbox.js'
 
 // Start a run in the selected project (#405): the one write that goes through the daemon's own
 // `startRun` (with its one-run-per-project busy guard), posted over Telefunc. The editor + control
@@ -53,7 +51,6 @@ export function StartRunForm({
   // Context selector (#439/#314): the agent can reach every registered repo, so ticking a subset
   // narrows its focus — the picked paths become one `Context:` line in the system prompt.
   const projects = useLoaded<ProjectSummary[]>(onProjects, [], [])
-  const [showContext, setShowContext] = useState(false)
   // The repo's own SYSTEM.md (#872): composition takes it as `user`, but reading it is
   // Node-bound, so without this read the "entire system prompt" preview under-reported.
   const userSystemPrompt = useLoaded<string | null>(() => onSystemPromptUser(projectId), null, [projectId])
@@ -91,8 +88,28 @@ export function StartRunForm({
     }
   }
 
+  // The Enhanced System Prompt dropdown (#863) rides the start of the "In play" row (#1046).
+  const systemPromptEl = (
+    <SystemPromptDisclosure
+      prompt={prompt}
+      disabled={vanilla}
+      onDisabledChange={value => updatePreferences({ vanilla: value })}
+      transparent={transparent}
+      onTransparentChange={value => updatePreferences({ transparent: value })}
+      // Read off the options this form will really send, so the preview cannot claim a
+      // smaller prompt than the run gets (#863 asks for the entire one). The browser
+      // section is Claude-only, and that rule lives in the mapping rather than here.
+      browser={options.browser ?? false}
+      autopilot={autopilot}
+      eco={options.eco}
+      context={[...context]}
+      user={userSystemPrompt}
+      busy={busy}
+    />
+  )
+
   return (
-    <form onSubmit={e => e.preventDefault()} className="border-b border-border p-3">
+    <form onSubmit={e => e.preventDefault()} className="p-3">
       <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Start a session</div>
       <Composer
         ref={composerRef}
@@ -117,69 +134,23 @@ export function StartRunForm({
         busy={busy}
         submitLabel="Start session"
         submitBusyLabel="Starting…"
+        contextControl={
+          <ContextMenu
+            otherProjects={otherProjects}
+            context={context}
+            contextFiles={contextFiles}
+            summary={contextSummary}
+            busy={busy}
+            onToggle={toggleContext}
+          />
+        }
+        resolvedRowStart={systemPromptEl}
       />
 
       {/* Feedback right where the action is (#948): the error used to render below the (possibly
           expanded, tall) Context disclosure, past the fold from the Start button that caused it. */}
       {error && <p role="alert" className="mt-2 text-xs text-danger">{error}</p>}
       {note && !error && <p role="status" className="mt-2 text-xs text-muted-foreground">{note}</p>}
-
-      <SystemPromptDisclosure
-        prompt={prompt}
-        disabled={vanilla}
-        onDisabledChange={value => updatePreferences({ vanilla: value })}
-        transparent={transparent}
-        onTransparentChange={value => updatePreferences({ transparent: value })}
-        // Read off the options this form will really send, so the preview cannot claim a
-        // smaller prompt than the run gets (#863 asks for the entire one). The browser
-        // section is Claude-only, and that rule lives in the mapping rather than here.
-        browser={options.browser ?? false}
-        autopilot={autopilot}
-        eco={options.eco}
-        context={[...context]}
-        user={userSystemPrompt}
-        busy={busy}
-      />
-
-      {/* Always rendered (#948): hiding the whole section for a single-project setup also hid
-          the only place that teaches the `#` / Files-tab focus flow. */}
-      <div className="mt-3 text-xs text-muted-foreground">
-          <DisclosureToggle open={showContext} onToggle={() => setShowContext(s => !s)}>
-            Context{contextSummary && <span className="text-primary"> · {contextSummary}</span>}
-          </DisclosureToggle>
-          {showContext && (
-            <div className="mt-2 grid grid-cols-1 gap-4 rounded border border-border p-3 sm:grid-cols-2">
-              {/* Projects: repo checkboxes. The agent can still reach every repo; ticking some just
-                  narrows its focus (kept in the heading's tooltip). */}
-              <div>
-                <p className="mb-1.5 text-muted-foreground/80" title="The agent can still reach every repo; ticking some just narrows its focus.">
-                  Projects
-                </p>
-                {otherProjects.length > 0 ? (
-                  <div className="flex flex-col gap-1">
-                    {otherProjects.map(p => (
-                      <label key={p.id} className="flex cursor-pointer items-center gap-1.5" title={p.path}>
-                        <Checkbox checked={context.has(p.path)} onCheckedChange={() => toggleContext(p.path)} disabled={busy} />
-                        <span className="truncate">{p.name}</span>
-                      </label>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-muted-foreground/60">No other repos to add.</p>
-                )}
-              </div>
-              {/* Files picked via a `#` mention or the file tree (#661): removable with an X. */}
-              <div>
-                <p className="mb-1 text-muted-foreground/80">Files</p>
-                {contextFiles.length > 0 ? (
-                  <ContextFiles files={contextFiles} onRemove={toggleContext} busy={busy} />
-                ) : (
-                  <p className="text-muted-foreground/60">None yet — add with # or the Files tab.</p>
-                )}
-              </div>
-            </div>
-          )}
-      </div>
     </form>
   )
 }

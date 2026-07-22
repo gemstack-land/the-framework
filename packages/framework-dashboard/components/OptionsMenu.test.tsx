@@ -23,10 +23,13 @@ function open() {
 }
 
 describe('OptionsMenu (#654)', () => {
-  test('the trigger badges how many options are on', () => {
+  test('the trigger marks that options are on with a dot (#1046)', () => {
     render(<OptionsMenu options={mainOptions()} ecoOptions={ecoOptions()} showEco={false} busy={false} />)
-    // Only Eco is checked -> the gear trigger shows a corner badge "1".
-    expect(screen.getByRole('button', { name: /session options/i }).textContent).toContain('1')
+    const trigger = screen.getByRole('button', { name: /session options/i })
+    // A presence dot now, not a number: the count lives in the title for a11y, the dot in the corner.
+    expect(trigger.getAttribute('title')).toMatch(/\bon$/)
+    expect(trigger.querySelector('span.rounded-full')).not.toBeNull()
+    expect(trigger.textContent).not.toContain('1') // no number in the badge anymore
   })
 
   test('toggling an item writes the new value through', () => {

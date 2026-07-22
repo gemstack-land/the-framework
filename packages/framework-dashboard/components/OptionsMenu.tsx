@@ -86,12 +86,12 @@ export function OptionsMenu({
       >
         <Settings className="h-4 w-4" />
         {activeCount > 0 && (
-          <span className="absolute -right-1 -top-0.5 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-[var(--color-primary)] px-0.5 text-[9px] font-medium leading-none text-[var(--color-primary-foreground)]">
-            {activeCount}
-          </span>
+          // A small presence dot (#1046): that some options are on is the signal; the exact count
+          // is one click away in the menu, so the number was noise.
+          <span className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-[var(--color-primary)]" />
         )}
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="min-w-[19rem] max-w-[22rem]">
+      <DropdownMenuContent align="end" className="min-w-[19rem] max-w-[22rem]">
         {options.map(o => (
           <OptionCheckboxRow key={o.key} row={o} busy={busy} />
         ))}
