@@ -1,6 +1,6 @@
 <img src="./logo.svg" alt="The Framework" align="left" width="120" />
 
-# The Framework
+### The Framework
 
 **Autonomous AI programming.**  
 Stop babysitting your coding agents. You make the important decisions; AI does the rest.
