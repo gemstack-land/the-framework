@@ -1,10 +1,51 @@
-# 💎 GemStack
+# The Framework
 
-A collection of high-quality, framework-agnostic tools for building AI applications in Node.
+**Autonomous AI programming.** Stop babysitting your coding agents: make the important decisions and let AI do the rest.
 
-GemStack is shared, community-governed infrastructure built with the [Vike](https://vike.dev) team. Each tool is a standalone, well-tested package that works in any Node app and composes cleanly with the others. Packages join GemStack by *graduating* one at a time, when they prove framework-agnostic value, not by bulk-moving a framework's package set in.
+[![npm](https://img.shields.io/npm/v/@gemstack/framework)](https://www.npmjs.com/package/@gemstack/framework) [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE) [![Discord](https://img.shields.io/badge/Discord-join-5865F2?logo=discord&logoColor=white)](https://discord.gg/qc8zvdzWNR)
 
-## Packages
+The Framework turns your coding agent into an autonomous teammate: it plans, researches, implements, reviews, and improves its own work, while keeping you in control of the decisions that matter. It wraps a coding-agent CLI (Claude Code today) as a black box and takes you from an idea to a running app, with a localhost dashboard that shows the orchestration the agent's own chat cannot: the loop status, the review passes, and the queue of what is next.
+
+It is 100% open source, runs 100% locally, and uses your existing AI subscription (bring your own Claude Code).
+
+## Quickstart
+
+```bash
+npm i -g @gemstack/framework
+framework "a paginated orders page backed by an orders table, with sign-in"
+
+# one-shot, no install:
+npx @gemstack/framework "..."
+
+# deterministic offline demo (no model, no API key):
+framework --fake
+```
+
+## Stop babysitting
+
+AI is capable, yet left alone it is lazy, forgetful, and quietly makes decisions it should be asking you about. The Framework fixes that at the prompt layer:
+
+- **AI is lazy.** It splits large tasks into subtasks and works through a checklist, so it spends real effort instead of taking shortcuts.
+- **AI plans lazily.** A loop of critical feedback and research runs before any code is written.
+- **AI writes throwaway code.** It questions and reviews its own work until it is confident the result is correct, maintainable, and DRY.
+- **AI decides without asking.** When real alternatives with trade-offs exist, it surfaces them to you instead of silently picking one.
+- **AI forgets.** Decisions and context are saved to `knowledge-base/*.md` in your repo, so you stop repeating yourself.
+
+## How it works
+
+The Framework does not run its own agent. It drives a coding agent as a black box: it sends a prompt, lets the agent's own loop run, reads the code produced, gates on the outcome (builds, serves, review passes), then re-prompts. The seam is the code, never the agent's individual tool calls, so the wrapped agent keeps its subscription-based auth and stays swappable.
+
+- **Enhanced system prompt.** Best-practice instructions layered on top of your agent: divide and conquer, enumerate before coding, self-review, surface alternatives. Fully customizable, or opt out.
+- **Autopilot.** Pick how much runs unattended. Quick wins and quality refactors can run on their own; non-obvious decisions still come back to you.
+- **Dashboard.** A localhost dashboard shows the live run, the loop status, the review passes, the queue of upcoming tasks, the reviews waiting on you, and your subscription usage.
+- **Bring your own subscription.** Orchestrates agents through your existing Claude Code install, so there is no extra API bill.
+- **100% local.** Runs on your machine like a desktop app. No backdoors, no tracking; your knowledge base lives as `knowledge-base/*.md` in your own Git repository.
+
+See the [`@gemstack/framework` README](./packages/framework/README.md) for the CLI, the library API, and the driver seam.
+
+## Built on GemStack
+
+The Framework is the turnkey product on top of **GemStack**: a collection of high-quality, framework-agnostic packages built with the [Vike](https://vike.dev) team. Each package is standalone, well tested, and works in any Node app; The Framework composes them into one product. Packages join GemStack by *graduating* one at a time, when they prove framework-agnostic value, not by bulk-moving a framework's package set in.
 
 All packages publish under the **`@gemstack/`** scope (e.g. `npm install @gemstack/ai-sdk`).
 
