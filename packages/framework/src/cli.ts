@@ -1173,6 +1173,19 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
   // `framework worktrees` is the CLI half of the dashboard's retained-worktree cleanup (#752).
   if (opts.worktrees) return worktreesCmd(opts.worktrees, opts.cwd ?? process.cwd(), io)
 
+  // Everything left is a live run — handled below so the top of runCli stays a dispatch table.
+  return runBuild(opts, io)
+}
+
+/**
+ * The live-run command: a build, a direct `prompt`/`research`, or bare `framework` (which
+ * foregrounds the dashboard when there is nothing to build). Resolves config over the layers,
+ * runs preflight, wires this run's store / control channel / dashboard / browser / consumption
+ * guard / journal, then hands the whole thing to {@link settleRun}. Returns the process exit
+ * code. Split out of {@link runCli} so the top reads as a dispatch table and this reads as one
+ * run's lifecycle, like every other subcommand handler.
+ */
+async function runBuild(opts: CliOptions, io: CliIO): Promise<number> {
   const fake = opts.fake
   const intent = opts.intent || (fake ? FAKE_INTENT : '')
   // Bare `framework` (no prompt): run the dashboard server in the foreground so its logs
