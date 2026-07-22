@@ -94,11 +94,11 @@ export interface ContextDoc {
   comment: string
 }
 
-const DECISIONS_DOC: ContextDoc = { path: 'DECISIONS.md', comment: 'decisions taken, and why' }
-const KNOWLEDGE_BASE_DOC: ContextDoc = {
-  path: 'KNOWLEDGE-BASE.md',
-  comment: 'observed facts, non-obvious knowledge, and insights relevant to the project',
-}
+// The knowledge base lives under `knowledge-base/` (#683): one file per kind rather than a
+// single flat doc, so the agent folds each learning back into the right file.
+const DECISIONS_DOC: ContextDoc = { path: 'knowledge-base/DECISIONS.md', comment: 'decisions taken, and why' }
+const FACTS_DOC: ContextDoc = { path: 'knowledge-base/FACTS.md', comment: 'non-obvious facts relevant to the project' }
+const INSIGHTS_DOC: ContextDoc = { path: 'knowledge-base/INSIGHTS.md', comment: 'insights relevant to the project' }
 
 /**
  * The business-knowledge docs (#537): what the repo has learned about itself, which the
@@ -107,7 +107,7 @@ const KNOWLEDGE_BASE_DOC: ContextDoc = {
  * agent is never told to read one set of files and update another (pinned by a test). A
  * subset of {@link CONTEXT_DOCS}.
  */
-export const BUSINESS_KNOWLEDGE_DOCS: readonly ContextDoc[] = [DECISIONS_DOC, KNOWLEDGE_BASE_DOC]
+export const BUSINESS_KNOWLEDGE_DOCS: readonly ContextDoc[] = [DECISIONS_DOC, FACTS_DOC, INSIGHTS_DOC]
 
 /**
  * Everything the agent keeps in context at the start of a run (#683), which
@@ -124,11 +124,14 @@ export const BUSINESS_KNOWLEDGE_DOCS: readonly ContextDoc[] = [DECISIONS_DOC, KN
 export const CONTEXT_DOCS: readonly ContextDoc[] = [
   DECISIONS_DOC,
   { path: 'GOAL.md', comment: 'the goal of the project (long-term direction, scope, non-scope, ...)' },
-  KNOWLEDGE_BASE_DOC,
+  FACTS_DOC,
+  INSIGHTS_DOC,
   // What the market looks like (#694): written by the [Market research] preset and read by the
   // follow-up that turns it into tickets. A pointer the agent reads, not a doc it folds knowledge
   // back into, so it stays out of BUSINESS_KNOWLEDGE_DOCS.
-  { path: 'MARKET_RESEARCH.md', comment: 'the market the project competes in' },
+  { path: 'knowledge-base/MARKET_RESEARCH.md', comment: 'the market the project competes in' },
+  // The catch-all (#683): any other file the agent parks under knowledge-base/.
+  { path: 'knowledge-base/**.md', comment: 'more files holding knowledge related to the project' },
   { path: 'tickets/**.md', comment: 'things to potentially work on; format: node_modules/@gemstack/framework/prompts/ticketing_format.md' },
   { path: 'TODO_AGENTS.md', comment: 'the AI task queue; format: node_modules/@gemstack/framework/prompts/todo_format.md' },
 ]

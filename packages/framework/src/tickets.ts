@@ -4,7 +4,7 @@ import { join } from 'node:path'
 /**
  * The root `tickets/` directory (#629): a plain repo convention where The Framework
  * keeps its human-facing roadmap files, rather than hiding them in a proprietary
- * `.the-framework/` dir. It sits beside conventions like a root `DECISIONS.md`. Since
+ * `.the-framework/` dir. It sits beside conventions like the `knowledge-base/` docs. Since
  * #682 moved the backlog out to a root `TODO_AGENTS.md`, this directory holds only
  * ticket files (`<DATE>_<SLUG>.md`).
  */

@@ -12,7 +12,8 @@ If the changes introduced by ${{ tf.session_name }} can potentially lead to secu
 ## Business knowledge
 
 If you didn't already, consider updating the following based on the changes and discussions of ${{ tf.session_name }} (you can create the files if they're missing):
-- `DECISIONS.md` (decisions taken, and why)
-- `KNOWLEDGE-BASE.md` (knowledge and insights related to the project)
+- `knowledge-base/DECISIONS.md` (decisions taken, and why)
+- `knowledge-base/FACTS.md` (non-obvious facts relevant to the project)
+- `knowledge-base/INSIGHTS.md` (insights relevant to the project)
 
 Only write what a future agent would need and cannot get from the code itself.
