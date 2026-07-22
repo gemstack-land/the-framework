@@ -236,6 +236,55 @@ function parseOption(o: Record<string, unknown>, i: number): ChoicesOption | und
 }
 
 /**
+ * The shared skeleton of an options await block (#337/#339): find the last block for `tag`, parse
+ * its body's `options` array, map each labelled option through `mapOption`, and bail when none
+ * survive. Returns the resolved title, the raw record (so a caller can read a trailer field like
+ * `recommended`), and the mapped options. Tolerant by design — a malformed block yields `undefined`
+ * rather than throwing, since a bad parse must never crash a build.
+ */
+function parseOptionsGate<T extends ChoicesOption>(
+  text: string,
+  tag: string,
+  titleFallback: string,
+  mapOption: (base: ChoicesOption, raw: Record<string, unknown>) => T,
+): { title: string; record: Record<string, unknown>; options: T[] } | undefined {
+  const block = lastBlock(text, tag)
+  if (!block) return undefined
+  const parsed = parseBody(block.body)
+  if (!parsed) return undefined
+
+  const options: T[] = []
+  parsed.options.forEach((o, i) => {
+    const opt = parseOption(o, i)
+    if (opt) options.push(mapOption(opt, o))
+  })
+  if (options.length === 0) return undefined
+
+  return { title: str(parsed.record.title) || titleFallback, record: parsed.record, options }
+}
+
+/**
+ * The shared skeleton of an option-less await block (#358/#796): a record carrying a title and one
+ * optional string field (`file`, `url`). Same tolerance — a blank title falls back and a malformed
+ * block is ignored. A field that is not a string is dropped rather than shown as "undefined".
+ */
+function parseRecordGate<F extends string>(
+  text: string,
+  tag: string,
+  field: F,
+  titleFallback: string,
+): ({ title: string } & { [K in F]?: string }) | undefined {
+  const block = lastBlock(text, tag)
+  if (!block) return undefined
+  const record = parseRecord(block.body)
+  if (!record) return undefined
+  const value = str(record[field])
+  return { title: str(record.title) || titleFallback, ...(value ? { [field]: value } : {}) } as {
+    title: string
+  } & { [K in F]?: string }
+}
+
+/**
  * Parse a trailing `await-choices` block (per {@link AWAIT_PROTOCOL}) from a turn's
  * final text (#337). Returns `undefined` when the agent did not stop to ask (the common
  * case). Tolerant by design: ids are synthesized from position, a blank title falls
@@ -243,22 +292,11 @@ function parseOption(o: Record<string, unknown>, i: number): ChoicesOption | und
  * than throwing — a bad parse must never crash a build.
  */
 export function parseChoicesGate(text: string): ParsedChoicesGate | undefined {
-  const block = lastBlock(text, 'await-choices')
-  if (!block) return undefined
-  const parsed = parseBody(block.body)
-  if (!parsed) return undefined
-
-  const options: ChoicesOption[] = []
-  parsed.options.forEach((o, i) => {
-    const opt = parseOption(o, i)
-    if (opt) options.push(opt)
-  })
-  if (options.length === 0) return undefined
-
-  const title = str(parsed.record.title) || 'Which option?'
-  const rec = str(parsed.record.recommended)
-  const recommended = rec ? (options.find(o => o.id === rec) ?? options.find(o => o.label === rec))?.id : undefined
-  return { title, options, ...(recommended ? { recommended } : {}) }
+  const gate = parseOptionsGate(text, 'await-choices', 'Which option?', opt => opt)
+  if (!gate) return undefined
+  const rec = str(gate.record.recommended)
+  const recommended = rec ? (gate.options.find(o => o.id === rec) ?? gate.options.find(o => o.label === rec))?.id : undefined
+  return { title: gate.title, options: gate.options, ...(recommended ? { recommended } : {}) }
 }
 
 /**
@@ -267,19 +305,13 @@ export function parseChoicesGate(text: string): ParsedChoicesGate | undefined {
  * tolerance: synthesized ids, blank-title fallback, malformed block ignored.
  */
 export function parseMultiSelectGate(text: string): ParsedMultiSelectGate | undefined {
-  const block = lastBlock(text, 'await-multiselect')
-  if (!block) return undefined
-  const parsed = parseBody(block.body)
-  if (!parsed) return undefined
-
-  const options: MultiSelectOption[] = []
-  parsed.options.forEach((o, i) => {
-    const opt = parseOption(o, i)
-    if (opt) options.push({ ...opt, ...(o?.default === true ? { default: true } : {}) })
-  })
-  if (options.length === 0) return undefined
-
-  return { title: str(parsed.record.title) || 'Select any that apply', options }
+  const gate = parseOptionsGate(
+    text,
+    'await-multiselect',
+    'Select any that apply',
+    (opt, raw): MultiSelectOption => ({ ...opt, ...(raw?.default === true ? { default: true } : {}) }),
+  )
+  return gate ? { title: gate.title, options: gate.options } : undefined
 }
 
 /**
@@ -289,12 +321,7 @@ export function parseMultiSelectGate(text: string): ParsedMultiSelectGate | unde
  * parsers: blank-title fallback, malformed block ignored.
  */
 export function parseConfirmationGate(text: string): ParsedConfirmationGate | undefined {
-  const block = lastBlock(text, 'await-confirmation')
-  if (!block) return undefined
-  const record = parseRecord(block.body)
-  if (!record) return undefined
-  const file = str(record.file)
-  return { title: str(record.title) || 'Approve this plan?', ...(file ? { file } : {}) }
+  return parseRecordGate(text, 'await-confirmation', 'file', 'Approve this plan?')
 }
 
 /**
@@ -303,12 +330,7 @@ export function parseConfirmationGate(text: string): ParsedConfirmationGate | un
  * block ignored. A `url` that is not a string is dropped rather than shown as "undefined".
  */
 export function parseBrowserGate(text: string): ParsedBrowserGate | undefined {
-  const block = lastBlock(text, 'await-browser')
-  if (!block) return undefined
-  const record = parseRecord(block.body)
-  if (!record) return undefined
-  const url = str(record.url)
-  return { title: str(record.title) || 'Take over in the browser', ...(url ? { url } : {}) }
+  return parseRecordGate(text, 'await-browser', 'url', 'Take over in the browser')
 }
 
 /**
