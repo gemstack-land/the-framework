@@ -5,6 +5,7 @@ import { onProjects } from '../../server/projects.telefunc.js'
 import { ProjectPicker } from '../../components/ProjectPicker.js'
 import { BrandLink } from '../../components/BrandLink.js'
 import { ThemeToggle } from '../../components/ThemeToggle.js'
+import { ConnectionIndicator } from '../../components/ConnectionIndicator.js'
 import { NotificationsMenu } from '../../components/NotificationsMenu.js'
 import { Button } from '../../components/ui/button.js'
 import { RunHistory } from '../../components/RunHistory.js'
@@ -291,6 +292,8 @@ export default function Page() {
         />
         <div className="min-w-0 flex-1" />
         <div className="flex shrink-0 items-center gap-1">
+          {/* Which daemon this dashboard is talking to (#1052) — obvious once you can hop devices. */}
+          <ConnectionIndicator />
           <Button
             variant="outline"
             size="sm"

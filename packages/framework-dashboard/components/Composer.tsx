@@ -20,6 +20,8 @@ import { PresetCreatePanel } from './PresetCreatePanel.js'
 import { PresetsMenu } from './PresetsMenu.js'
 import { AgentModelMenu, type AgentOption } from './AgentModelMenu.js'
 import { OptionsMenu, type OptionRow, type RunTarget } from './OptionsMenu.js'
+import { AddDeviceDialog } from './AddDeviceDialog.js'
+import { useConnectionProfiles, connectTo, connectLocal, isLoopbackHost } from '../lib/profiles.js'
 import { ResolvedOptions } from './ResolvedOptions.js'
 import { ClaudeLogo, CodexLogo } from './agent-logos.js'
 import { Button } from './ui/button.js'
@@ -120,7 +122,13 @@ export const Composer = forwardRef<ComposerHandle, {
   // Set by the loaded preset, not by the surface (#959). Cleared with the box, like `kind`.
   const [newSession, setNewSession] = useState(false)
   const [addingPreset, setAddingPreset] = useState(false)
+  const [addingDevice, setAddingDevice] = useState(false) // #1052: the "Add a device" modal
   const editorRef = useRef<PromptEditorHandle>(null)
+  // The saved daemons this browser can hop to (#1052). Which one we are on now comes from the URL,
+  // fixed for the page's life (a device switch reloads), so it is read once rather than as state.
+  const profiles = useConnectionProfiles()
+  const currentUrl = typeof window === 'undefined' ? null : window.location.origin
+  const isLocalConnection = typeof window === 'undefined' ? true : isLoopbackHost(window.location.hostname)
   // The registered projects for the `@` picker — the same list the launcher reads.
   const projects = useLoaded<ProjectSummary[]>(onProjects, [], [])
 
@@ -304,6 +312,20 @@ export const Composer = forwardRef<ComposerHandle, {
       // The "Run on" driver axis (#1050) is baked in at spawn, so it is offered only at the launcher —
       // same reasoning as the agent select being hidden in-session.
       {...(inSession ? {} : { runTarget: { value: target, onChange: (t: RunTarget) => updatePreferences({ target: t }) } })}
+      // The saved-devices connection section (#1052) rides the same "Run on" sub, so it too is
+      // launcher-only; the header indicator shows the current device everywhere.
+      {...(inSession
+        ? {}
+        : {
+            connection: {
+              profiles,
+              currentUrl,
+              isLocal: isLocalConnection,
+              onConnect: connectTo,
+              onConnectLocal: connectLocal,
+              onAddDevice: () => setAddingDevice(true),
+            },
+          })}
     />
   )
 
@@ -339,6 +361,10 @@ export const Composer = forwardRef<ComposerHandle, {
     </Button>
   )
 
+  // The "Add a device" modal (#1052), rendered by both forms since the gear is in both. A portal, so
+  // its place in the tree does not matter.
+  const deviceDialog = addingDevice && <AddDeviceDialog onClose={() => setAddingDevice(false)} onAdded={() => editorRef.current?.focus()} />
+
   // Compact (#723): a single row for the navbar — editor, then the same controls and submit. It
   // stays one row on purpose (#755): the header must not grow taller to gain them.
   if (compact) {
@@ -348,6 +374,7 @@ export const Composer = forwardRef<ComposerHandle, {
         {agentModelEl}
         {optionsGearEl}
         {submitButton}
+        {deviceDialog}
       </div>
     )
   }
@@ -399,6 +426,7 @@ export const Composer = forwardRef<ComposerHandle, {
           }}
         />
       )}
+      {deviceDialog}
     </>
   )
 })

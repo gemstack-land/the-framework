@@ -1,6 +1,7 @@
 import type { Preferences } from '@gemstack/framework'
-import { Settings, Check } from 'lucide-react'
+import { Settings, Check, Laptop, MonitorSmartphone, Plus } from 'lucide-react'
 import { updatePreferences } from '../lib/preferences.js'
+import type { ConnectionProfile } from '../lib/profiles.js'
 import { cn } from '../lib/utils.js'
 import { buttonVariants } from './ui/button.js'
 import {
@@ -8,7 +9,9 @@ import {
   DropdownMenuTrigger,
   DropdownMenuContent,
   DropdownMenuCheckboxItem,
+  DropdownMenuGroup,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuSub,
   DropdownMenuSubTrigger,
@@ -52,6 +55,24 @@ export type RunTargetControl = {
   onChange: (value: RunTarget) => void
 }
 
+/**
+ * The "A device I have" section of the "Run on" sub (#1052). A device is a CONNECTION, not a driver:
+ * the driver rows above rewrite a preference, these NAVIGATE the browser to another daemon's origin.
+ * That is the divergence the gear holds in one list — driver rows call `updatePreferences` (per-run),
+ * device rows call `onConnect`/`onConnectLocal` (a page navigation carrying the token).
+ */
+export type ConnectionControl = {
+  /** The saved remote daemons this browser can hop to. */
+  profiles: ConnectionProfile[]
+  /** `window.location.origin`, to mark the daemon the dashboard is on now. */
+  currentUrl: string | null
+  /** Whether the current origin is loopback, so "Local" is the checked row. */
+  isLocal: boolean
+  onConnect: (profile: ConnectionProfile) => void
+  onConnectLocal: () => void
+  onAddDevice: () => void
+}
+
 // The run targets the gear offers (#1050). A single-select modeled on the agent tree (Check-marked
 // rows), not the boolean OptionRow. "Claude web" is a disabled placeholder for the sibling axis in
 // #1049 that has not shipped yet, so the menu shows where this is going without promising it.
@@ -60,7 +81,7 @@ const RUN_TARGET_ROWS: { value: RunTarget; label: string; description: string }[
   { value: 'actions', label: 'GitHub Actions', description: 'Run on a fresh GitHub Actions runner.' },
 ]
 
-function RunTargetSub({ control, busy }: { control: RunTargetControl; busy: boolean }) {
+function RunTargetSub({ control, connection, busy }: { control: RunTargetControl; connection?: ConnectionControl | undefined; busy: boolean }) {
   const current = RUN_TARGET_ROWS.find(r => r.value === control.value) ?? RUN_TARGET_ROWS[0]!
   return (
     <DropdownMenuSub>
@@ -69,6 +90,7 @@ function RunTargetSub({ control, busy }: { control: RunTargetControl; busy: bool
         <span className="text-muted-foreground">{current.label}</span>
       </DropdownMenuSubTrigger>
       <DropdownMenuSubContent>
+        {/* Driver rows (#1050): a per-run preference, written straight through. */}
         {RUN_TARGET_ROWS.map(row => (
           <DropdownMenuItem key={row.value} className="items-start" onClick={() => control.onChange(row.value)}>
             <Check className={cn('mt-0.5 h-3.5 w-3.5 shrink-0', row.value === control.value ? 'opacity-100' : 'opacity-0')} />
@@ -79,8 +101,38 @@ function RunTargetSub({ control, busy }: { control: RunTargetControl; busy: bool
           <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 opacity-0" />
           <OptionLabel label="Claude web" description="Coming soon." />
         </DropdownMenuItem>
+        {connection && <ConnectionSection connection={connection} busy={busy} />}
       </DropdownMenuSubContent>
     </DropdownMenuSub>
+  )
+}
+
+/** The "A device I have" rows (#1052). Unlike the driver rows above, a click here NAVIGATES the
+ * browser to that daemon's origin (carrying the token) rather than writing a preference. */
+function ConnectionSection({ connection, busy }: { connection: ConnectionControl; busy: boolean }) {
+  return (
+    <>
+      <DropdownMenuSeparator />
+      <DropdownMenuGroup>
+        <DropdownMenuLabel>A device I have</DropdownMenuLabel>
+        <DropdownMenuItem className="items-start" onClick={() => connection.onConnectLocal()}>
+          <Check className={cn('mt-0.5 h-3.5 w-3.5 shrink-0', connection.isLocal ? 'opacity-100' : 'opacity-0')} />
+          <Laptop className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
+          <OptionLabel label="Local" description="This machine's own daemon." />
+        </DropdownMenuItem>
+        {connection.profiles.map(profile => (
+          <DropdownMenuItem key={profile.id} className="items-start" onClick={() => connection.onConnect(profile)}>
+            <Check className={cn('mt-0.5 h-3.5 w-3.5 shrink-0', !connection.isLocal && profile.url === connection.currentUrl ? 'opacity-100' : 'opacity-0')} />
+            <MonitorSmartphone className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
+            <OptionLabel label={profile.label} description={profile.url} />
+          </DropdownMenuItem>
+        ))}
+        <DropdownMenuItem className="items-start" disabled={busy} onClick={() => connection.onAddDevice()}>
+          <Plus className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
+          <OptionLabel label="Add a device…" description="Paste the URL a box prints on its network bind." />
+        </DropdownMenuItem>
+      </DropdownMenuGroup>
+    </>
   )
 }
 
@@ -110,6 +162,7 @@ export function OptionsMenu({
   busy,
   label = 'Session options',
   runTarget,
+  connection,
 }: {
   options: OptionRow[]
   ecoOptions: OptionRow[]
@@ -122,6 +175,9 @@ export function OptionsMenu({
   /** The "Run on" driver axis (#1050), at the top of the gear. Omitted in-session, where the
    *  target is baked in at spawn — same as the agent select. */
   runTarget?: RunTargetControl | undefined
+  /** The saved-devices connection section (#1052), rendered inside the "Run on" sub under the
+   *  driver rows. Rides the same sub as runTarget, so it shows only where that does. */
+  connection?: ConnectionControl | undefined
 }) {
   const activeCount = options.filter(o => o.checked && !o.disabled).length
   return (
@@ -143,7 +199,7 @@ export function OptionsMenu({
       <DropdownMenuContent align="end" className="min-w-[19rem] max-w-[22rem]">
         {runTarget && (
           <>
-            <RunTargetSub control={runTarget} busy={busy} />
+            <RunTargetSub control={runTarget} connection={connection} busy={busy} />
             {options.length > 0 && <DropdownMenuSeparator />}
           </>
         )}

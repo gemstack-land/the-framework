@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, test, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
-import type { OptionRow } from './OptionsMenu.js'
+import type { OptionRow, ConnectionControl } from './OptionsMenu.js'
+import type { ConnectionProfile } from '../lib/profiles.js'
 
 const updatePreferences = vi.hoisted(() => vi.fn())
 vi.mock('../lib/preferences.js', () => ({ updatePreferences }))
@@ -96,6 +97,73 @@ describe('OptionsMenu (#654)', () => {
     render(<OptionsMenu options={[]} ecoOptions={[]} showEco={false} busy={false} />)
     open()
     expect(screen.queryByText('Run on')).toBeNull()
+  })
+
+  const profiles = (): ConnectionProfile[] => [
+    { id: 'http://192.168.1.5:4200', label: 'Studio', url: 'http://192.168.1.5:4200', token: 'aaa' },
+  ]
+  const connectionControl = (over: Partial<ConnectionControl> = {}): ConnectionControl => ({
+    profiles: profiles(),
+    currentUrl: 'http://127.0.0.1:4200',
+    isLocal: true,
+    onConnect: vi.fn(),
+    onConnectLocal: vi.fn(),
+    onAddDevice: vi.fn(),
+    ...over,
+  })
+
+  test('the "A device I have" section lists saved profiles under Run on (#1052)', () => {
+    render(
+      <OptionsMenu options={[]} ecoOptions={[]} showEco={false} busy={false} runTarget={{ value: 'local', onChange: vi.fn() }} connection={connectionControl()} />,
+    )
+    open()
+    fireEvent.click(screen.getByText('Run on'))
+    expect(screen.getByText('A device I have')).toBeTruthy()
+    expect(screen.getByText('Local')).toBeTruthy()
+    expect(screen.getByText('Studio')).toBeTruthy()
+    expect(screen.getByText('Add a device…')).toBeTruthy()
+  })
+
+  test('selecting a device navigates (does not write a preference) (#1052)', () => {
+    const onConnect = vi.fn()
+    render(
+      <OptionsMenu options={[]} ecoOptions={[]} showEco={false} busy={false} runTarget={{ value: 'local', onChange: vi.fn() }} connection={connectionControl({ onConnect })} />,
+    )
+    open()
+    fireEvent.click(screen.getByText('Run on'))
+    fireEvent.click(screen.getByText('Studio'))
+    expect(onConnect).toHaveBeenCalledWith(profiles()[0])
+    // A device row is a connection hop, not a driver preference.
+    expect(updatePreferences).not.toHaveBeenCalled()
+  })
+
+  test('Local fires its connect handler (#1052)', () => {
+    const onConnectLocal = vi.fn()
+    render(
+      <OptionsMenu options={[]} ecoOptions={[]} showEco={false} busy={false} runTarget={{ value: 'local', onChange: vi.fn() }} connection={connectionControl({ onConnectLocal })} />,
+    )
+    open()
+    fireEvent.click(screen.getByText('Run on'))
+    fireEvent.click(screen.getByText('Local'))
+    expect(onConnectLocal).toHaveBeenCalled()
+  })
+
+  test('Add a device opens the add flow (#1052)', () => {
+    const onAddDevice = vi.fn()
+    render(
+      <OptionsMenu options={[]} ecoOptions={[]} showEco={false} busy={false} runTarget={{ value: 'local', onChange: vi.fn() }} connection={connectionControl({ onAddDevice })} />,
+    )
+    open()
+    fireEvent.click(screen.getByText('Run on'))
+    fireEvent.click(screen.getByText('Add a device…'))
+    expect(onAddDevice).toHaveBeenCalled()
+  })
+
+  test('the device section is absent without a connection control (#1052)', () => {
+    render(<OptionsMenu options={[]} ecoOptions={[]} showEco={false} busy={false} runTarget={{ value: 'local', onChange: vi.fn() }} />)
+    open()
+    fireEvent.click(screen.getByText('Run on'))
+    expect(screen.queryByText('A device I have')).toBeNull()
   })
 
 })
