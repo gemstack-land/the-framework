@@ -1,4 +1,4 @@
-import type { FrameworkFileConfig } from './config.js'
+import { BOOLEAN_CONFIG_KEYS, CONFIG_KEYS, type FrameworkFileConfig } from './config.js'
 
 /**
  * Resolving a run's settings across config layers (#841).
@@ -79,30 +79,23 @@ export function resolveRunConfig(layers: readonly ConfigLayer[]): ResolvedRunCon
   }
   const preset = pick('preset')
   const event = pick('event')
+  const modes = {} as Record<(typeof BOOLEAN_CONFIG_KEYS)[number], boolean>
+  for (const key of BOOLEAN_CONFIG_KEYS) modes[key] = pick(key) ?? RUN_CONFIG_DEFAULTS[key]
   return {
     ...(preset ? { presetName: preset } : {}),
     ...(event ? { buildEvent: event } : {}),
-    autopilot: pick('autopilot') ?? RUN_CONFIG_DEFAULTS.autopilot,
-    technical: pick('technical') ?? RUN_CONFIG_DEFAULTS.technical,
-    antiLazyPill: pick('antiLazyPill') ?? RUN_CONFIG_DEFAULTS.antiLazyPill,
-    transparent: pick('transparent') ?? RUN_CONFIG_DEFAULTS.transparent,
+    ...modes,
     sources,
   }
 }
 
 /** The repo tier: `the-framework.yml` as a layer. */
 export function fileConfigLayer(file: FrameworkFileConfig, name = 'the-framework.yml'): ConfigLayer {
-  return {
-    name,
-    values: {
-      ...(file.preset !== undefined ? { preset: file.preset } : {}),
-      ...(file.event !== undefined ? { event: file.event } : {}),
-      ...(file.autopilot !== undefined ? { autopilot: file.autopilot } : {}),
-      ...(file.technical !== undefined ? { technical: file.technical } : {}),
-      ...(file.antiLazyPill !== undefined ? { antiLazyPill: file.antiLazyPill } : {}),
-      ...(file.transparent !== undefined ? { transparent: file.transparent } : {}),
-    },
+  const values: RunConfigValues = {}
+  for (const key of CONFIG_KEYS) {
+    if (file[key] !== undefined) Object.assign(values, { [key]: file[key] })
   }
+  return { name, values }
 }
 
 /** The active Open Loop modes of a resolved config, in a stable order. */
@@ -121,10 +114,7 @@ export function resolvedModes(config: Pick<ResolvedRunConfig, 'autopilot' | 'tec
 export function describeResolvedConfig(config: ResolvedRunConfig): string {
   const shown: [keyof RunConfigValues, string][] = [
     ['preset', config.presetName ?? ''],
-    ['autopilot', onOff(config.autopilot)],
-    ['technical', onOff(config.technical)],
-    ['antiLazyPill', onOff(config.antiLazyPill)],
-    ['transparent', onOff(config.transparent)],
+    ...BOOLEAN_CONFIG_KEYS.map((key): [keyof RunConfigValues, string] => [key, onOff(config[key])]),
     ['event', config.buildEvent ?? ''],
   ]
   return shown

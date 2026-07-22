@@ -2,6 +2,7 @@ import { nodeGitRunner, type GitRunner } from '../project.js'
 import { cachedPrView, forgetPr, nodeGhRunner, type GhRunner, type LinkedPr, type BranchPrLookup } from './gh.js'
 import { parseNumstat } from './file-diff.js'
 import { errorMessage } from '../error-message.js'
+import type { RunMeta } from '../store/index.js'
 
 // What a finished session produced, and what is left to do with it (#799).
 //
@@ -254,4 +255,34 @@ export async function openRunPullRequest(
   } catch (err) {
     return { ok: false, error: errorMessage(err) }
   }
+}
+
+/**
+ * Open a PR for a finished session, deciding from what the run recorded which cases should not
+ * open one. Reads the branch's handoff first: a branch that no longer exists, or a session that
+ * changed nothing, is a clear error rather than an empty PR, and a branch that already has a PR
+ * returns that one. Title is the session name (else the intent's first line, else the id); body
+ * is the intent plus which session did it. This is the handoff decision the dashboard's
+ * open-PR button offers; the RPC layer only resolves which run it is about.
+ */
+export async function openSessionPullRequest(cwd: string, run: RunMeta): Promise<HandoffResult> {
+  const branch = runBranchFor(run)
+  const handoff = await readRunHandoff(cwd, branch).catch(() => undefined)
+  if (handoff && !handoff.exists) return { ok: false, error: `branch ${branch} no longer exists` }
+  // Refuse rather than open an empty PR: a session that changed nothing has nothing to hand off.
+  if (handoff?.empty) return { ok: false, error: 'this session produced no commits to open a PR for' }
+  if (handoff?.pr) return { ok: true, url: handoff.pr.url }
+  return openRunPullRequest(cwd, branch, {
+    title: run.sessionName ?? run.intent?.split('\n')[0]?.slice(0, 72) ?? `Session ${run.id}`,
+    body: sessionPrBody(run),
+    ...(handoff?.base ? { base: handoff.base } : {}),
+  })
+}
+
+/** The PR body: what was asked for, and which session did it. */
+function sessionPrBody(run: RunMeta): string {
+  const lines: string[] = []
+  if (run.intent) lines.push(run.intent.trim(), '')
+  lines.push(`Opened from The Framework session \`${run.sessionName ?? run.id}\`.`)
+  return lines.join('\n')
 }

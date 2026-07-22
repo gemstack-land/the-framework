@@ -1,10 +1,10 @@
 import { __decorateTelefunction } from 'telefunc'
-import { onRuns, onRun, onDocs, onProjectLog, onQueue, onOverview, onInterventions, onActivity, onDashboard, onGithubUrl, onGitStatus, onProjectFiles, onProjectFileStatus, onFileDiff, onRunChanges, onFileContent, onTickets, onRetainedWorktrees, onRunWorktree, onRunHandoff, onSystemPromptUser } from './reads.telefunc.js'
-import { sendStop, sendChoice, sendMessage, sendStart, sendPreview, onServeTargets, sendStopPreview, onPreviewStatus, sendOpenInApp, sendRemoveWorktree, sendDeleteSession, sendPushBranch, sendOpenPullRequest, sendQueueTicket } from './control.telefunc.js'
-import { onEvents } from './events.telefunc.js'
-import { onProjects, sendAddProject } from './projects.telefunc.js'
-import { onPreferences, savePreferences, onProjectPreferences, saveProjectPreferences, onEditors, onNotifyChannels } from './preferences.telefunc.js'
-import { onQuota } from './quota.telefunc.js'
+import * as reads from './reads.telefunc.js'
+import * as control from './control.telefunc.js'
+import * as events from './events.telefunc.js'
+import * as projects from './projects.telefunc.js'
+import * as preferences from './preferences.telefunc.js'
+import * as quota from './quota.telefunc.js'
 
 // The client bakes each RPC key from the dashboard's source path (relative to its Vite
 // root, keeping the `.ts` extension) as `"<telefuncFilePath>:<exportName>"`. Since the
@@ -19,6 +19,18 @@ export const DASHBOARD_TELEFUNC_KEYS = {
   preferences: '/server/preferences.telefunc.ts',
   quota: '/server/quota.telefunc.ts',
 } as const
+
+// Every function export of these modules is a telefunction; each is registered under its own
+// export name, so the name can never drift from the identifier and an exported-but-unregistered
+// function (the #866 400-and-nothing-else failure) is impossible by construction.
+const TELEFUNC_MODULES: Record<keyof typeof DASHBOARD_TELEFUNC_KEYS, Record<string, unknown>> = {
+  reads,
+  control,
+  events,
+  projects,
+  preferences,
+  quota,
+}
 
 let registered = false
 
@@ -43,54 +55,12 @@ export function registeredTelefunctionNames(): ReadonlySet<string> {
 export function registerDashboardTelefunctions(appRootDir: string = process.cwd()): void {
   if (registered) return
   registered = true
-  const reg = (fn: (...args: never[]) => unknown, name: string, key: string): void => {
-    registeredNames.add(name)
-    __decorateTelefunction(fn as never, name, key, appRootDir)
+  for (const group of Object.keys(TELEFUNC_MODULES) as Array<keyof typeof DASHBOARD_TELEFUNC_KEYS>) {
+    const key = DASHBOARD_TELEFUNC_KEYS[group]
+    for (const [name, fn] of Object.entries(TELEFUNC_MODULES[group])) {
+      if (typeof fn !== 'function') continue
+      registeredNames.add(name)
+      __decorateTelefunction(fn as never, name, key, appRootDir)
+    }
   }
-  const { reads, control, events, projects, preferences, quota } = DASHBOARD_TELEFUNC_KEYS
-  reg(onRuns, 'onRuns', reads)
-  reg(onRun, 'onRun', reads)
-  reg(onDocs, 'onDocs', reads)
-  reg(onProjectLog, 'onProjectLog', reads)
-  reg(onQueue, 'onQueue', reads)
-  reg(onOverview, 'onOverview', reads)
-  reg(onInterventions, 'onInterventions', reads)
-  reg(onActivity, 'onActivity', reads)
-  reg(onDashboard, 'onDashboard', reads)
-  reg(onGithubUrl, 'onGithubUrl', reads)
-  reg(onGitStatus, 'onGitStatus', reads)
-  reg(onRetainedWorktrees, 'onRetainedWorktrees', reads)
-  reg(onRunWorktree, 'onRunWorktree', reads)
-  reg(onRunHandoff, 'onRunHandoff', reads)
-  reg(onSystemPromptUser, 'onSystemPromptUser', reads)
-  reg(onProjectFiles, 'onProjectFiles', reads)
-  reg(onProjectFileStatus, 'onProjectFileStatus', reads)
-  reg(onFileDiff, 'onFileDiff', reads)
-  reg(onRunChanges, 'onRunChanges', reads)
-  reg(onFileContent, 'onFileContent', reads)
-  reg(onTickets, 'onTickets', reads)
-  reg(sendStop, 'sendStop', control)
-  reg(sendChoice, 'sendChoice', control)
-  reg(sendMessage, 'sendMessage', control)
-  reg(sendStart, 'sendStart', control)
-  reg(sendPreview, 'sendPreview', control)
-  reg(onServeTargets, 'onServeTargets', control)
-  reg(sendStopPreview, 'sendStopPreview', control)
-  reg(onPreviewStatus, 'onPreviewStatus', control)
-  reg(sendOpenInApp, 'sendOpenInApp', control)
-  reg(sendRemoveWorktree, 'sendRemoveWorktree', control)
-  reg(sendDeleteSession, 'sendDeleteSession', control)
-  reg(sendPushBranch, 'sendPushBranch', control)
-  reg(sendOpenPullRequest, 'sendOpenPullRequest', control)
-  reg(sendQueueTicket, 'sendQueueTicket', control)
-  reg(onEvents, 'onEvents', events)
-  reg(onProjects, 'onProjects', projects)
-  reg(sendAddProject, 'sendAddProject', projects)
-  reg(onPreferences, 'onPreferences', preferences)
-  reg(savePreferences, 'savePreferences', preferences)
-  reg(onProjectPreferences, 'onProjectPreferences', preferences)
-  reg(saveProjectPreferences, 'saveProjectPreferences', preferences)
-  reg(onEditors, 'onEditors', preferences)
-  reg(onNotifyChannels, 'onNotifyChannels', preferences)
-  reg(onQuota, 'onQuota', quota)
 }

@@ -30,6 +30,17 @@ export interface FrameworkFileConfig {
 /** Config file names read from the workspace root, in precedence order. */
 export const FRAMEWORK_CONFIG_FILES = ['the-framework.yml', 'the-framework.yaml'] as const
 
+/** The string-valued config keys, parsed and copied across layers as-is. */
+export const STRING_CONFIG_KEYS = ['preset', 'event'] as const
+/**
+ * The boolean-valued mode keys. This is the canonical mode list: parsing, the config-layer copy,
+ * resolution, and the resolved-config summary all iterate it, so a new mode is added here once and
+ * flows through them (only its default and any renamed output field are declared per key).
+ */
+export const BOOLEAN_CONFIG_KEYS = ['autopilot', 'technical', 'antiLazyPill', 'transparent'] as const
+/** Every config key, string then boolean, in declaration order. */
+export const CONFIG_KEYS = [...STRING_CONFIG_KEYS, ...BOOLEAN_CONFIG_KEYS] as const
+
 /**
  * Read `the-framework.yml` (or `.yaml`) from a directory. A missing file yields
  * `{}`. Best-effort: a malformed file is reported via `onWarn` and treated as
@@ -70,13 +81,13 @@ export function parseFrameworkConfig(raw: string, source = 'the-framework.yml'):
   }
   const obj = data as Record<string, unknown>
   const config: FrameworkFileConfig = {}
-  for (const key of ['preset', 'event'] as const) {
+  for (const key of STRING_CONFIG_KEYS) {
     if (obj[key] !== undefined) {
       if (typeof obj[key] !== 'string') throw new Error(`${source}: "${key}" must be a string`)
       config[key] = obj[key] as string
     }
   }
-  for (const key of ['autopilot', 'technical', 'antiLazyPill', 'transparent'] as const) {
+  for (const key of BOOLEAN_CONFIG_KEYS) {
     if (obj[key] !== undefined) {
       if (typeof obj[key] !== 'boolean') throw new Error(`${source}: "${key}" must be a boolean`)
       config[key] = obj[key] as boolean

@@ -6,13 +6,7 @@ import { resolveProjectPath, resolveRunPath, contextPreferences, contextPreview 
 import { appendFlatTodoEntry } from '../todo-loop.js'
 import { findRun, isSafeRunId, type RunMeta } from '../store/index.js'
 import { removeProjectWorktree, deleteProjectRun } from '../worktrees.js'
-import {
-  openRunPullRequest,
-  pushRunBranch,
-  readRunHandoff,
-  runBranchFor,
-  type HandoffResult,
-} from '../dashboard/run-handoff.js'
+import { openSessionPullRequest, pushRunBranch, runBranchFor, type HandoffResult } from '../dashboard/run-handoff.js'
 import type { ChoiceBy } from '../events.js'
 import type {
   DeleteSessionResult,
@@ -97,16 +91,27 @@ export async function sendMessage(projectId: string, text: string, runId?: strin
  * from under it.
  */
 export async function sendRemoveWorktree(projectId: string, runId: string): Promise<RemoveWorktreeResult> {
-  // Read the context before the first await: telefunc only exposes it synchronously, at the top
-  // of the telefunction. Through the tolerant accessor, since this is also called directly.
+  return withWorktreeRemoval(projectId, runId, (cwd, opts) => removeProjectWorktree(cwd, runId, opts))
+}
+
+/**
+ * Shared body of the two worktree-removing writes (#982/#1032): resolve the local checkout, refuse
+ * when there is none (the read-only relay), and run the removal with the daemon-only step of
+ * stopping a preview that may be serving the tree (#797) before it comes off disk. Only the
+ * removal action and its result shape differ.
+ *
+ * The context is read before the first await: telefunc only exposes it synchronously, at the top
+ * of the telefunction. Through the tolerant accessor, since these are also called directly.
+ */
+async function withWorktreeRemoval<T>(
+  projectId: string,
+  runId: string,
+  remove: (cwd: string, opts: { beforeRemove: (id: string) => Promise<void> }) => Promise<T>,
+): Promise<T | { ok: false; error: string }> {
   const preview = contextPreview()
   const cwd = await resolveProjectPath(projectId)
   if (!cwd) return { ok: false, error: 'this project has no local path on this server' }
-  return removeProjectWorktree(cwd, runId, {
-    beforeRemove: async id => {
-      await preview?.stop(projectId, id)
-    },
-  })
+  return remove(cwd, { beforeRemove: async id => { await preview?.stop(projectId, id) } })
 }
 
 /**
@@ -117,14 +122,7 @@ export async function sendRemoveWorktree(projectId: string, runId: string): Prom
  * daemon step of stopping a preview that may be serving the worktree before it comes off disk.
  */
 export async function sendDeleteSession(projectId: string, runId: string): Promise<DeleteSessionResult> {
-  const preview = contextPreview()
-  const cwd = await resolveProjectPath(projectId)
-  if (!cwd) return { ok: false, error: 'this project has no local path on this server' }
-  return deleteProjectRun(cwd, runId, {
-    beforeRemove: async id => {
-      await preview?.stop(projectId, id)
-    },
-  })
+  return withWorktreeRemoval(projectId, runId, (cwd, opts) => deleteProjectRun(cwd, runId, opts))
 }
 
 /**
@@ -236,26 +234,7 @@ export async function sendPushBranch(projectId: string, runId: string): Promise<
 export async function sendOpenPullRequest(projectId: string, runId: string): Promise<HandoffResult> {
   const target = await handoffTargetFor(projectId, runId)
   if (!target) return { ok: false, error: 'unknown session' }
-  const { cwd, run } = target
-  const branch = runBranchFor(run)
-  const handoff = await readRunHandoff(cwd, branch).catch(() => undefined)
-  if (handoff && !handoff.exists) return { ok: false, error: `branch ${branch} no longer exists` }
-  // Refuse rather than open an empty PR: a session that changed nothing has nothing to hand off.
-  if (handoff?.empty) return { ok: false, error: 'this session produced no commits to open a PR for' }
-  if (handoff?.pr) return { ok: true, url: handoff.pr.url }
-  return openRunPullRequest(cwd, branch, {
-    title: run.sessionName ?? run.intent?.split('\n')[0]?.slice(0, 72) ?? `Session ${run.id}`,
-    body: prBodyFor(run),
-    ...(handoff?.base ? { base: handoff.base } : {}),
-  })
-}
-
-/** The PR body: what was asked for, and which session did it. */
-function prBodyFor(run: RunMeta): string {
-  const lines: string[] = []
-  if (run.intent) lines.push(run.intent.trim(), '')
-  lines.push(`Opened from The Framework session \`${run.sessionName ?? run.id}\`.`)
-  return lines.join('\n')
+  return openSessionPullRequest(target.cwd, target.run)
 }
 
 /** What {@link sendQueueTicket} did: the backlog file written, or why it could not be. */

@@ -557,24 +557,45 @@ export async function archiveWorktreeRun(
   }
 }
 
+/** Newest run first: an id sorts chronologically, so the id order IS the time order (no parse). */
+const byIdDesc = (a: { id: string }, b: { id: string }): number => (a.id < b.id ? 1 : a.id > b.id ? -1 : 0)
+
+/**
+ * Every `runs/*.json` archived meta with the path it was read from, torn/half-written entries
+ * skipped. The one home of the archived-history read loop, shared by {@link listRuns} and the
+ * boot reconcile. A missing/unreadable dir throws to the caller, as both callers always let it.
+ */
+async function readArchivedMetaEntries(fs: StoreFs, runsDir: string): Promise<Array<{ path: string; meta: RunMeta }>> {
+  const entries: Array<{ path: string; meta: RunMeta }> = []
+  for (const name of await fs.readdir(runsDir)) {
+    if (!name.endsWith('.json')) continue
+    const path = join(runsDir, name)
+    try {
+      entries.push({ path, meta: JSON.parse(await fs.read(path)) as RunMeta })
+    } catch {
+      // torn/half-written meta — skip it
+    }
+  }
+  return entries
+}
+
+/**
+ * A `running` meta whose owning process is provably gone (or unknowable on boot): the orphan
+ * {@link reconcileOrphanedRuns} flips to `stopped`. A live pid on this host, or a non-running
+ * meta, is left be. The narrowing lets a caller use the meta as present in the true branch.
+ */
+function isDeadRunning(meta: RunMeta | undefined, isAlive: (pid: number) => boolean): meta is RunMeta {
+  return meta?.status === 'running' && ownerLiveness(meta, isAlive) !== 'live'
+}
+
 /**
  * List a project's archived runs, most-recent first. Reads every `runs/*.json`
  * meta; the id sorts chronologically so no timestamp parse is needed. Missing or
  * unreadable dir/entries are skipped, never thrown.
  */
 export async function listRuns(cwd: string, fs: StoreFs = nodeStoreFs()): Promise<RunMeta[]> {
-  const runsDir = join(cwd, FRAMEWORK_DIR, RUNS_DIR)
-  const entries = await fs.readdir(runsDir)
-  const metas: RunMeta[] = []
-  for (const name of entries) {
-    if (!name.endsWith('.json')) continue
-    try {
-      metas.push(JSON.parse(await fs.read(join(runsDir, name))) as RunMeta)
-    } catch {
-      // skip a torn/half-written meta
-    }
-  }
-  return metas.sort((a, b) => (a.id < b.id ? 1 : a.id > b.id ? -1 : 0))
+  const entries = await readArchivedMetaEntries(fs, join(cwd, FRAMEWORK_DIR, RUNS_DIR))
+  return entries.map(entry => entry.meta).sort(byIdDesc)
 }
 
 /**
@@ -613,22 +634,19 @@ export async function reconcileOrphanedRuns(
   let fixed = 0
   // Archived runs stuck at `running` (e.g. a prior live run the next run never
   // rescued). Done before the live run so its fresh archive isn't re-counted here.
-  for (const name of await fs.readdir(join(dir, RUNS_DIR))) {
-    if (!name.endsWith('.json')) continue
-    const path = join(dir, RUNS_DIR, name)
+  for (const { path, meta } of await readArchivedMetaEntries(fs, join(dir, RUNS_DIR))) {
+    if (!isDeadRunning(meta, isAlive)) continue
     try {
-      const meta = JSON.parse(await fs.read(path)) as RunMeta
-      if (meta.status !== 'running' || ownerLiveness(meta, isAlive) === 'live') continue
       await writeMetaFile(fs, path, { ...meta, status: 'stopped' })
       fixed++
     } catch {
-      // torn/half-written meta — skip it
+      // write failed — best-effort, skip
     }
   }
   // The live run: flip it, then archive so a crash that skipped close() still
   // leaves the stopped run in the history list.
   const live = await readMetaFile(fs, join(dir, META_FILE))
-  if (live?.status === 'running' && ownerLiveness(live, isAlive) !== 'live') {
+  if (isDeadRunning(live, isAlive)) {
     await stopAndArchiveLive(fs, dir, live)
     fixed++
   }
@@ -642,7 +660,7 @@ export async function reconcileOrphanedRuns(
     if (!isSafeRunId(name)) continue
     const worktreeDir = join(dir, WORKTREES_DIR, name, FRAMEWORK_DIR)
     const meta = await readMetaFile(fs, join(worktreeDir, META_FILE))
-    if (meta?.status !== 'running' || ownerLiveness(meta, isAlive) === 'live') continue
+    if (!isDeadRunning(meta, isAlive)) continue
     await writeMetaFile(fs, join(worktreeDir, META_FILE), { ...meta, status: 'stopped' }).catch(() => {})
     await archiveWorktreeRun(join(dir, WORKTREES_DIR, name), cwd, fs).catch(() => undefined)
     fixed++
@@ -729,7 +747,7 @@ export async function readLiveMetas(
     const meta = await readLiveMeta(candidate, fs, isAlive).catch(() => undefined)
     if (meta) runs.push({ ...meta, cwd: candidate })
   }
-  return runs.sort((a, b) => (a.id < b.id ? 1 : a.id > b.id ? -1 : 0))
+  return runs.sort(byIdDesc)
 }
 
 /**

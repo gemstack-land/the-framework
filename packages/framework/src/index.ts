@@ -48,19 +48,21 @@ export {
 } from './steps.js'
 export {
   runFramework,
-  requestChoices,
-  requestMultiSelect,
-  resolveAwaitGate,
   type RunFrameworkOptions,
   type RunFrameworkResult,
   type DeployDecision,
   type ServeConfig,
   type AppPreview,
+} from './run.js'
+export {
+  requestChoices,
+  requestMultiSelect,
+  resolveAwaitGate,
   type ChoicesOption,
   type ChoicesDeps,
   type MultiSelectOption,
   type MultiSelectDeps,
-} from './run.js'
+} from './await-gate.js'
 export { snapshotWorkspace, SANDBOX_IGNORE, type SnapshotOptions } from './sandbox.js'
 export {
   parseResetsAt,

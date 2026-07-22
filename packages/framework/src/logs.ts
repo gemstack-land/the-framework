@@ -92,23 +92,85 @@ export function gitignorePath(cwd: string): string {
   return join(cwd, THE_FRAMEWORK_DIR, '.gitignore')
 }
 
+/** The fields accumulated while parsing, before the required ones are checked. */
+interface EntryDraft {
+  status?: string
+  id?: string
+  sessionId?: string
+  sessionLink?: string
+  sessionName?: string
+  branch?: string
+}
+
+/**
+ * The single-line `- key: ` fields, in render order, each owning both directions of its own
+ * encoding. render and parse both walk this one list, so a field's name, prefix, and escaping
+ * can never drift between the two sides — the file's one real hazard when they were hand-mirrored.
+ * The heading and the `- prompts:` nested list are structurally different and stay bespoke.
+ */
+const LOG_FIELDS: ReadonlyArray<{
+  prefix: string
+  /** This entry's line body (after the prefix), or `undefined` to omit the line. */
+  render: (entry: LogEntry) => string | undefined
+  /** Fold a parsed line body onto the draft. */
+  parse: (body: string, draft: EntryDraft) => void
+}> = [
+  {
+    prefix: '- status: ',
+    render: entry => entry.status,
+    parse: (body, draft) => {
+      draft.status = body.trim()
+    },
+  },
+  {
+    prefix: '- run: ',
+    render: entry => (entry.id ? encodeField(entry.id) : undefined),
+    parse: (body, draft) => {
+      draft.id = decodeField(body.trim())
+    },
+  },
+  {
+    prefix: '- session: ',
+    render: entry =>
+      entry.sessionId === undefined
+        ? undefined
+        : entry.sessionLink
+          ? `[${entry.sessionId}](${entry.sessionLink})`
+          : entry.sessionId,
+    parse: (body, draft) => {
+      const value = body.trim()
+      const linked = /^\[(.+)\]\((.+)\)$/.exec(value)
+      if (linked) {
+        draft.sessionId = linked[1]!
+        draft.sessionLink = linked[2]!
+      } else {
+        draft.sessionId = value
+      }
+    },
+  },
+  {
+    prefix: '- name: ',
+    render: entry => (entry.sessionName ? encodeField(entry.sessionName) : undefined),
+    parse: (body, draft) => {
+      draft.sessionName = decodeField(body.trim())
+    },
+  },
+  {
+    prefix: '- branch: ',
+    render: entry => (entry.branch ? encodeField(entry.branch) : undefined),
+    parse: (body, draft) => {
+      draft.branch = decodeField(body.trim())
+    },
+  },
+]
+
 /** Markdown for one entry, starting at `## ` (no file header, no blank lines around it). */
 export function renderLogEntry(entry: LogEntry): string {
-  const lines = [
-    `## ${entry.at}${SEP}${entry.kind}${SEP}${encodeField(entry.title)}`,
-    '',
-    `- status: ${entry.status}`,
-  ]
-  if (entry.id) lines.push(`- run: ${encodeField(entry.id)}`)
-  if (entry.sessionId) {
-    lines.push(
-      entry.sessionLink
-        ? `- session: [${entry.sessionId}](${entry.sessionLink})`
-        : `- session: ${entry.sessionId}`,
-    )
+  const lines = [`## ${entry.at}${SEP}${entry.kind}${SEP}${encodeField(entry.title)}`, '']
+  for (const field of LOG_FIELDS) {
+    const body = field.render(entry)
+    if (body !== undefined) lines.push(`${field.prefix}${body}`)
   }
-  if (entry.sessionName) lines.push(`- name: ${encodeField(entry.sessionName)}`)
-  if (entry.branch) lines.push(`- branch: ${encodeField(entry.branch)}`)
   if (entry.prompts && entry.prompts.length > 0) {
     lines.push('- prompts:')
     for (const prompt of entry.prompts) lines.push(`  - ${encodeField(prompt)}`)
@@ -151,12 +213,7 @@ function parseEntry(lines: string[]): LogEntry | undefined {
   const title = decodeField(parts.slice(2).join(SEP))
   if (!at || !kind || !title || !KINDS.includes(kind)) return undefined
 
-  let status: string | undefined
-  let id: string | undefined
-  let sessionId: string | undefined
-  let sessionLink: string | undefined
-  let sessionName: string | undefined
-  let branch: string | undefined
+  const draft: EntryDraft = {}
   let prompts: string[] | undefined
   let inPrompts = false
   for (const line of lines.slice(1)) {
@@ -165,41 +222,27 @@ function parseEntry(lines: string[]): LogEntry | undefined {
       continue
     }
     inPrompts = false
-    if (line.startsWith('- status: ')) {
-      status = line.slice('- status: '.length).trim()
-    } else if (line.startsWith('- run: ')) {
-      id = decodeField(line.slice('- run: '.length).trim())
-    } else if (line.startsWith('- name: ')) {
-      sessionName = decodeField(line.slice('- name: '.length).trim())
-    } else if (line.startsWith('- branch: ')) {
-      branch = decodeField(line.slice('- branch: '.length).trim())
-    } else if (line.startsWith('- session: ')) {
-      const value = line.slice('- session: '.length).trim()
-      const linked = /^\[(.+)\]\((.+)\)$/.exec(value)
-      if (linked) {
-        sessionId = linked[1]
-        sessionLink = linked[2]
-      } else {
-        sessionId = value
-      }
-    } else if (line.trim() === '- prompts:') {
+    if (line.trim() === '- prompts:') {
       prompts = []
       inPrompts = true
+      continue
     }
+    const field = LOG_FIELDS.find(f => line.startsWith(f.prefix))
+    if (field) field.parse(line.slice(field.prefix.length), draft)
   }
-  if (!status || !STATUSES.includes(status)) return undefined
+  if (!draft.status || !STATUSES.includes(draft.status)) return undefined
 
   const entry: LogEntry = {
     at,
     kind: kind as LogEntry['kind'],
     title,
-    status: status as LogEntry['status'],
+    status: draft.status as LogEntry['status'],
   }
-  if (id) entry.id = id
-  if (sessionId) entry.sessionId = sessionId
-  if (sessionLink) entry.sessionLink = sessionLink
-  if (sessionName) entry.sessionName = sessionName
-  if (branch) entry.branch = branch
+  if (draft.id) entry.id = draft.id
+  if (draft.sessionId) entry.sessionId = draft.sessionId
+  if (draft.sessionLink) entry.sessionLink = draft.sessionLink
+  if (draft.sessionName) entry.sessionName = draft.sessionName
+  if (draft.branch) entry.branch = draft.branch
   if (prompts && prompts.length > 0) entry.prompts = prompts
   return entry
 }
