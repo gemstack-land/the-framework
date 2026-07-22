@@ -1,7 +1,6 @@
 import type { Preferences } from '@gemstack/framework'
-import { Settings, Check } from 'lucide-react'
+import { Settings } from 'lucide-react'
 import { updatePreferences } from '../lib/preferences.js'
-import type { EditorInfo } from '../server/preferences.telefunc.js'
 import { cn } from '../lib/utils.js'
 import { buttonVariants } from './ui/button.js'
 import {
@@ -9,9 +8,6 @@ import {
   DropdownMenuTrigger,
   DropdownMenuContent,
   DropdownMenuCheckboxItem,
-  DropdownMenuGroup,
-  DropdownMenuItem,
-  DropdownMenuLabel,
   DropdownMenuSeparator,
 } from './ui/dropdown-menu.js'
 
@@ -67,9 +63,6 @@ export function OptionsMenu({
   ecoOptions,
   showEco,
   busy,
-  editor,
-  editors,
-  onEditorChange,
   label = 'Session options',
 }: {
   options: OptionRow[]
@@ -80,18 +73,8 @@ export function OptionsMenu({
   /** The trigger's name. In-session composers pass no run options (#833), so theirs says
    *  "Preferences" rather than promising session control it does not have. */
   label?: string
-  /** The current preferred-editor CLI (#727), or undefined for the default. */
-  editor: string | undefined
-  /** The editors detected on the daemon's machine; empty on a public host. */
-  editors: EditorInfo[]
-  /** Pick an editor CLI, or `undefined` to fall back to `$FRAMEWORK_EDITOR` / `code`. */
-  onEditorChange: (editor: string | undefined) => void
 }) {
   const activeCount = options.filter(o => o.checked && !o.disabled).length
-  // Detected editors, plus the stored one as a "custom" row when it isn't auto-detected (e.g. a
-  // hand-set $FRAMEWORK_EDITOR), so the current choice always shows even if we couldn't find it.
-  const editorRows: EditorInfo[] =
-    editor && !editors.some(e => e.bin === editor) ? [...editors, { bin: editor, label: editor }] : editors
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
@@ -99,11 +82,11 @@ export function OptionsMenu({
         disabled={busy}
         title={activeCount > 0 ? `${label} — ${activeCount} on` : label}
         aria-label={label}
-        className={cn(buttonVariants({ variant: 'outline', size: 'icon-sm' }), 'relative')}
+        className={cn(buttonVariants({ variant: 'ghost', size: 'icon-sm' }), 'relative h-8 w-8')}
       >
         <Settings className="h-4 w-4" />
         {activeCount > 0 && (
-          <span className="absolute -right-1.5 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-[var(--color-primary)] px-1 text-[10px] font-medium leading-none text-[var(--color-primary-foreground)]">
+          <span className="absolute -right-1 -top-0.5 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-[var(--color-primary)] px-0.5 text-[9px] font-medium leading-none text-[var(--color-primary-foreground)]">
             {activeCount}
           </span>
         )}
@@ -120,33 +103,6 @@ export function OptionsMenu({
             ))}
           </>
         )}
-        <DropdownMenuSeparator />
-        <DropdownMenuGroup>
-          <DropdownMenuLabel>Open in editor</DropdownMenuLabel>
-          <DropdownMenuItem
-            disabled={busy}
-            closeOnClick={false}
-            onClick={() => onEditorChange(undefined)}
-            title="Use $FRAMEWORK_EDITOR, or VS Code"
-            className="items-start"
-          >
-            <Check className={cn('mt-0.5 h-3.5 w-3.5 shrink-0', editor ? 'opacity-0' : 'opacity-100')} />
-            <OptionLabel label="Default" description="$FRAMEWORK_EDITOR, or code" />
-          </DropdownMenuItem>
-          {editorRows.map(e => (
-            <DropdownMenuItem
-              key={e.bin}
-              disabled={busy}
-              closeOnClick={false}
-              onClick={() => onEditorChange(e.bin)}
-              title={`Open projects in ${e.label} (${e.bin})`}
-              className="items-start"
-            >
-              <Check className={cn('mt-0.5 h-3.5 w-3.5 shrink-0', editor === e.bin ? 'opacity-100' : 'opacity-0')} />
-              <OptionLabel label={e.label} description={e.bin} />
-            </DropdownMenuItem>
-          ))}
-        </DropdownMenuGroup>
       </DropdownMenuContent>
     </DropdownMenu>
   )

@@ -1,5 +1,5 @@
 import type { CustomPreset } from '@gemstack/framework'
-import { BookMarked, Plus, X } from 'lucide-react'
+import { SquareSlash, Plus, X } from 'lucide-react'
 import { cn } from '../lib/utils.js'
 import { buttonVariants } from './ui/button.js'
 import { OptionLabel } from './ui/option-label.js'
@@ -91,11 +91,11 @@ export function PresetsMenu({
       <DropdownMenuTrigger
         type="button"
         disabled={busy}
+        aria-label="Presets"
         title="Load a preset prompt — also available by typing / in the editor"
-        className={cn(buttonVariants({ variant: 'outline', size: 'sm' }))}
+        className={cn(buttonVariants({ variant: 'ghost', size: 'icon-sm' }), 'h-8 w-8')}
       >
-        <BookMarked className="h-4 w-4" aria-hidden />
-        Presets
+        <SquareSlash className="h-4 w-4" aria-hidden />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="min-w-[16rem] max-w-[20rem]">
         <DropdownMenuGroup>

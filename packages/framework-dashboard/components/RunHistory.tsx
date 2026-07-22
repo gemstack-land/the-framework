@@ -99,21 +99,26 @@ export function RunHistory({
             : 'w-full',
         )}
       >
-      <div className={cn('whitespace-nowrap px-4 py-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground', label)}>
-        Sessions
-      </div>
       <ScrollArea className="min-h-0 flex-1">
-        <div className="px-2">
+        {/* Extra right padding clears the overlay scrollbar (w-2.5) so a row's hover fill doesn't
+            run under the bar. */}
+        <div className="pl-2 pr-3.5 pt-3">
         {/* Permanent home / launcher — always present, never a run: starting a new session. */}
         <Button
           variant="ghost"
-          className={cn('mb-1 w-full justify-start', collapsed && 'justify-center px-0', atHome && 'bg-accent text-accent-foreground')}
+          className={cn('mb-1 w-full justify-start gap-2', collapsed && 'justify-center px-0', atHome && 'bg-accent text-accent-foreground')}
           onClick={() => onSelect(null)}
           title={collapsed ? 'New session' : undefined}
         >
-          <Plus className={cn('h-4 w-4 shrink-0', !collapsed && 'mr-2')} />
-          <span className={cn('whitespace-nowrap', label)}>New session</span>
+          <Plus className="h-4 w-4 shrink-0" />
+          <span className={cn('whitespace-nowrap', label)}>New</span>
         </Button>
+        {/* Recents label sits under the launcher, over the run list (not a page-wide header). */}
+        {(runs.length > 0 || optimistic !== null) && (
+          <div className={cn('whitespace-nowrap px-2 pb-1 pt-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground', label)}>
+            Recents
+          </div>
+        )}
 
         {/* A just-started run, before its run.json exists — highlighted while following it. */}
         {optimistic !== null && !hasRunning && (
@@ -211,7 +216,7 @@ function RunRow({
           <AgentLogo
             agent={agent}
             title={AGENT_LABELS[agent]}
-            className={cn('ml-auto h-3.5 w-3.5 shrink-0 text-muted-foreground', label)}
+            className={cn('ml-auto h-3 w-3 shrink-0 text-muted-foreground', label)}
           />
         )}
       </span>

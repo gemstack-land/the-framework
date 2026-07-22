@@ -45,7 +45,7 @@ describe('RunHistory (#785)', () => {
       <RunHistory projectId="p1" runs={[]} selectedRunId="run-2" onSelect={() => {}} startTick={1} startIntent="add dark mode" />,
     )
     const rows = [...container.querySelectorAll('button')]
-    const home = rows.find(row => row.textContent?.includes('New session'))
+    const home = rows.find(row => row.textContent?.trim() === 'New')
     const starting = rows.find(row => row.textContent?.includes('starting…'))
     expect(starting?.className).toContain('bg-accent')
     expect(home?.className).not.toContain('bg-accent')

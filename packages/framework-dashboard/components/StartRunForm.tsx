@@ -117,7 +117,6 @@ export function StartRunForm({
         busy={busy}
         submitLabel="Start session"
         submitBusyLabel="Starting…"
-        showShortcutHint
       />
 
       {/* Feedback right where the action is (#948): the error used to render below the (possibly

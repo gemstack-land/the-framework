@@ -22,10 +22,12 @@ const KNOWLEDGE_CONTEXT = `Context:\n${KNOWLEDGE_LINES}`
 test('CONTEXT_DOCS is the #683 fragment: business knowledge plus the roadmap/queue pointers', () => {
   const paths = CONTEXT_DOCS.map(d => d.path)
   assert.deepEqual(paths, [
-    'DECISIONS.md',
+    'knowledge-base/DECISIONS.md',
     'GOAL.md',
-    'KNOWLEDGE-BASE.md',
-    'MARKET_RESEARCH.md',
+    'knowledge-base/FACTS.md',
+    'knowledge-base/INSIGHTS.md',
+    'knowledge-base/MARKET_RESEARCH.md',
+    'knowledge-base/**.md',
     'tickets/**.md',
     'TODO_AGENTS.md',
   ])
@@ -34,7 +36,7 @@ test('CONTEXT_DOCS is the #683 fragment: business knowledge plus the roadmap/que
   // GOAL / market research / tickets / TODO_AGENTS are read-only context, so they are not in the
   // merge-update set.
   const businessPaths = BUSINESS_KNOWLEDGE_DOCS.map(d => d.path)
-  for (const p of ['GOAL.md', 'MARKET_RESEARCH.md', 'tickets/**.md', 'TODO_AGENTS.md']) {
+  for (const p of ['GOAL.md', 'knowledge-base/MARKET_RESEARCH.md', 'knowledge-base/**.md', 'tickets/**.md', 'TODO_AGENTS.md']) {
     assert.ok(!businessPaths.includes(p))
   }
   // The ticket-format pointer is inlined here (this module stays node-free), so pin it to the
