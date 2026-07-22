@@ -1,10 +1,11 @@
 import { useState, type KeyboardEvent } from 'react'
 import type { CustomPreset } from '@gemstack/framework'
 import { Button } from './ui/button.js'
+import { Dialog } from './ui/dialog.js'
 
-// The "New preset" create panel (#649/#626), lifted out of the Presets dropdown so it renders
-// full-width under the controls row. Prefills the prompt from the editor's current text — the
-// common "save what I just wrote" path. A preset is just a label + a prompt.
+// The "New preset" create dialog (#649/#626): a modal over the composer rather than a panel that
+// pushed the controls down. Prefills the prompt from the editor's current text — the common "save
+// what I just wrote" path. A preset is just a label + a prompt, plus where it is saved (#1025).
 
 const LABEL_MAX = 80
 
@@ -42,12 +43,8 @@ export function PresetCreatePanel({
     onSave({ id: newId(), label: trimmedLabel, prompt: trimmedPrompt }, canSaveToProject ? scope : 'user')
   }
 
-  // Keyboard parity with the composer (#948): Esc cancels, ⌘/Ctrl+Enter saves.
+  // ⌘/Ctrl+Enter saves, matching the composer (#948); Esc closes via the Dialog itself.
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
-    if (e.key === 'Escape') {
-      e.preventDefault()
-      onCancel()
-    }
     if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
       e.preventDefault()
       save()
@@ -55,7 +52,8 @@ export function PresetCreatePanel({
   }
 
   return (
-    <div className="mt-1.5 flex w-full flex-col gap-1.5 rounded-md border border-border p-2" onKeyDown={onKeyDown}>
+    <Dialog open onOpenChange={next => { if (!next) onCancel() }} title="New preset">
+      <div className="flex w-full flex-col gap-2" onKeyDown={onKeyDown}>
       <input
         type="text"
         value={label}
@@ -70,7 +68,7 @@ export function PresetCreatePanel({
         value={prompt}
         placeholder="The prompt this preset runs…"
         disabled={busy}
-        rows={4}
+        rows={5}
         onChange={e => setPrompt(e.target.value)}
         className="w-full resize-y rounded-md border border-border bg-background px-2 py-1 font-mono text-xs text-foreground"
       />
@@ -100,7 +98,7 @@ export function PresetCreatePanel({
           </span>
         </div>
       )}
-      <div className="flex items-center justify-end gap-2">
+      <div className="mt-1 flex items-center justify-end gap-2">
         <Button type="button" variant="ghost" size="sm" onClick={onCancel}>
           Cancel
         </Button>
@@ -108,6 +106,7 @@ export function PresetCreatePanel({
           Save preset
         </Button>
       </div>
-    </div>
+      </div>
+    </Dialog>
   )
 }
