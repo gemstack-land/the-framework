@@ -11,7 +11,6 @@ import { DeleteSessionButton } from './DeleteSessionButton.js'
 import { WorkspaceActions } from './WorkspaceActions.js'
 import { GitStatusBar } from './GitStatusBar.js'
 import { Button, buttonVariants } from './ui/button.js'
-import { CopyButton } from './ui/copy-button.js'
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from './ui/tooltip.js'
 
 // One run's action bar: Serve, Stop, and Open session as a single row of icon buttons with
@@ -122,11 +121,6 @@ export function RunActionBar({
             Remove, the more destructive of the pair. */}
         {onDeleted && !active && runId && (
           <DeleteSessionButton projectId={projectId} runId={runId} label={label} onDeleted={onDeleted} />
-        )}
-        {/* The session id is the exact string a `--resume` takes (#948), useful even when the deep
-            link below is also shown, so it is always offered for copy when a session has one. */}
-        {info?.sessionId && (
-          <CopyButton text={info.sessionId} label={`Copy session id (${info.sessionId})`} className="p-1.5" />
         )}
         {session && (
           <Tooltip>

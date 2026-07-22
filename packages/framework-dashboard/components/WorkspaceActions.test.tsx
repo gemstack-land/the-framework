@@ -17,6 +17,14 @@ vi.mock('../server/control.telefunc.js', () => ({
   sendStopPreview,
 }))
 
+// The editor picker (#727) lives on the editor button now; stub the preference store and the
+// detected-editors read so the tests drive a fixed set.
+const updatePreferences = vi.hoisted(() => vi.fn())
+let prefs: { editor?: string } = {}
+let detectedEditors: { bin: string; label: string }[] = []
+vi.mock('../lib/preferences.js', () => ({ usePreferences: () => prefs, updatePreferences }))
+vi.mock('../lib/editors.js', () => ({ useDetectedEditors: () => detectedEditors }))
+
 const { WorkspaceActions } = await import('./WorkspaceActions.js')
 const { TooltipProvider } = await import('./ui/tooltip.js')
 
@@ -34,8 +42,14 @@ const buttons = () => screen.getAllByRole('button')
 beforeEach(() => {
   sendOpenInApp.mockClear()
   onGithubUrl.mockClear()
+  updatePreferences.mockClear()
+  prefs = {}
+  detectedEditors = []
 })
 afterEach(cleanup)
+
+// The editor button is a dropdown now (#727): open it, then click the "open" item.
+const openEditorMenu = () => fireEvent.click(screen.getByRole('button', { name: /open in editor/i }))
 
 describe('WorkspaceActions (#809)', () => {
   test("a session's folder and editor open that session's worktree", async () => {
@@ -45,7 +59,8 @@ describe('WorkspaceActions (#809)', () => {
     await waitFor(() => expect(buttons().length).toBeGreaterThan(1))
     fireEvent.click(buttons()[0]!)
     await waitFor(() => expect(sendOpenInApp).toHaveBeenCalledWith('p1', 'files', 'run-1'))
-    fireEvent.click(buttons()[1]!)
+    openEditorMenu()
+    fireEvent.click(screen.getByText("Open this session's checkout"))
     await waitFor(() => expect(sendOpenInApp).toHaveBeenCalledWith('p1', 'editor', 'run-1'))
   })
 
@@ -67,5 +82,36 @@ describe('WorkspaceActions (#809)', () => {
     renderActions('run-1')
     await waitFor(() => expect(screen.getByRole('link')).toBeTruthy())
     expect(buttons().length).toBe(projectCount)
+  })
+})
+
+describe('WorkspaceActions editor picker (#727)', () => {
+  test('picking a detected editor stores its CLI bin', () => {
+    detectedEditors = [
+      { bin: 'code', label: 'VS Code' },
+      { bin: 'cursor', label: 'Cursor' },
+    ]
+    renderActions('run-1')
+    openEditorMenu()
+    fireEvent.click(screen.getByText('Cursor'))
+    expect(updatePreferences).toHaveBeenCalledWith({ editor: 'cursor' })
+  })
+
+  test('picking Default clears the editor', () => {
+    prefs = { editor: 'cursor' }
+    detectedEditors = [{ bin: 'cursor', label: 'Cursor' }]
+    renderActions('run-1')
+    openEditorMenu()
+    fireEvent.click(screen.getByText('Default'))
+    expect(updatePreferences).toHaveBeenCalledWith({ editor: '' })
+  })
+
+  test('shows a stored editor that was not auto-detected as a custom row', () => {
+    prefs = { editor: 'mate' }
+    detectedEditors = [{ bin: 'code', label: 'VS Code' }]
+    renderActions('run-1')
+    openEditorMenu()
+    // The custom bin appears (as both its own label and description), selectable like the rest.
+    expect(screen.getAllByText('mate').length).toBeGreaterThan(0)
   })
 })

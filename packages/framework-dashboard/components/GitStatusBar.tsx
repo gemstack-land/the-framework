@@ -5,7 +5,6 @@ import { onGitStatus, onRunWorktree } from '../server/reads.telefunc.js'
 import { usePolled } from '../lib/use-async.js'
 import { formatBytes } from '@gemstack/framework/client'
 import { cn } from '../lib/utils.js'
-import { CopyButton } from './ui/copy-button.js'
 
 // The checkout in play (#491, part of #488): active branch, a clean/dirty dot, the linked PR.
 // Polled, so it tracks a run committing or branching. Hidden when there is no git repo (or on
@@ -100,7 +99,7 @@ export function GitStatusBar({
       >
         <GitBranch className="h-3.5 w-3.5 shrink-0" />
         <span
-          className={cn('truncate', label ? 'max-w-[14rem]' : 'min-w-[5rem] max-w-[16rem] font-medium text-foreground')}
+          className={cn('truncate', label ? 'max-w-[14rem]' : 'max-w-[16rem] font-medium text-foreground')}
           title={branchTitle}
         >
           {branchText}
@@ -146,7 +145,6 @@ export function GitStatusBar({
       ) : (
         facts
       )}
-      {branch && <CopyButton text={branch} label="Copy branch name" />}
       {status.pr && (
         <a
           href={status.pr.url}

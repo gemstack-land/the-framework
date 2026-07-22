@@ -26,39 +26,30 @@ const baseProps = {
   toggleContext: () => {},
 }
 
-// #862: the rail asks for the room when it is showing something worth reading wide, and the
-// shell hands it over by collapsing the sessions rail. Reported up, since only the rail knows
-// which tab is open.
-describe('RightRail wide mode (#862)', () => {
+// The rail holds one fixed width for every tab: switching to a pushed view no longer widens it
+// (the per-tab wide mode from #862 was dropped so the tabs read as one stable column).
+describe('RightRail width', () => {
   const rail = (container: HTMLElement) => container.querySelector('aside')!
 
-  test('a list-shaped tab stays narrow and asks for nothing', () => {
-    const onWideChange = vi.fn()
-    const { container } = render(<RightRail {...baseProps} onWideChange={onWideChange} />)
-    expect(rail(container).className).toContain('w-80')
-    expect(onWideChange).toHaveBeenLastCalledWith(false)
+  test('a list-shaped tab holds the fixed width', () => {
+    const { container } = render(<RightRail {...baseProps} />)
+    expect(rail(container).className).toContain('w-[27rem]')
   })
 
-  test('a pushed view takes the wide form and says so', () => {
-    const onWideChange = vi.fn()
-    const { container } = render(<RightRail {...baseProps} views={[view]} onWideChange={onWideChange} />)
-    // The first view pulls the rail to the Views tab on its own.
-    expect(rail(container).className).toContain('w-[32rem]')
-    expect(onWideChange).toHaveBeenLastCalledWith(true)
+  test('a pushed view keeps the same width — no expand', () => {
+    const { container } = render(<RightRail {...baseProps} views={[view]} />)
+    // The first view pulls the rail to the Views tab on its own, but the width does not change.
+    expect(rail(container).className).toContain('w-[27rem]')
   })
 
-  test('leaving the view gives the room back', () => {
-    const onWideChange = vi.fn()
-    const { container } = render(<RightRail {...baseProps} views={[view]} onWideChange={onWideChange} />)
+  test('the width is unchanged after switching away from a view', () => {
+    const { container } = render(<RightRail {...baseProps} views={[view]} />)
     fireEvent.click(screen.getByRole('tab', { name: /docs/i }))
-    expect(rail(container).className).toContain('w-80')
-    expect(onWideChange).toHaveBeenLastCalledWith(false)
+    expect(rail(container).className).toContain('w-[27rem]')
   })
 
-  test('no project means no rail and no claim on the room', () => {
-    const onWideChange = vi.fn()
-    const { container } = render(<RightRail {...baseProps} projectId={null} onWideChange={onWideChange} />)
+  test('no project means no rail', () => {
+    const { container } = render(<RightRail {...baseProps} projectId={null} />)
     expect(container.querySelector('aside')).toBeNull()
-    expect(onWideChange).toHaveBeenLastCalledWith(false)
   })
 })

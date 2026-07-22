@@ -63,14 +63,13 @@ export function AgentModelMenu({
         type="button"
         disabled={busy}
         title={`Agent: ${current?.label ?? ''} · Model: ${currentModelLabel}`}
-        className={cn(buttonVariants({ variant: 'outline', size: 'xs' }), 'gap-1.5 font-normal')}
+        className={cn(buttonVariants({ variant: 'ghost', size: 'sm' }), 'gap-1.5 font-normal')}
       >
         {current?.icon ? (
           <span className="flex h-4 w-4 items-center justify-center">{current.icon}</span>
         ) : (
           current?.label
         )}
-        <span className="text-[var(--color-muted-foreground)]">·</span>
         {currentModelLabel}
         <ChevronDown className="h-3.5 w-3.5 opacity-70" />
       </DropdownMenuTrigger>

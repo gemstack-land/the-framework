@@ -1,4 +1,5 @@
 import { forwardRef, useImperativeHandle, useMemo, useRef, useState, type FormEvent } from 'react'
+import { ArrowUp, Loader2 } from 'lucide-react'
 import type { ProjectSummary } from '@gemstack/framework'
 import { AGENTS, AGENT_LABELS, LAUNCHER_PRESETS, type AgentName } from '@gemstack/framework/client'
 import {
@@ -9,7 +10,6 @@ import {
   usePreferenceSources,
   useProjectFileConfig,
 } from '../lib/preferences.js'
-import { useDetectedEditors } from '../lib/editors.js'
 import { useLoaded } from '../lib/use-async.js'
 import { onProjects } from '../server/projects.telefunc.js'
 import { PromptEditor, type PromptEditorHandle } from './PromptEditor.js'
@@ -20,6 +20,7 @@ import { OptionsMenu, type OptionRow } from './OptionsMenu.js'
 import { ResolvedOptions } from './ResolvedOptions.js'
 import { ClaudeLogo, CodexLogo } from './agent-logos.js'
 import { Button } from './ui/button.js'
+import { cn } from '../lib/utils.js'
 
 // The presets (#353/#433): each PREFILLS the editor with a rendered prompt and runs it verbatim
 // (`kind: 'prompt'`). Emptying the box falls back to a normal `build` run. The list, its order and
@@ -35,7 +36,7 @@ const AGENT_UI: Record<AgentName, { icon: AgentOption['icon']; models: AgentOpti
   claude: {
     icon: <ClaudeLogo className="h-4 w-4" />,
     models: [
-      { value: '', label: 'Default model' },
+      { value: '', label: 'Default' },
       { value: 'opus', label: 'Opus' },
       { value: 'sonnet', label: 'Sonnet' },
       { value: 'haiku', label: 'Haiku' },
@@ -44,7 +45,7 @@ const AGENT_UI: Record<AgentName, { icon: AgentOption['icon']; models: AgentOpti
   codex: {
     icon: <CodexLogo className="h-4 w-4" />,
     models: [
-      { value: '', label: 'Default model' },
+      { value: '', label: 'Default' },
       { value: 'gpt-5-codex', label: 'GPT-5 Codex' },
       { value: 'gpt-5', label: 'GPT-5' },
       { value: 'o3', label: 'o3' },
@@ -85,8 +86,6 @@ export const Composer = forwardRef<ComposerHandle, {
   submitLabel: string
   submitBusyLabel: string
   placeholder?: string | undefined
-  /** Show the ⌘↵ hint on the submit button (the launcher's Start). */
-  showShortcutHint?: boolean | undefined
   /** Compact single-row form for the navbar quick-launch (#723): editor + submit, no control row
    *  or preset panel. The `/` `<` `@` `#` triggers still work; agent/model + options come from the
    *  shared prefs the launcher sets. */
@@ -103,7 +102,7 @@ export const Composer = forwardRef<ComposerHandle, {
    *  session exists yet. */
   sessionName?: string | undefined
 }>(function Composer(
-  { files, addContext, removeContext, onSubmit, onPromptChange, onPreset, busy, submitLabel, submitBusyLabel, placeholder, showShortcutHint = false, compact = false, showAgentModel = true, inSession = false, sessionName },
+  { files, addContext, removeContext, onSubmit, onPromptChange, onPreset, busy, submitLabel, submitBusyLabel, placeholder, compact = false, showAgentModel = true, inSession = false, sessionName },
   ref,
 ) {
   const [prompt, setPrompt] = useState('')
@@ -148,8 +147,6 @@ export const Composer = forwardRef<ComposerHandle, {
   // The stored agent as a display name; an unknown stored value falls back to Claude Code.
   const agentLabel = AGENT_LABELS[AGENTS.includes(agent as AgentName) ? (agent as AgentName) : 'claude']
   const customPresets = preferences.customPresets ?? [] // #626: the user's own saved prompts
-  const editor = preferences.editor // #727: preferred editor; undefined = $FRAMEWORK_EDITOR / code
-  const detectedEditors = useDetectedEditors() // #727: editors installed on the daemon's machine
   const theme = themePreference(preferences) // #725: system (default) / light / dark
 
   // Vanilla removes the system prompt (nothing left for Eco to trim); Transparent turns off the
@@ -255,17 +252,17 @@ export const Composer = forwardRef<ComposerHandle, {
   // one real omission: a run started from the navbar used the stored agent, model and options with
   // nothing on screen saying which. Every value is preferences-backed and global, so the same
   // controls in either place read and write the same state.
-  const controls = (
+  const agentModelEl = showAgentModel && (
+    <AgentModelMenu
+      agents={AGENT_OPTIONS}
+      agent={agent}
+      model={model}
+      onChange={(a, m) => updatePreferences({ agent: a, model: m })}
+      busy={busy}
+    />
+  )
+  const secondaryControls = (
     <>
-      {showAgentModel && (
-        <AgentModelMenu
-          agents={AGENT_OPTIONS}
-          agent={agent}
-          model={model}
-          onChange={(a, m) => updatePreferences({ agent: a, model: m })}
-          busy={busy}
-        />
-      )}
       {/* Presets get a visible surface (#948): load, create and delete in one menu, instead of
           loading only behind typing `/` and deleting off in the options gear. Not in the compact
           row, which has no room and no create panel. */}
@@ -286,12 +283,39 @@ export const Composer = forwardRef<ComposerHandle, {
         ecoOptions={inSession ? [] : ecoOptions}
         showEco={!inSession && eco && !ecoDisabled}
         busy={busy}
-        editor={editor}
-        editors={detectedEditors}
-        onEditorChange={e => updatePreferences({ editor: e ?? '' })}
         {...(inSession ? { label: 'Preferences' } : {})}
       />
     </>
+  )
+
+  // The submit is a single icon button that only shows once the prompt has text (#721): an empty
+  // launcher has nothing to send, and the arrow reads as "send" in either place (Start session /
+  // Send). It is always full size (never appears to grow): it fades in and slides into place, and
+  // its layout footprint is animated with a negative margin (0 <- -w) rather than its width, so the
+  // control to its left (the agent/model select) is pushed over smoothly. `aria-hidden` while empty
+  // keeps it out of the a11y tree and role queries.
+  const hasPrompt = !!prompt.trim()
+  const submitButton = (
+    <Button
+      type="submit"
+      size="icon-sm"
+      onClick={submit}
+      disabled={busy || !hasPrompt}
+      aria-hidden={!hasPrompt}
+      tabIndex={hasPrompt ? undefined : -1}
+      aria-label={submitLabel}
+      title={busy ? submitBusyLabel : `${submitLabel}  (⌘↵ / Ctrl+Enter)`}
+      className={cn(
+        // `disabled:opacity-*` overrides the base (the button is disabled while empty/busy), so the
+        // hidden state must force it to 0 and the shown state back to full for the busy spinner.
+        'h-8 w-8 shrink-0 transition-[margin,opacity,transform] duration-150 ease-out',
+        hasPrompt
+          ? 'ml-0 translate-x-0 opacity-100 disabled:opacity-100'
+          : 'pointer-events-none -ml-8 translate-x-2 opacity-0 disabled:opacity-0',
+      )}
+    >
+      {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowUp className="h-4 w-4" />}
+    </Button>
   )
 
   // Compact (#723): a single row for the navbar — editor, then the same controls and submit. It
@@ -300,50 +324,29 @@ export const Composer = forwardRef<ComposerHandle, {
     return (
       <div className="flex items-start gap-1.5">
         <div className="min-w-0 flex-1">{editorEl}</div>
-        {controls}
-        <Button
-          type="submit"
-          size="sm"
-          onClick={submit}
-          disabled={busy || !prompt.trim()}
-          title={!prompt.trim() ? 'Type a prompt first' : `${submitLabel}  (⌘↵ / Ctrl+Enter)`}
-        >
-          {busy ? submitBusyLabel : submitLabel}
-        </Button>
+        {agentModelEl}
+        {secondaryControls}
+        {submitButton}
       </div>
     )
   }
 
   return (
     <>
-      {editorEl}
-
-      {/* Run controls, directly under the editor (#649/#650/#654/#668): agent+model at the start,
-          then presets and the options gear, then submit at the end. */}
-      <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-        {controls}
-        <Button
-          type="submit"
-          size="sm"
-          onClick={submit}
-          className="ml-auto"
-          disabled={busy || !prompt.trim()}
-          title={!prompt.trim() ? 'Type a prompt first' : `${submitLabel}  (⌘↵ / Ctrl+Enter)`}
-        >
-          {busy ? (
-            submitBusyLabel
-          ) : (
-            <>
-              {submitLabel}
-              {showShortcutHint && (
-                // The editor submits on ⌘/Ctrl+Enter (#695/U13): surface the otherwise-hidden shortcut.
-                <kbd className="ml-1.5 hidden rounded border border-primary-foreground/30 px-1 text-[10px] font-medium text-primary-foreground/70 sm:inline">
-                  ⌘↵
-                </kbd>
-              )}
-            </>
-          )}
-        </Button>
+      {/* The composer box (#721): the editor and its run controls under one rounded border, so the
+          prompt and the buttons that act on it read as a single input surface. The editor is
+          borderless here (its border moved out to this box); controls sit tucked below it. */}
+      <div className="rounded-lg border border-border bg-transparent focus-within:border-muted-foreground/40">
+        {editorEl}
+        {/* Run controls (#649/#650/#654/#668): presets and the options gear at the start, then the
+            agent+model select paired with submit at the end. */}
+        <div className="flex flex-wrap items-center gap-1.5 px-2 pb-2">
+          {secondaryControls}
+          <div className="ml-auto flex items-center gap-1.5">
+            {agentModelEl}
+            {submitButton}
+          </div>
+        </div>
       </div>
 
       {/* What the session resolves to, without opening the gear (#842). Off in the compact row
