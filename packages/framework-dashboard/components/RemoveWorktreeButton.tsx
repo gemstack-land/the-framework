@@ -1,4 +1,4 @@
-import { Trash2 } from 'lucide-react'
+import { FolderX } from 'lucide-react'
 import { sendRemoveWorktree } from '../server/control.telefunc.js'
 import { useAction } from '../lib/use-action.js'
 import { Button } from './ui/button.js'
@@ -41,7 +41,7 @@ export function RemoveWorktreeButton({
           />
         }
       >
-        <Trash2 className="h-3.5 w-3.5" />
+        <FolderX className="h-3.5 w-3.5" />
       </TooltipTrigger>
       <TooltipContent>
         {error ?? (busy ? 'Removing…' : "Remove this session's worktree (its history is already saved)")}

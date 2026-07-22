@@ -7,6 +7,7 @@ import { useAction } from '../lib/use-action.js'
 import { isRunActive } from '../lib/live-state.js'
 import { describeSessionLink } from '../lib/session-link.js'
 import { RemoveWorktreeButton } from './RemoveWorktreeButton.js'
+import { DeleteSessionButton } from './DeleteSessionButton.js'
 import { WorkspaceActions } from './WorkspaceActions.js'
 import { GitStatusBar } from './GitStatusBar.js'
 import { Button, buttonVariants } from './ui/button.js'
@@ -25,6 +26,7 @@ export function RunActionBar({
   events,
   retainedWorktree = false,
   onWorktreeRemoved,
+  onDeleted,
   label,
   summary,
   expanded = false,
@@ -41,6 +43,9 @@ export function RunActionBar({
   retainedWorktree?: boolean
   /** Told after that worktree is removed, so the button goes. */
   onWorktreeRemoved?: () => void
+  /** Told after this session is deleted, so the caller can leave it (#1032). Given only for a
+   * finished run: absent, no delete is offered. */
+  onDeleted?: (() => void) | undefined
   /** What the session's branch holds, said beside the branch itself (#1023). */
   summary?: ReactNode
   expanded?: boolean
@@ -111,6 +116,12 @@ export function RunActionBar({
         {/* A retained worktree only exists for a finished run, so this never sits beside Stop. */}
         {retainedWorktree && !active && runId && (
           <RemoveWorktreeButton projectId={projectId} runId={runId} onRemoved={() => onWorktreeRemoved?.()} />
+        )}
+        {/* Delete the whole session, records and all (#1032). Finished runs only, and it needs no
+            worktree — a clean run that kept none can still be cleared from the list. Sits after
+            Remove, the more destructive of the pair. */}
+        {onDeleted && !active && runId && (
+          <DeleteSessionButton projectId={projectId} runId={runId} label={label} onDeleted={onDeleted} />
         )}
         {!session && info?.sessionId && (
           <CopyButton text={info.sessionId} label={`Copy session id (${info.sessionId})`} className="p-1.5" />

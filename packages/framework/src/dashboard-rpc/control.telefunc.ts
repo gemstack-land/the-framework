@@ -5,7 +5,7 @@ import { openInApp, type OpenTarget, type OpenResult } from '../dashboard/open-i
 import { resolveProjectPath, resolveRunPath, contextPreferences, contextPreview } from './context.js'
 import { appendFlatTodoEntry } from '../todo-loop.js'
 import { findRun, isSafeRunId, type RunMeta } from '../store/index.js'
-import { removeProjectWorktree } from '../worktrees.js'
+import { removeProjectWorktree, deleteProjectRun } from '../worktrees.js'
 import {
   openRunPullRequest,
   pushRunBranch,
@@ -15,6 +15,7 @@ import {
 } from '../dashboard/run-handoff.js'
 import type { ChoiceBy } from '../events.js'
 import type {
+  DeleteSessionResult,
   PreviewResult,
   PreviewStatus,
   RemoveWorktreeResult,
@@ -102,6 +103,24 @@ export async function sendRemoveWorktree(projectId: string, runId: string): Prom
   const cwd = await resolveProjectPath(projectId)
   if (!cwd) return { ok: false, error: 'this project has no local path on this server' }
   return removeProjectWorktree(cwd, runId, {
+    beforeRemove: async id => {
+      await preview?.stop(projectId, id)
+    },
+  })
+}
+
+/**
+ * Delete a session (#1032): remove it from the dashboard, records and all — the sibling of
+ * {@link sendRemoveWorktree}, and the one destructive-of-history action, so its surface confirms
+ * first. The checks, the worktree removal and what it leaves behind (the branch, the committed
+ * `LOGS.md` line, the conversation record) are all {@link deleteProjectRun}'s; this adds only the
+ * daemon step of stopping a preview that may be serving the worktree before it comes off disk.
+ */
+export async function sendDeleteSession(projectId: string, runId: string): Promise<DeleteSessionResult> {
+  const preview = contextPreview()
+  const cwd = await resolveProjectPath(projectId)
+  if (!cwd) return { ok: false, error: 'this project has no local path on this server' }
+  return deleteProjectRun(cwd, runId, {
     beforeRemove: async id => {
       await preview?.stop(projectId, id)
     },

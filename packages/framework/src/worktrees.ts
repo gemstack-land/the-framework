@@ -1,3 +1,4 @@
+import { join } from 'node:path'
 import { formatBytes } from './format-bytes.js'
 import { errorMessage } from './error-message.js'
 import {
@@ -10,6 +11,8 @@ import {
   worktreePath,
   worktreeSize,
   isSafeRunId,
+  FRAMEWORK_DIR,
+  RUNS_DIR,
   type RunStatus,
 } from './store/index.js'
 
@@ -126,6 +129,69 @@ export async function removeProjectWorktree(
     await opts.beforeRemove?.(runId)
     await removeWorktree(cwd, path)
     await pruneWorktrees(cwd)
+    return { ok: true }
+  } catch (err) {
+    return { ok: false, error: errorMessage(err) }
+  }
+}
+
+/** The outcome of {@link deleteProjectRun}. */
+export type DeleteRunResult = { ok: true } | { ok: false; error: string }
+
+/** Surface-specific work {@link deleteProjectRun} does, and the file-removal seam for tests. */
+export interface DeleteRunOptions {
+  /** Run before the worktree comes off disk (stop a preview serving it, as removal does). */
+  beforeRemove?: (runId: string) => Promise<void>
+  /** Remove one file, tolerant of an absent one. Defaults to `rm(path, { force: true })`. */
+  removeFile?: (path: string) => Promise<void>
+}
+
+async function rmFile(path: string): Promise<void> {
+  const { rm } = await import('node:fs/promises')
+  await rm(path, { force: true })
+}
+
+/**
+ * Delete a session (#1032): take it out of the dashboard, records and all.
+ *
+ * This is the sibling of {@link removeProjectWorktree}, and the difference is the whole point.
+ * Remove-worktree reclaims the checkout on disk and keeps the session — its row, its replayable
+ * log — because the history was already archived. Delete removes that archive too: the run meta
+ * (`runs/<id>.json`, what the rail lists) and its event log (`runs/<id>.jsonl`, what replays), so
+ * the row is gone for good. It is the one destructive-of-history action, which is why the surfaces
+ * that call it confirm first.
+ *
+ * What it deliberately leaves is git's, not the dashboard's: the branch `the-framework/run-<id>`
+ * (or the name the agent gave it) and its commits, the committed `LOGS.md` line, and the
+ * conversation record. Deleting a branch that may carry merged work or an open PR is not a thing a
+ * dashboard action should do silently, so the branch stays and delete means "remove from the
+ * dashboard", not "erase every trace".
+ *
+ * Refuses while the run is still going — Stop is how a run ends. Any uncommitted work in the
+ * worktree is discarded with it, which is the intent here (the session is being thrown away),
+ * unlike remove-worktree, which commits that work to the kept branch first.
+ */
+export async function deleteProjectRun(cwd: string, runId: string, opts: DeleteRunOptions = {}): Promise<DeleteRunResult> {
+  if (!isSafeRunId(runId)) return { ok: false, error: `invalid session id: ${runId}` }
+  const live = await readLiveMetas(cwd).catch(() => [])
+  if (live.some(run => run.id === runId && run.status === 'running')) {
+    return { ok: false, error: 'that session is still going; stop it before deleting it' }
+  }
+  const removeFile = opts.removeFile ?? rmFile
+  try {
+    // The worktree first, if one is on disk: force-removed (its uncommitted work goes with the
+    // session), where remove-worktree would have committed it to the kept branch.
+    const names = await listWorktreeDirs(cwd).catch((): string[] => [])
+    if (names.includes(runId)) {
+      await opts.beforeRemove?.(runId)
+      await removeWorktree(cwd, worktreePath(cwd, runId))
+      await pruneWorktrees(cwd)
+    }
+    // Then the records that put the row in the list. Tolerant of an absent file, so a half-deleted
+    // session (its worktree already gone) still finishes cleanly.
+    const runsDir = join(cwd, FRAMEWORK_DIR, RUNS_DIR)
+    await removeFile(join(runsDir, `${runId}.json`))
+    await removeFile(join(runsDir, `${runId}.jsonl`))
     return { ok: true }
   } catch (err) {
     return { ok: false, error: errorMessage(err) }

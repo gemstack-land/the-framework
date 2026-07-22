@@ -34,6 +34,7 @@ export function RunView({
   removeContext,
   lost = false,
   onRunStarted,
+  onDeleted,
 }: {
   projectId: string
   /** Which run this is (#749); absent right after Start, before the poll adopts its id. */
@@ -53,6 +54,8 @@ export function RunView({
   lost?: boolean
   /** Jump to the run a preset or a continuation started (#959). */
   onRunStarted?: ((intent: string, runId?: string) => void) | undefined
+  /** Leave this session after it is deleted (#1032) — back to the project home. */
+  onDeleted?: (() => void) | undefined
 }) {
   // The archived log, read only once the run has ended: while it runs, the channel is the truth.
   const archived = useLoaded<FrameworkEvent[] | null>(
@@ -98,6 +101,7 @@ export function RunView({
         label={label ?? progress.sessionName}
         retainedWorktree={hasWorktree}
         onWorktreeRemoved={onWorktreeRemoved}
+        onDeleted={onDeleted}
         summary={
           showHandoff ? (
             <>

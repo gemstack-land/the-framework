@@ -1,6 +1,6 @@
 import { __decorateTelefunction } from 'telefunc'
 import { onRuns, onRun, onDocs, onProjectLog, onQueue, onOverview, onInterventions, onActivity, onDashboard, onGithubUrl, onGitStatus, onProjectFiles, onProjectFileStatus, onFileDiff, onRunChanges, onFileContent, onTickets, onRetainedWorktrees, onRunWorktree, onRunHandoff, onSystemPromptUser } from './reads.telefunc.js'
-import { sendStop, sendChoice, sendMessage, sendStart, sendPreview, onServeTargets, sendStopPreview, onPreviewStatus, sendOpenInApp, sendRemoveWorktree, sendPushBranch, sendOpenPullRequest, sendQueueTicket } from './control.telefunc.js'
+import { sendStop, sendChoice, sendMessage, sendStart, sendPreview, onServeTargets, sendStopPreview, onPreviewStatus, sendOpenInApp, sendRemoveWorktree, sendDeleteSession, sendPushBranch, sendOpenPullRequest, sendQueueTicket } from './control.telefunc.js'
 import { onEvents } from './events.telefunc.js'
 import { onProjects, sendAddProject } from './projects.telefunc.js'
 import { onPreferences, savePreferences, onProjectPreferences, saveProjectPreferences, onEditors, onNotifyChannels } from './preferences.telefunc.js'
@@ -79,6 +79,7 @@ export function registerDashboardTelefunctions(appRootDir: string = process.cwd(
   reg(onPreviewStatus, 'onPreviewStatus', control)
   reg(sendOpenInApp, 'sendOpenInApp', control)
   reg(sendRemoveWorktree, 'sendRemoveWorktree', control)
+  reg(sendDeleteSession, 'sendDeleteSession', control)
   reg(sendPushBranch, 'sendPushBranch', control)
   reg(sendOpenPullRequest, 'sendOpenPullRequest', control)
   reg(sendQueueTicket, 'sendQueueTicket', control)

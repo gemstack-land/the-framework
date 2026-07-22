@@ -3,8 +3,8 @@ import { test } from 'node:test'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { mkdir, mkdtemp, readFile, realpath, rm, stat, writeFile } from 'node:fs/promises'
-import { formatWorktreeList, removeProjectWorktree, type WorktreeRow } from './worktrees.js'
-import { addWorktree, runBranchName } from './store/index.js'
+import { deleteProjectRun, formatWorktreeList, removeProjectWorktree, type WorktreeRow } from './worktrees.js'
+import { addWorktree, listRuns, runBranchName } from './store/index.js'
 import { nodeGitRunner } from './project.js'
 
 const row = (over: Partial<WorktreeRow> & { runId: string }): WorktreeRow => ({ live: false, ...over })
@@ -96,4 +96,72 @@ test('an unknown session is refused before any git runs (#982)', async () => {
   } finally {
     await rm(repo, { recursive: true, force: true })
   }
+})
+
+// #1032: delete removes the session from the dashboard, records and all — where remove-worktree
+// keeps it. Against real git, because "did the branch survive" is the whole distinction.
+
+/** Write an archived run's meta + log, the two files that put its row in the rail. */
+async function archiveRun(repo: string, id: string): Promise<{ meta: string; log: string }> {
+  const runs = join(repo, '.the-framework', 'runs')
+  await mkdir(runs, { recursive: true })
+  const meta = join(runs, `${id}.json`)
+  const log = join(runs, `${id}.jsonl`)
+  await writeFile(meta, JSON.stringify({ version: 1, status: 'stopped', id, startedAt: '2026-01-01T00:00:00.000Z' }))
+  await writeFile(log, '{"kind":"end"}\n')
+  return { meta, log }
+}
+
+test('deleting a session removes its records and worktree but keeps the branch (#1032)', async () => {
+  const { repo, path, branch } = await repoWithDirtyWorktree()
+  try {
+    const { meta, log } = await archiveRun(repo, RUN_ID)
+    assert.equal((await listRuns(repo)).some(r => r.id === RUN_ID), true, 'the row is listed to begin with')
+
+    assert.deepEqual(await deleteProjectRun(repo, RUN_ID), { ok: true })
+
+    await assert.rejects(() => stat(path), 'the worktree is gone')
+    await assert.rejects(() => stat(meta), 'the run meta is gone')
+    await assert.rejects(() => stat(log), 'the event log is gone')
+    assert.equal((await listRuns(repo)).some(r => r.id === RUN_ID), false, 'the row has left the list')
+    // The branch and its commits are git history, deliberately left behind.
+    const shown = await nodeGitRunner()(['rev-parse', '--verify', branch], repo)
+    assert.match(shown, /^[0-9a-f]{40}/, 'the branch still exists')
+  } finally {
+    await rm(repo, { recursive: true, force: true })
+  }
+})
+
+test('deleting discards uncommitted worktree work rather than committing it (#1032)', async () => {
+  const { repo, path, branch } = await repoWithDirtyWorktree()
+  try {
+    await archiveRun(repo, RUN_ID)
+    // The worktree holds an uncommitted "Welcome!" edit. remove-worktree would commit it to the
+    // branch; delete throws the session away, so the branch keeps only what it had committed.
+    assert.deepEqual(await deleteProjectRun(repo, RUN_ID), { ok: true })
+    await assert.rejects(() => stat(path))
+    const shown = await nodeGitRunner()(['show', `${branch}:index.html`], repo)
+    assert.match(shown, /Hello, world!/, 'the branch keeps its committed content, not the discarded edit')
+    assert.doesNotMatch(shown, /Welcome!/)
+  } finally {
+    await rm(repo, { recursive: true, force: true })
+  }
+})
+
+test('deleting a record-only session (its worktree already gone) still clears the row (#1032)', async () => {
+  const repo = await realpath(await mkdtemp(join(tmpdir(), 'framework-del-')))
+  try {
+    const { meta } = await archiveRun(repo, 'run-x')
+    // No worktree on disk — a clean finished run, or one already removed. Delete must not need one.
+    assert.deepEqual(await deleteProjectRun(repo, 'run-x'), { ok: true })
+    await assert.rejects(() => stat(meta), 'the record is gone')
+  } finally {
+    await rm(repo, { recursive: true, force: true })
+  }
+})
+
+test('an invalid session id is refused before anything is touched (#1032)', async () => {
+  const result = await deleteProjectRun('/nowhere', '../etc/passwd')
+  assert.equal(result.ok, false)
+  assert.match(result.ok === false ? result.error : '', /invalid session id/)
 })

@@ -12,6 +12,9 @@ const buttonVariants = cva(
         outline:
           'border border-[var(--color-border)] bg-transparent hover:bg-[var(--color-accent)] hover:text-[var(--color-accent-foreground)]',
         ghost: 'hover:bg-[var(--color-accent)] hover:text-[var(--color-accent-foreground)]',
+        // A confirmed destructive action (#1032): --danger is a fill, so its label inverts the
+        // opposite way (text-background), the same rule ChoicePanel's Approve button follows.
+        destructive: 'bg-[var(--color-danger)] text-[var(--color-background)] hover:opacity-90',
       },
       size: {
         default: 'h-9 px-4 py-2',

@@ -266,6 +266,12 @@ export default function Page() {
         removeContext={removeContext}
         lost={lost}
         onRunStarted={onRunStarted}
+        onDeleted={() => {
+          // Its view is about to point at a session that no longer exists; go home and refresh
+          // the rail so the row is gone (#1032).
+          selectRun(null)
+          reload()
+        }}
       />
     )
   }
