@@ -1,5 +1,6 @@
 import type { FrameworkEvent } from '@gemstack/framework'
 import { formatFrameworkEvent } from '@gemstack/framework/client'
+import { eventKindLabel } from '../lib/event-labels.js'
 import { receivedAt } from '../lib/event-times.js'
 import { Badge } from './ui/badge.js'
 import {
@@ -64,7 +65,7 @@ export function EventList({
                 <MessageScrollerItem key={i} messageId={String(i)} scrollAnchor={isTurnBoundary(e)} className="flex items-start gap-2">
                   {/* Fixed-width badge column so the text lines up whether or not this row repeats the kind. */}
                   <span className="w-20 shrink-0">
-                    {chunkHead && <Badge className="mt-0.5 text-[10px] uppercase text-muted-foreground">{e.kind}</Badge>}
+                    {chunkHead && <Badge className="mt-0.5 text-[10px] uppercase text-muted-foreground">{eventKindLabel(e.kind)}</Badge>}
                   </span>
                   {disclosable ? (
                     <details className="min-w-0 flex-1">
