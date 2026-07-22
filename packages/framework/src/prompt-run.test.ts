@@ -36,6 +36,26 @@ test('runPrompt runs a gateless prompt straight through and emits session + end'
   assert.equal(events.some(e => e.kind === 'choice'), false)
 })
 
+test('runPrompt swallows a throwing onEvent listener and still finishes', async () => {
+  // A listener that throws on every event, including the session/system-prompt events emitted
+  // before the run's try block. Without the guard the first throw escapes runPrompt uncaught; with
+  // it, the run completes and its `end` still fires. Events are recorded before the throw.
+  const seen: FrameworkEvent[] = []
+  const driver = new FakeDriver({ turns: [{ text: 'all done' }] })
+  const { text } = await runPrompt({
+    prompt: 'do the thing',
+    driver,
+    cwd: '/ws',
+    onEvent: e => {
+      seen.push(e)
+      throw new Error('listener boom')
+    },
+  })
+  assert.equal(text, 'all done')
+  assert.equal(seen[0]!.kind, 'session') // the pre-try session event was delivered, its throw swallowed
+  assert.deepEqual(seen.at(-1), { kind: 'end', ok: true })
+})
+
 test('runPrompt seeds the driver and resumes the opening prompt for a finished-run session (#720)', async () => {
   let startOpts: DriverStartOptions | undefined
   let openingResume: boolean | undefined

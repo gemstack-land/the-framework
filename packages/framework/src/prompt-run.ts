@@ -97,7 +97,16 @@ export async function runPrompt(opts: RunPromptOptions): Promise<RunPromptResult
   const events: FrameworkEvent[] = []
   const emit = (event: FrameworkEvent): void => {
     events.push(event)
-    opts.onEvent?.(event)
+    // Swallow a listener that throws, as runFramework does: emit runs both inside and outside the
+    // try below (the session-start and system-prompt events fire first), so an unguarded throw would
+    // escape the run uncaught or skip its `end` event.
+    if (opts.onEvent) {
+      try {
+        opts.onEvent(event)
+      } catch (err) {
+        console.error('[framework] onEvent threw; ignoring:', err)
+      }
+    }
   }
 
   // The built-in #326 prompt + any user SYSTEM.md frame the session (#301). The
