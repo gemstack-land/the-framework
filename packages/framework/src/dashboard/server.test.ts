@@ -21,6 +21,27 @@ function fetchText(url: string): Promise<{ status: number; body: string; type: s
   })
 }
 
+// Like fetchText, but with an optional Cookie header and the response's Set-Cookie / Location back.
+function fetchAuth(
+  url: string,
+  cookie?: string,
+): Promise<{ status: number; body: string; setCookie?: string | undefined; location?: string | undefined }> {
+  return new Promise((resolvePromise, rejectPromise) => {
+    get(url, { headers: cookie ? { cookie } : {} }, res => {
+      let body = ''
+      res.on('data', c => (body += c))
+      res.on('end', () =>
+        resolvePromise({
+          status: res.statusCode ?? 0,
+          body,
+          setCookie: res.headers['set-cookie']?.[0],
+          location: res.headers.location,
+        }),
+      )
+    }).on('error', rejectPromise)
+  })
+}
+
 /** Send a raw request line over a socket — for request targets `http.get` refuses to send. */
 function rawRequest(url: string, requestLine: string): Promise<string> {
   const port = Number(new URL(url).port)
@@ -151,6 +172,96 @@ test('the Telefunc mount rejects a cross-origin POST (CSRF guard)', async () => 
     const { status, body } = await postCrossOrigin(dash.url + '/_telefunc')
     assert.equal(status, 403)
     assert.match(body, /cross-origin/)
+  } finally {
+    await dash.close()
+    await rm(bundle, { recursive: true, force: true })
+  }
+})
+
+// The shared token (#1051): a real base64url token, matching what the registry generates.
+const TOKEN = 'zX2p8Q0hqk3m9tR7vN1cW4bY6sJ5aL0dFgHiKlMnOp'
+
+// The guard triggers on the token being configured, not on the bind host (a non-loopback bind is
+// exactly what configures one). Binding loopback with the token set exercises every guard path
+// without an external bind that could trip the OS firewall in an automated run; the true two-daemon
+// non-loopback drive is noted as a follow-up in the PR.
+async function guardedDashboard(): Promise<{ base: string; close: () => Promise<void> }> {
+  const bundle = await fakeBundle()
+  const dash = await startDashboard({ port: 0, clientBundleDir: bundle, token: TOKEN })
+  return {
+    base: dash.url,
+    close: async () => {
+      await dash.close()
+      await rm(bundle, { recursive: true, force: true })
+    },
+  }
+}
+
+test('with a token set, every route is 401 without a cookie or ?token= (#1051)', async () => {
+  const { base, close } = await guardedDashboard()
+  try {
+    // The static bundle, the RPC mount, and the browser proxy are all fronted uniformly.
+    for (const path of ['/', '/assets/app.js', '/_telefunc', '/browser/p/x/stream']) {
+      const res = await fetchAuth(base + path)
+      assert.equal(res.status, 401, `${path} should be 401`)
+      assert.match(res.body, /unauthorized/)
+    }
+  } finally {
+    await close()
+  }
+})
+
+test('a valid ?token= sets the HttpOnly fw_daemon cookie and 302s to the clean path (#1051)', async () => {
+  const { base, close } = await guardedDashboard()
+  try {
+    const res = await fetchAuth(`${base}/?token=${TOKEN}`)
+    assert.equal(res.status, 302)
+    assert.equal(res.location, '/') // the token is stripped from the redirect target
+    assert.match(res.setCookie ?? '', /^fw_daemon=/)
+    assert.match(res.setCookie ?? '', /HttpOnly/)
+    assert.match(res.setCookie ?? '', /SameSite=Strict/)
+    assert.match(res.setCookie ?? '', /Path=\//)
+  } finally {
+    await close()
+  }
+})
+
+test('a wrong ?token= is 401, not admitted (timing-safe compare) (#1051)', async () => {
+  const { base, close } = await guardedDashboard()
+  try {
+    const sameLength = await fetchAuth(`${base}/?token=${'a'.repeat(TOKEN.length)}`)
+    assert.equal(sameLength.status, 401)
+    const shorter = await fetchAuth(`${base}/?token=nope`)
+    assert.equal(shorter.status, 401)
+  } finally {
+    await close()
+  }
+})
+
+test('the fw_daemon cookie admits the bundle, /_telefunc, and /browser (#1051)', async () => {
+  const { base, close } = await guardedDashboard()
+  try {
+    const cookie = `fw_daemon=${TOKEN}`
+    const root = await fetchAuth(`${base}/`, cookie)
+    assert.equal(root.status, 200)
+    assert.match(root.body, /<div id="root">/)
+    // Not 401 is the guard passing; the mount / proxy then answer on their own terms.
+    const rpc = await fetchAuth(`${base}/_telefunc`, cookie)
+    assert.notEqual(rpc.status, 401)
+    const browser = await fetchAuth(`${base}/browser/p/x/stream`, cookie)
+    assert.notEqual(browser.status, 401)
+  } finally {
+    await close()
+  }
+})
+
+test('a loopback bind sets no token, so the gate is a no-op (byte-identical) (#1051)', async () => {
+  const bundle = await fakeBundle()
+  const dash = await startDashboard({ port: 0, clientBundleDir: bundle }) // no token
+  try {
+    const res = await fetchAuth(dash.url + '/') // no cookie, no ?token=
+    assert.equal(res.status, 200)
+    assert.match(res.body, /<div id="root">/)
   } finally {
     await dash.close()
     await rm(bundle, { recursive: true, force: true })

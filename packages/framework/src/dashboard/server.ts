@@ -1,4 +1,5 @@
-import { createServer, type Server } from 'node:http'
+import { createServer, type Server, type IncomingMessage, type ServerResponse } from 'node:http'
+import { timingSafeEqual } from 'node:crypto'
 import type { AddressInfo } from 'node:net'
 import type { ProjectsProvider } from './projects.js'
 import { registryPreferencesStore, type PreferencesStore } from '../registry.js'
@@ -72,6 +73,13 @@ export interface DashboardOptions {
    * no built bundle, where the server reports the bundle is missing.
    */
   clientBundleDir?: string
+  /**
+   * The shared token that guards a non-loopback bind (#1051): with it set, every route (static
+   * bundle, `/_telefunc`, `/browser`) needs a valid `fw_daemon` cookie or a matching `?token=`,
+   * else 401. Omit for a loopback bind, where the guard is a no-op and local UX is byte-identical.
+   * A separate concern from the CSRF origin check in telefunc-serve.ts, which it composes with.
+   */
+  token?: string
 }
 
 /** A running localhost dashboard: the prerendered SPA + its Telefunc mount. */
@@ -122,12 +130,15 @@ export function startDashboard(opts: DashboardOptions = {}): Promise<Dashboard> 
     quota,
   })
 
+  const token = opts.token
   const server = createServer((req, res) => {
     const pathname = requestPathname(req)
     if (pathname === undefined) {
       res.writeHead(400, { 'content-type': 'text/plain' }).end('bad request')
       return
     }
+    // #1051: one guard fronting every route on a non-loopback bind; a no-op when no token is set.
+    if (token !== undefined && !authorizeDaemonRequest(req, res, token)) return
     if (pathname === '/_telefunc' || pathname.startsWith('/_telefunc/')) {
       void telefuncMount(req, res)
       return
@@ -168,4 +179,53 @@ function listenDashboard(server: Server, host: string, port: number, close: () =
 
 function closeServer(server: Server): Promise<void> {
   return new Promise(resolvePromise => server.close(() => resolvePromise()))
+}
+
+/** The cookie a bootstrapped browser carries on every same-origin request (#1051). */
+const DAEMON_COOKIE = 'fw_daemon'
+
+/**
+ * The non-loopback bind guard (#1051): a request needs a valid `fw_daemon` cookie or a matching
+ * `?token=`, else 401. A valid `?token=` sets the cookie and 302s to the clean path so the token
+ * leaves the URL bar, history, and Referer after one hop; the cookie then rides RPC, the events
+ * Channel, and the MJPEG `<img>` screencast alike (all same-origin), which a bearer header cannot
+ * reach. Returns true to admit the request, false once it has answered (401 or the redirect).
+ */
+export function authorizeDaemonRequest(req: IncomingMessage, res: ServerResponse, token: string): boolean {
+  // Safe to re-parse: requestPathname already parsed this same url without throwing (#938).
+  const url = new URL(req.url ?? '/', 'http://localhost')
+  const queryToken = url.searchParams.get('token')
+  if (queryToken !== null && tokensMatch(queryToken, token)) {
+    url.searchParams.delete('token')
+    const query = url.searchParams.toString()
+    res.writeHead(302, {
+      'set-cookie': `${DAEMON_COOKIE}=${token}; HttpOnly; SameSite=Strict; Path=/`,
+      location: url.pathname + (query ? `?${query}` : ''),
+    })
+    res.end()
+    return false
+  }
+  const cookieToken = readCookie(req.headers.cookie, DAEMON_COOKIE)
+  if (cookieToken !== undefined && tokensMatch(cookieToken, token)) return true
+  res.writeHead(401, { 'content-type': 'text/plain' })
+  res.end('unauthorized')
+  return false
+}
+
+/** Constant-time token compare (#1051). The length check first, since `timingSafeEqual` throws on
+ * unequal-length buffers and a length mismatch cannot be a match anyway. */
+function tokensMatch(a: string, b: string): boolean {
+  const ab = Buffer.from(a)
+  const bb = Buffer.from(b)
+  return ab.length === bb.length && timingSafeEqual(ab, bb)
+}
+
+/** One cookie's value out of a `Cookie` header, or `undefined`. */
+function readCookie(header: string | undefined, name: string): string | undefined {
+  if (!header) return undefined
+  for (const part of header.split(';')) {
+    const eq = part.indexOf('=')
+    if (eq !== -1 && part.slice(0, eq).trim() === name) return part.slice(eq + 1).trim()
+  }
+  return undefined
 }

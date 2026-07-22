@@ -1,4 +1,5 @@
 import { basename, dirname, join, resolve } from 'node:path'
+import { randomBytes } from 'node:crypto'
 import { isAgentName } from './agent-names.js'
 import { nodeFs } from './node-fs.js'
 import { PROJECT_PREFERENCE_KEYS, MAX_SPEND_OFFSET, type ProjectPreferences } from './preference-defaults.js'
@@ -147,6 +148,12 @@ export interface Registry {
   preferences: Preferences
   /** Per-project overrides (#840), keyed by {@link ProjectRecord.id}. Absent keys fall through. */
   projectPreferences: Record<string, ProjectPreferences>
+  /**
+   * The shared daemon token (#1051): generated on the first non-loopback bind and reused after.
+   * A top-level field, deliberately not a {@link Preferences} one, so it is never shipped to the
+   * browser bundle or the per-project override map. Absent on a loopback-only machine.
+   */
+  daemonToken?: string
 }
 
 /** A read/write handle for the user preferences, threaded through the dashboard's Telefunc
@@ -385,6 +392,8 @@ export async function readRegistry(
     projects,
     preferences: sanitizePreferences(obj.preferences),
     projectPreferences: sanitizeProjectPreferenceMap(obj.projectPreferences),
+    // #1051: kept only as a non-empty string, so a hand-edited registry can't smuggle a junk token.
+    ...(typeof obj.daemonToken === 'string' && obj.daemonToken ? { daemonToken: obj.daemonToken } : {}),
   }
 }
 
@@ -402,10 +411,13 @@ export async function readRegistry(
  */
 async function writeRegistry(registry: Registry, fs: RegistryFs, env: NodeJS.ProcessEnv): Promise<void> {
   const file = registryPath(env)
-  const { projects, preferences, projectPreferences } = registry
-  const contents = Object.keys(projectPreferences).length
-    ? { projects, preferences, projectPreferences }
-    : { projects, preferences }
+  const { projects, preferences, projectPreferences, daemonToken } = registry
+  const contents = {
+    projects,
+    preferences,
+    ...(Object.keys(projectPreferences).length ? { projectPreferences } : {}),
+    ...(daemonToken ? { daemonToken } : {}),
+  }
   const json = JSON.stringify(contents, null, 2)
   await fs.mkdir(dirname(file))
   if (!fs.rename) return fs.write(file, json)
@@ -485,7 +497,7 @@ export async function removeProject(
     const remaining = registry.projects.filter(project => project.id !== id)
     if (remaining.length === registry.projects.length) return false
     const { [id]: _dropped, ...projectPreferences } = registry.projectPreferences
-    await writeRegistry({ projects: remaining, preferences: registry.preferences, projectPreferences }, fs, env)
+    await writeRegistry({ ...registry, projects: remaining, projectPreferences }, fs, env)
     return true
   })
 }
@@ -537,6 +549,34 @@ export async function writeProjectPreferences(
     const projectPreferences = Object.keys(sanitized).length ? { ...rest, [projectId]: sanitized } : rest
     await writeRegistry({ ...registry, projectPreferences }, fs, env)
   })
+}
+
+/**
+ * The shared daemon token (#1051): read the persisted one, or generate + persist it now. Called
+ * only on a non-loopback bind, so a loopback-only machine never grows one. Serialized with the
+ * other mutators so two concurrent binds can't each write a different token. `base64url` of 32
+ * random bytes: URL-safe, so it drops straight into a `?token=` without encoding.
+ */
+export async function ensureDaemonToken(
+  fs: RegistryFs = nodeRegistryFs(),
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<string> {
+  return serialize(async () => {
+    const registry = await readRegistry(fs, env)
+    if (registry.daemonToken) return registry.daemonToken
+    const daemonToken = randomBytes(32).toString('base64url')
+    await writeRegistry({ ...registry, daemonToken }, fs, env)
+    return daemonToken
+  })
+}
+
+/** The persisted daemon token (#1051), or `undefined` when none exists. A pure read, so a process
+ * that only prints the reachable URL never generates one. */
+export async function readDaemonToken(
+  fs: RegistryFs = nodeRegistryFs(),
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<string | undefined> {
+  return (await readRegistry(fs, env)).daemonToken
 }
 
 /** A {@link PreferencesStore} bound to the real registry file, wired by the daemon so the

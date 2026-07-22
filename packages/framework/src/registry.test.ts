@@ -3,8 +3,10 @@ import { test } from 'node:test'
 import { join } from 'node:path'
 import {
   addProject,
+  ensureDaemonToken,
   listProjects,
   projectId,
+  readDaemonToken,
   readPreferences,
   readProjectPreferences,
   readRegistry,
@@ -489,3 +491,46 @@ test('a rejected mutation does not wedge the queue for the next caller (#991)', 
   assert.deepEqual(await listProjects(healthy, ENV), [APP_B])
 })
 
+
+test('ensureDaemonToken generates a base64url token, persists it, and reuses it (#1051)', async () => {
+  const fs = memFs()
+  const first = await ensureDaemonToken(fs, ENV)
+  assert.match(first, /^[A-Za-z0-9_-]+$/) // base64url: URL-safe, so it drops into ?token= unencoded
+  assert.ok(first.length >= 43) // 32 random bytes as base64url
+  // Persisted as a top-level field, never under preferences (never shipped to the browser bundle).
+  const stored = JSON.parse(fs.files.get(FILE)!)
+  assert.equal(stored.daemonToken, first)
+  assert.equal(stored.preferences.daemonToken, undefined)
+  // A second call reuses the persisted one rather than rotating it.
+  assert.equal(await ensureDaemonToken(fs, ENV), first)
+})
+
+test('readDaemonToken returns undefined until one is generated, then the persisted token (#1051)', async () => {
+  const fs = memFs()
+  assert.equal(await readDaemonToken(fs, ENV), undefined)
+  const token = await ensureDaemonToken(fs, ENV)
+  assert.equal(await readDaemonToken(fs, ENV), token)
+})
+
+test('a non-string / empty daemonToken in a hand-edited file is dropped (#1051)', async () => {
+  for (const bad of [42, '', null, {}]) {
+    const fs = memFs({ [FILE]: JSON.stringify({ projects: [], preferences: {}, daemonToken: bad }) })
+    assert.equal(await readDaemonToken(fs, ENV), undefined)
+  }
+})
+
+test('the daemon token survives the other registry mutators (#1051)', async () => {
+  const fs = memFs()
+  const token = await ensureDaemonToken(fs, ENV)
+  await addProject('/repos/app-a', APP_A.addedAt, fs, ENV)
+  await writePreferences({ vanilla: true }, fs, ENV)
+  await writeProjectPreferences(APP_A.id, { model: 'opus' }, fs, ENV)
+  await removeProject(APP_A.id, fs, ENV)
+  assert.equal(await readDaemonToken(fs, ENV), token)
+})
+
+test('two concurrent first-binds settle on one shared token, not two (#1051)', async () => {
+  const fs = memFs({ [FILE]: JSON.stringify({ projects: [], preferences: {} }) }, { slow: true })
+  const [a, b] = await Promise.all([ensureDaemonToken(fs, ENV), ensureDaemonToken(fs, ENV)])
+  assert.equal(a, b)
+})
