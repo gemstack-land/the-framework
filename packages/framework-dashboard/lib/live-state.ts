@@ -83,6 +83,23 @@ export function runOutcome(events: readonly FrameworkEvent[]): RunOutcome | unde
 }
 
 /**
+ * The GitHub Actions run's live URL, from the `action` event the ActionsDriver emits once it
+ * finds its workflow run (#1053): its label is `run <html_url>`. Lets the run view link through
+ * to the live Actions run while the transcript is still burst-replaying at the end. The last
+ * match wins, so a multi-turn session points at its most recent run. Absent until the driver has
+ * found the run (and for any non-Actions target).
+ */
+export function actionsRunUrl(events: readonly FrameworkEvent[]): string | undefined {
+  let url: string | undefined
+  for (const event of events) {
+    if (event.kind !== 'driver' || event.event.type !== 'action') continue
+    const match = /^run (https?:\/\/\S+)$/.exec(event.event.label)
+    if (match) url = match[1]
+  }
+  return url
+}
+
+/**
  * The current run's slice of an accumulated live feed. The dashboard's live channel keeps
  * one long-lived subscription per project and appends every streamed event, but each run
  * truncates `events.jsonl` on disk and opens with exactly one `session` event

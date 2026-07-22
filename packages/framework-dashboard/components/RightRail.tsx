@@ -28,6 +28,7 @@ export function RightRail({
   context,
   toggleContext,
   hasBrowser = false,
+  target,
   onRunStarted,
 }: {
   projectId: string | null
@@ -43,6 +44,8 @@ export function RightRail({
   toggleContext: (path: string) => void
   /** Whether the selected run is serving a browser preview (#813), i.e. it was started with Browser on. */
   hasBrowser?: boolean
+  /** Where the selected run executes (#1053): an `actions` run has no browser on the runner, so no pane. */
+  target?: 'local' | 'actions' | undefined
   /** Told when a panel starts a session (the tickets import, #948), so the shell shows it. */
   onRunStarted?: ((intent: string, runId?: string) => void) | undefined
 }) {
@@ -57,6 +60,8 @@ export function RightRail({
   const hasChoices = choices.length > 0
   const hasViews = views.length > 0
   const hasFiles = files.length > 0
+  // No browser on a GitHub Actions runner (#1053), so no screencast to proxy — never offer the tab.
+  const showBrowser = hasBrowser && target !== 'actions'
 
   // Only pull the rail for something genuinely new (#695/U22): a fresh choice gate (an id we
   // haven't shown) or the first view. A resolving gate, a second view, or a Files flip no longer
@@ -82,7 +87,7 @@ export function RightRail({
     ...(hasChoices ? ['choices' as const] : []),
     ...(hasViews ? ['views' as const] : []),
     // Only when the run actually has one (#813) — a dead tab teaches people the preview is broken.
-    ...(hasBrowser && runId ? ['browser' as const] : []),
+    ...(showBrowser && runId ? ['browser' as const] : []),
     'tickets',
     'docs',
     'log',
@@ -137,7 +142,7 @@ export function RightRail({
           <ChoicesRail projectId={projectId} runId={runId} choices={choices} />
         ) : tab === 'views' && hasViews ? (
           <ViewsRail views={views} />
-        ) : tab === 'browser' && hasBrowser && runId ? (
+        ) : tab === 'browser' && showBrowser && runId ? (
           <BrowserPanel projectId={projectId} runId={runId} />
         ) : tab === 'tickets' ? (
           <TicketsPanel projectId={projectId} onRunStarted={onRunStarted} />

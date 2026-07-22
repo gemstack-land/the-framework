@@ -129,6 +129,12 @@ export interface RunMeta {
    * dashboard is a different process, so meta is the only place it can learn it.
    */
   browserStreamPort?: number
+  /**
+   * Where this run executes (#1050/#1053): `actions` for a GitHub Actions run, absent for a local
+   * run. Persisted so the run view can tell a burst-mode Actions run from a stalled live feed and
+   * gate the browser pane off (#1053).
+   */
+  target?: 'local' | 'actions'
 }
 
 /**
@@ -195,6 +201,8 @@ export interface OpenStoreOptions {
    * Falls back to a fresh run when there is nothing to reopen.
    */
   continueRun?: boolean
+  /** Where this run executes (#1053): recorded on the meta so the run view can read it. */
+  target?: 'local' | 'actions'
 }
 
 /**
@@ -268,7 +276,7 @@ export interface RunOwner {
 }
 
 /** The seed meta a run starts from, before any event is folded in. */
-function freshMeta(startedAt: string, intent?: string, owner?: RunOwner, id?: string): RunMeta {
+function freshMeta(startedAt: string, intent?: string, owner?: RunOwner, id?: string, target?: 'local' | 'actions'): RunMeta {
   return {
     version: RUN_META_VERSION,
     status: 'running',
@@ -278,6 +286,8 @@ function freshMeta(startedAt: string, intent?: string, owner?: RunOwner, id?: st
     passes: 0,
     ...(owner ? { pid: owner.pid, host: owner.host } : {}),
     ...(intent ? { intent } : {}),
+    // Only `actions` travels; `local` is the default every reader already assumes.
+    ...(target === 'actions' ? { target } : {}),
   }
 }
 
@@ -377,7 +387,7 @@ export class RunStore {
     await fs.mkdir(dir)
     const owner = opts.owner ?? { pid: process.pid, host: hostname() }
     const clock = opts.clock ?? (() => new Date().toISOString())
-    const store = new RunStore(fs, dir, clock, freshMeta(now, opts.intent, owner, opts.id))
+    const store = new RunStore(fs, dir, clock, freshMeta(now, opts.intent, owner, opts.id, opts.target))
     if (opts.continueRun) {
       // Reopen: the log stays, the row keeps its original intent, and this process takes ownership
       // so a liveness probe (#716) reads the run as alive rather than as an orphan.

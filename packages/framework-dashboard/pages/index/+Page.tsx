@@ -265,6 +265,7 @@ export default function Page() {
         addContext={addContext}
         removeContext={removeContext}
         lost={lost}
+        target={selectedRun.target}
         onRunStarted={onRunStarted}
         onDeleted={() => {
           // Its view is about to point at a session that no longer exists; go home and refresh
@@ -336,6 +337,7 @@ export default function Page() {
           context={context}
           toggleContext={toggleContext}
           hasBrowser={selectedRun?.status === 'running' && selectedRun.browserStreamPort !== undefined}
+          target={selectedRun?.target}
           onRunStarted={onRunStarted}
         />
       </div>

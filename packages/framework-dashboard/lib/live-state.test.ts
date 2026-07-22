@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest'
 import type { FrameworkEvent } from '@gemstack/framework'
-import { agentViews, pendingChoices, isRunActive, currentRunEvents, runOutcome } from './live-state.js'
+import { agentViews, pendingChoices, isRunActive, currentRunEvents, runOutcome, actionsRunUrl } from './live-state.js'
 
 const view = (id: string, title: string, markdown: string): FrameworkEvent => ({ kind: 'view', id, title, markdown })
 const choice = (id: string, title: string): FrameworkEvent => ({
@@ -125,5 +125,29 @@ describe('runOutcome', () => {
 
   test('a user stop is a stop, not a failure', () => {
     expect(runOutcome([{ kind: 'end', ok: false, stopped: true }])).toEqual({ ok: false, stopped: true })
+  })
+})
+
+describe('actionsRunUrl', () => {
+  const action = (label: string): FrameworkEvent => ({ kind: 'driver', event: { type: 'action', label } })
+
+  test('extracts the html_url from the ActionsDriver run action', () => {
+    expect(actionsRunUrl([action('run https://github.com/o/r/actions/runs/42')])).toBe(
+      'https://github.com/o/r/actions/runs/42',
+    )
+  })
+
+  test('undefined before the run action has fired', () => {
+    expect(actionsRunUrl([{ kind: 'driver', event: { type: 'start', prompt: 'go' } }])).toBeUndefined()
+  })
+
+  test('a plain tool action is not mistaken for a run url', () => {
+    expect(actionsRunUrl([action('Edit')])).toBeUndefined()
+  })
+
+  test('the most recent run wins across turns', () => {
+    expect(
+      actionsRunUrl([action('run https://github.com/o/r/actions/runs/1'), action('run https://github.com/o/r/actions/runs/2')]),
+    ).toBe('https://github.com/o/r/actions/runs/2')
   })
 })
