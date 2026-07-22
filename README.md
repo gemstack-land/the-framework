@@ -1,8 +1,16 @@
-# The Framework
+<p align="center">
+  <img src="./logo.svg" alt="The Framework" width="200" />
+</p>
 
-**Autonomous AI programming.** Stop babysitting your coding agents: make the important decisions and let AI do the rest.
+<h1 align="center">The Framework</h1>
 
-[![npm](https://img.shields.io/npm/v/@gemstack/framework)](https://www.npmjs.com/package/@gemstack/framework) [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE) [![Discord](https://img.shields.io/badge/Discord-join-5865F2?logo=discord&logoColor=white)](https://discord.gg/qc8zvdzWNR)
+<p align="center"><b>Autonomous AI programming.</b> Stop babysitting your coding agents: make the important decisions and let AI do the rest.</p>
+
+<p align="center">
+  <a href="https://www.npmjs.com/package/@gemstack/framework"><img src="https://img.shields.io/npm/v/@gemstack/framework" alt="npm" /></a>
+  <a href="./LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License: MIT" /></a>
+  <a href="https://discord.gg/qc8zvdzWNR"><img src="https://img.shields.io/badge/Discord-join-5865F2?logo=discord&logoColor=white" alt="Discord" /></a>
+</p>
 
 The Framework turns your coding agent into an autonomous teammate: it plans, researches, implements, reviews, and improves its own work, while keeping you in control of the decisions that matter. It wraps a coding-agent CLI (Claude Code today) as a black box and takes you from an idea to a running app, with a localhost dashboard that shows the orchestration the agent's own chat cannot: the loop status, the review passes, and the queue of what is next.
 
