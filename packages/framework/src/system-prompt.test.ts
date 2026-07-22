@@ -13,6 +13,8 @@ import {
 } from './system-prompt.js'
 import { FLAT_TODO_FILE, TICKETING_FORMAT_FILE, TODO_FORMAT_FILE } from './tickets.js'
 import { loadUserSystemPrompt, SYSTEM_PROMPT_FILE } from './system-prompt-file.js'
+import { CONVERSATIONS_DIR } from './conversations.js'
+import { THE_FRAMEWORK_DIR } from './framework-dir.js'
 
 /** The context docs as the commented bullets they render to (#559/#683). */
 const KNOWLEDGE_LINES = CONTEXT_DOCS.map(d => `- \`${d.path}\` (${d.comment})`).join('\n')
@@ -29,14 +31,15 @@ test('CONTEXT_DOCS is the #683 fragment: business knowledge plus the roadmap/que
     'knowledge-base/MARKET_RESEARCH.md',
     'knowledge-base/**.md',
     'tickets/**.md',
+    '.the-framework/conversations/**.md',
     'TODO_AGENTS.md',
   ])
   // The business-knowledge docs are a subset the agent also updates at merge.
   for (const doc of BUSINESS_KNOWLEDGE_DOCS) assert.ok(paths.includes(doc.path), `missing ${doc.path}`)
-  // GOAL / market research / tickets / TODO_AGENTS are read-only context, so they are not in the
-  // merge-update set.
+  // GOAL / market research / tickets / conversations / TODO_AGENTS are read-only context, so they
+  // are not in the merge-update set.
   const businessPaths = BUSINESS_KNOWLEDGE_DOCS.map(d => d.path)
-  for (const p of ['GOAL.md', 'knowledge-base/MARKET_RESEARCH.md', 'knowledge-base/**.md', 'tickets/**.md', 'TODO_AGENTS.md']) {
+  for (const p of ['GOAL.md', 'knowledge-base/MARKET_RESEARCH.md', 'knowledge-base/**.md', 'tickets/**.md', '.the-framework/conversations/**.md', 'TODO_AGENTS.md']) {
     assert.ok(!businessPaths.includes(p))
   }
   // The ticket-format pointer is inlined here (this module stays node-free), so pin it to the
@@ -46,6 +49,10 @@ test('CONTEXT_DOCS is the #683 fragment: business knowledge plus the roadmap/que
   // Same for the #880 backlog-format pointer.
   const todo = CONTEXT_DOCS.find(d => d.path === FLAT_TODO_FILE)
   assert.ok(todo?.comment.includes(TODO_FORMAT_FILE), `expected the ${TODO_FORMAT_FILE} pointer`)
+  // The conversations pointer (#683/#908) is inlined too, so pin its dir to the canonical
+  // constants rather than a bare literal that could drift from where runs actually commit.
+  const conversations = CONTEXT_DOCS.find(d => d.path.startsWith(`${THE_FRAMEWORK_DIR}/${CONVERSATIONS_DIR}/`))
+  assert.ok(conversations, `expected the ${THE_FRAMEWORK_DIR}/${CONVERSATIONS_DIR}/ pointer`)
 })
 import { AWAIT_PROTOCOL, BROWSER_PROTOCOL, SIGNAL_PROTOCOL } from './turn-gate.js'
 
