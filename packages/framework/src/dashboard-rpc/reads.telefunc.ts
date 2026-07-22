@@ -40,6 +40,22 @@ async function withProject<T>(projectId: string, read: (cwd: string) => Promise<
 }
 
 /**
+ * The `withProject` twin for a run-scoped read: resolve the checkout a `runId` names (its own
+ * worktree while live, else the project root, #738), then read forgivingly. An absent project
+ * or a failing read both fall back to `empty`.
+ */
+async function withRunPath<T>(projectId: string, runId: string | undefined, read: (cwd: string) => Promise<T>, empty: T): Promise<T> {
+  const cwd = await resolveRunPath(projectId, runId)
+  return cwd ? read(cwd).catch(() => empty) : empty
+}
+
+/** Run a cross-project rollup over every registered project, tolerating a failed registry read. */
+async function withProjects<T>(build: (projects: Awaited<ReturnType<ReturnType<typeof contextProjects>['list']>>) => Promise<T>): Promise<T> {
+  const projects = await contextProjects().list().catch(() => [])
+  return build(projects)
+}
+
+/**
  * The project's runs, most-recent first (or `[]`). The archived (finished) runs
  * from `runs/`, plus every live run prepended — so the sidebar shows an in-progress
  * run with a `running` status the moment it starts, not only after it closes.
@@ -137,32 +153,27 @@ export async function onProjectLog(projectId: string): Promise<LogEntry[]> {
 
 /** The aggregated open TODO queue across every registered project (#438), most-open first. */
 export async function onQueue(): Promise<ProjectQueue[]> {
-  const projects = await contextProjects().list().catch(() => [])
-  return collectQueue(projects)
+  return withProjects(collectQueue)
 }
 
 /** The cross-project Overview (#437): what is running now, the queue size, and recent projects. */
 export async function onOverview(): Promise<Overview> {
-  const projects = await contextProjects().list().catch(() => [])
-  return buildOverview(projects)
+  return withProjects(buildOverview)
 }
 
 /** The cross-project interventions queue (#632, Queue #624): open PRs that need review, newest first. */
 export async function onInterventions(): Promise<Intervention[]> {
-  const projects = await contextProjects().list().catch(() => [])
-  return buildInterventions(projects)
+  return withProjects(buildInterventions)
 }
 
 /** The cross-project "New activity" feed (#627): recent run started/finished transitions, newest first. */
 export async function onActivity(): Promise<Activity[]> {
-  const projects = await contextProjects().list().catch(() => [])
-  return buildActivity(projects)
+  return withProjects(buildActivity)
 }
 
 /** The Overview dashboard page (#471): the {@link onOverview} rollup plus run counts, run-status totals, and activity. */
 export async function onDashboard(): Promise<DashboardData> {
-  const projects = await contextProjects().list().catch(() => [])
-  return buildDashboard(projects)
+  return withProjects(buildDashboard)
 }
 
 /**
@@ -172,8 +183,7 @@ export async function onDashboard(): Promise<DashboardData> {
  * Pass a live `runId` to list that run's worktree instead of the project root (#738).
  */
 export async function onProjectFiles(projectId: string, runId?: string): Promise<string[]> {
-  const cwd = await resolveRunPath(projectId, runId)
-  return cwd ? crawlRepoFiles(cwd).catch(() => []) : []
+  return withRunPath(projectId, runId, crawlRepoFiles, [])
 }
 
 /**
@@ -182,8 +192,7 @@ export async function onProjectFiles(projectId: string, runId?: string): Promise
  * Pass a live `runId` to see that run's own worktree rather than the project root (#738).
  */
 export async function onProjectFileStatus(projectId: string, runId?: string): Promise<Record<string, FileGitStatus>> {
-  const cwd = await resolveRunPath(projectId, runId)
-  return cwd ? readFileStatuses(cwd).catch(() => ({})) : {}
+  return withRunPath<Record<string, FileGitStatus>>(projectId, runId, readFileStatuses, {})
 }
 
 /**
@@ -228,9 +237,7 @@ export async function onRunChanges(projectId: string, runId?: string): Promise<F
  * file has a diff worth seeing, an unchanged one has only itself.
  */
 export async function onFileContent(projectId: string, path: string, runId?: string): Promise<FileContent | null> {
-  const cwd = await resolveRunPath(projectId, runId)
-  if (!cwd) return null
-  return readFileContent(cwd, path).catch(() => null)
+  return withRunPath<FileContent | null>(projectId, runId, cwd => readFileContent(cwd, path), null)
 }
 
 /** The project's GitHub URL from its `origin` remote (#489), or null (no remote / not GitHub / relay). */
