@@ -2,7 +2,7 @@ import { mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import type { DriverSession } from './driver/index.js'
 import type { ChoicePick, ChoiceRequest, FrameworkEvent } from './events.js'
-import { requestChoices, runAwaitRounds } from './run.js'
+import { requestChoices, runAwaitRounds } from './await-gate.js'
 import { FLAT_TODO_FILE, findFlatTodo } from './tickets.js'
 import { createTurnSignalEmitter } from './turn-gate.js'
 

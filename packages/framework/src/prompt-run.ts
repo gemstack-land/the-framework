@@ -1,6 +1,6 @@
 import type { Driver, DriverSession } from './driver/index.js'
 import { type ChoicePick, type ChoiceRequest, type FrameworkEvent } from './events.js'
-import { runAwaitRounds, type RecordMessage } from './run.js'
+import { runAwaitRounds, type RecordMessage } from './await-gate.js'
 import { composeRunSystem, renderSystemPrompt, type EcoOptions, type TfContext } from './system-prompt.js'
 import { createRunControls, emitSessionStart, endStopDetail } from './run-telemetry.js'
 import { createTurnSignalEmitter } from './turn-gate.js'

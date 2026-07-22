@@ -1,7 +1,7 @@
 import type { FrameworkEvent } from './events.js'
 import { PROTOCOLS_BROWSER, PROTOCOLS_AWAIT, PROTOCOLS_SIGNAL } from './prompts.generated.js'
-import type { ChoicesOption } from './run.js'
-import type { MultiSelectOption } from './run.js'
+import type { ChoicesOption } from './await-gate.js'
+import type { MultiSelectOption } from './await-gate.js'
 
 /**
  * The framework-owned "await" protocol (#337 / #339): the *code side* of the

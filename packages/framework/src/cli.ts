@@ -47,7 +47,7 @@ import { loadUserSystemPrompt, SYSTEM_PROMPT_FILE } from './system-prompt-file.j
 import { checkForUpdate, formatUpdateStatus, nodeVersionFetcher } from './update-check.js'
 import { appendLog, type LogEntry } from './logs.js'
 import { appendMessage, isSafeVia } from './conversations.js'
-import type { RecordMessage } from './run.js'
+import type { RecordMessage } from './await-gate.js'
 import { preflight } from './preflight.js'
 import { RunStore, currentBranch, nodeStoreFs, renameRunBranch, runBranchName, type StoreFs } from './store/index.js'
 import { materializePresets } from './presets.js'

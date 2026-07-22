@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { resolveAwaitGate } from './run.js'
+import { resolveAwaitGate } from './await-gate.js'
 import { BROWSER_HANDLED, BROWSER_NOT_HANDLED, parseAwaitGate, parseBrowserGate } from './turn-gate.js'
 
 const block = (body: string) => `Stuck on the login page.\n\n\`\`\`await-browser\n${body}\n\`\`\``
