@@ -63,8 +63,8 @@ export function EventList({
               const at = receivedAt(e)
               return (
                 <MessageScrollerItem key={i} messageId={String(i)} scrollAnchor={isTurnBoundary(e)} className="flex items-start gap-2">
-                  {/* Fixed-width badge column so the text lines up whether or not this row repeats the kind. */}
-                  <span className="w-20 shrink-0">
+                  {/* Fixed-width badge column so the text lines up whether or not this row repeats the kind. Wide enough for the longest common label ("system prompt") to sit on one line. */}
+                  <span className="w-28 shrink-0">
                     {chunkHead && <Badge className="mt-0.5 text-[10px] uppercase text-muted-foreground">{eventKindLabel(e.kind)}</Badge>}
                   </span>
                   {disclosable ? (
