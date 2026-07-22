@@ -90,6 +90,18 @@ test('fresh open seeds the run intent into the snapshot (so prompt runs are not 
   assert.equal((await store.readMeta())?.intent, 'what is your name')
 })
 
+test('fresh open records an actions target so the run view can read it (#1053)', async () => {
+  const fs = memFs()
+  const store = await RunStore.open(CWD, { fs, fresh: true, now: AT, target: 'actions' })
+  assert.equal((await store.readMeta())?.target, 'actions')
+})
+
+test('a local target is left off the snapshot (default, #1053)', async () => {
+  const fs = memFs()
+  const store = await RunStore.open(CWD, { fs, fresh: true, now: AT, target: 'local' })
+  assert.equal('target' in (await store.readMeta())!, false)
+})
+
 test('a scope event still refines a seeded intent (build path)', async () => {
   const fs = memFs()
   const store = await RunStore.open(CWD, { fs, fresh: true, now: AT, intent: 'build a blog' })

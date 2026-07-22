@@ -1355,6 +1355,8 @@ async function runBuild(opts: CliOptions, io: CliIO): Promise<number> {
         ...(opts.runId ? { id: opts.runId } : {}),
         // Continuing (#762): keep the existing log rather than starting this run's history over.
         ...(opts.continueRun ? { continueRun: true } : {}),
+        // Where the run executes (#1053): the run view reads it to switch to the Actions affordance.
+        ...(opts.target ? { target: opts.target } : {}),
       })
     } catch (err) {
       io.err(`could not persist session state (${errorMessage(err)}); continuing without it`)

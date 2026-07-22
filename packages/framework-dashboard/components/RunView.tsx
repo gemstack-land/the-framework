@@ -8,6 +8,7 @@ import { runOutcome } from '../lib/live-state.js'
 import { RunActionBar } from './RunActionBar.js'
 import { RunComposer } from './RunComposer.js'
 import { RunFeed } from './RunFeed.js'
+import { ActionsRunNotice } from './ActionsRunNotice.js'
 import { ChangesSummary, RunChanges } from './RunChanges.js'
 import { HandoffActions, HandoffSummary, RunHandoffDetails, handoffExpandable } from './RunHandoff.js'
 
@@ -29,6 +30,7 @@ export function RunView({
   events,
   live,
   label,
+  target,
   files,
   addContext,
   removeContext,
@@ -47,6 +49,8 @@ export function RunView({
    * the stable identity, so the branch renaming itself near the end of a run (#736) reads as a
    * detail changing rather than the whole view changing. */
   label?: string | undefined
+  /** Where the run executes (#1053): `actions` swaps the live feed for a burst-mode affordance. */
+  target?: 'local' | 'actions' | undefined
   files: string[]
   addContext: (path: string) => void
   removeContext?: ((path: string) => void) | undefined
@@ -122,6 +126,9 @@ export function RunView({
           files as the run's. */}
       {live && runId && <RunChanges projectId={projectId} runId={runId} open={open} onSummary={onChangesSummary} />}
       {!live && open && <RunHandoffDetails handoff={handoff.handoff} />}
+      {/* A GitHub Actions run replays in a burst at the end (#1053), so the live feed looks stalled:
+          say the wait is expected and link through to the live Actions run. */}
+      <ActionsRunNotice target={target} events={shown} live={live} />
       {/* Nothing to show yet is not the same thing in both states: a live run is waiting for its
           first event, a finished one is still reading its log. */}
       {!live && archived === null && shown.length === 0 ? (

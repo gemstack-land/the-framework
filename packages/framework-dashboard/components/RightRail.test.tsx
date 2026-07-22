@@ -53,3 +53,17 @@ describe('RightRail width', () => {
     expect(container.querySelector('aside')).toBeNull()
   })
 })
+
+// A GitHub Actions run has no browser on the runner (#1053), so the pane must not be offered even
+// when the browser flag is on; a local run keeps it.
+describe('RightRail browser tab (#1053)', () => {
+  test('a local run with a browser offers the Browser tab', () => {
+    render(<RightRail {...baseProps} hasBrowser />)
+    expect(screen.getByRole('tab', { name: /browser/i })).toBeTruthy()
+  })
+
+  test('an Actions run never offers the Browser tab, even with the flag on', () => {
+    render(<RightRail {...baseProps} hasBrowser target="actions" />)
+    expect(screen.queryByRole('tab', { name: /browser/i })).toBeNull()
+  })
+})
