@@ -107,6 +107,8 @@ export function startOptionFlags(options: StartRunOptions): string[] {
   if (typeof options.agent === 'string' && options.agent.trim() && options.agent !== 'claude') {
     flags.push('--agent', options.agent.trim())
   }
+  // Run target (#1050): only `actions` needs a flag; `local` is the default and emits nothing.
+  if (options.target === 'actions') flags.push('--run-on', 'actions')
   // Unattended (#846): nobody is at the keyboard, so gates take the recommended option
   // rather than park for an answer that is not coming.
   if (options.unattended) flags.push('--unattended')

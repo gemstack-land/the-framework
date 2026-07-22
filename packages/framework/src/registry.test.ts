@@ -225,6 +225,23 @@ test('every boolean preference survives a save; the sanitizer cannot silently dr
   assert.deepEqual(await readPreferences(fs, ENV), allOn)
 })
 
+test('sanitizePreferences keeps a valid run target and drops junk (#1050)', async () => {
+  // The PREFERENCE_KEYS loop is boolean-only, so a string preference needs its own branch or the
+  // save silently eats it. A valid target round-trips; an unknown one is dropped to the default.
+  const fs = memFs()
+  await writePreferences({ target: 'actions' }, fs, ENV)
+  assert.deepEqual(await readPreferences(fs, ENV), { target: 'actions' })
+  await writePreferences({ target: 'moon' } as never, fs, ENV)
+  assert.deepEqual(await readPreferences(fs, ENV), {})
+})
+
+test('a project may override the run target (#1050)', async () => {
+  // `target` is a project-scoped key (like agent/model), so "run this repo on Actions" sticks.
+  const fs = memFs()
+  await writeProjectPreferences('app-1', { target: 'actions' }, fs, ENV)
+  assert.deepEqual(await readProjectPreferences('app-1', fs, ENV), { target: 'actions' })
+})
+
 // Per-project run options (#840): a project overrides only what it sets, the rest falls through.
 
 test('resolvePreferences lets a project override only the keys it stores', async () => {

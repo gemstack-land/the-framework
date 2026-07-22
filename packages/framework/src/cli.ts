@@ -13,7 +13,10 @@ import {
   type FrameworkSignals,
 } from '@gemstack/ai-autopilot'
 import { type ClaudeCodeDriverOptions, type Driver, type DriverSession, type PermissionMode } from './driver/index.js'
-import { AGENTS, AGENT_SPECS, createDriver, isAgentName, type AgentName } from './agent.js'
+import { AGENTS, AGENT_SPECS, isAgentName, type AgentName } from './agent.js'
+import { createRunDriver } from './run-driver.js'
+import { githubSlugFor } from './dashboard/github.js'
+import type { ActionsDriverOptions } from './driver/index.js'
 import { launchSharedBrowser, withBrowser, type SharedBrowser } from './browser.js'
 import { connectCdp, startBrowserStream, type BrowserStream } from './browser-stream.js'
 import { hostExecutor } from './host-exec.js'
@@ -159,6 +162,10 @@ Options:
                          (default: claude). Codex reports no price and no quota,
                          so --max-cost and the consumption limits cannot gate it;
                          the session says so at startup rather than imply a guard.
+  --run-on <local|actions>   Where the run executes (default: local, this device).
+                         actions drives it on a fresh GitHub Actions runner; needs a
+                         GitHub origin remote and a user token in GH_TOKEN (repo +
+                         workflow scopes).
   --cwd <dir>            Workspace the agent builds in (default: current directory).
   --model <id>           Model to pass through to the wrapped agent.
   --via <surface>        Surface this run was started from (e.g. discord); recorded
@@ -258,6 +265,9 @@ export interface CliOptions {
   intent: string
   /** `--agent <claude|codex>`: which agent CLI drives the run (#542). Default `claude`. */
   agent: AgentName
+  /** `--run-on <local|actions>` (#1050): where the run executes. `actions` drives it on a GitHub
+   * Actions runner via ActionsDriver (#934); absent / `local` runs on this device as before. */
+  target?: 'local' | 'actions' | undefined
   cwd?: string | undefined
   /**
    * `--run-id <id>` (#736): the id the daemon allocated for this run before spawning it. Its
@@ -483,6 +493,12 @@ export function parseArgs(argv: string[]): CliOptions {
         const value = argv[++i]
         if (!isAgentName(value)) opts.error = `invalid --agent: ${value ?? '(missing)'}. Expected: ${AGENTS.join(' | ')}`
         else opts.agent = value
+        break
+      }
+      case '--run-on': {
+        const value = argv[++i]
+        if (value !== 'local' && value !== 'actions') opts.error = `invalid --run-on: ${value ?? '(missing)'}. Expected: local | actions`
+        else opts.target = value
         break
       }
       case '--cwd':
@@ -1485,9 +1501,34 @@ async function runBuild(opts: CliOptions, io: CliIO): Promise<number> {
     io.err('note: no Chrome found, so --browser falls back to its own browser (no preview).')
   }
 
+  // Run on GitHub Actions (#1050): owner/repo come from the project's origin remote, the token from
+  // GH_TOKEN. The token is read from the environment, never the committed the-framework.yml, since a
+  // repo file is public and this must be a user PAT. Resolved before the driver so a missing remote
+  // or token fails the run with a clear reason rather than deep inside ActionsDriver.
+  let actionsConfig: ActionsDriverOptions | undefined
+  if (opts.target === 'actions' && !fake) {
+    const slug = await githubSlugFor(cwd)
+    const token = process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN
+    if (!slug) {
+      io.err('--run-on actions needs a GitHub origin remote on this repo.')
+      return 2
+    }
+    if (!token) {
+      io.err('--run-on actions needs a GitHub user token in GH_TOKEN (repo + workflow scopes).')
+      return 2
+    }
+    actionsConfig = { owner: slug.owner, repo: slug.repo, token }
+    io.out(`◆ run on: GitHub Actions (${slug.owner}/${slug.repo})`)
+  }
+
   const driver: Driver = fake
     ? fakeDriver()
-    : createDriver({ agent: opts.agent, claudeOpts: withBrowser(claudeOpts, opts.browser, sharedBrowser?.browserUrl) })
+    : createRunDriver({
+        agent: opts.agent,
+        claudeOpts: withBrowser(claudeOpts, opts.browser, sharedBrowser?.browserUrl),
+        ...(opts.target ? { target: opts.target } : {}),
+        ...(actionsConfig ? { actionsConfig } : {}),
+      })
 
   // Whether the agent actually ends up with browser tools, which is narrower than the flag: they
   // ride Claude Code's MCP config, so `--browser` on another agent wires nothing (see

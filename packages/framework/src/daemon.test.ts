@@ -85,6 +85,9 @@ test('startOptionFlags spells an explicit off as the --no-* form (#842)', () => 
   assert.deepEqual(startOptionFlags({ agent: 'codex' }), ['--agent', 'codex'])
   assert.deepEqual(startOptionFlags({ agent: 'claude' }), [])
   assert.deepEqual(startOptionFlags({ agent: '   ' }), [])
+  // Run target (#1050): only `actions` emits --run-on; `local` is the default -> no flag.
+  assert.deepEqual(startOptionFlags({ target: 'actions' }), ['--run-on', 'actions'])
+  assert.deepEqual(startOptionFlags({ target: 'local' }), [])
   // Unattended (#846): auto PM's own runs, whose gates must not park for an absent human.
   assert.deepEqual(startOptionFlags({ unattended: true }), ['--unattended'])
   assert.deepEqual(startOptionFlags({ unattended: false }), [])

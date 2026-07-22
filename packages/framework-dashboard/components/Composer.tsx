@@ -19,7 +19,7 @@ import { PromptEditor, type PromptEditorHandle } from './PromptEditor.js'
 import { PresetCreatePanel } from './PresetCreatePanel.js'
 import { PresetsMenu } from './PresetsMenu.js'
 import { AgentModelMenu, type AgentOption } from './AgentModelMenu.js'
-import { OptionsMenu, type OptionRow } from './OptionsMenu.js'
+import { OptionsMenu, type OptionRow, type RunTarget } from './OptionsMenu.js'
 import { ResolvedOptions } from './ResolvedOptions.js'
 import { ClaudeLogo, CodexLogo } from './agent-logos.js'
 import { Button } from './ui/button.js'
@@ -154,6 +154,7 @@ export const Composer = forwardRef<ComposerHandle, {
   const browser = preferences.browser ?? false
   const model = preferences.model ?? '' // #628: empty = the driver's default model
   const agent = preferences.agent ?? 'claude' // #650: which coding agent drives the run
+  const target = preferences.target ?? 'local' // #1050: where the run executes (this device / GitHub Actions)
   // The stored agent as a display name; an unknown stored value falls back to Claude Code.
   const agentLabel = AGENT_LABELS[AGENTS.includes(agent as AgentName) ? (agent as AgentName) : 'claude']
   const customPresets = preferences.customPresets ?? [] // #626: the user's own saved prompts
@@ -300,6 +301,9 @@ export const Composer = forwardRef<ComposerHandle, {
       showEco={!inSession && eco && !ecoDisabled}
       busy={busy}
       {...(inSession ? { label: 'Preferences' } : {})}
+      // The "Run on" driver axis (#1050) is baked in at spawn, so it is offered only at the launcher —
+      // same reasoning as the agent select being hidden in-session.
+      {...(inSession ? {} : { runTarget: { value: target, onChange: (t: RunTarget) => updatePreferences({ target: t }) } })}
     />
   )
 

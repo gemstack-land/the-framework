@@ -37,6 +37,7 @@ export const PROJECT_PREFERENCE_KEYS = [
   'transparent',
   'model',
   'agent',
+  'target',
 ] as const
 
 /** What one project overrides: a subset of {@link Preferences}, storing only the keys it sets. */

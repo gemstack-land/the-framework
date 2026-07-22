@@ -381,12 +381,20 @@ test('parseArgs flags unknown options and bad values', () => {
   assert.match(parseArgs(['--permission-mode', 'wat']).error!, /permission-mode/)
   assert.match(parseArgs(['--agent', 'gemini']).error!, /invalid --agent/)
   assert.match(parseArgs(['--agent']).error!, /invalid --agent/)
+  assert.match(parseArgs(['--run-on', 'cloud']).error!, /invalid --run-on/)
+  assert.match(parseArgs(['--run-on']).error!, /invalid --run-on/)
 })
 
 test('parseArgs reads --agent, defaulting to claude (#542)', () => {
   assert.equal(parseArgs(['x']).agent, 'claude')
   assert.equal(parseArgs(['--agent', 'claude', 'x']).agent, 'claude')
   assert.equal(parseArgs(['--agent', 'codex', 'x']).agent, 'codex')
+})
+
+test('parseArgs reads --run-on, absent by default (#1050)', () => {
+  assert.equal(parseArgs(['x']).target, undefined)
+  assert.equal(parseArgs(['--run-on', 'local', 'x']).target, 'local')
+  assert.equal(parseArgs(['--run-on', 'actions', 'x']).target, 'actions')
 })
 
 test('createDriver builds the agent --agent picked (#542)', () => {

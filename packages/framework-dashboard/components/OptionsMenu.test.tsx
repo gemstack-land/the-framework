@@ -75,4 +75,27 @@ describe('OptionsMenu (#654)', () => {
     expect(updatePreferences).not.toHaveBeenCalled()
   })
 
+  test('the Run on submenu picks a target and calls back (#1050)', () => {
+    const onChange = vi.fn()
+    render(
+      <OptionsMenu
+        options={mainOptions()}
+        ecoOptions={ecoOptions()}
+        showEco={false}
+        busy={false}
+        runTarget={{ value: 'local', onChange }}
+      />,
+    )
+    open()
+    fireEvent.click(screen.getByText('Run on'))
+    fireEvent.click(screen.getByText('GitHub Actions'))
+    expect(onChange).toHaveBeenCalledWith('actions')
+  })
+
+  test('the Run on submenu is absent when no target control is passed (in-session) (#1050)', () => {
+    render(<OptionsMenu options={[]} ecoOptions={[]} showEco={false} busy={false} />)
+    open()
+    expect(screen.queryByText('Run on')).toBeNull()
+  })
+
 })

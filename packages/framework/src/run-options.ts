@@ -56,6 +56,7 @@ export function runOptionsFromPreferences(preferences: Preferences, context: str
   const browser = preferences.browser ?? false
   const model = preferences.model ?? ''
   const agent = preferences.agent ?? 'claude'
+  const target = preferences.target ?? 'local'
   const ecoDrops = {
     ...(preferences.ecoPlanning ? { autoPlanning: true } : {}),
     ...(preferences.ecoResearch ? { autoResearch: true } : {}),
@@ -77,6 +78,8 @@ export function runOptionsFromPreferences(preferences: Preferences, context: str
     ...(browser && agent === 'claude' ? { browser: true } : {}),
     ...(model ? { model } : {}),
     ...(agent !== 'claude' ? { agent } : {}),
+    // Run target (#1050): only `actions` travels; `local` is the default the CLI already assumes.
+    ...(target === 'actions' ? { target } : {}),
     ...(context.length ? { context } : {}),
   }
 }

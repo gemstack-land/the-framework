@@ -31,3 +31,20 @@ export async function githubUrlFor(cwd: string, git: GitRunner = nodeGitRunner()
     return undefined
   }
 }
+
+/** The `{ owner, repo }` a GitHub remote names, or undefined when it is not a GitHub remote (#1050). */
+export function githubSlugFromRemote(remote: string): { owner: string; repo: string } | undefined {
+  const url = githubUrlFromRemote(remote)
+  if (!url) return undefined
+  const [owner, repo] = url.slice('https://github.com/'.length).split('/')
+  return owner && repo ? { owner, repo } : undefined
+}
+
+/** The repo's `{ owner, repo }` from its `origin` remote, or undefined (no remote / not GitHub) (#1050). */
+export async function githubSlugFor(cwd: string, git: GitRunner = nodeGitRunner()): Promise<{ owner: string; repo: string } | undefined> {
+  try {
+    return githubSlugFromRemote(await git(['remote', 'get-url', 'origin'], cwd))
+  } catch {
+    return undefined
+  }
+}

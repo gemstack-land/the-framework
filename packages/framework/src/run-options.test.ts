@@ -64,6 +64,12 @@ test('the model passes through, and an empty one does not (#858)', () => {
   assert.equal(runOptionsFromPreferences({ model: '' }).model, undefined)
 })
 
+test('the run target is sent only when it is not the default local (#1050)', () => {
+  assert.equal(runOptionsFromPreferences({}).target, undefined)
+  assert.equal(runOptionsFromPreferences({ target: 'local' }).target, undefined)
+  assert.equal(runOptionsFromPreferences({ target: 'actions' }).target, 'actions')
+})
+
 test('browser is dropped for an agent that cannot use it (#801)', () => {
   assert.equal(runOptionsFromPreferences({ browser: true }).browser, true)
   assert.equal(runOptionsFromPreferences({ browser: true, agent: 'codex' }).browser, undefined)
