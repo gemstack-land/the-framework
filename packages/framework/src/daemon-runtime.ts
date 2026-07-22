@@ -17,15 +17,15 @@ import {
   removeWorktree,
   pruneWorktrees,
   readLiveMetas,
-  resolveRunCheckout,
   isPidAlive,
   writeSuspendedRuns,
   type SuspendedRun,
 } from './store/index.js'
-import type { StartRunKind, StartRunOptions, StartRunResult, AddProjectResult, PreviewResult, PreviewStatus } from './dashboard/index.js'
+import type { StartRunKind, StartRunOptions, StartRunResult, AddProjectResult } from './dashboard/index.js'
 import type { PreviewHandlers } from './dashboard/telefunc-serve.js'
 import { isSafeVia } from './conversations.js'
-import { startPreview, detectServeTargets, type PreviewHandle, type ServeTarget } from './preview.js'
+import { createPreviewRuntime } from './preview-runtime.js'
+import { scopedKey, parseScopedKey, keyBelongsTo } from './runtime-keys.js'
 import { addProject, listProjects, projectId } from './registry.js'
 import { installProject, enumerateGitRepos } from './install.js'
 import { isGitRepo } from './project.js'
@@ -39,23 +39,6 @@ import { errorMessage } from './error-message.js'
  * as what the daemon does for a project -- the split createProjectRuntime's own doc always
  * claimed, finished.
  */
-
-/**
- * One composite key scheme for the runtime's per-run state: `<projectKey>::<runId>`, or the bare
- * project key for a project-scoped entry (a fallback run with no worktree, a project's preview).
- * Built and parsed only here -- three call sites used to hand-roll the encoding, the prefix
- * match and the split separately.
- */
-const scopedKey = (projectKey: string, runId?: string): string => (runId ? `${projectKey}::${runId}` : projectKey)
-
-/** The two halves of a {@link scopedKey}. */
-function parseScopedKey(key: string): { projectKey: string; runId?: string } {
-  const separator = key.indexOf('::')
-  return separator === -1 ? { projectKey: key } : { projectKey: key.slice(0, separator), runId: key.slice(separator + 2) }
-}
-
-/** Whether a {@link scopedKey} belongs to a project (its own entry, or one of its runs). */
-const keyBelongsTo = (key: string, projectKey: string): boolean => key === projectKey || key.startsWith(`${projectKey}::`)
 
 /**
  * Locate the CLI entry to re-invoke for a detached child, refusing to re-exec a test
@@ -215,7 +198,6 @@ export function createProjectRuntime({ cwd, env, binPath }: ProjectRuntimeOption
   // Live run pids, keyed per run rather than per project (#736) — see onStart for the key.
   const activeRuns = new Map<string, number>()
   const starting = new Set<string>() // reserved keys mid-spawn, to close the async gap
-  const activePreviews = new Map<string, PreviewHandle>()
 
   // A project id resolves to its repo path via the registry; the home id (or none)
   // resolves to the daemon's own `cwd` without a lookup.
@@ -224,6 +206,10 @@ export function createProjectRuntime({ cwd, env, binPath }: ProjectRuntimeOption
     const records = await listProjects(undefined, env).catch(() => [])
     return records.find(record => record.id === id)?.path
   }
+
+  // App previews (#475/#797) are their own runtime: they share only this resolver and the key scheme,
+  // and the run half reaches in exactly once, to stop a finished run's preview (see tearDownWorktree).
+  const previews = createPreviewRuntime({ homeId, resolveProject })
 
   /**
    * Put a continued run (#762) back in its own checkout: the same worktree if it was retained, else
@@ -302,12 +288,14 @@ export function createProjectRuntime({ cwd, env, binPath }: ProjectRuntimeOption
    * Best-effort from end to end: this runs off a process-exit event with nothing to return to,
    * so a failure here must not take the daemon down.
    */
+  /** The project half of a preview key from a checkout: the registry id every preview RPC keys by. */
+  const projectKeyFor = (projectCwd: string): string => projectId(resolve(projectCwd))
   const tearDownWorktree = async (projectCwd: string, worktree: string, runId?: string): Promise<void> => {
     try {
       // A session can be serving its own checkout (#797), and that dev server holds the directory
       // it is about to lose. Stop it first, whether or not the worktree ends up removed: the run
       // is over, so the preview is serving a tree nothing is working on.
-      await onStopPreview(projectKeyFor(projectCwd), runId)
+      await previews.preview.stop(projectKeyFor(projectCwd), runId)
       // Where the work ended up, recorded before the checkout can go (#799). The branch outlives
       // the worktree and is the only handle the dashboard has left on a finished session.
       const branch = await currentBranch(worktree)
@@ -434,76 +422,6 @@ export function createProjectRuntime({ cwd, env, binPath }: ProjectRuntimeOption
     return { ok: true, added, alreadyActivated }
   }
 
-  // On-demand app preview (#475): one long-lived preview process per project, kept here so it
-  // outlives the request that opened it and the Stop that closes it. Track a preview under its
-  // key and evict it the moment it stops serving (stop, or a self-exit: crash / build error /
-  // the user killing it), so previewStatus never reports a dead URL and the idempotent open
-  // below never hands back a corpse instead of restarting.
-  //
-  // Since #797 the key carries the session too, because a session serves its OWN worktree: one
-  // preview per project as before, plus one per session that asks for it, each pointing at the
-  // tree it belongs to. Keyed by project alone, a session's Serve booted the project's checkout
-  // and showed you code that session never wrote.
-  /** The project half of a preview key from a checkout: the registry id every RPC keys by. */
-  const projectKeyFor = (projectCwd: string): string => projectId(resolve(projectCwd))
-  const trackPreview = (key: string, handle: PreviewHandle): void => {
-    activePreviews.set(key, handle)
-    void handle.exited.then(() => {
-      if (activePreviews.get(key) === handle) activePreviews.delete(key)
-    })
-  }
-  // The app the user last served per project (#651), so re-serving a monorepo picks it again
-  // without re-choosing. In-memory: a live preview already rehydrates via onPreviewStatus, and
-  // the pick resets on daemon restart (the picker still lists everything).
-  const lastServeTarget = new Map<string, string>()
-  const onServeTargets = async (targetProjectId?: string, runId?: string): Promise<ServeTarget[]> => {
-    const projectCwd = await resolveProject(targetProjectId)
-    if (!projectCwd) return []
-    // Detected in the checkout that will actually be served: a session's branch may have added or
-    // removed a servable package, and offering the project's list would offer apps it cannot serve.
-    const serveCwd = await resolveRunCheckout(projectCwd, runId)
-    return detectServeTargets(serveCwd).catch(() => [])
-  }
-  const onPreview = async (targetProjectId?: string, targetId?: string, runId?: string): Promise<PreviewResult> => {
-    const projectKey = targetProjectId ?? homeId
-    const key = scopedKey(projectKey, runId)
-    const existing = activePreviews.get(key)
-    if (existing) return { ok: true, url: existing.url, command: existing.command }
-    const projectCwd = await resolveProject(targetProjectId)
-    if (!projectCwd) return { ok: false, error: `unknown project: ${targetProjectId}` }
-    const serveCwd = await resolveRunCheckout(projectCwd, runId)
-    try {
-      // Resolve the pick: an explicit choice, else the one remembered from last time. Both are
-      // matched against the live target list so a stale/unknown id falls back to the root default.
-      // The memory is per project, not per session: which app you serve is a property of the repo.
-      const wantId = targetId ?? lastServeTarget.get(projectKey)
-      const target = wantId ? (await detectServeTargets(serveCwd).catch(() => [])).find(t => t.id === wantId) : undefined
-      const handle = await startPreview(target ? { cwd: serveCwd, target } : { cwd: serveCwd })
-      // A racing second open won the slot while we were booting: keep theirs, drop ours.
-      const raced = activePreviews.get(key)
-      if (raced) {
-        await handle.stop().catch(() => {})
-        return { ok: true, url: raced.url, command: raced.command }
-      }
-      if (target) lastServeTarget.set(projectKey, target.id)
-      trackPreview(key, handle)
-      return { ok: true, url: handle.url, command: handle.command }
-    } catch (err) {
-      return { ok: false, error: errorMessage(err) }
-    }
-  }
-  const onStopPreview = async (targetProjectId?: string, runId?: string): Promise<void> => {
-    const key = scopedKey(targetProjectId ?? homeId, runId)
-    const handle = activePreviews.get(key)
-    if (!handle) return
-    activePreviews.delete(key)
-    await handle.stop().catch(() => {})
-  }
-  const onPreviewStatus = (targetProjectId?: string, runId?: string): PreviewStatus => {
-    const handle = activePreviews.get(scopedKey(targetProjectId ?? homeId, runId))
-    return handle ? { running: true, url: handle.url, command: handle.command } : { running: false }
-  }
-
   /**
    * How many runs are live on a project (#685). Run keys are `<projectKey>::<runId>`, or the
    * bare project key for a run that got no worktree, so both spellings count. The pid is
@@ -560,17 +478,12 @@ export function createProjectRuntime({ cwd, env, binPath }: ProjectRuntimeOption
     return suspended
   }
 
-  const dispose = async (): Promise<void> => {
-    await Promise.all([...activePreviews.values()].map(p => p.stop().catch(() => {})))
-    activePreviews.clear()
-  }
-
   return {
     onStart,
     onAddProject,
-    preview: { start: onPreview, targets: onServeTargets, stop: onStopPreview, status: onPreviewStatus },
+    preview: previews.preview,
     activeRunCount,
     suspendRuns,
-    dispose,
+    dispose: previews.dispose,
   }
 }
