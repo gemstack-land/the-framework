@@ -14,6 +14,7 @@ import { maintenanceDue, readMaintenanceState, mergeMaintenanceState } from './m
 import { promoteQueue } from './queue-promote.js'
 import { findTodoBacklog } from './todo-loop.js'
 import { startConversationCommitter } from './conversation-commit.js'
+import { startMergedWorktreeSweep } from './merged-worktrees.js'
 import { readConversation } from './conversations.js'
 import { startDiscordBot, DISCORD_VIA } from './discord/bot.js'
 import { startDiscordReplyMirror } from './discord/reply-mirror.js'
@@ -156,6 +157,13 @@ export function startBackgroundServices(deps: BackgroundServiceDeps): Background
   // so it sat as an uncommitted change until a human noticed. Path-scoped and debounced, and it
   // skips a repo that is mid-rebase or index-locked rather than committing into someone's work.
   const conversationCommitter = startConversationCommitter({ projects, log })
+
+  // Reclaim the checkout of a session whose work has landed (#1036). A failed or stopped run keeps
+  // its worktree so you can read what it was holding (#752), and nothing ever took those back — so
+  // they accumulated one full checkout at a time. Once the branch is merged the checkout is the
+  // only copy that costs disk and says nothing new; the branch and the session's row are kept, so
+  // this reclaims space rather than throwing work away.
+  const mergedWorktrees = startMergedWorktreeSweep({ projects, log })
 
   const botEnabled = async () => notificationEnabled(await prefs(), 'discordBot')
   // `resolve` matters: projectId hashes the path string, and `--cwd` reaches us verbatim, so a
@@ -310,6 +318,7 @@ export function startBackgroundServices(deps: BackgroundServiceDeps): Background
       stopped = true
       stopDiscord()
       autoPm.stop()
+      mergedWorktrees.stop()
       // Stop the timer here, so `flushConversations` below is a single flush past the idle window
       // rather than a wait for a poll that is no longer coming.
       conversationCommitter.stop()

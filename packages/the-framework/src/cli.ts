@@ -73,6 +73,7 @@ import {
   pruneProjectWorktrees,
   formatWorktreeList,
 } from './worktrees.js'
+import { removeMergedWorktrees } from './merged-worktrees.js'
 import { defaultWhat } from './preset-prompt.js'
 import { renderOnBeforeMergeablePrompt, type OnBeforeMergeableContext } from './on-before-mergeable-prompt.js'
 import { runPrompt } from './prompt-run.js'
@@ -151,7 +152,8 @@ Usage:
                                  --dry-run to preview; --max-repos / --max-cost to bound.
   framework worktrees             List the checkouts this project's sessions kept.
                                  rm <sessionId> removes one; prune removes every one
-                                 whose session is no longer running.
+                                 whose session is no longer running; sweep removes only
+                                 those whose branch has landed (#1036), keeping the branch.
   framework --fake                Run the offline demo (no CLI, no model, deterministic).
   framework doctor                Check prerequisites (Claude Code installed, etc.).
   framework relay                 Host a session relay so teammates can watch a session (#230).
@@ -642,6 +644,7 @@ export function parseArgs(argv: string[]): CliOptions {
     const sub = words.shift()
     if (sub === undefined || sub === 'list') opts.worktrees = { action: 'list' }
     else if (sub === 'prune') opts.worktrees = { action: 'prune' }
+    else if (sub === 'sweep') opts.worktrees = { action: 'sweep' }
     else if (sub === 'rm') {
       const runId = words.shift()
       opts.worktrees = { action: 'rm', ...(runId ? { runId } : {}) }
@@ -1806,7 +1809,12 @@ async function ensureDaemonCmd(opts: CliOptions, io: CliIO): Promise<number> {
 }
 
 /** What `framework worktrees` was asked to do (#752). */
-export type WorktreesCommand = { action: 'list' } | { action: 'rm'; runId?: string } | { action: 'prune' }
+export type WorktreesCommand =
+  | { action: 'list' }
+  | { action: 'rm'; runId?: string }
+  | { action: 'prune' }
+  /** Remove only the checkouts whose branch has landed (#1036) — the daemon's sweep, on demand. */
+  | { action: 'sweep' }
 
 /**
  * `framework worktrees` (#752): the retained-worktree cleanup the dashboard already has (#737),
@@ -1833,6 +1841,18 @@ async function worktreesCmd(command: WorktreesCommand, cwd: string, io: CliIO): 
     }
     io.out(`◆ removed the worktree for session ${command.runId}.`)
     return 0
+  }
+  // The daemon runs this on a timer (#1036); here it is on demand, for a machine whose daemon is
+  // not running and for seeing what the sweep would say.
+  if (command.action === 'sweep') {
+    const { removed, failed } = await removeMergedWorktrees(cwd)
+    for (const item of removed) {
+      io.out(`◆ removed ${item.runId}: ${item.branch} ${item.via === 'pr' ? 'was merged on GitHub' : 'is merged into the base'}.`)
+    }
+    for (const item of failed) io.err(`✗ ${item.runId}: ${item.error}`)
+    if (removed.length === 0 && failed.length === 0) io.out('No landed worktrees to remove.')
+    else if (removed.length > 0) io.out(`The branches and the sessions are kept; only the checkouts were removed.`)
+    return failed.length > 0 ? 1 : 0
   }
   const { removed, skipped } = await pruneProjectWorktrees(cwd)
   for (const skip of skipped) io.out(`  kept ${skip.runId}: ${skip.reason}`)
