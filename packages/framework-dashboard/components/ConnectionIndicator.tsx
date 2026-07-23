@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { Laptop, MonitorSmartphone } from 'lucide-react'
 import { useConnectionProfiles, currentConnection, rememberLocalOrigin } from '../lib/profiles.js'
+import { stashDraftFromUrl } from '../lib/draft-handoff.js'
 
 // The "connected to <label>" indicator (#1052): which daemon the dashboard is talking to. Every
 // transport is same-origin, so the browser's origin IS the connection — loopback is this machine's
@@ -9,8 +10,11 @@ import { useConnectionProfiles, currentConnection, rememberLocalOrigin } from '.
 export function ConnectionIndicator() {
   const profiles = useConnectionProfiles()
   // Remember the loopback origin we launched from, so "Local" can return to the right port later.
+  // Also move any carried draft (#1066) out of the URL at SPA boot, before it reaches the address bar.
   useEffect(() => {
-    if (typeof window !== 'undefined') rememberLocalOrigin(window.location.origin, window.location.hostname)
+    if (typeof window === 'undefined') return
+    stashDraftFromUrl()
+    rememberLocalOrigin(window.location.origin, window.location.hostname)
   }, [])
   if (typeof window === 'undefined') return null
   const { label, isLocal } = currentConnection(profiles, window.location.origin, window.location.hostname)

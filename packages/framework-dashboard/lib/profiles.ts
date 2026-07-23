@@ -110,15 +110,25 @@ export function localOrigin(): string {
   return store()?.getItem(LOCAL_ORIGIN_KEY) ?? DEFAULT_LOCAL_ORIGIN
 }
 
-/** The connect URL for a device: its origin plus the token for the one bootstrap hop (#1051). */
-export function connectUrl(profile: Pick<ConnectionProfile, 'url' | 'token'>): string {
-  return profile.token ? `${profile.url}/?token=${encodeURIComponent(profile.token)}` : profile.url
+/** Cap on a carried composer draft (#1066): above this the hop drops the draft (plain connect) so a
+ * huge paste can't blow the URL length. */
+const MAX_CARRIED_DRAFT = 7000
+
+/** The connect URL for a device: its origin plus the token for the one bootstrap hop (#1051), and
+ * the composer draft (#1066) so a device hop never nukes the typed prompt. The bootstrap 302 strips
+ * only `token`, so `draft` survives to land on the remote SPA. */
+export function connectUrl(profile: Pick<ConnectionProfile, 'url' | 'token'>, draft?: string): string {
+  const parts: string[] = []
+  if (profile.token) parts.push(`token=${encodeURIComponent(profile.token)}`)
+  if (draft && draft.length <= MAX_CARRIED_DRAFT) parts.push(`draft=${encodeURIComponent(draft)}`)
+  return parts.length ? `${profile.url}/?${parts.join('&')}` : profile.url
 }
 
-/** Navigate the browser to a saved device (carrying its token). This is the connection hop, NOT a
- * run submit: the remote SPA re-authenticates same-origin from the cookie the bootstrap sets. */
-export function connectTo(profile: ConnectionProfile): void {
-  globalThis.location?.assign(connectUrl(profile))
+/** Navigate the browser to a saved device, carrying its token and the live composer draft (#1066).
+ * This is the connection hop, NOT a run submit: the remote SPA re-authenticates same-origin from the
+ * cookie the bootstrap sets, and rehydrates the draft into its composer. */
+export function connectTo(profile: ConnectionProfile, draft?: string): void {
+  globalThis.location?.assign(connectUrl(profile, draft))
 }
 
 /** Navigate back to this machine's own loopback daemon (no token). */

@@ -70,6 +70,7 @@ function renderComposer(over: Partial<Parameters<typeof Composer>[0]> = {}) {
 beforeEach(() => {
   prefs = {}
   updatePreferences.mockReset()
+  sessionStorage.clear()
 })
 afterEach(cleanup)
 
@@ -179,6 +180,23 @@ describe('Composer (#721)', () => {
     fireEvent.click(screen.getByText('Security audit'))
     fireEvent.click(screen.getByRole('button', { name: 'Send' }))
     expect(second.onSubmit).toHaveBeenCalledWith(expect.stringContaining('Security audit'), 'prompt', { newSession: false })
+  })
+
+  // #1066: a draft carried across a device hop lands in sessionStorage; the launcher seeds it into
+  // the editor on mount, as a build (not a preset), and takes it once.
+  test('the launcher rehydrates a draft carried from another device (#1066)', () => {
+    sessionStorage.setItem('fw.pending-draft', 'carried from the studio box')
+    const { onSubmit } = renderComposer({ submitLabel: 'Start session' })
+    fireEvent.click(screen.getByRole('button', { name: /Start session/ }))
+    expect(onSubmit).toHaveBeenCalledWith('carried from the studio box', 'build', { newSession: false })
+    expect(sessionStorage.getItem('fw.pending-draft')).toBeNull() // taken once
+  })
+
+  test('an in-session composer does not rehydrate a carried draft (#1066)', () => {
+    sessionStorage.setItem('fw.pending-draft', 'not for here')
+    renderComposer({ inSession: true })
+    expect(sessionStorage.getItem('fw.pending-draft')).toBe('not for here') // launcher-only
+    expect(screen.queryByRole('button', { name: 'Send' })).toBeNull() // nothing seeded
   })
 
   test('emptying the box drops the preset\'s new-session rule with the preset (#959)', () => {

@@ -1,0 +1,5 @@
+---
+"@gemstack/framework-dashboard": minor
+---
+
+Flatten the "Run on" picker into one list and preserve the composer draft across a device hop (#1066). The gear's "Run on" submenu was two axes stacked as one confusing list: driver rows (where a run executes) plus a separate "A device I have" section (which daemon the dashboard talks to), which also duplicated "Local" with "Current device". It is now a single flat list: This machine / GitHub Actions / Claude web (coming soon) / your saved devices / Add a device, with exactly one checkmark. On the local daemon the checkmark tracks the driver target; connected to a device it sits on that device, and clicking "This machine" goes home instead of writing a driver preference. Switching devices no longer nukes the typed prompt: the connect hop carries the draft alongside the token, the remote SPA moves it out of the URL into sessionStorage at boot (so it never sits in the address bar, history, or a Referer), and the launcher rehydrates it. Oversize drafts fall back to a plain connect so a huge paste can't blow the URL length.

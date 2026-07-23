@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
-import type { OptionRow, ConnectionControl } from './OptionsMenu.js'
+import type { OptionRow, ConnectionControl, RunTarget } from './OptionsMenu.js'
 import type { ConnectionProfile } from '../lib/profiles.js'
 
 const updatePreferences = vi.hoisted(() => vi.fn())
@@ -112,58 +112,112 @@ describe('OptionsMenu (#654)', () => {
     ...over,
   })
 
-  test('the "A device I have" section lists saved profiles under Run on (#1052)', () => {
+  // Rows are matched by tokens that never appear in the sub-trigger summary (unique descriptions,
+  // or the device url), so the summary echoing a driver/device label can't make a query ambiguous.
+  const THIS_MACHINE = 'Run on this machine, as today.'
+  const ACTIONS = 'Run on a fresh GitHub Actions runner.'
+  const STUDIO_URL = 'http://192.168.1.5:4200'
+  const rowOf = (token: string): HTMLElement => screen.getByText(token).closest('[role="menuitem"]') as HTMLElement
+  const isChecked = (token: string): boolean => !!rowOf(token).querySelector('svg')?.classList.contains('opacity-100')
+
+  function openRunOn(connection: ConnectionControl, value: RunTarget = 'local') {
     render(
-      <OptionsMenu options={[]} ecoOptions={[]} showEco={false} busy={false} runTarget={{ value: 'local', onChange: vi.fn() }} connection={connectionControl()} />,
+      <OptionsMenu options={[]} ecoOptions={[]} showEco={false} busy={false} runTarget={{ value, onChange: vi.fn() }} connection={connection} />,
     )
     open()
     fireEvent.click(screen.getByText('Run on'))
-    expect(screen.getByText('A device I have')).toBeTruthy()
-    expect(screen.getByText('Local')).toBeTruthy()
-    expect(screen.getByText('Studio')).toBeTruthy()
+  }
+
+  test('Run on is one flat list, no "A device I have" header and no separate "Local" row (#1066)', () => {
+    openRunOn(connectionControl())
+    // The old two-axis framing is gone: no section header, no redundant "Local" duplicating this machine.
+    expect(screen.queryByText('A device I have')).toBeNull()
+    expect(screen.queryByText('Local')).toBeNull()
+    // The whole list renders as one: driver rows (renamed), the disabled placeholder, the device, and Add.
+    expect(screen.getByText(THIS_MACHINE)).toBeTruthy()
+    expect(screen.getByText(ACTIONS)).toBeTruthy()
+    expect(screen.getByText('Claude web')).toBeTruthy()
+    expect(screen.getByText(STUDIO_URL)).toBeTruthy()
     expect(screen.getByText('Add a device…')).toBeTruthy()
+    // Claude web stays a disabled placeholder for the sibling axis that has not shipped.
+    expect(rowOf('Claude web').hasAttribute('data-disabled')).toBe(true)
   })
 
-  test('selecting a device navigates (does not write a preference) (#1052)', () => {
+  test('on the local daemon the checkmark tracks the driver target, not a device (#1066)', () => {
+    openRunOn(connectionControl({ isLocal: true }), 'actions')
+    expect(isChecked(ACTIONS)).toBe(true) // the selected driver target
+    expect(isChecked(THIS_MACHINE)).toBe(false)
+    expect(isChecked(STUDIO_URL)).toBe(false) // no device is the connection
+  })
+
+  test('connected to a device the checkmark is on that device, driver rows quiet (#1066)', () => {
+    openRunOn(connectionControl({ isLocal: false, currentUrl: STUDIO_URL }), 'local')
+    expect(isChecked(STUDIO_URL)).toBe(true)
+    expect(isChecked(THIS_MACHINE)).toBe(false)
+    expect(isChecked(ACTIONS)).toBe(false)
+  })
+
+  test('clicking a device navigates (does not write a preference) (#1066)', () => {
     const onConnect = vi.fn()
-    render(
-      <OptionsMenu options={[]} ecoOptions={[]} showEco={false} busy={false} runTarget={{ value: 'local', onChange: vi.fn() }} connection={connectionControl({ onConnect })} />,
-    )
-    open()
-    fireEvent.click(screen.getByText('Run on'))
-    fireEvent.click(screen.getByText('Studio'))
+    openRunOn(connectionControl({ onConnect }))
+    fireEvent.click(rowOf(STUDIO_URL))
     expect(onConnect).toHaveBeenCalledWith(profiles()[0])
     // A device row is a connection hop, not a driver preference.
     expect(updatePreferences).not.toHaveBeenCalled()
   })
 
-  test('Local fires its connect handler (#1052)', () => {
+  test('clicking "This machine" while on a remote device goes home, not a driver write (#1066)', () => {
     const onConnectLocal = vi.fn()
+    const onChange = vi.fn()
     render(
-      <OptionsMenu options={[]} ecoOptions={[]} showEco={false} busy={false} runTarget={{ value: 'local', onChange: vi.fn() }} connection={connectionControl({ onConnectLocal })} />,
+      <OptionsMenu
+        options={[]}
+        ecoOptions={[]}
+        showEco={false}
+        busy={false}
+        runTarget={{ value: 'local', onChange }}
+        connection={connectionControl({ isLocal: false, currentUrl: STUDIO_URL, onConnectLocal })}
+      />,
     )
     open()
     fireEvent.click(screen.getByText('Run on'))
-    fireEvent.click(screen.getByText('Local'))
+    fireEvent.click(rowOf(THIS_MACHINE))
     expect(onConnectLocal).toHaveBeenCalled()
+    expect(onChange).not.toHaveBeenCalled()
   })
 
-  test('Add a device opens the add flow (#1052)', () => {
-    const onAddDevice = vi.fn()
+  test('clicking "This machine" on the local daemon writes the driver target (#1066)', () => {
+    const onConnectLocal = vi.fn()
+    const onChange = vi.fn()
     render(
-      <OptionsMenu options={[]} ecoOptions={[]} showEco={false} busy={false} runTarget={{ value: 'local', onChange: vi.fn() }} connection={connectionControl({ onAddDevice })} />,
+      <OptionsMenu
+        options={[]}
+        ecoOptions={[]}
+        showEco={false}
+        busy={false}
+        runTarget={{ value: 'actions', onChange }}
+        connection={connectionControl({ isLocal: true, onConnectLocal })}
+      />,
     )
     open()
     fireEvent.click(screen.getByText('Run on'))
+    fireEvent.click(rowOf(THIS_MACHINE))
+    expect(onChange).toHaveBeenCalledWith('local')
+    expect(onConnectLocal).not.toHaveBeenCalled()
+  })
+
+  test('Add a device opens the add flow (#1066)', () => {
+    const onAddDevice = vi.fn()
+    openRunOn(connectionControl({ onAddDevice }))
     fireEvent.click(screen.getByText('Add a device…'))
     expect(onAddDevice).toHaveBeenCalled()
   })
 
-  test('the device section is absent without a connection control (#1052)', () => {
+  test('the device rows are absent without a connection control (#1066)', () => {
     render(<OptionsMenu options={[]} ecoOptions={[]} showEco={false} busy={false} runTarget={{ value: 'local', onChange: vi.fn() }} />)
     open()
     fireEvent.click(screen.getByText('Run on'))
-    expect(screen.queryByText('A device I have')).toBeNull()
+    expect(screen.queryByText(STUDIO_URL)).toBeNull()
+    expect(screen.queryByText('Add a device…')).toBeNull()
   })
-
 })

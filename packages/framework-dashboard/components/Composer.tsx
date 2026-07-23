@@ -1,4 +1,4 @@
-import { forwardRef, useImperativeHandle, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react'
+import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { ArrowUp, Loader2 } from 'lucide-react'
 import type { ProjectSummary } from '@gemstack/framework'
 import { AGENTS, AGENT_LABELS, LAUNCHER_PRESETS, type AgentName } from '@gemstack/framework/client'
@@ -21,7 +21,8 @@ import { PresetsMenu } from './PresetsMenu.js'
 import { AgentModelMenu, type AgentOption } from './AgentModelMenu.js'
 import { OptionsMenu, type OptionRow, type RunTarget } from './OptionsMenu.js'
 import { AddDeviceDialog } from './AddDeviceDialog.js'
-import { useConnectionProfiles, connectTo, connectLocal, isLoopbackHost } from '../lib/profiles.js'
+import { useConnectionProfiles, connectTo, connectLocal, isLoopbackHost, type ConnectionProfile } from '../lib/profiles.js'
+import { stashDraftFromUrl, takePendingDraft } from '../lib/draft-handoff.js'
 import { ResolvedOptions } from './ResolvedOptions.js'
 import { ClaudeLogo, CodexLogo } from './agent-logos.js'
 import { Button } from './ui/button.js'
@@ -183,6 +184,19 @@ export const Composer = forwardRef<ComposerHandle, {
     focus: () => editorRef.current?.focus(),
   }))
 
+  // Rehydrate a draft carried from another device (#1066), launcher-only. stashDraftFromUrl is
+  // idempotent, so calling it here is race-safe even if the SPA-entry call has not run yet. A carried
+  // draft is still a 'build', so seed the editor without flipping kind.
+  useEffect(() => {
+    if (compact || inSession) return
+    stashDraftFromUrl()
+    const carried = takePendingDraft()
+    if (carried) {
+      editorRef.current?.loadTemplate(carried)
+      setPrompt(carried)
+    }
+  }, [compact, inSession])
+
   // A synchronous latch alongside the async `busy` prop (#948): two fast ⌘↵ presses both read
   // `busy === false` (React state lags), fired two starts, and the second surfaced a spurious
   // "already active" error. The ref flips before any await.
@@ -321,7 +335,8 @@ export const Composer = forwardRef<ComposerHandle, {
               profiles,
               currentUrl,
               isLocal: isLocalConnection,
-              onConnect: connectTo,
+              // Carry the live draft across the hop (#1066) so switching devices never nukes it.
+              onConnect: (p: ConnectionProfile) => connectTo(p, prompt),
               onConnectLocal: connectLocal,
               onAddDevice: () => setAddingDevice(true),
             },

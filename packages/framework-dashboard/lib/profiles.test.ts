@@ -1,10 +1,11 @@
-import { afterEach, describe, expect, test } from 'vitest'
+import { afterEach, describe, expect, test, vi } from 'vitest'
 import {
   listProfiles,
   addProfile,
   removeProfile,
   parseDeviceUrl,
   connectUrl,
+  connectTo,
   currentConnection,
   isLoopbackHost,
   localOrigin,
@@ -50,6 +51,26 @@ describe('profiles.ts (#1052)', () => {
   test('connectUrl carries the token for the bootstrap hop', () => {
     expect(connectUrl({ url: 'http://box:4200', token: 'abc' })).toBe('http://box:4200/?token=abc')
     expect(connectUrl({ url: 'http://127.0.0.1:4200', token: '' })).toBe('http://127.0.0.1:4200') // Local, no token
+  })
+
+  test('connectUrl carries the composer draft alongside the token (#1066)', () => {
+    expect(connectUrl({ url: 'http://box:4200', token: 'abc' }, 'ship it')).toBe('http://box:4200/?token=abc&draft=ship%20it')
+    // No token (Local): the draft still rides.
+    expect(connectUrl({ url: 'http://127.0.0.1:4200', token: '' }, 'hi')).toBe('http://127.0.0.1:4200/?draft=hi')
+    // An oversize draft is dropped so it can't blow the URL length; the hop still connects.
+    expect(connectUrl({ url: 'http://box:4200', token: 'abc' }, 'x'.repeat(8000))).toBe('http://box:4200/?token=abc')
+  })
+
+  test('connectTo navigates carrying the token and the draft (#1066)', () => {
+    // jsdom won't let location.assign be redefined, so stub the whole location the code reads.
+    const assign = vi.fn()
+    vi.stubGlobal('location', { assign })
+    connectTo({ id: 'x', label: 'Studio', url: 'http://box:4200', token: 'abc' }, 'my prompt')
+    expect(assign).toHaveBeenCalledTimes(1)
+    const url = assign.mock.calls[0]![0] as string
+    expect(url).toContain('token=abc')
+    expect(url).toContain('draft=' + encodeURIComponent('my prompt'))
+    vi.unstubAllGlobals()
   })
 
   test('isLoopbackHost knows the local machine', () => {

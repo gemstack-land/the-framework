@@ -1,5 +1,5 @@
 import type { Preferences } from '@gemstack/framework'
-import { Settings, Check, Laptop, MonitorSmartphone, Plus } from 'lucide-react'
+import { Settings, Check, MonitorSmartphone, Plus } from 'lucide-react'
 import { updatePreferences } from '../lib/preferences.js'
 import type { ConnectionProfile } from '../lib/profiles.js'
 import { cn } from '../lib/utils.js'
@@ -9,9 +9,7 @@ import {
   DropdownMenuTrigger,
   DropdownMenuContent,
   DropdownMenuCheckboxItem,
-  DropdownMenuGroup,
   DropdownMenuItem,
-  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuSub,
   DropdownMenuSubTrigger,
@@ -56,17 +54,18 @@ export type RunTargetControl = {
 }
 
 /**
- * The "A device I have" section of the "Run on" sub (#1052). A device is a CONNECTION, not a driver:
- * the driver rows above rewrite a preference, these NAVIGATE the browser to another daemon's origin.
- * That is the divergence the gear holds in one list — driver rows call `updatePreferences` (per-run),
- * device rows call `onConnect`/`onConnectLocal` (a page navigation carrying the token).
+ * The saved-devices half of the flat "Run on" list (#1052/#1066). A device is a CONNECTION, not a
+ * driver: the driver rows rewrite a preference, these NAVIGATE the browser to another daemon's
+ * origin. That divergence is why the one list holds both: driver rows call `onChange` (per-run),
+ * device rows call `onConnect` (a page navigation carrying the token), and "This machine" while
+ * remote calls `onConnectLocal` (go home) rather than writing the driver preference.
  */
 export type ConnectionControl = {
   /** The saved remote daemons this browser can hop to. */
   profiles: ConnectionProfile[]
   /** `window.location.origin`, to mark the daemon the dashboard is on now. */
   currentUrl: string | null
-  /** Whether the current origin is loopback, so "Local" is the checked row. */
+  /** Whether the current origin is loopback, so a driver row (not a device) carries the checkmark. */
   isLocal: boolean
   onConnect: (profile: ConnectionProfile) => void
   onConnectLocal: () => void
@@ -77,23 +76,39 @@ export type ConnectionControl = {
 // rows), not the boolean OptionRow. "Claude web" is a disabled placeholder for the sibling axis in
 // #1049 that has not shipped yet, so the menu shows where this is going without promising it.
 const RUN_TARGET_ROWS: { value: RunTarget; label: string; description: string }[] = [
-  { value: 'local', label: 'Current device', description: 'Run on this machine, as today.' },
+  { value: 'local', label: 'This machine', description: 'Run on this machine, as today.' },
   { value: 'actions', label: 'GitHub Actions', description: 'Run on a fresh GitHub Actions runner.' },
 ]
 
+// One flat "Run on" list (#1066): the driver rows, then the saved devices and "Add a device", with a
+// single checkmark. Which daemon the dashboard is on decides it: a driver row when on the local
+// daemon, else the connected device's row. The two axes read as one list, so a device hop never
+// looks like a second, redundant "Local".
 function RunTargetSub({ control, connection, busy }: { control: RunTargetControl; connection?: ConnectionControl | undefined; busy: boolean }) {
-  const current = RUN_TARGET_ROWS.find(r => r.value === control.value) ?? RUN_TARGET_ROWS[0]!
+  // No connection control means only the driver axis exists, so treat it as the local daemon.
+  const onLocalDaemon = connection ? connection.isLocal : true
+  const summary =
+    connection && !connection.isLocal
+      ? connection.profiles.find(p => p.url === connection.currentUrl)?.label ?? 'A device'
+      : RUN_TARGET_ROWS.find(r => r.value === control.value)?.label ?? RUN_TARGET_ROWS[0]!.label
   return (
     <DropdownMenuSub>
       <DropdownMenuSubTrigger disabled={busy}>
         <span className="flex-1">Run on</span>
-        <span className="text-muted-foreground">{current.label}</span>
+        <span className="text-muted-foreground">{summary}</span>
       </DropdownMenuSubTrigger>
       <DropdownMenuSubContent>
-        {/* Driver rows (#1050): a per-run preference, written straight through. */}
+        {/* Driver rows (#1050). On a device, "This machine" goes home (#1066) rather than writing the
+            driver preference; the other driver rows still write straight through. */}
         {RUN_TARGET_ROWS.map(row => (
-          <DropdownMenuItem key={row.value} className="items-start" onClick={() => control.onChange(row.value)}>
-            <Check className={cn('mt-0.5 h-3.5 w-3.5 shrink-0', row.value === control.value ? 'opacity-100' : 'opacity-0')} />
+          <DropdownMenuItem
+            key={row.value}
+            className="items-start"
+            onClick={() =>
+              row.value === 'local' && connection && !connection.isLocal ? connection.onConnectLocal() : control.onChange(row.value)
+            }
+          >
+            <Check className={cn('mt-0.5 h-3.5 w-3.5 shrink-0', onLocalDaemon && row.value === control.value ? 'opacity-100' : 'opacity-0')} />
             <OptionLabel label={row.label} description={row.description} />
           </DropdownMenuItem>
         ))}
@@ -101,38 +116,23 @@ function RunTargetSub({ control, connection, busy }: { control: RunTargetControl
           <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 opacity-0" />
           <OptionLabel label="Claude web" description="Coming soon." />
         </DropdownMenuItem>
-        {connection && <ConnectionSection connection={connection} busy={busy} />}
-      </DropdownMenuSubContent>
-    </DropdownMenuSub>
-  )
-}
-
-/** The "A device I have" rows (#1052). Unlike the driver rows above, a click here NAVIGATES the
- * browser to that daemon's origin (carrying the token) rather than writing a preference. */
-function ConnectionSection({ connection, busy }: { connection: ConnectionControl; busy: boolean }) {
-  return (
-    <>
-      <DropdownMenuSeparator />
-      <DropdownMenuGroup>
-        <DropdownMenuLabel>A device I have</DropdownMenuLabel>
-        <DropdownMenuItem className="items-start" onClick={() => connection.onConnectLocal()}>
-          <Check className={cn('mt-0.5 h-3.5 w-3.5 shrink-0', connection.isLocal ? 'opacity-100' : 'opacity-0')} />
-          <Laptop className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
-          <OptionLabel label="Local" description="This machine's own daemon." />
-        </DropdownMenuItem>
-        {connection.profiles.map(profile => (
+        {/* Saved devices (#1052/#1066): a click NAVIGATES to that daemon's origin (carrying token +
+            draft), not a preference write. Folded into this same list. */}
+        {connection?.profiles.map(profile => (
           <DropdownMenuItem key={profile.id} className="items-start" onClick={() => connection.onConnect(profile)}>
             <Check className={cn('mt-0.5 h-3.5 w-3.5 shrink-0', !connection.isLocal && profile.url === connection.currentUrl ? 'opacity-100' : 'opacity-0')} />
             <MonitorSmartphone className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
             <OptionLabel label={profile.label} description={profile.url} />
           </DropdownMenuItem>
         ))}
-        <DropdownMenuItem className="items-start" disabled={busy} onClick={() => connection.onAddDevice()}>
-          <Plus className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
-          <OptionLabel label="Add a device…" description="Paste the URL a box prints on its network bind." />
-        </DropdownMenuItem>
-      </DropdownMenuGroup>
-    </>
+        {connection && (
+          <DropdownMenuItem className="items-start" disabled={busy} onClick={() => connection.onAddDevice()}>
+            <Plus className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
+            <OptionLabel label="Add a device…" description="Paste the URL a box prints on its network bind." />
+          </DropdownMenuItem>
+        )}
+      </DropdownMenuSubContent>
+    </DropdownMenuSub>
   )
 }
 
