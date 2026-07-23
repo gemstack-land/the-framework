@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { cardStyle, mono, SectionHead, sectionStyle, WipBadge } from './ui'
+import { cardStyle, mono, Note, SectionHead, sectionStyle, WipBadge } from './ui'
 
 const featureCardStyle = {
   ...cardStyle,
@@ -75,21 +75,9 @@ export function Features() {
               Use your existing AI subscription — The Framework orchestrates agents via your Claude Code / Codex
               installation.
             </FeatureText>
-            <p
-              data-wip="1"
-              style={{
-                margin: 0,
-                fontSize: 13.5,
-                lineHeight: 1.6,
-                color: '#9da9a0',
-                border: '1px dashed #4f585e',
-                borderRadius: 9,
-                padding: '11px 15px',
-              }}
-            >
-              <WipBadge style={{ marginRight: 8, display: 'inline-block' }} />
+            <Note label={<WipBadge style={{ marginRight: 8, display: 'inline-block' }} />}>
               Claude Code Web: orchestrate agents via Claude Code Web for 0% local CPU usage.
-            </p>
+            </Note>
           </div>
           <div style={{ ...featureCardStyle, gap: 12 }}>
             <h3 style={{ margin: 0, fontSize: 19, fontWeight: 600 }}>Notifications</h3>

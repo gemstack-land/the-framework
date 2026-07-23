@@ -47,7 +47,7 @@ export function SectionHead({ title, sub }: { title: ReactNode; sub?: string }) 
   )
 }
 
-export function Note({ children, style }: { children: ReactNode; style?: CSSProperties }) {
+export function Note({ children, style, label }: { children: ReactNode; style?: CSSProperties; label?: ReactNode }) {
   return (
     <p
       style={{
@@ -63,20 +63,22 @@ export function Note({ children, style }: { children: ReactNode; style?: CSSProp
         ...style,
       }}
     >
-      <span
-        style={{
-          fontStyle: 'normal',
-          fontFamily: mono,
-          fontSize: 11,
-          fontWeight: 600,
-          letterSpacing: '0.1em',
-          textTransform: 'uppercase',
-          color: '#dbbc7f',
-          marginRight: 10,
-        }}
-      >
-        Note
-      </span>{' '}
+      {label ?? (
+        <span
+          style={{
+            fontStyle: 'normal',
+            fontFamily: mono,
+            fontSize: 11,
+            fontWeight: 600,
+            letterSpacing: '0.1em',
+            textTransform: 'uppercase',
+            color: '#dbbc7f',
+            marginRight: 10,
+          }}
+        >
+          Note
+        </span>
+      )}{' '}
       {children}
     </p>
   )
@@ -89,6 +91,7 @@ export function WipBadge({ style }: { style?: CSSProperties }) {
       {' '}
       <span
         style={{
+          fontStyle: 'normal',
           fontFamily: mono,
           fontSize: 10.5,
           fontWeight: 600,
