@@ -124,6 +124,12 @@ export interface Preferences {
   autoSpendOffset?: number
   /** User-defined presets (#626): the user's own saved prompts, shown beside the built-in presets. */
   customPresets?: CustomPreset[]
+  /**
+   * Whether the Overview's Onboarding checklist has been dismissed (#958). Absent = show it,
+   * so a fresh install is walked through setup; dismissing only hides it on the Overview, and
+   * the same checklist stays available on the settings page.
+   */
+  onboardingDismissed?: boolean
 }
 
 /**
@@ -269,6 +275,7 @@ const BOOLEAN_PREFERENCES: Record<BooleanPreferenceKey, true> = {
   notifyNewActivity: true,
   notifyHumanIntervention: true,
   autoPm: true,
+  onboardingDismissed: true,
 }
 
 const PREFERENCE_KEYS = Object.keys(BOOLEAN_PREFERENCES) as BooleanPreferenceKey[]

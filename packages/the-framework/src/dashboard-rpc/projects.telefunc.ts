@@ -1,7 +1,7 @@
 import { getContext } from 'telefunc'
 import { contextProjects } from './context.js'
 import type { ProjectSummary } from '../dashboard/projects.js'
-import type { AddProjectResult } from '../dashboard/types.js'
+import type { AddProjectResult, OnboardingSuggestion } from '../dashboard/types.js'
 import type { DashboardContext } from '../dashboard/telefunc-serve.js'
 
 // The Projects sidebar behind the new dashboard (#405): the global registry (#390) the
@@ -25,4 +25,19 @@ export async function sendAddProject(path: string, directory: boolean): Promise<
   const trimmed = path.trim()
   if (!trimmed) return { ok: false, error: 'a project path is required' }
   return addProject(trimmed, directory)
+}
+
+/**
+ * The Onboarding checklist's one server-side fact (#958): the directory this server runs in,
+ * so the first step can offer "Add {cwd} as project" without the user typing a path.
+ *
+ * Gated on the same `addProject` wiring as {@link sendAddProject}. A public host (the relay)
+ * cannot act on the suggestion anyway, and must not disclose where it runs, so it offers none.
+ */
+export async function onOnboarding(): Promise<OnboardingSuggestion> {
+  const { addProject } = getContext<DashboardContext>()
+  if (!addProject) return { cwd: null, cwdProjectId: null }
+  const cwd = process.cwd()
+  const registered = await contextProjects().list()
+  return { cwd, cwdProjectId: registered.find(p => p.path === cwd)?.id ?? null }
 }

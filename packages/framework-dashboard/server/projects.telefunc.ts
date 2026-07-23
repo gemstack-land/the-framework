@@ -4,6 +4,6 @@
 // Imported then exported, not re-exported (#1014): telefunc's dev transform appends
 // `__decorateTelefunction(<name>, ...)` per export, which needs a local binding. An
 // `export ... from` creates none, so `pnpm dev` died with `<name> is not defined`.
-import { onProjects, sendAddProject } from '@gemstack/the-framework/dashboard-rpc'
+import { onProjects, sendAddProject, onOnboarding } from '@gemstack/the-framework/dashboard-rpc'
 
-export { onProjects, sendAddProject }
+export { onProjects, sendAddProject, onOnboarding }

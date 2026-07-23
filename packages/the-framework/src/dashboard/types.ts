@@ -17,6 +17,20 @@ export type AddProjectResult =
   | { ok: false; error: string }
 
 /**
+ * What the Onboarding checklist (#958) needs and no other read carries: the server's own
+ * working directory, offered as the one-click first project.
+ *
+ * Both fields are null where adding projects is not wired (the relay), so a public host
+ * never discloses its filesystem layout.
+ */
+export interface OnboardingSuggestion {
+  /** The server's working directory, or null when it cannot be offered. */
+  cwd: string | null
+  /** The project id for {@link cwd} when it is already registered, else null. */
+  cwdProjectId: string | null
+}
+
+/**
  * The dashboard's Global options (#314), posted alongside a Start. Each maps to a
  * run flag: Autopilot + Technical to modes, Vanilla to removing the built-in
  * system prompt, and Eco to the fine-grained #326 section drops. Absent fields

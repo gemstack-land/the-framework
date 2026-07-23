@@ -11,6 +11,7 @@ import { Button } from '../../components/ui/button.js'
 import { RunHistory } from '../../components/RunHistory.js'
 import { ProjectHome } from '../../components/ProjectHome.js'
 import { DashboardPage } from '../../components/DashboardPage.js'
+import { SettingsPage } from '../../components/SettingsPage.js'
 import { RunView } from '../../components/RunView.js'
 import { runLabel } from '../../lib/run-label.js'
 import { RightRail } from '../../components/RightRail.js'
@@ -28,7 +29,7 @@ import { useDocumentTitle } from '../../lib/document-title.js'
 import { useWorking } from '../../lib/use-working.js'
 import { useFavicon } from '../../lib/favicon.js'
 import { useDaemonHealth } from '../../lib/use-daemon-health.js'
-import { TriangleAlert } from 'lucide-react'
+import { TriangleAlert, Settings } from 'lucide-react'
 
 /** Stable, so `files` keeps one identity while no project is selected. */
 const EMPTY_FILES: string[] = []
@@ -58,7 +59,7 @@ const EMPTY_ACTIVITY: Activity[] = []
 // what the remembered-project state (#475) was for.
 export default function Page() {
   const { route, go } = useRoute()
-  const { projectId, runId } = route
+  const { view, projectId, runId } = route
 
   // A just-started run: bump the tick so the Sessions rail shows an optimistic "starting…" row
   // with the typed prompt at once, before the spawned process writes its run.json. `id` is the
@@ -180,6 +181,13 @@ export default function Page() {
     go({ projectId: null, runId: null })
   }
 
+  // The settings page (#958): every setting in one place, plus the Onboarding checklist, which is
+  // where dismissing it from the Overview says you can pick it back up.
+  const showSettings = () => {
+    setAdopting(false)
+    go({ view: 'settings', projectId: null, runId: null })
+  }
+
   // The live run feed is owned here so both the main view and the right rail's choice gates
   // (#440) read one shared Telefunc Channel. Hooks run before the relay early return below.
   // The run whose feed and controls are in play is simply the one in the URL; in the no-id
@@ -213,6 +221,7 @@ export default function Page() {
   // run streams its own feed and is steered by its own id (#749).
   const selectedRun = runId ? runs.find(run => run.id === runId) : undefined
   const renderMain = () => {
+    if (view === 'settings') return <SettingsPage onSelectProject={selectProject} onDone={showDashboard} />
     if (!projectId) return <DashboardPage onSelectProject={selectProject} interventions={interventions} />
     if (unknownProject)
       return (
@@ -308,6 +317,9 @@ export default function Page() {
           </Button>
           <ThemeToggle />
           <NotificationsMenu />
+          <Button variant="ghost" size="sm" onClick={showSettings} title="Settings" aria-label="Settings">
+            <Settings className="h-4 w-4" aria-hidden />
+          </Button>
         </div>
       </header>
       {!healthy && (
