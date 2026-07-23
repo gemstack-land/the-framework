@@ -109,7 +109,7 @@ export function Hero() {
           style={{
             display: 'table',
             position: 'relative',
-            margin: '0 auto 8px',
+            margin: '0 auto 0px',
             fontSize: 'clamp(26px, 6vw, 42px)',
             fontWeight: 500,
             color: '#9da9a0',
@@ -121,7 +121,7 @@ export function Hero() {
       </h1>
       <p
         style={{
-          margin: '-4px 0 0',
+          margin: '-10px 0 0',
           fontSize: 'clamp(19px, 4.5vw, 25px)',
           fontWeight: 500,
           lineHeight: 1.45,
@@ -139,7 +139,7 @@ export function Hero() {
           flexDirection: 'column',
           gap: 16,
           alignItems: 'center',
-          marginTop: 12,
+          marginTop: 18,
           maxWidth: '100%',
         }}
       >
@@ -280,7 +280,7 @@ export function Hero() {
 
       <div
         style={{
-          marginTop: 12,
+          marginTop: 16,
           paddingTop: 8,
           width: '100%',
           maxWidth: 1056,
