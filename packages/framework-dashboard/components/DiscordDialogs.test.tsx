@@ -7,7 +7,11 @@ import type { NotifyChannels } from '../server/preferences.telefunc.js'
 // copy: a credential goes in and never comes back, an env-set one is reported rather than edited,
 // and what is stored is offered as Replace/Remove rather than a field with a secret in it.
 
-const saveDiscordCredentials = vi.hoisted(() => vi.fn(async () => ({ ok: true as const })))
+// Typed as the RPC's own result union, not inferred from the happy-path default, so a test can
+// set the refusal case.
+const saveDiscordCredentials = vi.hoisted(() =>
+  vi.fn<(patch: unknown) => Promise<{ ok: true } | { ok: false; error: string }>>(async () => ({ ok: true })),
+)
 vi.mock('../server/preferences.telefunc.js', () => ({ saveDiscordCredentials }))
 
 const updatePreferences = vi.hoisted(() => vi.fn())
