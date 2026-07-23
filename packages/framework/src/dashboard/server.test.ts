@@ -219,7 +219,8 @@ test('a valid ?token= sets the HttpOnly fw_daemon cookie and 302s to the clean p
     assert.equal(res.location, '/') // the token is stripped from the redirect target
     assert.match(res.setCookie ?? '', /^fw_daemon=/)
     assert.match(res.setCookie ?? '', /HttpOnly/)
-    assert.match(res.setCookie ?? '', /SameSite=Strict/)
+    // Lax, not Strict, so the cookie survives the cross-origin device-hop redirect (#1052).
+    assert.match(res.setCookie ?? '', /SameSite=Lax/)
     assert.match(res.setCookie ?? '', /Path=\//)
   } finally {
     await close()
