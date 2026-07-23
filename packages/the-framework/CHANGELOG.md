@@ -1,14 +1,12 @@
-# @gemstack/framework
+# @gemstack/the-framework
 
-## 2.0.0
+## 1.2.0
 
-### Major Changes
+### Minor Changes
 
 - b2d23ed: Rename the package from `@gemstack/framework` to `@gemstack/the-framework`, and the CLI command from `framework` to `the-framework` (#1071), for consistency with the product name **The Framework**.
 
-  This is a breaking change: update installs to `@gemstack/the-framework` and invocations to `the-framework`. The old `@gemstack/framework` package will be deprecated on npm with a pointer to the new name.
-
-### Minor Changes
+  Shipped as a new package name rather than a break in the old one: `@gemstack/framework` keeps resolving and is deprecated with a pointer here, so nothing installed today stops working. Update installs to `@gemstack/the-framework` and invocations to `the-framework`.
 
 - 61451a1: Dashboard: the session page says its branch once. The handoff card that repeated the branch name under the action bar is gone; its verdict ("2 commits · 0 files", "no changes", "branch gone") and its Push branch / Open PR buttons now ride in the branch row itself, and clicking that row expands the commits and changed files. A live session's Changes panel folds into the same row: the file count sits beside the branch, the rows open underneath.
 - ecf2ce4: feat(framework): context fragment lists the recorded conversations (#683)
