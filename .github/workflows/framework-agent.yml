@@ -82,6 +82,10 @@ jobs:
         env:
           RUN_BRANCH: ${{ inputs.branch }}
           DISPATCH_REF: ${{ github.ref_name }}
+          # Authenticate the push explicitly. The agent step runs its own git setup and leaves
+          # the checkout's persisted credentials unusable, so a plain `git push origin` fails
+          # with "Authentication failed"; push through a tokenized URL instead.
+          GH_PUSH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           if [ -z "$RUN_BRANCH" ]; then echo "no run branch requested"; exit 0; fi
@@ -99,7 +103,7 @@ jobs:
             echo "no new commits; nothing to push"
             exit 0
           fi
-          git push origin "HEAD:refs/heads/$RUN_BRANCH"
+          git push "https://x-access-token:${GH_PUSH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "HEAD:refs/heads/$RUN_BRANCH"
           echo "branch=$RUN_BRANCH" >> "$GITHUB_OUTPUT"
 
       # The only REST-readable channel out of a run. `always()` so a failed turn still
