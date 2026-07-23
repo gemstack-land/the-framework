@@ -1,6 +1,6 @@
 {
   "name": "@gemstack/example-mcp-quickstart",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "private": true,
   "description": "Runnable framework-neutral quickstart for @gemstack/mcp: a protected MCP server on node:http and Hono, with zero @rudderjs/* packages.",
   "type": "module",

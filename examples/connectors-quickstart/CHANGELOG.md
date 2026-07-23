@@ -1,5 +1,13 @@
 # @gemstack/example-connectors-quickstart
 
+## 0.0.4
+
+### Patch Changes
+
+- Updated dependencies [9258b84]
+  - @gemstack/mcp@0.5.0
+  - @gemstack/mcp-connectors@0.2.2
+
 ## 0.0.3
 
 ### Patch Changes

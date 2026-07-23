@@ -1,5 +1,217 @@
 # @gemstack/framework
 
+## 2.0.0
+
+### Major Changes
+
+- b2d23ed: Rename the package from `@gemstack/framework` to `@gemstack/the-framework`, and the CLI command from `framework` to `the-framework` (#1071), for consistency with the product name **The Framework**.
+
+  This is a breaking change: update installs to `@gemstack/the-framework` and invocations to `the-framework`. The old `@gemstack/framework` package will be deprecated on npm with a pointer to the new name.
+
+### Minor Changes
+
+- 61451a1: Dashboard: the session page says its branch once. The handoff card that repeated the branch name under the action bar is gone; its verdict ("2 commits · 0 files", "no changes", "branch gone") and its Push branch / Open PR buttons now ride in the branch row itself, and clicking that row expands the commits and changed files. A live session's Changes panel folds into the same row: the file count sits beside the branch, the rows open underneath.
+- ecf2ce4: feat(framework): context fragment lists the recorded conversations (#683)
+
+  Adds `.the-framework/conversations/**.md` to `CONTEXT_DOCS`, so a run is told to read the human conversations (Discord/chat turns) that earlier runs committed there. A read-only pointer, like `tickets/` and `TODO_AGENTS.md`, so it stays out of the merge-update set. The path is pinned by a test to the canonical `THE_FRAMEWORK_DIR`/`CONVERSATIONS_DIR` constants so it cannot drift from where runs actually commit.
+
+- 053db85: feat(framework): context fragment points the knowledge base at a `knowledge-base/` folder (#683)
+
+  Splits the flat `KNOWLEDGE-BASE.md` into `knowledge-base/FACTS.md` and `knowledge-base/INSIGHTS.md`, and moves `DECISIONS.md` and `MARKET_RESEARCH.md` under `knowledge-base/`, with a `knowledge-base/**.md` catch-all. The on-before-mergeable prompt and the Market research preset name the same paths.
+
+- 7c70533: Dashboard: the session log reads like a conversation. Your prompt is its own `YOU` row and the agent's turn is `AGENT`, so a message is no longer echoed twice — the redundant `You: …` log line is gone and the first prompt and every follow-up now read the same way.
+
+  Both your prompts and the agent's replies render as Markdown (headings, bold, lists, code, links), at the log's own density. A short message renders inline; a long one collapses to its first line with a chevron and expands in place on click, so the log stays scannable without hiding the text.
+
+  Also: the sessions rail's home row is now "New session" (a launcher) instead of "Live", and a session's id is always offered for copy in the toolbar (the exact string `--resume` takes), beside the existing copy-branch action.
+
+- a1552ac: feat(framework): remote-daemon lane, non-loopback bind guarded by a shared token (#1051)
+
+  `framework --daemon --host <addr>` binds the dashboard daemon to a non-loopback address so a device you own can reach it. Because a daemon that spawns processes is code execution for anyone who finds the port, a non-loopback bind generates and persists a shared token (`crypto.randomBytes(32)`, a top-level `Registry.daemonToken`, never a preference and never shipped to the browser bundle), and one guard fronts every route (static bundle, `/_telefunc`, `/browser`): a request needs a valid `fw_daemon` cookie or a matching `?token=`, else 401, compared with `crypto.timingSafeEqual`. A valid `?token=` sets an `HttpOnly; SameSite=Strict` cookie and 302s to the clean path, so one cookie rides the RPC, the live-events Channel, and the MJPEG screencast alike. A loopback bind generates nothing and the guard is a no-op, so the local zero-config path is byte-identical. The CLI prints a loud warning and the token URL on any non-loopback bind. Composes with (does not replace) the existing CSRF origin check.
+
+- 3166507: Devices: online/offline status and remove-device in the "Run on" gear (#1072).
+
+  Each saved-device row in the gear gains a remove (X) control that drops the device; if the removed device was the selected run target, the selection clears back to a driver target. The gear device rows and the connection indicator now show a green (online) / grey (offline) reachability dot, and an offline row is muted and labelled. The device tokens stay browser-side (per #1052), so the browser hands the local daemon each device's {url, token} and the daemon does a cookie'd `GET /_relay/ping` to report reachable or not; a short client poll drives the dots. The new ping endpoint is cookie-guarded (401 without) and starts nothing.
+
+- 969b9bb: Dashboard launcher and rail UX pass:
+
+  - The prompt editor and its run controls are grouped into one rounded "composer box"; the editor loses its own border and focus ring, and the placeholder and typed text get roomier padding.
+  - The submit button is a single arrow icon that stays hidden until the prompt has text, then fades in and slides into place, pushing the model select over smoothly (a spinner shows while starting or sending).
+  - The agent/model select sits just left of the submit button, borderless, with the model shown as selected (the default reads "Default", no separator dot).
+  - Presets is a borderless slash icon, the options gear is borderless with a smaller count badge, and all controls share one height.
+  - "Open in editor" moved out of the options gear onto the workspace editor button, which now opens the checkout and picks the preferred editor.
+  - The right rail holds one fixed width for every tab (no expand on Views/Browser).
+  - The sessions rail: "New session" is now "New", the "Sessions" heading is replaced by a "Recents" label over the list, the agent logo is smaller, and rows clear the scrollbar.
+  - The session toolbar drops the copy-branch and copy-session-id buttons, and the branch dirty/clean indicator sits closer to the branch name.
+
+- f20add1: Dashboard: the session view holds still. A run ending used to swap the whole page for a different one — the action bar blanked, the output was replaced by "Loading session…", the run overview disappeared and the composer was rebuilt. Live and finished are now the same view, so only what the bar, feed and composer say changes. The action bar is one row at any width (the branch truncates, the least important facts drop out, the buttons never wrap under it), and the composer no longer vanishes on a session that ended without a resumable id: it stays and starts a new session instead.
+- 85c5f73: Onboarding checklist and a settings page (#958).
+
+  The Overview gains an **Onboarding** section: add a project (one click for the directory the server runs in), fill the AI task queue, fill `tickets/` (with an "Import tickets from GitHub" button), add the Discord bot, turn on browser notifications, and add Discord notifications. Every step's done-state is derived from a real fact (a registered project, a non-empty queue, a ticket on disk, a granted browser permission, credentials the daemon holds), so a step cannot be ticked by clicking it, and one done outside the dashboard shows up done. It can be dismissed, which hides it only on the Overview.
+
+  Settings now have a page of their own at `/settings`, reachable from the header, collecting what was spread across the header menus: appearance and editor, agent / model / run-on, run options, eco, notifications, and automation. The Onboarding checklist lives there too and is not dismissible, which is what dismissing it on the Overview points you to.
+
+  Supporting changes: `onDashboard`'s per-project rollup carries `hasTickets`, a new `onOnboarding` read offers the server's working directory as a first project (gated on the same wiring as adding projects, so a public host discloses nothing), and `onboardingDismissed` joins the preferences.
+
+- d3cd883: Custom presets can now be saved to a project, not just to you. When you create a preset with a project open, a "Save to" choice lets you keep it private (as before) or commit it into the repo's `.the-framework/custom-presets.json`, so everyone who clones the project gets it. Shared presets show up in their own "Project presets" group in the Presets menu and under `/` in the editor, and delete from there. Personal presets still live in your home config and follow you across every project.
+- 30e94f9: feat(framework): run a session on a connected device via a server-side relay (#1067, slice 1)
+
+  Picking a saved device in the "Run on" gear now makes it a true run target: you stay on this dashboard, submit, and the session runs on the remote device and streams its events back into the current run view. A device row no longer navigates the browser; it selects the device in place (the token stays a per-browser secret, memory-only, never persisted).
+
+  Under the hood the local daemon relays the run: it POSTs the run to the remote daemon's new `/_relay/start` (authenticating with the device token as the `fw_daemon` cookie, no Origin) and fetch-streams the remote's `/_relay/events` back into the local run view over the normal same-origin channel. The browser never talks cross-origin and the token never leaves the two daemons. Both `/_relay/*` endpoints are fronted by the same #1051 token guard.
+
+  Slice 1 is submit + live events. The remote run executes in the device's own home checkout, and the diff, PR, push/handoff, and browser screencast panels show a "not available for remote runs yet" placeholder; those (and per-project remote targeting) land in later slices.
+
+- 38ef437: A run started on a connected device is now a true peer: its file reads, diffs, git status, worktree, run-handoff, live steering, and push/open-PR all work by relaying each run-scoped RPC to the device over the #1051 token cookie, keyed by a durable per-run marker on the local daemon; push and PR run on the device's own checkout. The run view's diff and handoff panels are no longer suppressed for remote runs (#1067, slice 2). The browser preview stays local-only for now (slice 3).
+- 1c8d520: A run relayed to a connected device (#1067) now appears in the local project's session list and re-opens after a dashboard reload, instead of showing "This session is gone". The local daemon keeps a lightweight in-memory RunMeta for each relayed run (target 'remote', the device label, a status that flips when the relay stream ends) and merges it into the run list; the event backlog already survives via the daemon-side stream (#1077).
+- 3bc2a2e: Make a remote run's session-list row accurate and legible (#1067). The local in-memory stub for a relayed run now folds every streamed event through the store's own reducer, so it mirrors the device: it shows WAITING while the run is parked on you (not a permanent RUNNING), settles to the right terminal status, and picks up the agent logo and any pending-choice state. The row also gets a small device glyph (with the device name on hover) so a session running on a connected device is distinguishable at a glance from a local one.
+- df6ac36: Run target: wire GitHub Actions into the "Run on" gear (#1050). The options gear gains a single-select "Run on" submenu (Current device, the default; GitHub Actions; Claude web as a disabled placeholder), and picking GitHub Actions runs the turn on a fresh Actions runner via the already-merged ActionsDriver instead of on this device. The choice sticks per project like the agent and model. A new `--run-on <local|actions>` flag drives it from the CLI; `actions` reads the repo owner/repo from the origin remote and a user token from `GH_TOKEN` (repo + workflow scopes). `local` is unchanged.
+- 9202800: Run-view polish for a GitHub Actions target (#1053). A run started with `--run-on actions` now records its target on the run's meta, and the run view reads it: instead of an apparently-stalled live feed (the ActionsDriver replays its transcript in a burst at the end, on a fresh runner per turn), it shows a "running on GitHub Actions, updates arrive when the run finishes" affordance with a clickable link through to the live Actions run (from the `action`/`notice` events the driver emits, which carry the run's `html_url`). The right rail's Browser pane is gated off for an Actions run, since there is no browser on the runner to screencast. A local or remote-device run is unchanged.
+- c55dcca: Dashboard: a stopped session can be deleted. The sessions rail only ever grew — remove-worktree reclaimed a checkout on disk but kept the row, and nothing removed the record. Delete (a trash button beside Remove, which is now a folder-x icon so the two read apart) takes the session out of the dashboard: its run record and event log, and its worktree if one remains. It confirms first, because unlike remove-worktree the replayable history can't be recovered. It deliberately leaves the git branch and its commits, the committed `LOGS.md` line and the conversation record — deleting a branch that may carry merged work or an open PR is not something a trash icon should do silently. It refuses while a run is still going.
+- 3dd90eb: Dashboard: the session's branch row fills in about three times faster. It was waiting on a `gh pr view` (≈574ms, against ~10ms for every git read beside it) that ran twice per session, on every navigation and every poll. That lookup is now read through a single-flight, stale-while-revalidate cache, and it no longer blocks the branch, dirty flag, size, commits or files — they render at git speed while the PR arrives behind them. Opening a PR invalidates the cached answer, and a lookup still in flight is reported as pending rather than as "no PR", so the Open PR button holds off instead of offering to open a second one.
+- c2c5798: Dashboard: semantic status colours, a real Checkbox, a stable Sessions rail, and no emoji glyphs.
+
+  The status colours are now four tokens (`--success`, `--warning`, `--danger`, `--info`) tuned per
+  theme, replacing every raw palette value. Before this, "good" was six different greens, `amber-500`
+  meant both "stopped" and "building, fine", and the flat `-500` tones sat near 2:1 contrast on the
+  light canvas.
+
+  Checkboxes are a shadcn-style primitive on Base UI instead of bare `<input type="checkbox">`, so
+  they follow the theme and carry the same focus ring as everything else.
+
+  The Sessions rail no longer collapses to a strip when the right rail opens the Browser or Views
+  tab; its width is now constant.
+
+  The ✅/❌/⚠️ glyphs in the Enhanced System Prompt disclosure are replaced by a status dot and plain
+  text, matching how every other state in the app is drawn.
+
+  Sessions rail rows now show which agent ran them, and lead with something that identifies the
+  session: the agent's own session name or its branch when there is no typed prompt, and the start
+  time when there is neither. They used to print a bold "(no prompt)" while the timestamp that
+  actually told them apart sat beside it in small muted text.
+
+  A clean git tree's dot is neutral rather than green. Green means "added / new / done" everywhere
+  else, so a green dot for "nothing changed" sat one pane from the file tree's green dot for "this
+  folder has changes".
+
+  Claude's logo is its own starburst rather than the Anthropic wordmark.
+
+- 6e4eb69: Dashboard: the session toolbar leads with the session's name — the same label the rail shows (your prompt) — instead of the branch. The agent renames its branch near the end of a run, and with the branch as the headline that mutation read as the whole view changing; as muted git context beside a stable name, it no longer does. The shared `the-framework/` prefix is dropped from the branch for legibility (the full name stays in the tooltip and copy). The branch summary also stops blanking for a beat when a run stops: it holds the last file counts until the handoff has loaded, so it swaps once instead of flashing empty. One line still, with the label truncating last and the branch, size and summary dropping out as the pane narrows.
+
+### Patch Changes
+
+- 9fd8951: Let the GitHub Actions run target (#1050) read back a run's work and continue on it (#1085). `claude-code-action@v1` leaves its `branch_name` output empty for a `workflow_dispatch` agent run, so the driver never learned the branch the agent pushed: `readCode` failed and a follow-up turn started over on `main`. The driver now names the branch itself (`claude/framework-<session>`) and passes it to the workflow, which pushes the run's work there and records it, so the diff view works and each turn builds on the last.
+- c6548ca: Give each GitHub Actions run (`--run-on actions`, #1050) a correlation id that is unique across driver processes. The id seeded a per-process counter, so a fresh `framework run` process restarted it at 1 and every run's first turn was `actions-1-turn-1`; a new run could then match an earlier, identically named run still in the recent-runs window and report its stale result. The session id now mixes in a random tag, so a run only ever finds its own workflow run.
+- 6740853: Never silently downgrade a run into your own checkout when its worktree could not be created (#997).
+
+  Every run gets its own git worktree (#736) so the agent never edits the working tree you are sitting
+  in. When `git worktree add` failed, the daemon logged a line and ran the agent in the project's main
+  checkout instead, mixing its edits into your uncommitted work. That is reachable in normal use: on a
+  large repo `worktree add` writes a whole checkout and can outrun its budget and be killed.
+
+  A project that is not a git repo still falls back to the main checkout, which is the supported
+  pre-#736 behavior. A project that _is_ a repo and whose `worktree add` failed now fails the Start
+  instead, and the dashboard shows why. A failed Start is recoverable by starting it again; a checkout
+  with agent edits mixed into it is not.
+
+  A `worktree add` killed mid-write leaves the partial checkout it had already written behind (git
+  drops its own administrative entry on the way out, so `git worktree prune` finds nothing to do), so
+  that directory is now removed on the timeout path.
+
+  The fallback's log line also says which case it is: "is not a git repository, so it gets no
+  worktree" rather than a generic "no worktree" that read the same either way.
+
+- 38bb24a: `gitTimeoutMs()` no longer mistakes the value of a global git option for the subcommand, and a
+  conversation commit that keeps failing now says why.
+
+  `gitTimeoutMs()` picked the subcommand by dropping every word that starts with `-`, which drops
+  the flags but keeps the values of the global options that take one. `git -C /repo push` therefore
+  read as the subcommand `/repo`, and the push silently got the 30s local-mutation budget instead of
+  its intended 120s network budget. The same held for `-c key=val`, `--git-dir`, `--work-tree`,
+  `--namespace` and `--exec-path`. The leading global options are now skipped properly, value and
+  all, so the real subcommand is what picks the budget. No call site in the package passes `-C`
+  today, so no timeout that was already correct changes; this closes the trap before a future call
+  site falls into it. `gitTimeoutMs()`'s signature is unchanged.
+
+  The conversation committer logged only its successes. `commitConversations()` returns a reason
+  when it declines or fails, and the poller dropped it, so a project whose commit failed every tick
+  re-queued itself forever while printing nothing at all. The reason is now logged, but on change
+  only: the first failure prints one line, and repeats of the same reason stay quiet until the
+  reason changes or the commit lands, so a stuck project cannot flood the daemon log one line per
+  poll window. The ordinary "no conversation changes" outcome is never reported as a failure.
+
+- fd8e13f: Stop a throwing onEvent listener from escaping a prompt run (runPrompt).
+
+  runFramework wraps each `opts.onEvent(event)` call in a try/catch and logs-and-ignores a listener
+  that throws, but runPrompt's emit did not. Because emit is called both inside and outside the run's
+  try block (the session-start and system-prompt events fire before it), an onEvent listener that threw
+  could escape runPrompt uncaught, or skip the run's `end` event. runPrompt now guards the listener the
+  same way, so a bad listener can no longer take the run down.
+
+- 96f7b6d: Dashboard launcher polish. The run Context picker is now a dropdown that sits in the composer control row next to the presets button, instead of an inline section that pushed the form down. The options gear moved next to the model selector, before Send, and shows a small presence dot rather than a count. "Enhanced System Prompt" is now a dropdown too, sharing the "In play" row. Every menu trigger stays highlighted while its menu is open, and menus open toward the side with room. The prompt editor and all dropdowns now scroll through the shared thin overlay scrollbar, which also removes the doubled border/track the native bar left inside popups.
+- c9864a6: Dashboard: fix the Usage card's dividers rendering at full text brightness, and stop the
+  Overview cards stretching into empty space.
+
+  Tailwind v4 defaults an uncoloured `border-t` to `currentColor`, so the three dividers in the
+  Usage card painted at `oklch(0.95 0 0)`, the body text colour, against hairlines that are
+  `oklch(0.3 0.01 264)` everywhere else in the app. They now use the border token.
+
+  The two Overview card rows also stretched each card to its neighbour's height, so on a quiet
+  board half of "Session outcomes" and most of "Working now" were empty card. They are now two
+  column stacks that size to their content, which pairs the tall chart against the tall list and
+  brings the Projects table a full screen higher.
+
+- deb130e: Dashboard: the "New preset" form is now a centered modal dialog instead of a panel that pushed the composer controls down. Same fields (name, prompt, and the "Save to" scope choice); a backdrop click, Esc, or the close button dismisses it. Adds a reusable shadcn-style `Dialog` on Base UI for future forms.
+- 8a8cd75: Dashboard: make the `dark:` utilities follow the theme toggle instead of the OS.
+
+  Tailwind v4 compiles `dark:` to `@media (prefers-color-scheme: dark)` unless a custom variant
+  says otherwise, but the dashboard's tokens live on the `.dark` class that LayoutDefault toggles.
+  The two disagreed: picking Dark on a light OS applied the dark tokens while leaving every
+  `dark:text-*` rule unapplied, so diff counts, the stream-lost banner and the daemon-health banner
+  kept their light-mode colours on a dark canvas (and the reverse on a dark OS set to Light).
+  Declaring `@custom-variant dark` binds both to the same signal.
+
+- decace4: **Breaking (`@gemstack/ai-autopilot`):** the framework-detection exports are renamed so they no
+  longer collide with the user-facing domain presets.
+
+  Two unrelated subsystems were distinguished only by a directory's singular-vs-plural: `src/preset/`
+  (the Open Loop domain bundles, `{loops, prompts}`) and `src/presets/` (framework detection). Both
+  were re-exported side by side from the one entry point, so `definePreset` and `selectPreset` read
+  like a pair while being from different subsystems. "Preset" now means the user-facing domain bundle
+  only, which is what the shipped root `presets/` markdown and the dashboard already meant by it.
+
+  `src/presets/` moves to `src/framework-detection/` (internal), and the exports rename:
+
+  | Before                  | After                            |
+  | ----------------------- | -------------------------------- |
+  | `definePreset`          | `defineFrameworkPreset`          |
+  | `Preset`                | `FrameworkPreset`                |
+  | `PresetSpec`            | `FrameworkPresetSpec`            |
+  | `PresetSignals`         | `FrameworkPresetSignals`         |
+  | `PresetScore`           | `FrameworkPresetScore`           |
+  | `PresetRegistry`        | `FrameworkPresetRegistry`        |
+  | `PresetError`           | `FrameworkPresetError`           |
+  | `builtinPresets`        | `builtinFrameworkPresets`        |
+  | `builtinPresetRegistry` | `builtinFrameworkPresetRegistry` |
+
+  `detectFramework`, `vikePreset`, `nextPreset`, `FrameworkSignals` and `FrameworkDetection` are
+  unchanged: they were already unambiguous. The domain-preset exports (`defineDomainPreset`,
+  `selectPreset`, `composeDomainPresets`, `loadDomainPreset`, `builtinDomainPresets`,
+  `builtinPresetsDir`, ...) are unchanged.
+
+  No behavior change. As a side effect `@gemstack/ai-autopilot` no longer exports a `definePreset`
+  that clashes with the unrelated `definePreset` in `@gemstack/the-framework`.
+
+- ca48f85: Fix a remote run vanishing from the session list on a dashboard reload ("This session is gone"). `onRuns` read the relayed-run stubs through `contextRemote()` after two awaits, but telefunc only exposes `getContext()` synchronously at the top of a telefunction, so the call threw and every remote run was silently dropped from the list. The context is now read before the first await, so a relayed run stays in the list and re-opens after a reload as #1077 intended.
+- 6601c44: fix(framework): set the daemon token cookie SameSite=Lax so the "a device I have" connection hop works
+
+  The non-loopback bind guard (#1051) set the fw_daemon cookie SameSite=Strict. Connecting to a saved device (#1052) is a cross-origin top-level navigation, and a Strict cookie set during that navigation is withheld by the browser on the immediate redirect to the clean path, so the device connect landed on a 401. Lax still rides top-level GET navigations, and CSRF protection is unchanged (the same-origin check still fronts /\_telefunc).
+
+- ef4f007: Dashboard: the session log labels each row with a plain word instead of its internal event name (#1035). The badge used to show the raw event kind, so a turn of the AI read `DRIVER`, the paused state read `SETTLED`, and the spend row read `USAGE`. These now read `AGENT`, `WAITING`, and `COST`, and the resume-link row reads `RESUME`. Kinds that were already clear are unchanged.
+- 8154e20: Dashboard: widen the session-log badge column so "SYSTEM PROMPT" fits on one line. The badge column was narrow enough that the one two-word label wrapped to two lines; the column now fits it (measured at 106px, column is 112px).
+- Updated dependencies [decace4]
+  - @gemstack/ai-autopilot@0.12.0
+
 ## 1.1.0
 
 ### Minor Changes

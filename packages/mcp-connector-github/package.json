@@ -1,6 +1,6 @@
 {
   "name": "@gemstack/mcp-connector-github",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "GitHub connector for GemStack AI orchestration: read and act on issues, pull requests, and repo files over the GitHub REST API. Built with @gemstack/mcp-connectors.",
   "keywords": [
     "mcp",

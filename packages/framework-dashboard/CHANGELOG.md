@@ -1,5 +1,68 @@
 # @gemstack/framework-dashboard
 
+## 0.3.0
+
+### Minor Changes
+
+- 3e02886: Client connection profiles + "a device I have" in the gear (#1052). The "Run on" submenu gains an "A device I have" section: Local (this machine's own daemon), your saved daemons, and "Add a device". These rows diverge from the driver rows above them: a driver row writes a preference, a device row NAVIGATES the browser to that daemon's origin carrying its token, where the same-origin bootstrap re-authenticates from the cookie it sets. "Add a device" takes the full `http://host:port/?token=…` URL a box prints on its network bind (any reachable host: LAN IP, tailnet name, tunnel URL), parsing the origin and token out of one paste. Profiles live in per-browser localStorage, so the token never reaches the daemon's registry file. A "connected to <device>" indicator in the header shows which daemon the dashboard is talking to.
+- 3166507: Devices: online/offline status and remove-device in the "Run on" gear (#1072).
+
+  Each saved-device row in the gear gains a remove (X) control that drops the device; if the removed device was the selected run target, the selection clears back to a driver target. The gear device rows and the connection indicator now show a green (online) / grey (offline) reachability dot, and an offline row is muted and labelled. The device tokens stay browser-side (per #1052), so the browser hands the local daemon each device's {url, token} and the daemon does a cookie'd `GET /_relay/ping` to report reachable or not; a short client poll drives the dots. The new ping endpoint is cookie-guarded (401 without) and starts nothing.
+
+- 51fca19: Block Start when the selected "Run on" device is offline. When the run target is a saved device whose live status (from #1072) is offline, the submit button is disabled and a note asks you to pick another target in the "Run on" gear. Pressing Start no longer silently attempts the slow relay, and the target is never switched automatically (#1073). An unknown or still-checking status does not block.
+- 30e94f9: feat(framework): run a session on a connected device via a server-side relay (#1067, slice 1)
+
+  Picking a saved device in the "Run on" gear now makes it a true run target: you stay on this dashboard, submit, and the session runs on the remote device and streams its events back into the current run view. A device row no longer navigates the browser; it selects the device in place (the token stays a per-browser secret, memory-only, never persisted).
+
+  Under the hood the local daemon relays the run: it POSTs the run to the remote daemon's new `/_relay/start` (authenticating with the device token as the `fw_daemon` cookie, no Origin) and fetch-streams the remote's `/_relay/events` back into the local run view over the normal same-origin channel. The browser never talks cross-origin and the token never leaves the two daemons. Both `/_relay/*` endpoints are fronted by the same #1051 token guard.
+
+  Slice 1 is submit + live events. The remote run executes in the device's own home checkout, and the diff, PR, push/handoff, and browser screencast panels show a "not available for remote runs yet" placeholder; those (and per-project remote targeting) land in later slices.
+
+- 38ef437: A run started on a connected device is now a true peer: its file reads, diffs, git status, worktree, run-handoff, live steering, and push/open-PR all work by relaying each run-scoped RPC to the device over the #1051 token cookie, keyed by a durable per-run marker on the local daemon; push and PR run on the device's own checkout. The run view's diff and handoff panels are no longer suppressed for remote runs (#1067, slice 2). The browser preview stays local-only for now (slice 3).
+- 1c8d520: A run relayed to a connected device (#1067) now appears in the local project's session list and re-opens after a dashboard reload, instead of showing "This session is gone". The local daemon keeps a lightweight in-memory RunMeta for each relayed run (target 'remote', the device label, a status that flips when the relay stream ends) and merges it into the run list; the event backlog already survives via the daemon-side stream (#1077).
+- 3bc2a2e: Make a remote run's session-list row accurate and legible (#1067). The local in-memory stub for a relayed run now folds every streamed event through the store's own reducer, so it mirrors the device: it shows WAITING while the run is parked on you (not a permanent RUNNING), settles to the right terminal status, and picks up the agent logo and any pending-choice state. The row also gets a small device glyph (with the device name on hover) so a session running on a connected device is distinguishable at a glance from a local one.
+- 53cd77d: Flatten the "Run on" picker into one list and preserve the composer draft across a device hop (#1066). The gear's "Run on" submenu was two axes stacked as one confusing list: driver rows (where a run executes) plus a separate "A device I have" section (which daemon the dashboard talks to), which also duplicated "Local" with "Current device". It is now a single flat list: This machine / GitHub Actions / Claude web (coming soon) / your saved devices / Add a device, with exactly one checkmark. On the local daemon the checkmark tracks the driver target; connected to a device it sits on that device, and clicking "This machine" goes home instead of writing a driver preference. Switching devices no longer nukes the typed prompt: the connect hop carries the draft alongside the token, the remote SPA moves it out of the URL into sessionStorage at boot (so it never sits in the address bar, history, or a Referer), and the launcher rehydrates it. Oversize drafts fall back to a plain connect so a huge paste can't blow the URL length.
+- 9202800: Run-view polish for a GitHub Actions target (#1053). A run started with `--run-on actions` now records its target on the run's meta, and the run view reads it: instead of an apparently-stalled live feed (the ActionsDriver replays its transcript in a burst at the end, on a fresh runner per turn), it shows a "running on GitHub Actions, updates arrive when the run finishes" affordance with a clickable link through to the live Actions run (from the `action`/`notice` events the driver emits, which carry the run's `html_url`). The right rail's Browser pane is gated off for an Actions run, since there is no browser on the runner to screencast. A local or remote-device run is unchanged.
+
+### Patch Changes
+
+- Updated dependencies [9fd8951]
+- Updated dependencies [c6548ca]
+- Updated dependencies [61451a1]
+- Updated dependencies [ecf2ce4]
+- Updated dependencies [053db85]
+- Updated dependencies [7c70533]
+- Updated dependencies [a1552ac]
+- Updated dependencies [3166507]
+- Updated dependencies [6740853]
+- Updated dependencies [38bb24a]
+- Updated dependencies [fd8e13f]
+- Updated dependencies [969b9bb]
+- Updated dependencies [96f7b6d]
+- Updated dependencies [f20add1]
+- Updated dependencies [c9864a6]
+- Updated dependencies [85c5f73]
+- Updated dependencies [deb130e]
+- Updated dependencies [d3cd883]
+- Updated dependencies [8a8cd75]
+- Updated dependencies [decace4]
+- Updated dependencies [ca48f85]
+- Updated dependencies [30e94f9]
+- Updated dependencies [38ef437]
+- Updated dependencies [1c8d520]
+- Updated dependencies [3bc2a2e]
+- Updated dependencies [b2d23ed]
+- Updated dependencies [df6ac36]
+- Updated dependencies [9202800]
+- Updated dependencies [6601c44]
+- Updated dependencies [ef4f007]
+- Updated dependencies [c55dcca]
+- Updated dependencies [3dd90eb]
+- Updated dependencies [c2c5798]
+- Updated dependencies [6e4eb69]
+- Updated dependencies [8154e20]
+  - @gemstack/the-framework@2.0.0
+
 ## 0.2.0
 
 ### Minor Changes

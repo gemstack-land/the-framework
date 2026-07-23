@@ -1,5 +1,47 @@
 # @gemstack/example-framework-demo
 
+## 0.0.9
+
+### Patch Changes
+
+- Updated dependencies [9fd8951]
+- Updated dependencies [c6548ca]
+- Updated dependencies [61451a1]
+- Updated dependencies [ecf2ce4]
+- Updated dependencies [053db85]
+- Updated dependencies [7c70533]
+- Updated dependencies [a1552ac]
+- Updated dependencies [3166507]
+- Updated dependencies [6740853]
+- Updated dependencies [38bb24a]
+- Updated dependencies [fd8e13f]
+- Updated dependencies [969b9bb]
+- Updated dependencies [96f7b6d]
+- Updated dependencies [f20add1]
+- Updated dependencies [c9864a6]
+- Updated dependencies [85c5f73]
+- Updated dependencies [deb130e]
+- Updated dependencies [d3cd883]
+- Updated dependencies [8a8cd75]
+- Updated dependencies [decace4]
+- Updated dependencies [ca48f85]
+- Updated dependencies [30e94f9]
+- Updated dependencies [38ef437]
+- Updated dependencies [1c8d520]
+- Updated dependencies [3bc2a2e]
+- Updated dependencies [b2d23ed]
+- Updated dependencies [df6ac36]
+- Updated dependencies [9202800]
+- Updated dependencies [6601c44]
+- Updated dependencies [ef4f007]
+- Updated dependencies [c55dcca]
+- Updated dependencies [3dd90eb]
+- Updated dependencies [c2c5798]
+- Updated dependencies [6e4eb69]
+- Updated dependencies [8154e20]
+  - @gemstack/the-framework@2.0.0
+  - @gemstack/ai-autopilot@0.12.0
+
 ## 0.0.8
 
 ### Patch Changes
