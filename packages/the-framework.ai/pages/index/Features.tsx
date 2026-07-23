@@ -75,8 +75,8 @@ export function Features() {
               Use your existing AI subscription — The Framework orchestrates agents via your Claude Code / Codex
               installation.
             </FeatureText>
-            <Note label={<WipBadge style={{ marginRight: 8, display: 'inline-block' }} />}>
-              Claude Code Web: orchestrate agents via Claude Code Web for 0% local CPU usage.
+            <Note label={<WipBadge style={{ marginRight: 3, display: 'inline-block' }} />}>
+              Orchestrate agents via Claude Code Web for 0% local CPU usage.
             </Note>
           </div>
           <div style={{ ...featureCardStyle, gap: 12 }}>

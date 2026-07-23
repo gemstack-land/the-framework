@@ -59,14 +59,12 @@ export function Note({ children, style, label }: { children: ReactNode; style?: 
         borderLeft: '3px solid #dbbc7f',
         borderRadius: '0 8px 8px 0',
         padding: '12px 16px',
-        fontStyle: 'italic',
         ...style,
       }}
     >
       {label ?? (
         <span
           style={{
-            fontStyle: 'normal',
             fontFamily: mono,
             fontSize: 11,
             fontWeight: 600,
@@ -79,7 +77,13 @@ export function Note({ children, style, label }: { children: ReactNode; style?: 
           Note
         </span>
       )}{' '}
-      {children}
+      <span
+        style={{
+          fontStyle: 'italic',
+        }}
+      >
+        {children}
+      </span>
     </p>
   )
 }
@@ -104,7 +108,7 @@ export function WipBadge({ style }: { style?: CSSProperties }) {
           ...style,
         }}
       >
-         WIP
+         Coming soon
       </span>
     </>
   )
