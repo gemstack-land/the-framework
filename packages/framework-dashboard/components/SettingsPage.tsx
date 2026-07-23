@@ -3,6 +3,7 @@ import { AGENTS, AGENT_LABELS } from '@gemstack/the-framework/client'
 import { useDetectedEditors } from '../lib/editors.js'
 import { usePreferences, updatePreferences, themePreference, type ThemePreference } from '../lib/preferences.js'
 import { OnboardingChecklist } from './OnboardingChecklist.js'
+import { DevicesSettings } from './DevicesSettings.js'
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card.js'
 import { Checkbox } from './ui/checkbox.js'
 import { ScrollArea } from './ui/scroll-area.js'
@@ -86,6 +87,9 @@ export function SettingsPage({ onSelectProject }: { onSelectProject?: ((id: stri
             onChange={value => updatePreferences({ target: value as 'local' | 'actions' })}
           />
         </Section>
+
+        {/* Beside "Run on", since a saved device is the other thing a session can run on. */}
+        <DevicesSettings />
 
         <Section title="Run options">
           <ToggleRow
