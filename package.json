@@ -20,7 +20,7 @@
     "// Build website for production": "",
     "website:build": "cd packages/the-framework.ai/ && pnpm run build",
     "// Test website (CI)": "",
-    "docs:test": "cd packages/the-framework.ai/ && echo 'no tests yet'"
+    "website:test": "cd packages/the-framework.ai/ && echo 'no tests yet'"
   },
   "devDependencies": {
     "@changesets/cli": "^2.27.0",
