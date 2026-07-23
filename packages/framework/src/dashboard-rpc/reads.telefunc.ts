@@ -76,9 +76,12 @@ async function withProjects<T>(build: (projects: Awaited<ReturnType<ReturnType<t
  * instead of losing it.
  */
 export async function onRuns(projectId: string): Promise<RunMeta[]> {
+  // Read the relayed-run stubs BEFORE any await (#1077): telefunc only exposes getContext()
+  // synchronously at the top of a telefunction, so calling contextRemote() after an await loses
+  // the request context and drops every remote run from the list on a reload.
+  const remote = contextRemote()?.list(projectId) ?? []
   const cwd = await resolveProjectPath(projectId)
   const local = cwd ? await readAllRuns(cwd) : []
-  const remote = contextRemote()?.list(projectId) ?? []
   if (remote.length === 0) return local
   // A relayed run (#1067) lives only in the daemon's memory, not on disk; surface it in the list so
   // a reload re-opens it instead of losing it. Remote wins an id tie (it is the live authority).
