@@ -22,10 +22,13 @@ on:
         description: A prior agent session id to continue instead of starting fresh.
         required: false
 
-# The agent pushes a branch and may open a PR; nothing here needs write access to anything else.
+# The agent pushes a branch and may open a PR. `id-token: write` is not optional: the
+# action exchanges an OIDC token to authenticate the subscription OAuth token, and without
+# it every run fails with "Could not fetch an OIDC token".
 permissions:
   contents: write
   pull-requests: write
+  id-token: write
 
 jobs:
   agent:
