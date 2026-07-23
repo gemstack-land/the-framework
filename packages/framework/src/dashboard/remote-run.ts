@@ -1,6 +1,6 @@
 import { EventStream } from '@gemstack/ai-autopilot'
 import type { FrameworkEvent } from '../events.js'
-import type { RunMeta } from '../store/index.js'
+import { applyEventToMeta, type RunMeta } from '../store/index.js'
 import type { StartRunKind, StartRunOptions, StartRunResult } from './types.js'
 import { errorMessage } from '../error-message.js'
 
@@ -197,7 +197,7 @@ export class RelayedRuns {
     const stream = new EventStream<FrameworkEvent>()
     const cancel = streamRemoteEvents(target, runId, event => {
       stream.push(event)
-      if (event.kind === 'end') this.settle(runId, event) // record the run's ending on its list row
+      this.apply(runId, event) // fold the event into the run's list row, mirroring the device
     }, () => this.endStream(runId))
     this.runs.set(runId, { target, stream, cancel })
   }
@@ -220,11 +220,13 @@ export class RelayedRuns {
     return rows.sort((a, b) => (a.startedAt < b.startedAt ? 1 : a.startedAt > b.startedAt ? -1 : 0))
   }
 
-  /** Flip a relayed run's list row to its ending when the device's stream reports one (#1077). */
-  private settle(runId: string, end: Extract<FrameworkEvent, { kind: 'end' }>): void {
+  /** Fold each relayed event into the run's list row via the store's own reducer (#1077), so the
+   *  local stub mirrors the device: the terminal status on `end`, the waiting flag while it is parked
+   *  (#785), the driver once its session starts. Events carry no write time, so this stamps its own. */
+  private apply(runId: string, event: FrameworkEvent): void {
     const entry = this.metas.get(runId)
     if (!entry) return
-    entry.meta.status = end.stopped ? 'stopped' : end.ok ? 'done' : 'failed'
+    entry.meta = applyEventToMeta(entry.meta, event, new Date().toISOString())
   }
 
   /** Close a relayed run's event stream (not its target). Idempotent. */

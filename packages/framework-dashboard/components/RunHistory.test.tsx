@@ -102,4 +102,14 @@ describe('RunHistory collapsed (#862)', () => {
     const panel = rail(container).firstElementChild as HTMLElement
     expect(panel.className).toContain('absolute')
   })
+
+  test('a run on a connected device shows a device glyph naming the device (#1067)', () => {
+    render(<RunHistory projectId="p1" runs={[run({ target: 'remote', remoteLabel: 'my-laptop' })]} selectedRunId={null} onSelect={() => {}} />)
+    expect(screen.getByLabelText('Runs on my-laptop')).toBeTruthy()
+  })
+
+  test('a local run has no device glyph (#1067)', () => {
+    render(<RunHistory projectId="p1" runs={[run()]} selectedRunId={null} onSelect={() => {}} />)
+    expect(screen.queryByLabelText(/Runs on/)).toBeNull()
+  })
 })

@@ -278,6 +278,26 @@ test("a relayed run's list row flips to the device's ending, or stopped if the s
   assert.equal(await relayEndStatus(null), 'stopped') // no end event: the stream dropped, so it is no longer live
 })
 
+test('a relayed run reads as waiting while the device has it parked on the user (#1067/#785)', async () => {
+  // The device streams `settled` and keeps the run alive: the local list row must mirror that as
+  // waiting (settledAt set, still running), not a permanent running, so the badge matches the device.
+  const srv = await server((_req, res) => {
+    res.writeHead(200, { 'content-type': 'application/x-ndjson' })
+    res.write(`${JSON.stringify({ kind: 'settled' })}\n`) // stays open: parked, not finished
+  })
+  try {
+    const runs = new RelayedRuns()
+    runs.register('r1', { url: srv.url, token: 't' }, stubMeta('r1'), 'proj-1')
+    for (let i = 0; i < 40 && !runs.list('proj-1')[0]?.settledAt; i++) await new Promise(r => setTimeout(r, 25))
+    const row = runs.list('proj-1')[0]
+    assert.ok(row?.settledAt, 'a parked remote run carries settledAt, so its row reads waiting')
+    assert.equal(row?.status, 'running') // still live, so waiting (not a terminal status)
+    runs.dispose()
+  } finally {
+    await srv.close()
+  }
+})
+
 test('dispose clears the relayed run list and its device target (#1077)', async () => {
   const srv = await server((_req, res) => {
     res.writeHead(200, { 'content-type': 'application/x-ndjson' })

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Plus } from 'lucide-react'
+import { Plus, MonitorSmartphone } from 'lucide-react'
 import type { RunMeta, RunStatus } from '@gemstack/framework'
 import { AGENT_LABELS, agentForDriver } from '@gemstack/framework/client'
 import { Button } from './ui/button.js'
@@ -139,6 +139,8 @@ export function RunHistory({
             // `runs` is newest-first, so that is the first with a running status.
             active={run.id === selectedRunId || (followLive && run.id === newestRunningId)}
             waiting={run.settledAt !== undefined}
+            remote={run.target === 'remote'}
+            {...(run.remoteLabel ? { remoteLabel: run.remoteLabel } : {})}
             collapsed={collapsed}
             onClick={() => onSelect(run.id)}
           />
@@ -161,6 +163,8 @@ function RunRow({
   driver,
   dim = false,
   waiting = false,
+  remote = false,
+  remoteLabel,
   collapsed = false,
 }: {
   status: RunStatus
@@ -173,6 +177,10 @@ function RunRow({
   dim?: boolean
   /** Live, but parked on the user rather than working (#785). */
   waiting?: boolean
+  /** Runs on a connected device (#1067): the row gets a device glyph next to the agent logo. */
+  remote?: boolean
+  /** The device's label, for the glyph's tooltip. */
+  remoteLabel?: string | undefined
   /** In the narrow strip (#862): labels fade out, so the row is carried by its dot alone. */
   collapsed?: boolean
 }) {
@@ -210,14 +218,18 @@ function RunRow({
           {parked ? 'waiting' : status}
         </Badge>
         <span className={cn('truncate text-xs font-normal text-muted-foreground', label)}>{subtitle}</span>
-        {/* Which agent ran it. The logo is the only thing naming the agent on this row, so it
+        {/* Right cluster: a device glyph when the run is relayed to a connected device (#1067),
+            then the agent logo. The logo is the only thing naming the agent on this row, so it
             carries a title rather than being decorative. */}
-        {agent && (
-          <AgentLogo
-            agent={agent}
-            title={AGENT_LABELS[agent]}
-            className={cn('ml-auto h-3 w-3 shrink-0 text-muted-foreground', label)}
-          />
+        {(remote || agent) && (
+          <span className={cn('ml-auto flex shrink-0 items-center gap-1.5', label)}>
+            {remote && (
+              <span title={remoteLabel ? `Runs on ${remoteLabel}` : 'Runs on a connected device'} className="flex items-center">
+                <MonitorSmartphone className="h-3 w-3 text-muted-foreground" aria-label={remoteLabel ? `Runs on ${remoteLabel}` : 'Runs on a connected device'} />
+              </span>
+            )}
+            {agent && <AgentLogo agent={agent} title={AGENT_LABELS[agent]} className="h-3 w-3 text-muted-foreground" />}
+          </span>
         )}
       </span>
       <span className={cn('w-full truncate text-sm font-medium', label)}>{intent || 'New session'}</span>
