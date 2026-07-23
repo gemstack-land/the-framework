@@ -1,0 +1,72 @@
+import { DiscordIcon, GitHubIcon } from './icons'
+import { DISCORD_URL, GITHUB_URL } from './ui'
+
+export function Cta() {
+  return (
+    <section
+      style={{
+        maxWidth: 880,
+        margin: '0 auto',
+        padding: 'clamp(72px, 12vw, 110px) clamp(14px, 4vw, 24px) clamp(56px, 10vw, 90px)',
+        textAlign: 'center',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        gap: 22,
+      }}
+    >
+      <img src="/assets/logo.svg" alt="" style={{ width: 52, height: 59 }} />
+      <h2
+        style={{
+          margin: 0,
+          fontSize: 'clamp(26px, 6vw, 36px)',
+          fontWeight: 700,
+          letterSpacing: '-0.015em',
+          textWrap: 'pretty',
+        }}
+      >
+        Join our community of next-gen developers{' '}
+        <img src="/assets/emoji-flex.svg" alt="💪" style={{ height: '1em', verticalAlign: '-0.12em' }} />
+        <img src="/assets/emoji-mech-arm.svg" alt="🦾" style={{ height: '1em', verticalAlign: '-0.12em' }} />
+      </h2>
+      <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', justifyContent: 'center' }}>
+        <a
+          href={DISCORD_URL}
+          className="cta-primary"
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 10,
+            background: '#a7c080',
+            color: '#2d353b',
+            fontWeight: 600,
+            fontSize: 16,
+            borderRadius: 10,
+            padding: '13px 26px',
+          }}
+        >
+          <DiscordIcon width={19} height={15} />
+          Join us on Discord
+        </a>
+        <a
+          href={GITHUB_URL}
+          className="cta-secondary"
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 10,
+            border: '1px solid #4f585e',
+            color: '#d3c6aa',
+            fontWeight: 500,
+            fontSize: 16,
+            borderRadius: 10,
+            padding: '13px 26px',
+          }}
+        >
+          <GitHubIcon size={17} />
+          Star on GitHub
+        </a>
+      </div>
+    </section>
+  )
+}

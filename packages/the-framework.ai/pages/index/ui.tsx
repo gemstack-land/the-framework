@@ -1,0 +1,122 @@
+import type { CSSProperties, ReactNode } from 'react'
+
+export const DISCORD_URL = 'https://discord.gg/qc8zvdzWNR'
+export const GITHUB_URL = 'https://github.com/gemstack-land/gemstack'
+export const NPM_URL = 'https://www.npmjs.com/package/@gemstack/the-framework'
+
+export const mono = "'IBM Plex Mono', monospace" as const
+
+// A content section: max-width column with the shared vertical rhythm.
+export const sectionStyle: CSSProperties = {
+  maxWidth: 1120,
+  margin: '0 auto',
+  padding: 'clamp(56px, 10vw, 90px) clamp(14px, 4vw, 24px) 0',
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 36,
+}
+
+export const h2Style: CSSProperties = {
+  margin: 0,
+  fontSize: 'clamp(30px, 6vw, 40px)',
+  fontWeight: 700,
+  letterSpacing: '-0.015em',
+}
+
+export const cardStyle: CSSProperties = {
+  background: '#343f44',
+  border: '1px solid #3d484d',
+  borderRadius: 12,
+}
+
+// Small mono uppercase label (e.g. "Try", "What is it?", "Problem").
+export const kickerStyle: CSSProperties = {
+  fontFamily: mono,
+  fontSize: 11.5,
+  letterSpacing: '0.12em',
+  textTransform: 'uppercase',
+  color: '#a7c080',
+}
+
+export function SectionHead({ title, sub }: { title: ReactNode; sub?: string }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12, maxWidth: 640 }}>
+      <h2 style={h2Style}>{title}</h2>
+      {sub && <p style={{ margin: 0, fontSize: 17, lineHeight: 1.6, color: '#9da9a0' }}>{sub}</p>}
+    </div>
+  )
+}
+
+export function Note({ children, style }: { children: ReactNode; style?: CSSProperties }) {
+  return (
+    <p
+      style={{
+        margin: 0,
+        fontSize: 14,
+        lineHeight: 1.6,
+        color: '#9da9a0',
+        background: 'rgba(219, 188, 127, 0.07)',
+        borderLeft: '3px solid #dbbc7f',
+        borderRadius: '0 8px 8px 0',
+        padding: '12px 16px',
+        fontStyle: 'italic',
+        ...style,
+      }}
+    >
+      <span
+        style={{
+          fontStyle: 'normal',
+          fontFamily: mono,
+          fontSize: 11,
+          fontWeight: 600,
+          letterSpacing: '0.1em',
+          textTransform: 'uppercase',
+          color: '#dbbc7f',
+          marginRight: 10,
+        }}
+      >
+        Note
+      </span>{' '}
+      {children}
+    </p>
+  )
+}
+
+export function WipBadge({ style }: { style?: CSSProperties }) {
+  return (
+    <span
+      style={{
+        fontFamily: mono,
+        fontSize: 10.5,
+        fontWeight: 600,
+        letterSpacing: '0.08em',
+        color: '#dbbc7f',
+        border: '1px solid rgba(219, 188, 127, 0.4)',
+        borderRadius: 4,
+        padding: '1px 6px',
+        whiteSpace: 'nowrap',
+        ...style,
+      }}
+    >
+      🚧 WIP
+    </span>
+  )
+}
+
+export function CodeChip({ children, fontSize }: { children: string; fontSize: number }) {
+  return (
+    <code
+      style={{
+        wordBreak: 'break-all',
+        fontFamily: mono,
+        fontSize,
+        background: '#232a2e',
+        borderRadius: 5,
+        padding: '2px 6px',
+        color: '#dbbc7f',
+      }}
+    >
+      {children}
+    </code>
+  )
+}

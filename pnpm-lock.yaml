@@ -22,7 +22,7 @@ importers:
     devDependencies:
       vitepress:
         specifier: 2.0.0-alpha.17
-        version: 2.0.0-alpha.17(@types/node@20.19.43)(jiti@2.7.0)(lightningcss@1.32.0)(postcss@8.5.15)(tsx@4.22.4)(typescript@5.9.3)(yaml@2.9.0)
+        version: 2.0.0-alpha.17(@types/node@20.19.43)(jiti@2.7.0)(lightningcss@1.32.0)(postcss@8.5.16)(tsx@4.22.4)(typescript@5.9.3)(yaml@2.9.0)
       vue:
         specifier: ^3.5.29
         version: 3.5.39(typescript@5.9.3)
@@ -450,6 +450,37 @@ importers:
       zod:
         specifier: ^4.0.0
         version: 4.4.3
+
+  packages/the-framework.ai:
+    dependencies:
+      react:
+        specifier: ^19.2.0
+        version: 19.2.7
+      react-dom:
+        specifier: ^19.2.0
+        version: 19.2.7(react@19.2.7)
+      vike:
+        specifier: ^0.4.235
+        version: 0.4.260(hono@4.12.27)(react-streaming@0.4.20(react-dom@19.2.7(react@19.2.7))(react@19.2.7))(srvx@0.11.21)(vite@8.1.4(@types/node@20.19.43)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.22.4)(yaml@2.9.0))
+      vike-react:
+        specifier: ^0.6.5
+        version: 0.6.25(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(vike@0.4.260(hono@4.12.27)(react-streaming@0.4.20(react-dom@19.2.7(react@19.2.7))(react@19.2.7))(srvx@0.11.21)(vite@8.1.4(@types/node@20.19.43)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.22.4)(yaml@2.9.0)))
+    devDependencies:
+      '@types/react':
+        specifier: ^19.2.0
+        version: 19.2.17
+      '@types/react-dom':
+        specifier: ^19.2.0
+        version: 19.2.3(@types/react@19.2.17)
+      '@vitejs/plugin-react':
+        specifier: ^6.0.3
+        version: 6.0.3(vite@8.1.4(@types/node@20.19.43)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.22.4)(yaml@2.9.0))
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+      vite:
+        specifier: ^8.0.0
+        version: 8.1.4(@types/node@20.19.43)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.22.4)(yaml@2.9.0)
 
 packages:
 
@@ -3037,10 +3068,6 @@ packages:
     resolution: {integrity: sha512-V7+vQEJ06Z+c5tSye8S+nHUfI51xoXIXjHQ99cQtKUkQqqO1kO/KCJUfZXuB47h/YBlDhah2H3hdUGXn8ie0oA==}
     engines: {node: '>=8.6'}
 
-  picomatch@4.0.4:
-    resolution: {integrity: sha512-QP88BAKvMam/3NxH6vj2o21R6MjxZUAd6nlwAS/pnGvN9IVLocLHxGYIzFhg6fUQ+5th6P4dv4eW9jX3DSIj7A==}
-    engines: {node: '>=12'}
-
   picomatch@4.0.5:
     resolution: {integrity: sha512-RvwwcruNjI1ncT5xRakeyS9Lf8lcItv34KD+aif+VH9kduAyfYBipGh12274xtenIPZ119/R9BdTBa8gAwSh0A==}
     engines: {node: '>=12'}
@@ -3057,10 +3084,6 @@ packages:
     resolution: {integrity: sha512-h7Qlt6m4REp25qvIdvbDtVmD4LqVXfpRxhORv9L0jzETM05p4fuPJ3dKyuSXQxDSbXnmS79HAgi9589lGSpLkg==}
     engines: {node: '>=18'}
     hasBin: true
-
-  postcss@8.5.15:
-    resolution: {integrity: sha512-FfR8sjd4em2T6fb3I2MwAJU7HWVMr9zba+enmQeeWFfCbm+UOC/0X4DS8XtpUTMwWMGbjKYP7xjfNekzyGmB3A==}
-    engines: {node: ^10 || ^12 || >=14}
 
   postcss@8.5.16:
     resolution: {integrity: sha512-vuwillviilfKZsg0VGj5R/YwwcHx4SLsIOI/7K6mQkWx+l5cUHTjj5g0AasTBcyXsbfTgrwsUNmVUb5xVwyPwg==}
@@ -5403,7 +5426,7 @@ snapshots:
       '@vue/shared': 3.5.39
       estree-walker: 2.0.2
       magic-string: 0.30.21
-      postcss: 8.5.15
+      postcss: 8.5.16
       source-map-js: 1.2.1
 
   '@vue/compiler-ssr@3.5.39':
@@ -5890,9 +5913,9 @@ snapshots:
     dependencies:
       reusify: 1.1.0
 
-  fdir@6.5.0(picomatch@4.0.4):
+  fdir@6.5.0(picomatch@4.0.5):
     optionalDependencies:
-      picomatch: 4.0.4
+      picomatch: 4.0.5
 
   fetch-blob@3.2.0:
     dependencies:
@@ -6495,8 +6518,6 @@ snapshots:
 
   picomatch@2.3.2: {}
 
-  picomatch@4.0.4: {}
-
   picomatch@4.0.5: {}
 
   pify@4.0.1: {}
@@ -6504,12 +6525,6 @@ snapshots:
   pkce-challenge@5.0.1: {}
 
   playwright-core@1.61.1: {}
-
-  postcss@8.5.15:
-    dependencies:
-      nanoid: 3.3.15
-      picocolors: 1.1.1
-      source-map-js: 1.2.1
 
   postcss@8.5.16:
     dependencies:
@@ -6988,8 +7003,8 @@ snapshots:
 
   tinyglobby@0.2.17:
     dependencies:
-      fdir: 6.5.0(picomatch@4.0.4)
-      picomatch: 4.0.4
+      fdir: 6.5.0(picomatch@4.0.5)
+      picomatch: 4.0.5
 
   tinyrainbow@3.1.0: {}
 
@@ -7144,7 +7159,7 @@ snapshots:
       esbuild: 0.28.1
       json5: 2.2.3
       magic-string: 0.30.21
-      picomatch: 4.0.4
+      picomatch: 4.0.5
       semver: 7.8.5
       sirv: 3.0.2
       source-map-support: 0.5.21
@@ -7172,9 +7187,9 @@ snapshots:
   vite@7.3.6(@types/node@20.19.43)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.22.4)(yaml@2.9.0):
     dependencies:
       esbuild: 0.28.1
-      fdir: 6.5.0(picomatch@4.0.4)
-      picomatch: 4.0.4
-      postcss: 8.5.15
+      fdir: 6.5.0(picomatch@4.0.5)
+      picomatch: 4.0.5
+      postcss: 8.5.16
       rollup: 4.62.2
       tinyglobby: 0.2.17
     optionalDependencies:
@@ -7200,7 +7215,7 @@ snapshots:
       tsx: 4.22.4
       yaml: 2.9.0
 
-  vitepress@2.0.0-alpha.17(@types/node@20.19.43)(jiti@2.7.0)(lightningcss@1.32.0)(postcss@8.5.15)(tsx@4.22.4)(typescript@5.9.3)(yaml@2.9.0):
+  vitepress@2.0.0-alpha.17(@types/node@20.19.43)(jiti@2.7.0)(lightningcss@1.32.0)(postcss@8.5.16)(tsx@4.22.4)(typescript@5.9.3)(yaml@2.9.0):
     dependencies:
       '@docsearch/css': 4.6.3
       '@docsearch/js': 4.6.3
@@ -7222,7 +7237,7 @@ snapshots:
       vite: 7.3.6(@types/node@20.19.43)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.22.4)(yaml@2.9.0)
       vue: 3.5.39(typescript@5.9.3)
     optionalDependencies:
-      postcss: 8.5.15
+      postcss: 8.5.16
     transitivePeerDependencies:
       - '@types/node'
       - async-validator

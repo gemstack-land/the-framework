@@ -1,0 +1,54 @@
+import { h2Style, Note } from './ui'
+
+const ITEMS = [
+  'Avoiding AI from being lazy',
+  'Avoiding AI making implicit non-consensual decisions',
+  'Enhanced planning',
+  'Enhanced user confirmation — if variability, at-a-glance TL;DR choices',
+]
+
+export function EnhancedSystemPrompt() {
+  return (
+    <section
+      id="enhanced-system-prompt"
+      style={{
+        maxWidth: 1120,
+        margin: '0 auto',
+        padding: 'clamp(56px, 10vw, 90px) clamp(14px, 4vw, 24px) 0',
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(min(300px, 100%), 1fr))',
+        gap: 'clamp(28px, 5vw, 48px)',
+        alignItems: 'center',
+      }}
+    >
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <h2 style={h2Style}>Enhanced System Prompt</h2>
+        <p style={{ margin: 0, fontSize: 16.5, lineHeight: 1.65, color: '#9da9a0', textWrap: 'pretty' }}>
+          The Framework appends its own system prompt that instructs AI to follow highly effective practices — such as
+          dividing large work into subtasks and listing significant alternative solutions.
+        </p>
+        <Note>Customizable (or fully opt-out).</Note>
+      </div>
+      <ul style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 12 }}>
+        {ITEMS.map((item) => (
+          <li
+            key={item}
+            style={{
+              background: '#343f44',
+              border: '1px solid #3d484d',
+              borderRadius: 10,
+              padding: '16px 20px',
+              fontSize: 15,
+              lineHeight: 1.5,
+              display: 'flex',
+              gap: 12,
+            }}
+          >
+            <span style={{ color: '#a7c080' }}>✓</span>
+            {item}
+          </li>
+        ))}
+      </ul>
+    </section>
+  )
+}

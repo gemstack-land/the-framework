@@ -1,0 +1,169 @@
+/* Ported from the design export's <helmet> styles, plus its `style-hover` /
+ * `style-after` runtime attributes converted to real CSS. Hover rules that
+ * override inline base styles need `!important` (matching the runtime's
+ * inline-level precedence). */
+
+html {
+  scroll-behavior: smooth;
+}
+* {
+  transition:
+    border-color 0.15s,
+    background-color 0.15s,
+    color 0.15s;
+}
+h1,
+h2,
+h3 {
+  text-wrap: balance;
+}
+body {
+  margin: 0;
+  background: #2d353b;
+  color: #d3c6aa;
+  font-family: 'IBM Plex Sans', sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+a {
+  color: #7fbbb3;
+  text-decoration: none;
+}
+a:hover {
+  color: #83c092;
+}
+::selection {
+  background: #475258;
+}
+section[id] {
+  scroll-margin-top: 76px;
+}
+
+/* --- Hover states (from `style-hover`) --- */
+.nav-btn:hover {
+  border-color: #859289 !important;
+}
+.pm-tab:hover {
+  color: #d3c6aa !important;
+}
+.copy-box:hover {
+  background: rgba(167, 192, 128, 0.04) !important;
+}
+.install-chip:hover {
+  border-color: #859289 !important;
+}
+.cta-primary:hover {
+  background: #b5cc92 !important;
+}
+.cta-secondary:hover {
+  border-color: #859289 !important;
+}
+.footer-link:hover {
+  color: #d3c6aa !important;
+}
+
+/* --- Section nav --- */
+.section-nav::-webkit-scrollbar {
+  display: none;
+}
+.section-link {
+  color: #9da9a0;
+  border-bottom: 2px solid transparent;
+}
+.section-link.active {
+  color: #a7c080;
+  border-bottom-color: #a7c080;
+}
+.section-link:hover {
+  color: #d3c6aa;
+}
+
+/* --- Copy badges: hidden until the copy target is hovered or was just clicked --- */
+.try-badge,
+.copy-tip-side {
+  opacity: 0;
+}
+.copy-box:hover .try-badge,
+.try-badge.copied,
+.install-chip:hover .copy-tip-side,
+.copy-tip-side.copied {
+  opacity: 1;
+}
+
+/* --- Pseudo-elements (from `style-after`) --- */
+@keyframes strike {
+  from {
+    transform: scaleX(0.1);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+.strike::after {
+  content: '';
+  position: absolute;
+  left: -3%;
+  top: 52%;
+  width: 106%;
+  height: 4px;
+  border-radius: 2px;
+  background: #e67e80;
+  rotate: -2deg;
+  transform-origin: left center;
+  transform: scaleX(0.1);
+  animation: strike 1.6s cubic-bezier(0.65, 0, 0.35, 1) 0.6s forwards;
+}
+.try-badge::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  right: 11px;
+  border: 5px solid transparent;
+  border-top-color: #14181b;
+}
+.copy-tip-side::after {
+  content: '';
+  position: absolute;
+  right: 100%;
+  top: 50%;
+  margin-top: -5px;
+  border: 5px solid transparent;
+  border-right-color: #14181b;
+}
+
+/* --- Responsive --- */
+@media (max-width: 480px) {
+  .nav-btn span {
+    display: none;
+  }
+  .nav-btn {
+    padding: 7px 10px !important;
+  }
+}
+@media (max-width: 860px) {
+  .on-this-page,
+  .section-nav-wrap {
+    display: none !important;
+  }
+  .problem-card {
+    grid-template-columns: 1fr !important;
+    gap: 18px !important;
+  }
+}
+@media (max-width: 760px) {
+  .copy-tip-side {
+    left: auto !important;
+    right: 0 !important;
+    top: auto !important;
+    bottom: calc(100% + 9px) !important;
+    transform: none !important;
+  }
+  .copy-tip-side::after {
+    display: none !important;
+  }
+}
+@media (max-width: 600px) {
+  .solution-row {
+    grid-template-columns: 1fr !important;
+    row-gap: 4px !important;
+  }
+}

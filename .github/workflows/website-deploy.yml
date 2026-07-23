@@ -1,0 +1,38 @@
+name: Website Deployment
+on:
+  push:
+    # Only deploy upon new commits to `main`
+    branches:
+      - main
+    # Only run this workflow if there are changes in the following
+    paths:
+      - packages/the-framework.ai/**
+      - .github/workflows/website-deploy.yml
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+      # Vike prerenders the landing page (the-framework.ai) to static HTML in dist/client/.
+      - run: pnpm --filter @gemstack/the-framework.ai build
+
+      # public/ ships `CNAME` and `.nojekyll` into dist/client/, so `clean: true`
+      # can wipe the branch on each deploy without losing them.
+      - name: Deploy
+        uses: JamesIves/github-pages-deploy-action@v4.8.0
+        with:
+          branch: gh-pages
+          folder: packages/the-framework.ai/dist/client
+          # Remove previous build files
+          clean: true
+          # Remove history — avoiding exploding Git repository size
+          single-commit: true
+permissions:
+  contents: write
