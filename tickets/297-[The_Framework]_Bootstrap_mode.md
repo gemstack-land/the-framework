@@ -11,4 +11,4 @@ Label: "You can describe what you want approximately (e.g. just a hunch, just a 
 Low-prio for now I think (because I ain't sure how well we can make it work, to be tested).
 
 ---
-Source: https://github.com/gemstack-land/gemstack/issues/297
+Source: https://github.com/gemstack-land/the-framework/issues/297

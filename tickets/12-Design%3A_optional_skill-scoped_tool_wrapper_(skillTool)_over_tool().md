@@ -24,4 +24,4 @@ Open evidence here if/when: multi-skill loading produces real tool-name collisio
 Gated on the same family alignment as #8; design-only for now.
 
 ---
-Source: https://github.com/gemstack-land/gemstack/issues/12
+Source: https://github.com/gemstack-land/the-framework/issues/12

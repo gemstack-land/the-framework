@@ -4,7 +4,7 @@ Implements:
 - Listeners
   - Error in production (Sentry, Cloudfalre, ...) => triggers agent
   - CI is red on `main` (GitHub) => triggers agent
-- The [usage max-out idea](https://github.com/gemstack-land/gemstack/pull/287/changes):
+- The [usage max-out idea](https://github.com/gemstack-land/the-framework/pull/287/changes):
   - Check the current usage limit + when the limit resets
     - If usage limit reached (with a configurable margin) => abort, don't do any maintenance
     - Make sure to also check the usage limit of the current default model => use a fallback model if usage limit is reached (with a configurable margin)
@@ -13,4 +13,4 @@ Implements:
 - More?
 
 ---
-Source: https://github.com/gemstack-land/gemstack/issues/298
+Source: https://github.com/gemstack-land/the-framework/issues/298

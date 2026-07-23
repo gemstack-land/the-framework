@@ -11,7 +11,7 @@ The follow up question is about Telefunc. How can we use Telefunc to automatical
 @suleimansh In then meantime, for the MVP, I guess it's enough if the UI requests the data at load time (no syncing, user has to F5 the page to get fresh data), while the main view is synced via Telefunc Stream.
 
 See also:
-- https://github.com/gemstack-land/gemstack/issues/313
+- https://github.com/gemstack-land/the-framework/issues/313
 
 ---
-Source: https://github.com/gemstack-land/gemstack/issues/454
+Source: https://github.com/gemstack-land/the-framework/issues/454

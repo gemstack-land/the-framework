@@ -27,4 +27,4 @@ Split the runtime into composable pieces so The Framework can run anywhere from 
 - #297 (bootstrap mode), #453 (git worktrees), #454 (syncing UI <-> data): all assume a runtime that can host long-lived, multi-repo work.
 
 ---
-Source: https://github.com/gemstack-land/gemstack/issues/605
+Source: https://github.com/gemstack-land/the-framework/issues/605

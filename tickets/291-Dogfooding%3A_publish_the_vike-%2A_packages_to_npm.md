@@ -14,4 +14,4 @@ To close (work happens in the vike-data repo):
 Once this lands, the integrated reference app (#288) can be built anywhere, not just inside vike-data.
 
 ---
-Source: https://github.com/gemstack-land/gemstack/issues/291
+Source: https://github.com/gemstack-land/the-framework/issues/291

@@ -9,4 +9,4 @@ Follow-up from the ai-autopilot epic (#97). The runner seam and the first real a
 `LocalRunner` is the reference each mirrors; `FakeRunner` covers tests. Docker is done; WebContainer and Flue remain infra-gated (can't be built and honestly verified without provisioning that infra first).
 
 ---
-Source: https://github.com/gemstack-land/gemstack/issues/109
+Source: https://github.com/gemstack-land/the-framework/issues/109

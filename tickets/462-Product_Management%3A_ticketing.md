@@ -32,4 +32,4 @@ See also:
 - [Script one-way-syncing `CHANGELOG.md` => GitHub releases](https://github.com/vikejs/vike/tree/main/.github/workflows/sync-github-releases) ([permalink](https://github.com/vikejs/vike/tree/15c05abaeae57bc3112702a8faeca36c20ee13ea/.github/workflows/sync-github-releases)) — shows GitHub API usage, including some gotchas
 
 ---
-Source: https://github.com/gemstack-land/gemstack/issues/462
+Source: https://github.com/gemstack-land/the-framework/issues/462

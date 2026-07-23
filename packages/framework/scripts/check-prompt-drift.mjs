@@ -21,7 +21,7 @@ const here = dirname(fileURLToPath(import.meta.url))
 const systemPromptFile = join(here, '..', 'prompts', 'system_prompt.md')
 const snapshotFile = join(here, 'op-326-on-before-mergeable.snapshot.md')
 
-const REPO = 'gemstack-land/gemstack'
+const REPO = 'gemstack-land/the-framework'
 const ISSUE = 326
 
 /** The ```md blocks of the issue body, in order. Block 1 = system prompt, block 2 = on-before-mergeable. */

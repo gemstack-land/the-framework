@@ -3,13 +3,13 @@ import { test } from 'node:test'
 import { githubUrlFromRemote, githubUrlFor, githubSlugFromRemote, githubSlugFor } from './github.js'
 
 test('githubUrlFromRemote normalizes the common remote forms', () => {
-  const expected = 'https://github.com/gemstack-land/gemstack'
-  assert.equal(githubUrlFromRemote('git@github.com:gemstack-land/gemstack.git'), expected)
-  assert.equal(githubUrlFromRemote('git@github.com:gemstack-land/gemstack'), expected)
-  assert.equal(githubUrlFromRemote('ssh://git@github.com/gemstack-land/gemstack.git'), expected)
-  assert.equal(githubUrlFromRemote('https://github.com/gemstack-land/gemstack.git'), expected)
-  assert.equal(githubUrlFromRemote('https://github.com/gemstack-land/gemstack'), expected)
-  assert.equal(githubUrlFromRemote('https://user@github.com/gemstack-land/gemstack.git\n'), expected)
+  const expected = 'https://github.com/gemstack-land/the-framework'
+  assert.equal(githubUrlFromRemote('git@github.com:gemstack-land/the-framework.git'), expected)
+  assert.equal(githubUrlFromRemote('git@github.com:gemstack-land/the-framework'), expected)
+  assert.equal(githubUrlFromRemote('ssh://git@github.com/gemstack-land/the-framework.git'), expected)
+  assert.equal(githubUrlFromRemote('https://github.com/gemstack-land/the-framework.git'), expected)
+  assert.equal(githubUrlFromRemote('https://github.com/gemstack-land/the-framework'), expected)
+  assert.equal(githubUrlFromRemote('https://user@github.com/gemstack-land/the-framework.git\n'), expected)
 })
 
 test('githubUrlFromRemote returns undefined for non-GitHub or junk remotes', () => {
@@ -21,15 +21,15 @@ test('githubUrlFromRemote returns undefined for non-GitHub or junk remotes', () 
 })
 
 test('githubSlugFromRemote splits owner and repo, or undefined for a non-GitHub remote (#1050)', () => {
-  assert.deepEqual(githubSlugFromRemote('git@github.com:gemstack-land/gemstack.git'), { owner: 'gemstack-land', repo: 'gemstack' })
+  assert.deepEqual(githubSlugFromRemote('git@github.com:gemstack-land/the-framework.git'), { owner: 'gemstack-land', repo: 'the-framework' })
   assert.equal(githubSlugFromRemote('git@gitlab.com:o/r.git'), undefined)
   assert.equal(githubSlugFromRemote('https://github.com/only-owner'), undefined)
 })
 
 test('githubSlugFor reads origin and returns undefined when git fails (#1050)', async () => {
   assert.deepEqual(
-    await githubSlugFor('/x', async () => 'https://github.com/gemstack-land/gemstack.git\n'),
-    { owner: 'gemstack-land', repo: 'gemstack' },
+    await githubSlugFor('/x', async () => 'https://github.com/gemstack-land/the-framework.git\n'),
+    { owner: 'gemstack-land', repo: 'the-framework' },
   )
   assert.equal(
     await githubSlugFor('/x', async () => {
@@ -41,8 +41,8 @@ test('githubSlugFor reads origin and returns undefined when git fails (#1050)', 
 
 test('githubUrlFor reads origin and returns undefined when git fails', async () => {
   assert.equal(
-    await githubUrlFor('/x', async () => 'git@github.com:gemstack-land/gemstack.git\n'),
-    'https://github.com/gemstack-land/gemstack',
+    await githubUrlFor('/x', async () => 'git@github.com:gemstack-land/the-framework.git\n'),
+    'https://github.com/gemstack-land/the-framework',
   )
   assert.equal(
     await githubUrlFor('/x', async () => {

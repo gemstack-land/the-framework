@@ -254,7 +254,7 @@ import { startStdio } from '@gemstack/mcp/runtime'
 await startStdio(new DemoServer())
 ```
 
-> **Runnable example.** [`examples/mcp-quickstart`](https://github.com/gemstack-land/gemstack/tree/main/examples/mcp-quickstart) is a complete, framework-neutral server (tool, resource, prompt, `@Handle` DI, OAuth 2.1) served over both `node:http` and Hono, with a CI smoke test and zero framework dependencies.
+> **Runnable example.** [`examples/mcp-quickstart`](https://github.com/gemstack-land/the-framework/tree/main/examples/mcp-quickstart) is a complete, framework-neutral server (tool, resource, prompt, `@Handle` DI, OAuth 2.1) served over both `node:http` and Hono, with a CI smoke test and zero framework dependencies.
 
 ## OAuth 2.1
 

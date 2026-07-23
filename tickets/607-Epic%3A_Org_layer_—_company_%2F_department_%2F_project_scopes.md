@@ -21,4 +21,4 @@ An organization layer so agents work like scoped teammates inside a company:
 - #462 (tickets/knowledge saved in Git per repo): the per-scope knowledge bases build on this.
 
 ---
-Source: https://github.com/gemstack-land/gemstack/issues/607
+Source: https://github.com/gemstack-land/the-framework/issues/607

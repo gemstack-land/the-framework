@@ -13,7 +13,7 @@ Selected: implement now-ish.
 
 - Bootstrap mode
   - VALUE-HIGH (potentially groundbreaking, if we manage to make AI autonomously create advanced apps)
-  - The `PLAN.md` + `TODO.md` trick: https://github.com/gemstack-land/gemstack/issues/297#issuecomment-4913683778
+  - The `PLAN.md` + `TODO.md` trick: https://github.com/gemstack-land/the-framework/issues/297#issuecomment-4913683778
     - Try: also install it as system prompt injected to *all* prompts (not only when boostraping, let's see if it's sometimes counterproductive)
   - Ideas/brainstorming (don't implement yet)
     - PM system prompts:
@@ -28,7 +28,7 @@ Selected: implement now-ish.
   - VALUE-HIGH
   - Cron jobs to max-out daily usage limits (fires queue)
   - Implementation
-    - Accessing usage limits: https://github.com/gemstack-land/gemstack/pull/300#issuecomment-4918256151
+    - Accessing usage limits: https://github.com/gemstack-land/the-framework/pull/300#issuecomment-4918256151
   - Marketing
     - Easy sell (sexy feature, clear added value)
     - Unique USP (since Claude has no interest to implement this)

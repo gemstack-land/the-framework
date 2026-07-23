@@ -47,6 +47,6 @@ export default defineConfig({
   },
   // TO-DO/eventually: remove this workaround once upstream fixed the issue
   // Temporary workaround for Vike error
-  // https://github.com/gemstack-land/gemstack/issues/460
+  // https://github.com/gemstack-land/the-framework/issues/460
   vitePluginServerEntry: { disableAutoImport: true },
 } as UserConfig)

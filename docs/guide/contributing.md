@@ -28,7 +28,7 @@ If you maintain a framework, the path is: depend on the GemStack engine, impleme
 - **Propose a graduation.** If you have a framework-agnostic package that fits the bar above, open an issue describing what it does and why it belongs in GemStack rather than in a single framework.
 - **Build a binding.** Wire the engine into your framework and let us link it from here.
 
-The repository, issues, and discussions live at [github.com/gemstack-land/gemstack](https://github.com/gemstack-land/gemstack).
+The repository, issues, and discussions live at [github.com/gemstack-land/the-framework](https://github.com/gemstack-land/the-framework).
 
 ## Next
 

@@ -5,4 +5,4 @@ If we want Claude Code to be able to work on multiple tasks at the same time for
 We'll probably need it fairly soon, but I ain't sure how complex it is to fully implement, so we can make it post-MVP.
 
 ---
-Source: https://github.com/gemstack-land/gemstack/issues/453
+Source: https://github.com/gemstack-land/the-framework/issues/453

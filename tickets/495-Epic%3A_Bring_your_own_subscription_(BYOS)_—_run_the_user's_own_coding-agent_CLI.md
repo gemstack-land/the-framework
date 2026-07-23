@@ -20,4 +20,4 @@ Open calls for Rom:
 - config location: framework config (env-paths/XDG) vs a separate dotfile
 
 ---
-Source: https://github.com/gemstack-land/gemstack/issues/495
+Source: https://github.com/gemstack-land/the-framework/issues/495

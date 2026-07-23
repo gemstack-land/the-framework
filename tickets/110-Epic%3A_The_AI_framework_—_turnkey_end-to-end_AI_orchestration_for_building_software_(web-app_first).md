@@ -54,4 +54,4 @@ Our bet (review/QA loops + persistent state) differs from the spec-driven pack. 
 **Business model:** keep the OSS local version from being so complete that hosting is pointless. The paid wedge is team/multiplayer (shared decision log, review history, org-wide business context), not "we run it for you."
 
 ---
-Source: https://github.com/gemstack-land/gemstack/issues/110
+Source: https://github.com/gemstack-land/the-framework/issues/110

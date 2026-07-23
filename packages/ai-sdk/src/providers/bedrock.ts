@@ -99,7 +99,7 @@ class BedrockAdapter implements ProviderAdapter {
     if (!isAnthropicOnBedrock(model)) {
       throw new Error(
         `[ai-sdk] Bedrock model "${model}" is not yet supported. v1 only supports Anthropic Claude models on Bedrock ` +
-        `(model id starts with "anthropic."). File an issue at https://github.com/gemstack-land/gemstack/issues if you need another family.`,
+        `(model id starts with "anthropic."). File an issue at https://github.com/gemstack-land/the-framework/issues if you need another family.`,
       )
     }
   }

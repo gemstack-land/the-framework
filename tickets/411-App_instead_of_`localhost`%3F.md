@@ -9,4 +9,4 @@ Upside: looks professional.
 I think it's worth it... especially if we can use a solution that doesn't bloat the user's memory. Is Tauri (or some other tool) a good option?
 
 ---
-Source: https://github.com/gemstack-land/gemstack/issues/411
+Source: https://github.com/gemstack-land/the-framework/issues/411

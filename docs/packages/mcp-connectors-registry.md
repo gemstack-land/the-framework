@@ -24,7 +24,7 @@ The convention is what makes connectors discoverable: a search for `connector-` 
 3. Declare its `auth` honestly (`none` / `pat` / `oauth`) so an orchestrator knows what credential to resolve.
 4. Publish to npm. That's it — there's no registry to register with; the naming convention *is* the registry.
 
-To get a third-party connector linked from this page, open a PR or an issue on [gemstack-land/gemstack](https://github.com/gemstack-land/gemstack/issues).
+To get a third-party connector linked from this page, open a PR or an issue on [gemstack-land/the-framework](https://github.com/gemstack-land/the-framework/issues).
 
 ## See also
 

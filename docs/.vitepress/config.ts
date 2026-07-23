@@ -26,7 +26,7 @@ export default defineConfig({
       {
         text: 'Reference',
         items: [
-          { text: 'Changelog', link: 'https://github.com/gemstack-land/gemstack/releases' },
+          { text: 'Changelog', link: 'https://github.com/gemstack-land/the-framework/releases' },
           { text: 'npm — @gemstack', link: 'https://www.npmjs.com/org/gemstack' },
         ],
       },
@@ -109,7 +109,7 @@ export default defineConfig({
     },
 
     socialLinks: [
-      { icon: 'github', link: 'https://github.com/gemstack-land/gemstack' },
+      { icon: 'github', link: 'https://github.com/gemstack-land/the-framework' },
     ],
 
     footer: {
@@ -118,7 +118,7 @@ export default defineConfig({
     },
 
     editLink: {
-      pattern: 'https://github.com/gemstack-land/gemstack/edit/main/docs/:path',
+      pattern: 'https://github.com/gemstack-land/the-framework/edit/main/docs/:path',
       text: 'Edit this page on GitHub',
     },
   },

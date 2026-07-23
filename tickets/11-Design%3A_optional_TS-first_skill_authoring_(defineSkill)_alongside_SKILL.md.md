@@ -22,4 +22,4 @@ Offer a typed `defineSkill({ name, description, instructions, tools, resources }
 Gated on the same family alignment as #8; design-only for now.
 
 ---
-Source: https://github.com/gemstack-land/gemstack/issues/11
+Source: https://github.com/gemstack-land/the-framework/issues/11

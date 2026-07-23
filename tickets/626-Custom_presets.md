@@ -9,4 +9,4 @@ Custom presets might already be a reason enough for us to use The Framework.
 If it's a quick-win (I think it is?) then I'd say let's do it now.
 
 ---
-Source: https://github.com/gemstack-land/gemstack/issues/626
+Source: https://github.com/gemstack-land/the-framework/issues/626

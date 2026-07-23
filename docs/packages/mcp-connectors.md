@@ -132,7 +132,7 @@ await client.listTools() // [{ name: 'library_list-books', ... }, ...]
 await client.callTool('library_get-book', { id: 'b1' })
 ```
 
-To test a connector that calls a real API, stub global `fetch` and assert on the requests it makes — that is exactly how the [GitHub](https://github.com/gemstack-land/gemstack/blob/main/packages/mcp-connector-github/src/index.test.ts) and [Google Drive](https://github.com/gemstack-land/gemstack/blob/main/packages/mcp-connector-google-drive/src/index.test.ts) connectors are tested.
+To test a connector that calls a real API, stub global `fetch` and assert on the requests it makes — that is exactly how the [GitHub](https://github.com/gemstack-land/the-framework/blob/main/packages/mcp-connector-github/src/index.test.ts) and [Google Drive](https://github.com/gemstack-land/the-framework/blob/main/packages/mcp-connector-google-drive/src/index.test.ts) connectors are tested.
 
 ## API
 

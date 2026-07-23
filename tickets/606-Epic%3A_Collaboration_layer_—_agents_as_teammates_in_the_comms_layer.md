@@ -25,4 +25,4 @@ Agents get real identities and presence and live in the company's communication 
 - #462 (ticketing / PM): the tasks and issues agents maintain from chat.
 
 ---
-Source: https://github.com/gemstack-land/gemstack/issues/606
+Source: https://github.com/gemstack-land/the-framework/issues/606

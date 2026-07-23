@@ -1,6 +1,6 @@
 # @gemstack/ai-skills
 
-Portable capability bundles for [`@gemstack/ai-sdk`](https://github.com/gemstack-land/gemstack/tree/main/packages/ai-sdk) agents. A **skill** is a shippable folder — instructions + tools + resources — that you compose onto an `Agent` on demand. This mirrors the [Anthropic Agent Skills](https://www.anthropic.com/news/agent-skills) shape: a skill authored for Claude loads here, and a gemstack skill ships as a plain folder.
+Portable capability bundles for [`@gemstack/ai-sdk`](https://github.com/gemstack-land/the-framework/tree/main/packages/ai-sdk) agents. A **skill** is a shippable folder — instructions + tools + resources — that you compose onto an `Agent` on demand. This mirrors the [Anthropic Agent Skills](https://www.anthropic.com/news/agent-skills) shape: a skill authored for Claude loads here, and a gemstack skill ships as a plain folder.
 
 ```
 my-skill/

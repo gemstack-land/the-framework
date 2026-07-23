@@ -23,4 +23,4 @@ Make The Framework fully opt-in at the feature level: the user picks only the fe
 - The existing `--vanilla` / `--eco-*` / `--no-todo-loop` flags are the seed of a feature-toggle model.
 
 ---
-Source: https://github.com/gemstack-land/gemstack/issues/608
+Source: https://github.com/gemstack-land/the-framework/issues/608

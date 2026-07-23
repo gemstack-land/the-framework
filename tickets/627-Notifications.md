@@ -20,4 +20,4 @@ For me, that would be a feature enough to start using The Framework.
 If it's a quick-win (I think it is), then I'd say let's do it now.
 
 ---
-Source: https://github.com/gemstack-land/gemstack/issues/627
+Source: https://github.com/gemstack-land/the-framework/issues/627

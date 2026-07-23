@@ -29,4 +29,4 @@ Allow attaching skills at runtime, after construction:
 Gated on the same family alignment as #8; design-only for now.
 
 ---
-Source: https://github.com/gemstack-land/gemstack/issues/13
+Source: https://github.com/gemstack-land/the-framework/issues/13

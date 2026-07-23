@@ -31,4 +31,4 @@ Both can "produce an MCP server", but from different inputs (`mcpServerFromAgent
 
 ## Versioning
 
-Each package versions independently via Changesets. The API is settling toward `1.0` in the open; the AI family currently tracks the `0.x` line while contracts stabilize. See the [releases](https://github.com/gemstack-land/gemstack/releases) for changelogs.
+Each package versions independently via Changesets. The API is settling toward `1.0` in the open; the AI family currently tracks the `0.x` line while contracts stabilize. See the [releases](https://github.com/gemstack-land/the-framework/releases) for changelogs.

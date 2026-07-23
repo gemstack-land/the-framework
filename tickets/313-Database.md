@@ -29,7 +29,7 @@ A special Git repo named `my-framework` (convention, but the user can save the `
 
 ## See also
 
-- https://github.com/gemstack-land/gemstack/issues/454
+- https://github.com/gemstack-land/the-framework/issues/454
 
 ---
-Source: https://github.com/gemstack-land/gemstack/issues/313
+Source: https://github.com/gemstack-land/the-framework/issues/313

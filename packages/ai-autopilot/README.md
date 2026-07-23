@@ -1,6 +1,6 @@
 # @gemstack/ai-autopilot
 
-Orchestration for [`@gemstack/ai-sdk`](https://github.com/gemstack-land/gemstack/tree/main/packages/ai-sdk) agents — the "director" layer that runs **many** agent runs under a control policy.
+Orchestration for [`@gemstack/ai-sdk`](https://github.com/gemstack-land/the-framework/tree/main/packages/ai-sdk) agents — the "director" layer that runs **many** agent runs under a control policy.
 
 `ai-sdk` owns the single-agent loop and the handoff / subagent primitives. `ai-autopilot` owns orchestrating multiple runs: which agents run, in what order, how their results combine, and when to stop. If a feature is just calling an `ai-sdk` primitive, it belongs in `ai-sdk` — autopilot earns its keep only as the topology / control-policy layer.
 

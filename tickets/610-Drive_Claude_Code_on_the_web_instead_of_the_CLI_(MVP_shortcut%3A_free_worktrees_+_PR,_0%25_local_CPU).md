@@ -30,4 +30,4 @@ Add a driver that uses Claude Code on the web instead of the Claude Code CLI. We
 - #605 (daemon): where a server-side headless driver would run.
 
 ---
-Source: https://github.com/gemstack-land/gemstack/issues/610
+Source: https://github.com/gemstack-land/the-framework/issues/610

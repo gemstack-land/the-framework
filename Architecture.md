@@ -98,7 +98,7 @@ There is a tiny surface overlap (both can "produce an MCP server"), but from dif
 
 `@gemstack/mcp-connectors` is a small, agent-agnostic family on top of the server framework: a **connector contract** for wiring external services (GitHub, Google Drive, ...) into an agent as MCP tools. A connector `defineConnector`s its auth requirement and its tools and nothing else — it never reaches for env vars, OAuth, or a transport — and an orchestrator `mountConnectors` composes any number into one `@gemstack/mcp` server, supplying credentials and choosing the transport. That declare-needs / supply-later split is what lets first-party (`@gemstack/mcp-connector-*`) and third-party `mcp-connector-*` packages compose interchangeably. It sits on the `mcp` (server framework) axis, not the `ai-*` runtime axis: connectors depend on `@gemstack/mcp`, not on `ai-sdk`.
 
-## `ai-mcp` carve-out (decided - see [issue #7](https://github.com/gemstack-land/gemstack/issues/7))
+## `ai-mcp` carve-out (decided - see [issue #7](https://github.com/gemstack-land/the-framework/issues/7))
 
 The bridge is two functions today. Decisions:
 
@@ -108,7 +108,7 @@ The bridge is two functions today. Decisions:
 
 The seam is small and one-directional: `mcp/*` imports one runtime value (`dynamicTool`) plus four types (`Agent`, `HasTools`, `Tool`, `ToolCallContext`) from `ai-sdk`; `ai-sdk` imports nothing back. Still gated on family alignment with the Vike team before code lands.
 
-## `ai-skills` design (decided - see [issue #8](https://github.com/gemstack-land/gemstack/issues/8))
+## `ai-skills` design (decided - see [issue #8](https://github.com/gemstack-land/the-framework/issues/8))
 
 Largely greenfield: it builds the registry + loader + runtime around the existing `boost/skills` convention. Decisions:
 
@@ -119,7 +119,7 @@ Largely greenfield: it builds the registry + loader + runtime around the existin
 
 Follow-up authoring options (low priority, revisit on demand): TS-first `defineSkill` (#11), a skill-scoped `skillTool()` wrapper (#12), and imperative `agent.use(skill)` runtime composition (#13). Still gated on family alignment before code lands.
 
-## `ai-autopilot` design (shipped - see [issue #9](https://github.com/gemstack-land/gemstack/issues/9))
+## `ai-autopilot` design (shipped - see [issue #9](https://github.com/gemstack-land/the-framework/issues/9))
 
 Began as the most speculative of the family (a Supervisor seed) and grew into the AI-building framework. It sits above the real `ai-sdk` primitives (`asTool`, `resumeAsTool`, `resumeManyAsTool`, `SubAgentRunStore`, stop conditions).
 

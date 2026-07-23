@@ -4,7 +4,7 @@ The docs site is live on GitHub Pages at https://gemstack-land.github.io/gemstac
 
 ### Cutover checklist
 - [ ] DNS: point `gemstack.land` at GitHub Pages (CNAME/ALIAS to `gemstack-land.github.io`, or per the hosting decision below)
-- [ ] Set the Pages custom domain (`gh api -X PUT repos/gemstack-land/gemstack/pages -f cname=gemstack.land`) and wait for GitHub to provision TLS
+- [ ] Set the Pages custom domain (`gh api -X PUT repos/gemstack-land/the-framework/pages -f cname=gemstack.land`) and wait for GitHub to provision TLS
 - [ ] Drop `DOCS_BASE=/gemstack/` from `.github/workflows/deploy-docs.yml` so the VitePress base returns to `/`
 - [ ] Re-swap the interim `github.io` links to `gemstack.land`:
   - rudder `docs/guide/ai.md` + `docs/guide/mcp.md` (currently github.io, rudder PR #1465)
@@ -17,4 +17,4 @@ The governance questions (whose Cloudflare account owns the domain, GitHub Pages
 Non-urgent: the github.io URL works today and will redirect once the custom domain is attached.
 
 ---
-Source: https://github.com/gemstack-land/gemstack/issues/63
+Source: https://github.com/gemstack-land/the-framework/issues/63

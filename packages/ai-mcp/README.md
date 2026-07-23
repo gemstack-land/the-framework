@@ -1,6 +1,6 @@
 # @gemstack/ai-mcp
 
-The bridge between [`@gemstack/ai-sdk`](https://github.com/gemstack-land/gemstack/tree/main/packages/ai-sdk) Agents and [Model Context Protocol](https://modelcontextprotocol.io) servers. Two connectors:
+The bridge between [`@gemstack/ai-sdk`](https://github.com/gemstack-land/the-framework/tree/main/packages/ai-sdk) Agents and [Model Context Protocol](https://modelcontextprotocol.io) servers. Two connectors:
 
 - **`mcpClientTools(transport, opts?)`** — consume a remote MCP server's tools as Agent tools.
 - **`mcpServerFromAgent(AgentClass, opts?)`** — expose an Agent as an MCP server that external clients (Claude Desktop, Cursor, etc.) can call.

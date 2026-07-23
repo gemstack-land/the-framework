@@ -11,4 +11,4 @@ Intro text (WIP, I will polish this a *lot*):
 > It's kinda like open source Autopilot for Software Development: engineers take care of complex decisions, while AI fully and automatically takes care of the rest. The Framework automatically orchestrates the entire lifecycle as an automatic loop of product management, writing code, reviewing, refactoring for high-quality code, bug fixing, security audit, maintenance, ...).
 
 ---
-Source: https://github.com/gemstack-land/gemstack/issues/455
+Source: https://github.com/gemstack-land/the-framework/issues/455

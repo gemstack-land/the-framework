@@ -20,7 +20,7 @@ import type { DriverSession } from './driver/index.js'
 import { continuationPrompt, parseAwaitGate, type ParsedAwaitGate } from './turn-gate.js'
 
 /**
- * Driver-backed {@link https://github.com/gemstack-land/gemstack | Bootstrap} steps.
+ * Driver-backed {@link https://github.com/gemstack-land/the-framework | Bootstrap} steps.
  *
  * These implement the injectable steps of ai-autopilot's `Bootstrap` by running
  * everything *through* a {@link DriverSession} (option A, #166): build / improve

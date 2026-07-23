@@ -1,6 +1,6 @@
 # Instagram clone: spec + rubric
 
-Closes gemstack-land/gemstack#292. This is the fixed definition of the test app and how a
+Closes gemstack-land/the-framework#292. This is the fixed definition of the test app and how a
 generated app is scored, so "the AI was lazy" becomes a number instead of a vibe. Every run
 in #293/#294 is judged against this file and nothing else.
 

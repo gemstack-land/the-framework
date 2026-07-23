@@ -14,4 +14,4 @@ Scope when unblocked:
 Also worth deciding first, from Phase 1 real-world use: is browser access valuable enough to carry into the sandbox story at all?
 
 ---
-Source: https://github.com/gemstack-land/gemstack/issues/469
+Source: https://github.com/gemstack-land/the-framework/issues/469

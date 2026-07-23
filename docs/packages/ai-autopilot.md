@@ -20,7 +20,7 @@ The Supervisor (below) is the seed topology. Built up from it, the package is a 
 - **Bootstrap** — the spine that sequences all of the above into scope → build → full-fledged loop → deploy, taking an app from nothing to production-grade.
 - **Scale mode** — a self-maintaining `CODE-OVERVIEW.md`, refreshed only on material change.
 
-See [`examples/bootstrap-quickstart`](https://github.com/gemstack-land/gemstack/tree/main/examples/bootstrap-quickstart) for all of it wired together offline.
+See [`examples/bootstrap-quickstart`](https://github.com/gemstack-land/the-framework/tree/main/examples/bootstrap-quickstart) for all of it wired together offline.
 
 ## Supervisor (plan, dispatch, synthesize)
 

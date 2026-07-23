@@ -14,13 +14,13 @@
     "gemstack"
   ],
   "license": "MIT",
-  "homepage": "https://github.com/gemstack-land/gemstack/tree/main/packages/ai-skills#readme",
+  "homepage": "https://github.com/gemstack-land/the-framework/tree/main/packages/ai-skills#readme",
   "bugs": {
-    "url": "https://github.com/gemstack-land/gemstack/issues"
+    "url": "https://github.com/gemstack-land/the-framework/issues"
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/gemstack-land/gemstack",
+    "url": "https://github.com/gemstack-land/the-framework",
     "directory": "packages/ai-skills"
   },
   "type": "module",

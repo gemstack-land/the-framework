@@ -102,12 +102,12 @@ If the changes introduced by ${{ tf.session_name }} can potentially lead to secu
 
 ## See also
 
-- https://github.com/gemstack-land/gemstack/issues/323
-- https://github.com/gemstack-land/gemstack/issues/297#issuecomment-4913683778
-- https://github.com/gemstack-land/gemstack/issues/331
-- https://github.com/gemstack-land/gemstack/issues/361
-- https://github.com/gemstack-land/gemstack/issues/360
-- https://github.com/gemstack-land/gemstack/issues/461
+- https://github.com/gemstack-land/the-framework/issues/323
+- https://github.com/gemstack-land/the-framework/issues/297#issuecomment-4913683778
+- https://github.com/gemstack-land/the-framework/issues/331
+- https://github.com/gemstack-land/the-framework/issues/361
+- https://github.com/gemstack-land/the-framework/issues/360
+- https://github.com/gemstack-land/the-framework/issues/461
 
 ---
-Source: https://github.com/gemstack-land/gemstack/issues/326
+Source: https://github.com/gemstack-land/the-framework/issues/326
