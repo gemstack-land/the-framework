@@ -84,22 +84,26 @@ export function Note({ children, style }: { children: ReactNode; style?: CSSProp
 
 export function WipBadge({ style }: { style?: CSSProperties }) {
   return (
-    <span
-      style={{
-        fontFamily: mono,
-        fontSize: 10.5,
-        fontWeight: 600,
-        letterSpacing: '0.08em',
-        color: '#dbbc7f',
-        border: '1px solid rgba(219, 188, 127, 0.4)',
-        borderRadius: 4,
-        padding: '1px 6px',
-        whiteSpace: 'nowrap',
-        ...style,
-      }}
-    >
-      🚧 WIP
-    </span>
+    <>
+      🚧
+      {' '}
+      <span
+        style={{
+          fontFamily: mono,
+          fontSize: 10.5,
+          fontWeight: 600,
+          letterSpacing: '0.08em',
+          color: '#dbbc7f',
+          border: '1px solid rgba(219, 188, 127, 0.4)',
+          borderRadius: 4,
+          padding: '1px 6px',
+          whiteSpace: 'nowrap',
+          ...style,
+        }}
+      >
+         WIP
+      </span>
+    </>
   )
 }
 

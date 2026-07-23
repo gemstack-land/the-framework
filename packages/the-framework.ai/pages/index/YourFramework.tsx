@@ -61,8 +61,9 @@ export function YourFramework() {
       >
         <Card title="Flexible">
           <Item>The Framework doesn't force anything: pick only the features you need</Item>
-          <li data-wip="1" style={{ display: 'flex', gap: 10 }}>
-            <WipBadge style={{ alignSelf: 'flex-start', marginTop: 2 }} />
+          <li>
+            <WipBadge />
+            {' '}
             Customize anything to fit your needs
           </li>
         </Card>
