@@ -1,4 +1,4 @@
-<img src="./logo.svg?v=2" alt="The Framework" align="left" width="150" />
+<img src="./logo.svg?v=2" alt="The Framework" align="left" width="170" />
 
 ### The Framework
 
