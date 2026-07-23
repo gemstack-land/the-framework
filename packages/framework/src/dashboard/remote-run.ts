@@ -1,5 +1,6 @@
 import { EventStream } from '@gemstack/ai-autopilot'
 import type { FrameworkEvent } from '../events.js'
+import type { RunMeta } from '../store/index.js'
 import type { StartRunKind, StartRunOptions, StartRunResult } from './types.js'
 import { errorMessage } from '../error-message.js'
 
@@ -176,17 +177,28 @@ interface RelayedRun {
  * The `targets` map outlives the event pump (#1067 slice 2): a finished remote run's post-run reads,
  * push and open-PR still have to reach the device after its event stream has ended, so the device
  * target is kept until {@link dispose} clears it, not dropped when the stream closes.
+ *
+ * The `metas` map (#1077) holds a local {@link RunMeta} stub per relayed run so `onRuns` can show a
+ * remote run in the session list and re-open it after a dashboard reload; {@link list} projects it
+ * per project. Same lifetime as `targets`: it outlives the event stream and is cleared on dispose.
  */
 export class RelayedRuns {
   private readonly runs = new Map<string, RelayedRun>()
   private readonly targets = new Map<string, RemoteTarget>()
+  // The local RunMeta stub for each relayed run, so onRuns can show a remote run in the session list
+  // and re-open it after a reload; outlives the event stream, cleared on dispose (same lifetime as targets).
+  private readonly metas = new Map<string, { meta: RunMeta; projectId: string }>()
 
   /** Open a local stream for a remote run and start pumping the remote's events into it. */
-  register(runId: string, target: RemoteTarget): void {
+  register(runId: string, target: RemoteTarget, meta: RunMeta, projectId: string): void {
     this.targets.set(runId, target) // kept past the stream, for post-run reads/push/PR (slice 2)
+    this.metas.set(runId, { meta, projectId }) // the local list row, so a reload re-opens the run (#1077)
     this.runs.get(runId)?.cancel() // a re-register (same id) replaces the old pump
     const stream = new EventStream<FrameworkEvent>()
-    const cancel = streamRemoteEvents(target, runId, event => stream.push(event), () => this.endStream(runId))
+    const cancel = streamRemoteEvents(target, runId, event => {
+      stream.push(event)
+      if (event.kind === 'end') this.settle(runId, event) // record the run's ending on its list row
+    }, () => this.endStream(runId))
     this.runs.set(runId, { target, stream, cancel })
   }
 
@@ -200,15 +212,33 @@ export class RelayedRuns {
     return runId ? this.targets.get(runId) : undefined
   }
 
+  /** A project's relayed run stubs (#1077), newest-first, so `onRuns` can surface them in the list. */
+  list(projectId: string): RunMeta[] {
+    const rows: RunMeta[] = []
+    for (const entry of this.metas.values()) if (entry.projectId === projectId) rows.push(entry.meta)
+    // Newest first: startedAt is ISO, so a string compare is the time order (no parse).
+    return rows.sort((a, b) => (a.startedAt < b.startedAt ? 1 : a.startedAt > b.startedAt ? -1 : 0))
+  }
+
+  /** Flip a relayed run's list row to its ending when the device's stream reports one (#1077). */
+  private settle(runId: string, end: Extract<FrameworkEvent, { kind: 'end' }>): void {
+    const entry = this.metas.get(runId)
+    if (!entry) return
+    entry.meta.status = end.stopped ? 'stopped' : end.ok ? 'done' : 'failed'
+  }
+
   /** Close a relayed run's event stream (not its target). Idempotent. */
   private endStream(runId: string): void {
     const run = this.runs.get(runId)
     if (!run) return
     this.runs.delete(runId)
     run.stream.close() // a clean close surfaces as `done` in the browser, not a lost stream
+    // The stream dropped with no terminal event: the run is no longer live, so stop showing it as such.
+    const entry = this.metas.get(runId)
+    if (entry && entry.meta.status === 'running') entry.meta.status = 'stopped'
   }
 
-  /** Stop every pump, close every stream, and forget every device target, on daemon shutdown. */
+  /** Stop every pump, close every stream, and forget every device target + list stub, on daemon shutdown. */
   dispose(): void {
     for (const [runId, run] of this.runs) {
       run.cancel()
@@ -216,6 +246,7 @@ export class RelayedRuns {
       this.runs.delete(runId)
     }
     this.targets.clear()
+    this.metas.clear()
   }
 }
 

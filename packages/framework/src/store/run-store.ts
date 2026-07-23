@@ -130,11 +130,13 @@ export interface RunMeta {
    */
   browserStreamPort?: number
   /**
-   * Where this run executes (#1050/#1053): `actions` for a GitHub Actions run, absent for a local
-   * run. Persisted so the run view can tell a burst-mode Actions run from a stalled live feed and
-   * gate the browser pane off (#1053).
+   * Where this run executes (#1050/#1053): `actions` for a GitHub Actions run, `remote` when relayed
+   * to a connected device (#1067), absent for a local run. Persisted so the run view can tell a
+   * burst-mode Actions run from a stalled live feed and gate the browser pane off (#1053).
    */
-  target?: 'local' | 'actions'
+  target?: 'local' | 'actions' | 'remote'
+  /** The connected device a remote run (#1067) executes on, for the session list + notice after a reload. */
+  remoteLabel?: string
 }
 
 /**

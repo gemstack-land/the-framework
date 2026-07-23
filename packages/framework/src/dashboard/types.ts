@@ -69,12 +69,14 @@ export interface StartRunOptions {
   /**
    * Run this session on a connected device (#1067): the local daemon relays the run to the remote
    * daemon at `url` (authenticating with `token` as the `fw_daemon` cookie) and streams its events
-   * back into the local run view. Memory-only relay config the dashboard sets at submit time from a
-   * saved device. NEVER persisted to Preferences or the registry, and never a CLI flag: a device
-   * token is a per-browser secret. Absent = run locally, exactly as today. Stripped before the run
-   * is forwarded, so the remote starts an ordinary local run and does not relay onward.
+   * back into the local run view. The device `label` rides along (memory-only, like `url`/`token`) so
+   * the local session list + notice can show which device the run is on after a reload (#1077).
+   * Memory-only relay config the dashboard sets at submit time from a saved device. NEVER persisted to
+   * Preferences or the registry, and never a CLI flag: a device token is a per-browser secret. Absent =
+   * run locally, exactly as today. Stripped before the run is forwarded, so the remote starts an
+   * ordinary local run and does not relay onward.
    */
-  remote?: { url: string; token: string }
+  remote?: { url: string; token: string; label?: string }
 }
 
 /**

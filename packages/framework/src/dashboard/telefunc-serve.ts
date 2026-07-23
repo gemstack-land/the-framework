@@ -8,6 +8,7 @@ import type { PreferencesStore } from '../registry.js'
 import type { QuotaSource } from './quota.js'
 import type { AddProjectResult, PreviewResult, PreviewStatus, StartRunKind, StartRunOptions, StartRunResult } from './types.js'
 import type { ServeTarget } from '../preview.js'
+import type { RunMeta } from '../store/index.js'
 
 /** Wired by the daemon so `sendStart` can reach the daemon's own `startRun` closure. */
 export type StartRunHandler = (
@@ -40,6 +41,8 @@ export type EventsSource = (projectId: string, runId?: string) => AsyncIterable<
  *  read/steer/handoff to that device instead of resolving a (nonexistent) local checkout. */
 export interface RemoteRuns {
   target(runId: string | undefined): { url: string; token: string } | undefined
+  /** A project's relayed run stubs (#1077), so `onRuns` can show a remote run in the list and re-open it after a reload. */
+  list(projectId: string): RunMeta[]
 }
 
 /**

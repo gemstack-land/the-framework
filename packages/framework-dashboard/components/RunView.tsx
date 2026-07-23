@@ -51,8 +51,8 @@ export function RunView({
    * the stable identity, so the branch renaming itself near the end of a run (#736) reads as a
    * detail changing rather than the whole view changing. */
   label?: string | undefined
-  /** Where the run executes (#1053): `actions` swaps the live feed for a burst-mode affordance. */
-  target?: 'local' | 'actions' | undefined
+  /** Where the run executes (#1053): `actions` swaps the live feed for a burst-mode affordance; `remote` is relayed to a device (#1067). */
+  target?: 'local' | 'actions' | 'remote' | undefined
   /** The device this run executes on (#1067), when it is relayed to a connected one. Set only for a
    *  just-started remote run: its diff, handoff, and push/PR now relay to the device (slice 2), so the
    *  panels are shown, and a "runs on <device>" notice only flags that the browser preview stays local. */

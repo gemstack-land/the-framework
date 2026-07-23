@@ -269,6 +269,7 @@ export default function Page() {
         removeContext={removeContext}
         lost={lost}
         target={selectedRun.target}
+        remoteLabel={selectedRun.remoteLabel}
         onRunStarted={onRunStarted}
         onDeleted={() => {
           // Its view is about to point at a session that no longer exists; go home and refresh

@@ -20,8 +20,10 @@ import {
   resolveRunCheckout,
   FRAMEWORK_DIR,
   EVENTS_FILE,
+  RUN_META_VERSION,
   isPidAlive,
   writeSuspendedRuns,
+  type RunMeta,
   type SuspendedRun,
 } from './store/index.js'
 import type { FrameworkEvent } from './events.js'
@@ -223,7 +225,10 @@ export function createProjectRuntime({ cwd, env, binPath }: ProjectRuntimeOption
   const relayedRuns = new RelayedRuns()
   // The relayed-run lookup the dashboard's read RPCs consult (#1067 slice 2): is this runId remote, and
   // which device owns it. Outlives the event stream so a finished remote run's push/PR still reaches it.
-  const remoteRuns: RemoteRuns = { target: runId => relayedRuns.target(runId) }
+  const remoteRuns: RemoteRuns = {
+    target: runId => relayedRuns.target(runId),
+    list: projectId => relayedRuns.list(projectId),
+  }
   // The device side of the relay (#1067 slice 2): run one whitelisted read/steer/handoff RPC against this
   // daemon's own home checkout, for a daemon that relayed a run here. Home id forces the addressed project.
   const onRelayRpc = (fn: string, args: unknown[]): Promise<unknown> => dispatchRelayRpc(homeId, fn, args)
@@ -367,7 +372,23 @@ export function createProjectRuntime({ cwd, env, binPath }: ProjectRuntimeOption
     if (options.remote) {
       const { remote, ...forwarded } = options
       const result = await startRemoteRun(remote, { prompt, kind, options: forwarded })
-      if (result.ok && result.runId) relayedRuns.register(result.runId, remote)
+      if (result.ok && result.runId) {
+        // A relayed run has no local worktree or pid, so its list row is a memory-only stub (#1077):
+        // registered here so onRuns can show it and a dashboard reload re-opens it. Never written to disk.
+        const now = new Date().toISOString()
+        const meta: RunMeta = {
+          version: RUN_META_VERSION,
+          status: 'running',
+          id: result.runId,
+          startedAt: now,
+          updatedAt: now,
+          passes: 0,
+          target: 'remote',
+          ...(prompt ? { intent: prompt } : {}),
+          ...(remote.label ? { remoteLabel: remote.label } : {}),
+        }
+        relayedRuns.register(result.runId, remote, meta, targetProjectId ?? homeId)
+      }
       return result
     }
     const projectKey = targetProjectId ?? homeId
