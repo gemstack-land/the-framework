@@ -8,6 +8,8 @@ import { RunOutcomes } from './RunOutcomes.js'
 import { Quota } from './Quota.js'
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card.js'
 import { usePolled } from '../lib/use-async.js'
+import { usePreferences } from '../lib/preferences.js'
+import { OnboardingChecklist } from './OnboardingChecklist.js'
 import { cn } from '../lib/utils.js'
 import { formatDateTime, formatRelative } from '../lib/format-date.js'
 import { ScrollArea } from './ui/scroll-area.js'
@@ -25,6 +27,9 @@ export function DashboardPage({
   interventions: Intervention[]
 }) {
   const { value: data } = usePolled<DashboardData | null>(onDashboard, null, 5000, [])
+  // Dismissing only hides it here (#958); the settings page keeps it, which is what the
+  // dismiss control says.
+  const onboardingDismissed = usePreferences().onboardingDismissed ?? false
 
   return (
     <ScrollArea className="min-h-0 flex-1">
@@ -33,6 +38,8 @@ export function DashboardPage({
           <h1 className="text-xl font-semibold">Overview</h1>
           <p className="text-sm text-muted-foreground">Everything the agent is doing, across every project.</p>
         </div>
+
+        {!onboardingDismissed && <OnboardingChecklist dismissible onSelectProject={onSelectProject} />}
 
         <NeedsYou items={interventions} onSelectProject={onSelectProject} />
 

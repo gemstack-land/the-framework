@@ -68,3 +68,15 @@ test('buildDashboard buckets run activity across a 14-day window, oldest-first',
   // The June run falls outside the window and is not counted anywhere.
   assert.equal(data.activity.reduce((n, d) => n + d.count, 0), 3)
 })
+
+test('buildDashboard reports per-project ticket presence, which onboarding reads (#958)', async () => {
+  const data = await buildDashboard([project('a', '/a'), project('b', '/b')], {
+    runs: async () => [],
+    queue: async () => [],
+    tickets: async cwd => cwd === '/a',
+    now: NOW,
+  })
+
+  assert.equal(data.projects.find(p => p.projectId === 'a')!.hasTickets, true)
+  assert.equal(data.projects.find(p => p.projectId === 'b')!.hasTickets, false)
+})

@@ -28,6 +28,18 @@ const MAX_TICKET_BYTES = 4_000
 const SIBLING = /\.(plan|spike)\.md$/
 
 /**
+ * Whether the project has any ticket at all (#958).
+ *
+ * A `readdir` rather than a {@link readTickets} parse: the Onboarding checklist only needs
+ * presence, and it asks for every project on each dashboard poll, so reading and describing
+ * every ticket to answer a yes/no would be paid over and over.
+ */
+export async function hasTickets(cwd: string): Promise<boolean> {
+  const names = await readdir(join(cwd, TICKETS_DIR)).catch(() => [] as string[])
+  return names.some(name => name.endsWith('.md') && !SIBLING.test(name))
+}
+
+/**
  * A filename made readable, for a ticket with no heading. The format is
  * `<DATE>_<SLUG>.md`, but the tickets imported from GitHub are `<number>-<escaped title>.md`,
  * so decoding and de-underscoring gets both most of the way there.

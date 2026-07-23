@@ -9,8 +9,18 @@
 // Both ids are URL-safe by construction (the registry derives a project id from its path, a run id
 // from its start time), so the segments are still encoded/decoded — a URL typed by hand is input.
 
+/**
+ * The one first segment that names a view rather than a project (#958).
+ *
+ * Safe to reserve because a project id is never this word: the registry builds one as
+ * `<slugified basename>-<hash in base36>`, so every real id carries a `-<hash>` suffix.
+ */
+export const SETTINGS_SEGMENT = 'settings'
+
 /** What the dashboard is looking at, as carried by the URL. */
 export interface Route {
+  /** A top-level view belonging to no project (#958). Absent on the Overview/project/session axis. */
+  view?: 'settings'
   /** The selected project, or null for the Overview. */
   projectId: string | null
   /** The selected session (run id), or null for the project's home/launcher. */
@@ -20,12 +30,14 @@ export interface Route {
 /** Read the route out of a path. Anything unparseable is the Overview, and extra segments are ignored. */
 export function parseRoute(pathname: string): Route {
   const [projectId, runId] = pathname.split('/').filter(Boolean).map(decodeSegment)
+  if (projectId === SETTINGS_SEGMENT) return { view: 'settings', projectId: null, runId: null }
   if (!projectId) return { projectId: null, runId: null }
   return { projectId, runId: runId ?? null }
 }
 
 /** The path for a route — the inverse of {@link parseRoute}. */
-export function formatRoute({ projectId, runId }: Route): string {
+export function formatRoute({ view, projectId, runId }: Route): string {
+  if (view === 'settings') return `/${SETTINGS_SEGMENT}`
   if (!projectId) return '/'
   const project = encodeURIComponent(projectId)
   return runId ? `/${project}/${encodeURIComponent(runId)}` : `/${project}`

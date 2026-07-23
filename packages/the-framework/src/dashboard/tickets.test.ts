@@ -3,7 +3,7 @@ import { test } from 'node:test'
 import { mkdtemp, mkdir, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { readTickets } from './tickets.js'
+import { readTickets, hasTickets } from './tickets.js'
 
 async function repo(files: Record<string, string> = {}): Promise<string> {
   const cwd = await mkdtemp(join(tmpdir(), 'tf-tickets-'))
@@ -93,4 +93,21 @@ test('readTickets folds .spike.md and .plan.md into their ticket (#697)', async 
 test('readTickets ignores non-markdown files (#697)', async () => {
   const cwd = await repo({ '2026-07-20_thing.md': '# Thing\n', 'notes.txt': 'nope' })
   assert.deepEqual((await readTickets(cwd)).map(t => t.file), ['2026-07-20_thing.md'])
+})
+
+test('hasTickets is false with no tickets directory, true with a ticket (#958)', async () => {
+  assert.equal(await hasTickets(await repo()), false)
+  assert.equal(await hasTickets(await repo({ '2026-07-20_thing.md': '# Thing\n' })), true)
+})
+
+test('hasTickets agrees with readTickets: a lone spike or plan is not a ticket (#958)', async () => {
+  // The onboarding step asks whether `tickets/` is populated; a `.plan.md` with no ticket beside
+  // it is written *about* a ticket, so answering yes there would tick the step off nothing.
+  const cwd = await repo({ '2026-07-20_thing.plan.md': '# Plan\n', '2026-07-20_thing.spike.md': '# Spike\n' })
+  assert.equal(await hasTickets(cwd), false)
+  assert.deepEqual(await readTickets(cwd), [])
+})
+
+test('hasTickets ignores non-markdown files, like readTickets (#958)', async () => {
+  assert.equal(await hasTickets(await repo({ 'notes.txt': 'nope' })), false)
 })

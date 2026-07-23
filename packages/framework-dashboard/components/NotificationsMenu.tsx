@@ -1,5 +1,5 @@
-import { useSyncExternalStore } from 'react'
 import { Bell, BellOff } from 'lucide-react'
+import { useNotificationPermission } from '../lib/notification-permission.js'
 import { usePreferences, updatePreferences, notificationsEnabled, discordEnabled, discordBotEnabled, newActivityEnabled, humanInterventionEnabled } from '../lib/preferences.js'
 import { onNotifyChannels, type NotifyChannels } from '../server/preferences.telefunc.js'
 import { useLoaded } from '../lib/use-async.js'
@@ -23,22 +23,6 @@ import {
 // the header control that writes them. The Discord *bot* (#680) sits in its own "Chat" group
 // rather than under a delivery method: it is the one control here that takes messages in.
 
-/** Subscribe to `Notification.permission` changes where the browser supports it, else 'unsupported'. */
-function usePermission(): NotificationPermission | 'unsupported' {
-  return useSyncExternalStore(
-    subscribePermission,
-    () => (typeof Notification === 'undefined' ? 'unsupported' : Notification.permission),
-    () => 'unsupported',
-  )
-}
-
-function subscribePermission(onChange: () => void): () => void {
-  // No permission-change event fires on every browser; the value also changes right after our own
-  // requestPermission() resolves (which re-renders anyway). Poll lightly as a backstop.
-  const timer = setInterval(onChange, 3000)
-  return () => clearInterval(timer)
-}
-
 export function NotificationsMenu() {
   const preferences = usePreferences()
   const browser = notificationsEnabled(preferences)
@@ -46,7 +30,7 @@ export function NotificationsMenu() {
   const activity = newActivityEnabled(preferences)
   const needsYou = humanInterventionEnabled(preferences)
   const discordBot = discordBotEnabled(preferences)
-  const permission = usePermission()
+  const permission = useNotificationPermission()
   const browserSupported = permission !== 'unsupported'
   const blocked = permission === 'denied'
   // Whether the daemon can actually deliver on Discord (#948): the toggle is a preference,

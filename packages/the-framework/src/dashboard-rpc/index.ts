@@ -5,7 +5,7 @@
 export { onRuns, onRun, onDocs, onProjectLog, onQueue, onOverview, onInterventions, onActivity, onDashboard, onGithubUrl, onGitStatus, onProjectFiles, onProjectFileStatus, onFileDiff, onRunChanges, onFileContent, onTickets, onRetainedWorktrees, onRunWorktree, onRunHandoff, onSystemPromptUser } from './reads.telefunc.js'
 export { sendStop, sendChoice, sendMessage, sendStart, sendPreview, onServeTargets, sendStopPreview, onPreviewStatus, sendOpenInApp, sendRemoveWorktree, sendDeleteSession, sendPushBranch, sendOpenPullRequest, sendQueueTicket, type QueueTicketResult } from './control.telefunc.js'
 export { onEvents } from './events.telefunc.js'
-export { onProjects, sendAddProject } from './projects.telefunc.js'
+export { onProjects, sendAddProject, onOnboarding } from './projects.telefunc.js'
 export {
   onPreferences,
   savePreferences,

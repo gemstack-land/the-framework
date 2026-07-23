@@ -27,6 +27,20 @@ describe('parseRoute', () => {
     expect(parseRoute('/a%20b/c%2Fd')).toEqual({ projectId: 'a b', runId: 'c/d' })
     expect(parseRoute('/%E0%A4%A')).toEqual({ projectId: '%E0%A4%A', runId: null })
   })
+
+  it('reads the settings page, which belongs to no project (#958)', () => {
+    expect(parseRoute('/settings')).toEqual({ view: 'settings', projectId: null, runId: null })
+    // Trailing slash and stray segments are the same page, like every other route.
+    expect(parseRoute('/settings/')).toEqual({ view: 'settings', projectId: null, runId: null })
+    expect(parseRoute('/settings/anything')).toEqual({ view: 'settings', projectId: null, runId: null })
+  })
+
+  it('leaves every other first segment a project, so only the reserved word is taken (#958)', () => {
+    // A generated project id is `<name>-<hash>`, so it can never be the bare reserved word —
+    // but anything merely starting with it still has to route to a project.
+    expect(parseRoute('/settings-a1b2')).toEqual({ projectId: 'settings-a1b2', runId: null })
+    expect(parseRoute('/my-settings')).toEqual({ projectId: 'my-settings', runId: null })
+  })
 })
 
 describe('formatRoute', () => {
@@ -44,12 +58,18 @@ describe('formatRoute', () => {
     expect(formatRoute({ projectId: 'a b', runId: 'c/d' })).toBe('/a%20b/c%2Fd')
   })
 
+  it('writes the settings page, and it outranks a stale project id (#958)', () => {
+    expect(formatRoute({ view: 'settings', projectId: null, runId: null })).toBe('/settings')
+    expect(formatRoute({ view: 'settings', projectId: 'my-repo', runId: 'run-1' })).toBe('/settings')
+  })
+
   it('round-trips', () => {
     for (const route of [
       { projectId: null, runId: null },
       { projectId: 'my-repo', runId: null },
       { projectId: 'my-repo', runId: 'run-1' },
       { projectId: 'a b', runId: 'c/d' },
+      { view: 'settings' as const, projectId: null, runId: null },
     ]) {
       expect(parseRoute(formatRoute(route))).toEqual(route)
     }

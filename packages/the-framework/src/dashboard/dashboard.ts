@@ -1,6 +1,7 @@
 import { listRuns, type RunMeta, type RunStatus } from '../store/index.js'
 import type { ProjectSummary } from './projects.js'
 import { collectQueue, type ProjectQueue } from './queue.js'
+import { hasTickets } from './tickets.js'
 import { buildOverview, type ActiveRun, type RecentProject, type OverviewDeps } from './overview.js'
 
 // The Overview dashboard page (#471): the cross-project rollup that used to live cramped in
@@ -21,6 +22,8 @@ export interface ProjectStat {
   runs: number
   /** Open TODO items in this project's queue. */
   openTodos: number
+  /** Whether the repo has any ticket in `tickets/` (#958) — presence only, not a count. */
+  hasTickets: boolean
   lastActivityAt?: string
 }
 
@@ -61,6 +64,8 @@ const ACTIVITY_DAYS = 14
 export interface DashboardDeps extends OverviewDeps {
   /** Archived runs for a project path. Defaults to {@link listRuns} (forgiving of a missing dir). */
   runs?: (cwd: string) => Promise<RunMeta[]>
+  /** Whether a project has tickets (#958). Defaults to {@link hasTickets} (false on any error). */
+  tickets?: (cwd: string) => Promise<boolean>
   /** The clock, for the activity window. Defaults to `new Date()`. */
   now?: () => Date
 }
@@ -80,6 +85,7 @@ function localDateKey(d: Date): string {
  */
 export async function buildDashboard(projects: ProjectSummary[], deps: DashboardDeps = {}): Promise<DashboardData> {
   const listRunsFor = deps.runs ?? (cwd => listRuns(cwd).catch(() => []))
+  const hasTicketsFor = deps.tickets ?? (cwd => hasTickets(cwd).catch(() => false))
   const now = deps.now ? deps.now() : new Date()
 
   // Compute the queue once and hand it to buildOverview so the backlog is read a single time.
@@ -117,6 +123,7 @@ export async function buildDashboard(projects: ProjectSummary[], deps: Dashboard
       running: overview.active.some(a => a.projectId === project.id),
       runs: runs.length,
       openTodos: openByProject.get(project.id) ?? 0,
+      hasTickets: await hasTicketsFor(project.path),
       ...(project.lastActivityAt ? { lastActivityAt: project.lastActivityAt } : {}),
     })
   }

@@ -221,6 +221,7 @@ test('every boolean preference survives a save; the sanitizer cannot silently dr
     notifyNewActivity: true,
     notifyHumanIntervention: true,
     autoPm: true,
+    onboardingDismissed: true,
   }
   const fs = memFs()
   await writePreferences(allOn, fs, ENV)
