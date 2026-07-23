@@ -92,12 +92,15 @@ section[id] {
 }
 
 /* --- Pseudo-elements (from `style-after`) --- */
+/* The tilt lives inside `transform` — in every keyframe too, since animating `transform`
+ * replaces the whole list — because a standalone `rotate` next to a `transform` declaration
+ * is silently dropped by Lightning CSS, Vite's build-time CSS minifier. */
 @keyframes strike {
   from {
-    transform: scaleX(0.1);
+    transform: rotate(-5deg) scaleX(0.1);
   }
   to {
-    transform: scaleX(1);
+    transform: rotate(-5deg) scaleX(1);
   }
 }
 .strike::after {
@@ -110,9 +113,8 @@ section[id] {
   border-radius: 2px;
   background: #e67e80;
   opacity: 0.9;
-  rotate: -5deg;
   transform-origin: left center;
-  transform: scaleX(0.1);
+  transform: rotate(-5deg) scaleX(0.1);
   animation: strike 1.6s cubic-bezier(0.65, 0, 0.35, 1) 0.6s forwards;
 }
 .try-badge::after {
