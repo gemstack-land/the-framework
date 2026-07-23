@@ -17,7 +17,7 @@ import { crawlRepoFiles } from '../project.js'
 import { readFileStatuses, type FileGitStatus } from '../dashboard/file-status.js'
 import { readFileDiff, readFileChanges, type FileDiff, type FileChange } from '../dashboard/file-diff.js'
 import { readFileContent, type FileContent } from '../dashboard/file-read.js'
-import { contextProjects, resolveProjectPath, resolveRunPath } from './context.js'
+import { contextProjects, contextRemote, resolveProjectPath, resolveRunPath } from './context.js'
 import { relayOr } from './relay-run.js'
 import type { FrameworkEvent } from '../events.js'
 
@@ -70,11 +70,19 @@ async function withProjects<T>(build: (projects: Awaited<ReturnType<ReturnType<t
  * would otherwise show a running run as finished. The status is not filtered on: `readLiveMeta`
  * may have just self-healed a dead run to `stopped` (#716), and that freshly-archived row can
  * lag `listRuns` by a poll — keeping it regardless leaves the row visible with no flicker.
+ *
+ * A run relayed to a connected device (#1067) lives only in the daemon's memory, never on disk, so
+ * its in-memory stub is merged in too (#1077): that is what re-opens it after a dashboard reload
+ * instead of losing it.
  */
 export async function onRuns(projectId: string): Promise<RunMeta[]> {
   const cwd = await resolveProjectPath(projectId)
-  if (!cwd) return []
-  return readAllRuns(cwd)
+  const local = cwd ? await readAllRuns(cwd) : []
+  const remote = contextRemote()?.list(projectId) ?? []
+  if (remote.length === 0) return local
+  // A relayed run (#1067) lives only in the daemon's memory, not on disk; surface it in the list so
+  // a reload re-opens it instead of losing it. Remote wins an id tie (it is the live authority).
+  return [...remote, ...local.filter(run => !remote.some(r => r.id === run.id))]
 }
 
 /**

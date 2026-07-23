@@ -44,8 +44,8 @@ export function RightRail({
   toggleContext: (path: string) => void
   /** Whether the selected run is serving a browser preview (#813), i.e. it was started with Browser on. */
   hasBrowser?: boolean
-  /** Where the selected run executes (#1053): an `actions` run has no browser on the runner, so no pane. */
-  target?: 'local' | 'actions' | undefined
+  /** Where the selected run executes (#1053): an `actions` run has no browser on the runner, so no pane; `remote` (#1067) has none locally either. */
+  target?: 'local' | 'actions' | 'remote' | undefined
   /** Told when a panel starts a session (the tickets import, #948), so the shell shows it. */
   onRunStarted?: ((intent: string, runId?: string) => void) | undefined
 }) {

@@ -76,7 +76,7 @@ test('a run submitted with options.remote is created on the other daemon and its
   const homeIdA = projectId(resolve(cwdA))
 
   try {
-    const result = await runtimeA.onStart('build the thing', 'build', { remote: { url: deviceB.url, token: TOKEN } })
+    const result = await runtimeA.onStart('build the thing', 'build', { remote: { url: deviceB.url, token: TOKEN, label: 'my-laptop' } })
 
     // The run was created on B, and A returned B's own run id (not a locally allocated one).
     assert.equal(result.ok, true)
@@ -89,6 +89,17 @@ test('a run submitted with options.remote is created on the other daemon and its
     // A's own busy guard never fired: it allocated no worktree and spawned nothing.
     assert.equal(runtimeA.activeRunCount(homeIdA), 0)
 
+    // The relayed run keeps a local list row on A (#1077), so a dashboard reload re-opens it instead of
+    // losing it: a remote stub carrying B's run id, the device label, and the prompt, running until the
+    // relay stream ends. Read before draining, while it is still live.
+    const listed = runtimeA.remoteRuns.list(homeIdA)
+    assert.equal(listed.length, 1)
+    assert.equal(listed[0]!.id, B_RUN)
+    assert.equal(listed[0]!.target, 'remote')
+    assert.equal(listed[0]!.status, 'running')
+    assert.equal(listed[0]!.remoteLabel, 'my-laptop')
+    assert.equal(listed[0]!.intent, 'build the thing')
+
     // The events stream back through A's relayed-run source, in order.
     const stream = runtimeA.remoteEventsSource(homeIdA, B_RUN)
     assert.ok(stream, 'A should expose a live stream for the relayed run')
@@ -97,6 +108,10 @@ test('a run submitted with options.remote is created on the other daemon and its
       events.map(e => (e as { message?: string; kind?: string }).message ?? (e as { kind?: string }).kind),
       ['hello from B', 'end'],
     )
+
+    // B's stubbed start pushed `{kind:'end', ok:true}` and closed, so once A has drained the relayed
+    // stream the list row settles to done (#1077): the state a reload would now read off the list.
+    assert.equal(runtimeA.remoteRuns.list(homeIdA)[0]!.status, 'done')
 
     // Slice 2: a run-scoped read relays to B over /_relay/rpc and comes back. The caller's arg[0] is
     // A's local project id; B's dispatch drops it and reads against its own home, which has no repo

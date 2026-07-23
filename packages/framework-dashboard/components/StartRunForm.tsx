@@ -84,7 +84,7 @@ export function StartRunForm({
   // device adds the relay target (#1067); absent, this is byte-identical to a local start.
   const options = {
     ...runOptionsFromPreferences(preferences, [...context]),
-    ...(remoteDevice ? { remote: { url: remoteDevice.url, token: remoteDevice.token } } : {}),
+    ...(remoteDevice ? { remote: { url: remoteDevice.url, token: remoteDevice.token, label: remoteDevice.label } } : {}),
   }
 
   const submit = async (text: string, submitKind: 'build' | 'prompt') => {

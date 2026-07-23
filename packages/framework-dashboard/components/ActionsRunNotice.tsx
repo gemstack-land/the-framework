@@ -11,7 +11,7 @@ export function ActionsRunNotice({
   events,
   live,
 }: {
-  target?: 'local' | 'actions' | undefined
+  target?: 'local' | 'actions' | 'remote' | undefined
   events: readonly FrameworkEvent[]
   /** Whether the run is still going: the "updates on completion" line only applies while it runs. */
   live: boolean

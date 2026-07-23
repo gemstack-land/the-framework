@@ -3,6 +3,7 @@ import { test } from 'node:test'
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { startRemoteRun, streamRemoteEvents, pingRemote, relayRpc, RelayedRuns } from './remote-run.js'
+import { RUN_META_VERSION, type RunMeta } from '../store/index.js'
 import type { FrameworkEvent } from '../events.js'
 
 // A throwaway loopback server; the handler decides how it answers. Returns its base url + close.
@@ -11,6 +12,19 @@ async function server(handler: (req: IncomingMessage, res: ServerResponse) => vo
   await new Promise<void>(r => srv.listen(0, '127.0.0.1', () => r()))
   const port = (srv.address() as AddressInfo).port
   return { url: `http://127.0.0.1:${port}`, close: () => new Promise<void>(r => srv.close(() => r())) }
+}
+
+// A minimal running RunMeta stub, the local list row RelayedRuns keeps for a relayed run (#1077).
+function stubMeta(id: string, overrides: Partial<RunMeta> = {}): RunMeta {
+  const now = new Date().toISOString()
+  return { version: RUN_META_VERSION, status: 'running', id, startedAt: now, updatedAt: now, passes: 0, target: 'remote', ...overrides }
+}
+
+// Drain a RelayedRuns stream to completion, so both its `end`-driven settle and its close flip have run.
+async function drainRun(runs: RelayedRuns, runId: string): Promise<void> {
+  const stream = runs.get(runId)
+  assert.ok(stream)
+  for await (const _e of stream!) { /* consume until the device closes the body */ }
 }
 
 /** Wait until the stream ends (its `onEnd` fires) or a timeout trips, collecting events meanwhile. */
@@ -152,7 +166,7 @@ test('RelayedRuns feeds a run stream from the device and drops its token when th
   })
   try {
     const runs = new RelayedRuns()
-    runs.register('r1', { url: srv.url, token: 't' })
+    runs.register('r1', { url: srv.url, token: 't' }, stubMeta('r1'), 'proj-1')
     const stream = runs.get('r1') // grabbed synchronously, before the remote stream ends
     assert.ok(stream)
     const got: FrameworkEvent[] = []
@@ -171,7 +185,7 @@ test('RelayedRuns closes cleanly on a 401 with no events (#1067)', async () => {
   })
   try {
     const runs = new RelayedRuns()
-    runs.register('r1', { url: srv.url, token: 'stale' })
+    runs.register('r1', { url: srv.url, token: 'stale' }, stubMeta('r1'), 'proj-1')
     const stream = runs.get('r1')
     assert.ok(stream)
     const got: FrameworkEvent[] = []
@@ -218,6 +232,69 @@ test('relayRpc throws on a non-2xx from the device (#1067 slice 2)', async () =>
   }
 })
 
+test('RelayedRuns.list surfaces a relayed run as a remote row, scoped to its project (#1077)', async () => {
+  // A server that never closes the body, so the pump stays live and the row stays `running` while
+  // we read it synchronously; dispose() aborts the fetch on the way out.
+  const srv = await server((_req, res) => res.writeHead(200, { 'content-type': 'application/x-ndjson' }))
+  try {
+    const runs = new RelayedRuns()
+    runs.register('r1', { url: srv.url, token: 't' }, stubMeta('r1', { intent: 'do it' }), 'proj-1')
+    const rows = runs.list('proj-1') // read before the fetch does anything: the stub is set synchronously
+    assert.equal(rows.length, 1)
+    assert.equal(rows[0]?.id, 'r1')
+    assert.equal(rows[0]?.target, 'remote')
+    assert.equal(rows[0]?.status, 'running')
+    assert.equal(rows[0]?.intent, 'do it')
+    assert.deepEqual(runs.list('other'), []) // another project sees none of it
+    runs.dispose()
+  } finally {
+    await srv.close()
+  }
+})
+
+// Register a relayed run against a device that emits one log line then an optional end line and closes,
+// and return the status left on its list row once RelayedRuns has fully drained the stream (#1077).
+async function relayEndStatus(endEvent: FrameworkEvent | null): Promise<string | undefined> {
+  const srv = await server((_req, res) => {
+    res.writeHead(200, { 'content-type': 'application/x-ndjson' })
+    res.write(`${JSON.stringify({ kind: 'log', message: 'working' })}\n`)
+    if (endEvent) res.write(`${JSON.stringify(endEvent)}\n`)
+    res.end()
+  })
+  try {
+    const runs = new RelayedRuns()
+    runs.register('r1', { url: srv.url, token: 't' }, stubMeta('r1'), 'proj-1')
+    await drainRun(runs, 'r1')
+    return runs.list('proj-1')[0]?.status
+  } finally {
+    await srv.close()
+  }
+}
+
+test("a relayed run's list row flips to the device's ending, or stopped if the stream just drops (#1077)", async () => {
+  assert.equal(await relayEndStatus({ kind: 'end', ok: true } as FrameworkEvent), 'done')
+  assert.equal(await relayEndStatus({ kind: 'end', stopped: true, ok: false } as FrameworkEvent), 'stopped')
+  assert.equal(await relayEndStatus({ kind: 'end', ok: false } as FrameworkEvent), 'failed')
+  assert.equal(await relayEndStatus(null), 'stopped') // no end event: the stream dropped, so it is no longer live
+})
+
+test('dispose clears the relayed run list and its device target (#1077)', async () => {
+  const srv = await server((_req, res) => {
+    res.writeHead(200, { 'content-type': 'application/x-ndjson' })
+    res.end()
+  })
+  try {
+    const runs = new RelayedRuns()
+    runs.register('r1', { url: srv.url, token: 't' }, stubMeta('r1'), 'proj-1')
+    assert.equal(runs.list('proj-1').length, 1) // present before shutdown
+    runs.dispose()
+    assert.deepEqual(runs.list('proj-1'), []) // and gone after
+    assert.equal(runs.target('r1'), undefined)
+  } finally {
+    await srv.close()
+  }
+})
+
 test('RelayedRuns.target outlives the event stream and dispose clears it (#1067 slice 2)', async () => {
   const srv = await server((_req, res) => {
     res.writeHead(200, { 'content-type': 'application/x-ndjson' })
@@ -227,7 +304,7 @@ test('RelayedRuns.target outlives the event stream and dispose clears it (#1067 
   try {
     const runs = new RelayedRuns()
     const target = { url: srv.url, token: 't' }
-    runs.register('r1', target)
+    runs.register('r1', target, stubMeta('r1'), 'proj-1')
     const stream = runs.get('r1')
     assert.ok(stream)
     for await (const _e of stream!) { /* drain until the device closes the body, ending the pump */ }
