@@ -14,14 +14,14 @@
     "gemstack"
   ],
   "license": "MIT",
-  "homepage": "https://github.com/gemstack-land/the-framework/tree/main/packages/framework#readme",
+  "homepage": "https://github.com/gemstack-land/the-framework/tree/main/packages/the-framework#readme",
   "bugs": {
     "url": "https://github.com/gemstack-land/the-framework/issues"
   },
   "repository": {
     "type": "git",
     "url": "https://github.com/gemstack-land/the-framework",
-    "directory": "packages/framework"
+    "directory": "packages/the-framework"
   },
   "type": "module",
   "engines": {

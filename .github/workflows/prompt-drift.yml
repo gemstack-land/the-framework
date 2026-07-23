@@ -13,9 +13,9 @@ on:
   workflow_dispatch:
   pull_request:
     paths:
-      - 'packages/framework/prompts/**'
-      - 'packages/framework/scripts/check-prompt-drift.mjs'
-      - 'packages/framework/scripts/op-326-post-merge.snapshot.md'
+      - 'packages/the-framework/prompts/**'
+      - 'packages/the-framework/scripts/check-prompt-drift.mjs'
+      - 'packages/the-framework/scripts/op-326-post-merge.snapshot.md'
 
 jobs:
   drift:
@@ -27,6 +27,6 @@ jobs:
           node-version: 22
       # No install: the check is dependency-free on purpose, so it keeps working when the
       # workspace doesn't build.
-      - run: node packages/framework/scripts/check-prompt-drift.mjs
+      - run: node packages/the-framework/scripts/check-prompt-drift.mjs
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

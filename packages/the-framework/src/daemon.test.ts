@@ -811,7 +811,7 @@ test('runDaemon steers through the control log: sendStop / sendChoice append ent
 })
 
 test('isNestedWithin flags a child path, not equal/sibling/parent (#647)', () => {
-  assert.equal(isNestedWithin('/repo/packages/framework', '/repo'), true)
+  assert.equal(isNestedWithin('/repo/packages/the-framework', '/repo'), true)
   assert.equal(isNestedWithin('/repo', '/repo'), false) // equal is not nested
   assert.equal(isNestedWithin('/repo', '/repo/packages'), false) // parent is not nested
   assert.equal(isNestedWithin('/other/framework', '/repo'), false) // sibling tree
@@ -823,7 +823,7 @@ test('registerHomeProject skips a cwd nested inside an already-tracked project (
   const env = await configEnv(parent)
   try {
     await addProject(parent, new Date().toISOString(), undefined, env)
-    // A nested, activated subfolder (like packages/framework inside the repo).
+    // A nested, activated subfolder (like packages/the-framework inside the repo).
     const nested = join(parent, 'packages', 'framework')
     await mkdir(join(nested, FRAMEWORK_DIR), { recursive: true })
 
