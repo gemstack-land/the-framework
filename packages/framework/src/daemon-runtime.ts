@@ -1,5 +1,5 @@
 import { spawn, type ChildProcess } from 'node:child_process'
-import { basename, resolve } from 'node:path'
+import { basename, join, resolve } from 'node:path'
 import { rm, stat } from 'node:fs/promises'
 import {
   runIdFromStartedAt,
@@ -17,12 +17,18 @@ import {
   removeWorktree,
   pruneWorktrees,
   readLiveMetas,
+  resolveRunCheckout,
+  FRAMEWORK_DIR,
+  EVENTS_FILE,
   isPidAlive,
   writeSuspendedRuns,
   type SuspendedRun,
 } from './store/index.js'
+import type { FrameworkEvent } from './events.js'
 import type { StartRunKind, StartRunOptions, StartRunResult, AddProjectResult } from './dashboard/index.js'
-import type { PreviewHandlers } from './dashboard/telefunc-serve.js'
+import type { EventsSource, PreviewHandlers } from './dashboard/telefunc-serve.js'
+import { RelayedRuns, startRemoteRun } from './dashboard/remote-run.js'
+import { tailEvents } from './dashboard-rpc/events-tail.js'
 import { isSafeVia } from './conversations.js'
 import { createPreviewRuntime } from './preview-runtime.js'
 import { scopedKey, parseScopedKey, keyBelongsTo } from './runtime-keys.js'
@@ -177,6 +183,12 @@ export interface ProjectRuntime {
   onAddProject: (path: string, directory: boolean) => Promise<AddProjectResult>
   /** The Preview handler set (#475/#797), handed to the dashboard as one value so `runId` survives. */
   preview: PreviewHandlers
+  /** The live event stream for a run this daemon is relaying from a device (#1067), else undefined
+   *  so `onEvents` falls back to tailing the on-disk log. Wired as the dashboard's events source. */
+  remoteEventsSource: EventsSource
+  /** Tail a relay-started run's on-disk events (#1067): the daemon's `/_relay/events` endpoint uses
+   *  it to stream one run back to whichever daemon relayed it here. */
+  tailRelayEvents: (runId: string, onEvent: (event: FrameworkEvent) => void) => () => void
   /** Live runs on a project (#685), so a background job can tell an idle project from a busy one. */
   activeRunCount: (targetProjectId: string) => number
   /**
@@ -200,6 +212,8 @@ export function createProjectRuntime({ cwd, env, binPath }: ProjectRuntimeOption
   // Live run pids, keyed per run rather than per project (#736) — see onStart for the key.
   const activeRuns = new Map<string, number>()
   const starting = new Set<string>() // reserved keys mid-spawn, to close the async gap
+  // Runs this daemon is relaying to/from a connected device (#1067): the local half of a remote run.
+  const relayedRuns = new RelayedRuns()
 
   // A project id resolves to its repo path via the registry; the home id (or none)
   // resolves to the daemon's own `cwd` without a lookup.
@@ -333,6 +347,16 @@ export function createProjectRuntime({ cwd, env, binPath }: ProjectRuntimeOption
     options: StartRunOptions = {},
     targetProjectId?: string,
   ): Promise<StartRunResult> => {
+    // Run on a connected device (#1067): forward the run to the remote daemon and relay its events
+    // back, without allocating a worktree or touching this daemon's busy guard; the remote owns
+    // both. `remote` is stripped so the remote starts an ordinary local run and does not relay on.
+    // Slice 1 runs in the device's own home checkout; which remote project it targets is a later slice.
+    if (options.remote) {
+      const { remote, ...forwarded } = options
+      const result = await startRemoteRun(remote, { prompt, kind, options: forwarded })
+      if (result.ok && result.runId) relayedRuns.register(result.runId, remote)
+      return result
+    }
     const projectKey = targetProjectId ?? homeId
     const projectCwd = await resolveProject(targetProjectId)
     if (!projectCwd) return { ok: false, error: `unknown project: ${targetProjectId}` }
@@ -480,12 +504,40 @@ export function createProjectRuntime({ cwd, env, binPath }: ProjectRuntimeOption
     return suspended
   }
 
+  // The dashboard's events source (#1067): a stream for a run this daemon is relaying from a device,
+  // else undefined so `onEvents` tails the on-disk log as usual for an ordinary local run.
+  const remoteEventsSource: EventsSource = (_projectId, runId) => relayedRuns.get(runId)
+
+  // Tail a relay-started run's own log (#1067) for the `/_relay/events` endpoint. Resolving the run's
+  // worktree is async, so a stop is returned immediately and the tail attaches once the path is known.
+  const tailRelayEvents = (runId: string, onEvent: (event: FrameworkEvent) => void): (() => void) => {
+    let stop = (): void => {}
+    let cancelled = false
+    void resolveRunCheckout(cwd, runId)
+      .then(checkout => {
+        if (cancelled) return
+        stop = tailEvents(join(checkout, FRAMEWORK_DIR, EVENTS_FILE), onEvent)
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+      stop()
+    }
+  }
+
+  const dispose = async (): Promise<void> => {
+    relayedRuns.dispose()
+    await previews.dispose()
+  }
+
   return {
     onStart,
     onAddProject,
     preview: previews.preview,
+    remoteEventsSource,
+    tailRelayEvents,
     activeRunCount,
     suspendRuns,
-    dispose: previews.dispose,
+    dispose,
   }
 }

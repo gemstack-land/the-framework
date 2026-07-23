@@ -7,6 +7,8 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { startDashboard } from './server.js'
 import { isSameOriginRequest } from './telefunc-serve.js'
+import type { FrameworkEvent } from '../events.js'
+import type { StartRunKind, StartRunOptions, StartRunResult } from './types.js'
 import type { IncomingMessage } from 'node:http'
 
 function fetchText(url: string): Promise<{ status: number; body: string; type: string }> {
@@ -266,6 +268,133 @@ test('a loopback bind sets no token, so the gate is a no-op (byte-identical) (#1
   } finally {
     await dash.close()
     await rm(bundle, { recursive: true, force: true })
+  }
+})
+
+// A POST with an optional Cookie header, returning the status + body.
+function postAuth(url: string, body: string, cookie?: string): Promise<{ status: number; body: string }> {
+  return new Promise((resolvePromise, rejectPromise) => {
+    const req = request(url, { method: 'POST', headers: { 'content-type': 'application/json', ...(cookie ? { cookie } : {}) } }, res => {
+      let b = ''
+      res.on('data', c => (b += c))
+      res.on('end', () => resolvePromise({ status: res.statusCode ?? 0, body: b }))
+    })
+    req.on('error', rejectPromise)
+    req.end(body)
+  })
+}
+
+// GET a newline-delimited event stream, collecting the first `count` lines then tearing the
+// socket down (the endpoint follows forever, so it never ends on its own).
+function readNdjson(url: string, cookie: string, count: number): Promise<{ status: number; lines: unknown[] }> {
+  return new Promise((resolvePromise, rejectPromise) => {
+    const req = get(url, { headers: { cookie } }, res => {
+      if (res.statusCode !== 200) {
+        res.resume()
+        resolvePromise({ status: res.statusCode ?? 0, lines: [] })
+        return
+      }
+      let buffer = ''
+      const lines: unknown[] = []
+      res.on('data', c => {
+        buffer += c
+        let nl = buffer.indexOf('\n')
+        while (nl !== -1) {
+          const line = buffer.slice(0, nl).trim()
+          if (line) lines.push(JSON.parse(line))
+          buffer = buffer.slice(nl + 1)
+          nl = buffer.indexOf('\n')
+        }
+        if (lines.length >= count) {
+          req.destroy()
+          resolvePromise({ status: 200, lines })
+        }
+      })
+      res.on('end', () => resolvePromise({ status: 200, lines }))
+    })
+    req.on('error', () => {}) // destroy() rejects the request; the lines are already resolved
+    setTimeout(() => {
+      req.destroy()
+      rejectPromise(new Error('timed out reading ndjson'))
+    }, 4000).unref?.()
+  })
+}
+
+// A guarded dashboard wired for the device relay (#1067): a stub start that records its calls, and
+// an events tail backed by a fixed list. Mirrors what the daemon wires, minus a real spawn.
+async function relayDashboard(): Promise<{
+  base: string
+  starts: Array<{ prompt: string; kind: StartRunKind; options: StartRunOptions; projectId?: string }>
+  close: () => Promise<void>
+}> {
+  const bundle = await fakeBundle()
+  const starts: Array<{ prompt: string; kind: StartRunKind; options: StartRunOptions; projectId?: string }> = []
+  const onStart = (prompt: string, kind: StartRunKind, options: StartRunOptions, projectId?: string): StartRunResult => {
+    starts.push({ prompt, kind, options, ...(projectId ? { projectId } : {}) })
+    return { ok: true, runId: 'srv-run' }
+  }
+  const events: FrameworkEvent[] = [
+    { kind: 'log', message: 'e1' } as FrameworkEvent,
+    { kind: 'log', message: 'e2' } as FrameworkEvent,
+  ]
+  const tailEvents = (_runId: string, onEvent: (event: FrameworkEvent) => void): (() => void) => {
+    for (const e of events) onEvent(e)
+    return () => {}
+  }
+  const dash = await startDashboard({ port: 0, clientBundleDir: bundle, token: TOKEN, onStart, relay: { tailEvents } })
+  return {
+    base: dash.url,
+    starts,
+    close: async () => {
+      await dash.close()
+      await rm(bundle, { recursive: true, force: true })
+    },
+  }
+}
+
+test('/_relay/start needs the cookie: 401 without it, starts the run with it (#1067)', async () => {
+  const { base, starts, close } = await relayDashboard()
+  try {
+    const body = JSON.stringify({ prompt: 'do it', kind: 'build', options: { autopilot: true } })
+    const unauth = await postAuth(`${base}/_relay/start`, body)
+    assert.equal(unauth.status, 401) // the #1051 guard fronts the relay too
+    assert.equal(starts.length, 0)
+
+    const ok = await postAuth(`${base}/_relay/start`, body, `fw_daemon=${TOKEN}`)
+    assert.equal(ok.status, 200)
+    assert.deepEqual(JSON.parse(ok.body), { ok: true, runId: 'srv-run' })
+    assert.equal(starts.length, 1)
+    assert.equal(starts[0]!.prompt, 'do it')
+    assert.equal(starts[0]!.projectId, undefined) // slice 1 runs in the device's own home checkout
+  } finally {
+    await close()
+  }
+})
+
+test('/_relay/start strips a nested remote target so a relayed run never relays onward (#1067)', async () => {
+  const { base, starts, close } = await relayDashboard()
+  try {
+    const body = JSON.stringify({ prompt: 'x', kind: 'build', options: { remote: { url: 'http://evil', token: 'z' }, autopilot: true } })
+    const ok = await postAuth(`${base}/_relay/start`, body, `fw_daemon=${TOKEN}`)
+    assert.equal(ok.status, 200)
+    assert.equal(starts[0]!.options.remote, undefined) // the onward target was dropped
+    assert.equal(starts[0]!.options.autopilot, true) // the rest of the options survive
+  } finally {
+    await close()
+  }
+})
+
+test('/_relay/events needs the cookie and streams the run\'s events as ndjson (#1067)', async () => {
+  const { base, close } = await relayDashboard()
+  try {
+    const unauth = await fetchAuth(`${base}/_relay/events?run=srv-run`)
+    assert.equal(unauth.status, 401)
+
+    const streamed = await readNdjson(`${base}/_relay/events?run=srv-run`, `fw_daemon=${TOKEN}`, 2)
+    assert.equal(streamed.status, 200)
+    assert.deepEqual(streamed.lines.map(l => (l as { message?: string }).message), ['e1', 'e2'])
+  } finally {
+    await close()
   }
 })
 

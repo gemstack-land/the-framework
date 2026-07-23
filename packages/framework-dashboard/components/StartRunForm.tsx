@@ -4,6 +4,8 @@ import { runOptionsFromPreferences } from '@gemstack/framework/client'
 import { onProjects } from '../server/projects.telefunc.js'
 import { onSystemPromptUser } from '../server/reads.telefunc.js'
 import { usePreferences, updatePreferences, autopilotEnabled } from '../lib/preferences.js'
+import { useConnectionProfiles } from '../lib/profiles.js'
+import { useSelectedRemoteDeviceId } from '../lib/remote-target.js'
 import { useStartRun } from '../lib/use-start-run.js'
 import { useLoaded } from '../lib/use-async.js'
 import { Composer, type ComposerHandle } from './Composer.js'
@@ -25,7 +27,8 @@ export function StartRunForm({
   toggleContext,
 }: {
   projectId: string
-  onRunStarted?: ((intent: string, runId?: string) => void) | undefined
+  /** `runsOn` names the device a remote run executes on (#1067), for the "runs on <device>" marker. */
+  onRunStarted?: ((intent: string, runId?: string, runsOn?: string) => void) | undefined
   /** The project's files for the `#` picker (#504), owned by the shell. */
   files: string[]
   /** The run Context set, shared with the right-rail file tree (#492) — owned by the shell. */
@@ -70,9 +73,19 @@ export function StartRunForm({
     .filter(Boolean)
     .join(' · ')
 
+  // The device this run targets (#1067), if one is picked in the "Run on" gear. Its token is a
+  // per-browser secret, so it rides the run as memory-only `options.remote` and is never persisted.
+  const profiles = useConnectionProfiles()
+  const selectedDeviceId = useSelectedRemoteDeviceId()
+  const remoteDevice = selectedDeviceId ? profiles.find(p => p.id === selectedDeviceId) : undefined
+
   // The options this run will start with: the daemon's own mapping (#858), read once, so the
-  // submit and the system-prompt preview below cannot disagree with the run they describe.
-  const options = runOptionsFromPreferences(preferences, [...context])
+  // submit and the system-prompt preview below cannot disagree with the run they describe. A picked
+  // device adds the relay target (#1067); absent, this is byte-identical to a local start.
+  const options = {
+    ...runOptionsFromPreferences(preferences, [...context]),
+    ...(remoteDevice ? { remote: { url: remoteDevice.url, token: remoteDevice.token } } : {}),
+  }
 
   const submit = async (text: string, submitKind: 'build' | 'prompt') => {
     if (busy) return
@@ -82,7 +95,8 @@ export function StartRunForm({
     if (result) {
       // Show the run in the Runs rail immediately (#405): the spawned process writes its run.json
       // a beat later, so seed an optimistic row with the typed prompt until the real meta takes over.
-      onRunStarted?.(text, result.runId) // select the run we just started (#761)
+      // A remote run (#1067) carries the device label so the view can mark where it executes.
+      onRunStarted?.(text, result.runId, remoteDevice?.label) // select the run we just started (#761)
       composerRef.current?.clear()
       setPrompt('')
     }

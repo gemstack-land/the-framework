@@ -9,7 +9,8 @@ import { BROWSER_PROXY_PREFIX, handleBrowserProxy } from './browser-proxy.js'
 import { makeTelefuncMount } from './telefunc-serve.js'
 import { requestPathname } from '../request-path.js'
 import type { AddProjectResult, PreviewResult, PreviewStatus, StartRunKind, StartRunOptions, StartRunResult } from './types.js'
-import type { PreviewHandlers } from './telefunc-serve.js'
+import type { EventsSource, PreviewHandlers } from './telefunc-serve.js'
+import { handleRelayRequest, RELAY_PREFIX, type RelayHandlers } from './relay-endpoints.js'
 
 /** Options for {@link startDashboard}. */
 export interface DashboardOptions {
@@ -75,11 +76,23 @@ export interface DashboardOptions {
   clientBundleDir?: string
   /**
    * The shared token that guards a non-loopback bind (#1051): with it set, every route (static
-   * bundle, `/_telefunc`, `/browser`) needs a valid `fw_daemon` cookie or a matching `?token=`,
-   * else 401. Omit for a loopback bind, where the guard is a no-op and local UX is byte-identical.
-   * A separate concern from the CSRF origin check in telefunc-serve.ts, which it composes with.
+   * bundle, `/_telefunc`, `/browser`, `/_relay`) needs a valid `fw_daemon` cookie or a matching
+   * `?token=`, else 401. Omit for a loopback bind, where the guard is a no-op and local UX is
+   * byte-identical. A separate concern from the CSRF origin check in telefunc-serve.ts.
    */
   token?: string
+  /**
+   * The live-events source for a run this daemon is relaying from a connected device (#1067): a
+   * stream for such a run, else undefined so `onEvents` tails the on-disk log. Only the daemon
+   * wires one; the per-run dashboard and the relay leave it unset.
+   */
+  eventsSource?: EventsSource
+  /**
+   * Serve a relay-started run's events back to the daemon that relayed it here (#1067): the two
+   * `/_relay/*` endpoints (start + events). Only the daemon wires one, and both are fronted by the
+   * same `token` guard above, so a device without the cookie cannot start or read a run.
+   */
+  relay?: { tailEvents: (runId: string, onEvent: (event: import('../events.js').FrameworkEvent) => void) => () => void }
 }
 
 /** A running localhost dashboard: the prerendered SPA + its Telefunc mount. */
@@ -126,9 +139,15 @@ export function startDashboard(opts: DashboardOptions = {}): Promise<Dashboard> 
     ...(opts.projects ? { projects: opts.projects } : {}),
     ...(opts.onAddProject ? { addProject: opts.onAddProject } : {}),
     ...(opts.preview ? { preview: opts.preview } : {}),
+    ...(opts.eventsSource ? { eventsSource: opts.eventsSource } : {}),
     preferences: opts.preferences ?? registryPreferencesStore(),
     quota,
   })
+
+  // The device-to-daemon relay endpoints (#1067): wired only when the daemon supplies both a start
+  // and an events tail. Fronted by the same token guard as every other route below.
+  const relayHandlers: RelayHandlers | undefined =
+    opts.onStart && opts.relay ? { start: opts.onStart, tailEvents: opts.relay.tailEvents } : undefined
 
   const token = opts.token
   const server = createServer((req, res) => {
@@ -139,6 +158,12 @@ export function startDashboard(opts: DashboardOptions = {}): Promise<Dashboard> 
     }
     // #1051: one guard fronting every route on a non-loopback bind; a no-op when no token is set.
     if (token !== undefined && !authorizeDaemonRequest(req, res, token)) return
+    // The device relay (#1067): another daemon posts a run here and streams its events back. Behind
+    // the guard above, so a device without the cookie is already 401'd; unwired hosts 404 it.
+    if (pathname === RELAY_PREFIX || pathname.startsWith(`${RELAY_PREFIX}/`)) {
+      void handleRelayRequest(req, res, pathname, relayHandlers)
+      return
+    }
     if (pathname === '/_telefunc' || pathname.startsWith('/_telefunc/')) {
       void telefuncMount(req, res)
       return
@@ -178,6 +203,8 @@ function listenDashboard(server: Server, host: string, port: number, close: () =
 }
 
 function closeServer(server: Server): Promise<void> {
+  // Force-close keep-alive + streaming sockets (e.g. an open /_relay/events body, #1067) so close() resolves instead of waiting on them.
+  server.closeAllConnections()
   return new Promise(resolvePromise => server.close(() => resolvePromise()))
 }
 
