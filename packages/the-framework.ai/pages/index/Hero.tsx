@@ -193,7 +193,7 @@ export function Hero() {
             </div>
             <div
               className="copy-box"
-              onClick={(e) => tryCopy.copy(`${cmds.try} && the-framework`, e)}
+              onClick={(e) => tryCopy.copy(cmds.try, e)}
               style={{
                 position: 'relative',
                 cursor: 'pointer',
@@ -210,13 +210,7 @@ export function Hero() {
                   <span style={dollarStyle}>$ </span>
                   {cmds.try}
                 </span>
-                <span style={commentStyle}># Temporary install</span>
-              </div>
-              <div style={cmdLineStyle}>
-                <span>
-                  <span style={dollarStyle}>$ </span>the-framework
-                </span>
-                <span style={commentStyle}># Run it</span>
+                <span style={commentStyle}># One-shot run</span>
               </div>
             </div>
           </div>
@@ -237,7 +231,7 @@ export function Hero() {
           Or permanent install:
           <span
             className="install-chip"
-            onClick={(e) => installCopy.copy(cmds.install, e)}
+            onClick={(e) => installCopy.copy(`${cmds.install} && the-framework`, e)}
             style={{
               position: 'relative',
               cursor: 'pointer',
