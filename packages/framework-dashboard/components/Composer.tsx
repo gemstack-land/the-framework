@@ -21,7 +21,8 @@ import { PresetsMenu } from './PresetsMenu.js'
 import { AgentModelMenu, type AgentOption } from './AgentModelMenu.js'
 import { OptionsMenu, type OptionRow, type RunTarget } from './OptionsMenu.js'
 import { AddDeviceDialog } from './AddDeviceDialog.js'
-import { useConnectionProfiles, connectTo, connectLocal, isLoopbackHost, type ConnectionProfile } from '../lib/profiles.js'
+import { useConnectionProfiles, connectLocal, isLoopbackHost, type ConnectionProfile } from '../lib/profiles.js'
+import { useSelectedRemoteDeviceId, selectRemoteDevice } from '../lib/remote-target.js'
 import { stashDraftFromUrl, takePendingDraft } from '../lib/draft-handoff.js'
 import { ResolvedOptions } from './ResolvedOptions.js'
 import { ClaudeLogo, CodexLogo } from './agent-logos.js'
@@ -128,6 +129,7 @@ export const Composer = forwardRef<ComposerHandle, {
   // The saved daemons this browser can hop to (#1052). Which one we are on now comes from the URL,
   // fixed for the page's life (a device switch reloads), so it is read once rather than as state.
   const profiles = useConnectionProfiles()
+  const selectedDeviceId = useSelectedRemoteDeviceId() // #1067: the device this run targets, if any
   const currentUrl = typeof window === 'undefined' ? null : window.location.origin
   const isLocalConnection = typeof window === 'undefined' ? true : isLoopbackHost(window.location.hostname)
   // The registered projects for the `@` picker — the same list the launcher reads.
@@ -335,8 +337,10 @@ export const Composer = forwardRef<ComposerHandle, {
               profiles,
               currentUrl,
               isLocal: isLocalConnection,
-              // Carry the live draft across the hop (#1066) so switching devices never nukes it.
-              onConnect: (p: ConnectionProfile) => connectTo(p, prompt),
+              selectedDeviceId,
+              // #1067: selecting a device makes it the run target in place, no navigation.
+              onSelect: (p: ConnectionProfile) => selectRemoteDevice(p.id),
+              onSelectDriver: () => selectRemoteDevice(null),
               onConnectLocal: connectLocal,
               onAddDevice: () => setAddingDevice(true),
             },

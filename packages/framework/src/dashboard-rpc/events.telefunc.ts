@@ -33,17 +33,16 @@ async function resolveEventsPath(projectId: string, runId?: string): Promise<str
  * that run's rather than a mix — and without it the feed for a worktree run is empty.
  * Omitting it keeps the pre-#736 behavior of tailing the project root.
  *
- * Two sources, chosen by the mount: the relay (#426) streams from an in-memory run on
- * the context; everywhere else there is no such source, so it tails the log on disk.
+ * Two sources, chosen by the mount. An in-memory stream on the context wins: the relay's own run
+ * (#426), or a run the daemon is relaying from a device (#1067). Otherwise the on-disk log. The
+ * daemon sets a source that answers only for relayed runs, so an ordinary local run yields undefined
+ * here and falls through to tailing the log, exactly as before.
  */
 export async function onEvents(projectId: string, runId?: string): Promise<ClientChannel<never, FrameworkEvent>> {
-  const source = contextEventsSource()
-  if (source) {
-    // The relay: replay + follow its in-memory run, mirroring how serveSSE consumes it.
-    return streamChannel<FrameworkEvent>(send => {
-      const stream = source(projectId)
-      return stream ? forwardStream(stream, send) : undefined
-    })
+  const stream = contextEventsSource()?.(projectId, runId)
+  if (stream) {
+    // An in-memory run: replay + follow it, mirroring how serveSSE consumes it.
+    return streamChannel<FrameworkEvent>(send => forwardStream(stream, send))
   }
   // Everywhere else: tail the run's on-disk events.jsonl (undefined path -> closed channel).
   const path = await resolveEventsPath(projectId, runId)

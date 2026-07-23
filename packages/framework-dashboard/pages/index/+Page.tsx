@@ -64,7 +64,9 @@ export default function Page() {
   // with the typed prompt at once, before the spawned process writes its run.json. `id` is the
   // one the daemon allocated for it (#761) — the URL already points there, and this is what tells
   // the main pane that a session missing from the list is starting, not gone.
-  const [runStart, setRunStart] = useState<{ tick: number; intent: string; id: string | null }>({ tick: 0, intent: '', id: null })
+  // `runsOn` names the device a just-started remote run executes on (#1067), so the live view can
+  // mark where it runs and degrade the panels that are local-only. Undefined for a local run.
+  const [runStart, setRunStart] = useState<{ tick: number; intent: string; id: string | null; runsOn?: string }>({ tick: 0, intent: '', id: null })
   // A project with no git checkout gets no worktree, so Start hands back no id and there is
   // nothing to navigate to yet. That fallback is one run at a time (daemon.ts keys the busy guard
   // by project there), so "the running one" is still a safe guess — adopt it the moment the poll
@@ -128,8 +130,8 @@ export default function Page() {
   const { value: activity } = usePolled<Activity[]>(browserActivity ? onActivity : null, EMPTY_ACTIVITY, 15000, [browserActivity])
   useActivityNotifications(activity, browserActivity)
 
-  const onRunStarted = (intent: string, startedId?: string) => {
-    setRunStart(prev => ({ tick: prev.tick + 1, intent, id: startedId ?? null }))
+  const onRunStarted = (intent: string, startedId?: string, runsOn?: string) => {
+    setRunStart(prev => ({ tick: prev.tick + 1, intent, id: startedId ?? null, ...(runsOn ? { runsOn } : {}) }))
     setAdopting(startedId === undefined)
     // The picked context went with that run; the next launch starts from a clean focus (#948).
     resetContext()
@@ -224,7 +226,7 @@ export default function Page() {
     if (runId === null) {
       // Just pressed Start on a project with no worktree: follow the live output until the poll
       // surfaces the run and the effect above adopts its id.
-      if (adopting) return <RunView projectId={projectId} runId={null} events={events} live label={runStart.intent || undefined} files={files} addContext={addContext} removeContext={removeContext} lost={lost} onRunStarted={onRunStarted} />
+      if (adopting) return <RunView projectId={projectId} runId={null} events={events} live label={runStart.intent || undefined} remoteLabel={runStart.runsOn} files={files} addContext={addContext} removeContext={removeContext} lost={lost} onRunStarted={onRunStarted} />
       return (
         <ProjectHome
           projectId={projectId}
@@ -243,7 +245,7 @@ export default function Page() {
       // list we have not read yet. Both are live views; only a session that is genuinely absent
       // from a list we did read is gone.
       if (runId === runStart.id || !runsLoaded)
-        return <RunView projectId={projectId} runId={runId} events={events} live label={runStart.intent || undefined} files={files} addContext={addContext} removeContext={removeContext} lost={lost} onRunStarted={onRunStarted} />
+        return <RunView projectId={projectId} runId={runId} events={events} live label={runStart.intent || undefined} remoteLabel={runId === runStart.id ? runStart.runsOn : undefined} files={files} addContext={addContext} removeContext={removeContext} lost={lost} onRunStarted={onRunStarted} />
       return (
         <NotFound
           title="This session is gone"

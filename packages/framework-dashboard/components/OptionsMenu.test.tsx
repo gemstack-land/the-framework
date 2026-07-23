@@ -106,7 +106,9 @@ describe('OptionsMenu (#654)', () => {
     profiles: profiles(),
     currentUrl: 'http://127.0.0.1:4200',
     isLocal: true,
-    onConnect: vi.fn(),
+    selectedDeviceId: null,
+    onSelect: vi.fn(),
+    onSelectDriver: vi.fn(),
     onConnectLocal: vi.fn(),
     onAddDevice: vi.fn(),
     ...over,
@@ -143,11 +145,19 @@ describe('OptionsMenu (#654)', () => {
     expect(rowOf('Claude web').hasAttribute('data-disabled')).toBe(true)
   })
 
-  test('on the local daemon the checkmark tracks the driver target, not a device (#1066)', () => {
-    openRunOn(connectionControl({ isLocal: true }), 'actions')
+  test('on the local daemon with no device picked, the checkmark tracks the driver target (#1066)', () => {
+    openRunOn(connectionControl({ isLocal: true, selectedDeviceId: null }), 'actions')
     expect(isChecked(ACTIONS)).toBe(true) // the selected driver target
     expect(isChecked(THIS_MACHINE)).toBe(false)
-    expect(isChecked(STUDIO_URL)).toBe(false) // no device is the connection
+    expect(isChecked(STUDIO_URL)).toBe(false) // no device is the target
+  })
+
+  test('selecting a device puts the checkmark on it and quiets the driver rows (#1067)', () => {
+    // On the local daemon, a selected device is the run target in place, with no navigation involved.
+    openRunOn(connectionControl({ isLocal: true, selectedDeviceId: STUDIO_URL }), 'actions')
+    expect(isChecked(STUDIO_URL)).toBe(true)
+    expect(isChecked(THIS_MACHINE)).toBe(false)
+    expect(isChecked(ACTIONS)).toBe(false) // the driver target no longer carries the mark
   })
 
   test('connected to a device the checkmark is on that device, driver rows quiet (#1066)', () => {
@@ -157,12 +167,12 @@ describe('OptionsMenu (#654)', () => {
     expect(isChecked(ACTIONS)).toBe(false)
   })
 
-  test('clicking a device navigates (does not write a preference) (#1066)', () => {
-    const onConnect = vi.fn()
-    openRunOn(connectionControl({ onConnect }))
+  test('clicking a device selects it as the run target (no navigation, no preference) (#1067)', () => {
+    const onSelect = vi.fn()
+    openRunOn(connectionControl({ onSelect }))
     fireEvent.click(rowOf(STUDIO_URL))
-    expect(onConnect).toHaveBeenCalledWith(profiles()[0])
-    // A device row is a connection hop, not a driver preference.
+    expect(onSelect).toHaveBeenCalledWith(profiles()[0])
+    // A device row is a run-target selection now, not a driver preference or a navigation.
     expect(updatePreferences).not.toHaveBeenCalled()
   })
 
@@ -186,8 +196,9 @@ describe('OptionsMenu (#654)', () => {
     expect(onChange).not.toHaveBeenCalled()
   })
 
-  test('clicking "This machine" on the local daemon writes the driver target (#1066)', () => {
+  test('clicking "This machine" on the local daemon writes the driver target and clears any device (#1066/#1067)', () => {
     const onConnectLocal = vi.fn()
+    const onSelectDriver = vi.fn()
     const onChange = vi.fn()
     render(
       <OptionsMenu
@@ -196,13 +207,14 @@ describe('OptionsMenu (#654)', () => {
         showEco={false}
         busy={false}
         runTarget={{ value: 'actions', onChange }}
-        connection={connectionControl({ isLocal: true, onConnectLocal })}
+        connection={connectionControl({ isLocal: true, selectedDeviceId: STUDIO_URL, onConnectLocal, onSelectDriver })}
       />,
     )
     open()
     fireEvent.click(screen.getByText('Run on'))
     fireEvent.click(rowOf(THIS_MACHINE))
     expect(onChange).toHaveBeenCalledWith('local')
+    expect(onSelectDriver).toHaveBeenCalled() // a driver row clears the device selection (#1067)
     expect(onConnectLocal).not.toHaveBeenCalled()
   })
 

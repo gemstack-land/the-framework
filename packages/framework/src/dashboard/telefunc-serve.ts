@@ -30,9 +30,10 @@ export interface PreviewHandlers {
   status: (projectId?: string, runId?: string) => PreviewStatus | Promise<PreviewStatus>
 }
 
-/** Resolve a project id to its live event stream (#426): the relay feeds `onEvents` from
- * its own in-memory stream rather than a file on disk. */
-export type EventsSource = (projectId: string) => AsyncIterable<FrameworkEvent> | undefined
+/** Resolve a run to its live event stream: the relay feeds `onEvents` from its own in-memory stream
+ * rather than a file on disk (#426), and the daemon feeds a run it is relaying from a device (#1067).
+ * Returns undefined when there is no in-memory stream, so `onEvents` falls back to tailing the log. */
+export type EventsSource = (projectId: string, runId?: string) => AsyncIterable<FrameworkEvent> | undefined
 
 /**
  * The Telefunc request context the mount provides. `sendStart` reads `startRun` from it;
