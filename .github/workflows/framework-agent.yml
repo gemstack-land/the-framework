@@ -75,19 +75,22 @@ jobs:
           SESSION_ID: ${{ steps.claude.outputs.session_id }}
         run: |
           set -euo pipefail
-          mkdir -p .framework-run
+          # Not dot-prefixed: upload-artifact@v4 defaults include-hidden-files to false and
+          # drops every file under a hidden path segment, so a `.framework-run/` dir uploads
+          # nothing and the driver finds no artifact to read.
+          mkdir -p framework-run
           # An empty array still parses, so a crashed action yields an empty turn, not a driver error.
           if [ -n "$EXECUTION_FILE" ] && [ -f "$EXECUTION_FILE" ]; then
-            cp "$EXECUTION_FILE" .framework-run/execution.json
+            cp "$EXECUTION_FILE" framework-run/execution.json
           else
-            echo '[]' > .framework-run/execution.json
+            echo '[]' > framework-run/execution.json
           fi
           jq -n --arg branch "$BRANCH" --arg session_id "$SESSION_ID" \
-            '{branch: $branch, session_id: $session_id}' > .framework-run/meta.json
+            '{branch: $branch, session_id: $session_id}' > framework-run/meta.json
 
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: framework-run-${{ inputs.correlation_id }}
-          path: .framework-run
+          path: framework-run
           retention-days: 7
