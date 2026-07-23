@@ -5,48 +5,48 @@
 <animate attributeName="y1" dur="7s" repeatCount="indefinite" calcMode="linear" keyTimes="0;0.2857;0.4286;0.8571;1" values="148.4;148.4;140.3;140.3;148.4"/>
 <animate attributeName="x2" dur="7s" repeatCount="indefinite" calcMode="linear" keyTimes="0;0.2857;0.4286;0.8571;1" values="36.5;36.5;50.5;50.5;36.5"/>
 <animate attributeName="y2" dur="7s" repeatCount="indefinite" calcMode="linear" keyTimes="0;0.2857;0.4286;0.8571;1" values="-121.5;-121.5;-113.4;-113.4;-121.5"/>
-      <stop offset="0" stop-color="#e69875"><animate attributeName="stop-color" dur="6s" repeatCount="indefinite" calcMode="linear" keyTimes="0;0.1667;0.3333;0.5;0.6667;0.8333;1" values="#e69875;#dbbc7f;#a7c080;#7fbbb3;#d699b6;#e67e80;#e69875"/></stop>
-      <stop offset="1" stop-color="#e67e80"><animate attributeName="stop-color" dur="6s" repeatCount="indefinite" calcMode="linear" keyTimes="0;0.1667;0.3333;0.5;0.6667;0.8333;1" values="#e67e80;#e69875;#dbbc7f;#a7c080;#7fbbb3;#d699b6;#e67e80"/></stop>
+      <stop offset="0" stop-color="#e69875"><animate attributeName="stop-color" dur="4s" repeatCount="indefinite" calcMode="linear" keyTimes="0;0.1667;0.3333;0.5;0.6667;0.8333;1" values="#e69875;#dbbc7f;#a7c080;#7fbbb3;#d699b6;#e67e80;#e69875"/></stop>
+      <stop offset="1" stop-color="#e67e80"><animate attributeName="stop-color" dur="4s" repeatCount="indefinite" calcMode="linear" keyTimes="0;0.1667;0.3333;0.5;0.6667;0.8333;1" values="#e67e80;#e69875;#dbbc7f;#a7c080;#7fbbb3;#d699b6;#e67e80"/></stop>
     </linearGradient>
     <linearGradient id="hk-g1" gradientUnits="userSpaceOnUse" x1="-48.5" y1="212.8" x2="123.5" y2="-29.2">
 <animate attributeName="x1" dur="7s" repeatCount="indefinite" calcMode="linear" keyTimes="0;0.2857;0.4286;0.8571;1" values="-48.5;-48.5;-34.5;-34.5;-48.5"/>
 <animate attributeName="y1" dur="7s" repeatCount="indefinite" calcMode="linear" keyTimes="0;0.2857;0.4286;0.8571;1" values="212.8;212.8;220.8;220.8;212.8"/>
 <animate attributeName="x2" dur="7s" repeatCount="indefinite" calcMode="linear" keyTimes="0;0.2857;0.4286;0.8571;1" values="123.5;123.5;123.5;123.5;123.5"/>
 <animate attributeName="y2" dur="7s" repeatCount="indefinite" calcMode="linear" keyTimes="0;0.2857;0.4286;0.8571;1" values="-29.2;-29.2;-13;-13;-29.2"/>
-      <stop offset="0" stop-color="#dbbc7f"><animate attributeName="stop-color" dur="6s" repeatCount="indefinite" calcMode="linear" keyTimes="0;0.1667;0.3333;0.5;0.6667;0.8333;1" values="#dbbc7f;#a7c080;#7fbbb3;#d699b6;#e67e80;#e69875;#dbbc7f"/></stop>
-      <stop offset="1" stop-color="#e69875"><animate attributeName="stop-color" dur="6s" repeatCount="indefinite" calcMode="linear" keyTimes="0;0.1667;0.3333;0.5;0.6667;0.8333;1" values="#e69875;#dbbc7f;#a7c080;#7fbbb3;#d699b6;#e67e80;#e69875"/></stop>
+      <stop offset="0" stop-color="#dbbc7f"><animate attributeName="stop-color" dur="4s" repeatCount="indefinite" calcMode="linear" keyTimes="0;0.1667;0.3333;0.5;0.6667;0.8333;1" values="#dbbc7f;#a7c080;#7fbbb3;#d699b6;#e67e80;#e69875;#dbbc7f"/></stop>
+      <stop offset="1" stop-color="#e69875"><animate attributeName="stop-color" dur="4s" repeatCount="indefinite" calcMode="linear" keyTimes="0;0.1667;0.3333;0.5;0.6667;0.8333;1" values="#e69875;#dbbc7f;#a7c080;#7fbbb3;#d699b6;#e67e80;#e69875"/></stop>
     </linearGradient>
     <linearGradient id="hk-g2" gradientUnits="userSpaceOnUse" x1="-208.5" y1="64.4" x2="87" y2="92.4">
 <animate attributeName="x1" dur="7s" repeatCount="indefinite" calcMode="linear" keyTimes="0;0.2857;0.4286;0.8571;1" values="-208.5;-208.5;-208.5;-208.5;-208.5"/>
 <animate attributeName="y1" dur="7s" repeatCount="indefinite" calcMode="linear" keyTimes="0;0.2857;0.4286;0.8571;1" values="64.4;64.4;80.5;80.5;64.4"/>
 <animate attributeName="x2" dur="7s" repeatCount="indefinite" calcMode="linear" keyTimes="0;0.2857;0.4286;0.8571;1" values="87;87;73;73;87"/>
 <animate attributeName="y2" dur="7s" repeatCount="indefinite" calcMode="linear" keyTimes="0;0.2857;0.4286;0.8571;1" values="92.4;92.4;100.5;100.5;92.4"/>
-      <stop offset="0" stop-color="#a7c080"><animate attributeName="stop-color" dur="6s" repeatCount="indefinite" calcMode="linear" keyTimes="0;0.1667;0.3333;0.5;0.6667;0.8333;1" values="#a7c080;#7fbbb3;#d699b6;#e67e80;#e69875;#dbbc7f;#a7c080"/></stop>
-      <stop offset="1" stop-color="#dbbc7f"><animate attributeName="stop-color" dur="6s" repeatCount="indefinite" calcMode="linear" keyTimes="0;0.1667;0.3333;0.5;0.6667;0.8333;1" values="#dbbc7f;#a7c080;#7fbbb3;#d699b6;#e67e80;#e69875;#dbbc7f"/></stop>
+      <stop offset="0" stop-color="#a7c080"><animate attributeName="stop-color" dur="4s" repeatCount="indefinite" calcMode="linear" keyTimes="0;0.1667;0.3333;0.5;0.6667;0.8333;1" values="#a7c080;#7fbbb3;#d699b6;#e67e80;#e69875;#dbbc7f;#a7c080"/></stop>
+      <stop offset="1" stop-color="#dbbc7f"><animate attributeName="stop-color" dur="4s" repeatCount="indefinite" calcMode="linear" keyTimes="0;0.1667;0.3333;0.5;0.6667;0.8333;1" values="#dbbc7f;#a7c080;#7fbbb3;#d699b6;#e67e80;#e69875;#dbbc7f"/></stop>
     </linearGradient>
     <linearGradient id="hk-g3" gradientUnits="userSpaceOnUse" x1="-160" y1="-148.4" x2="-36.5" y2="121.5">
 <animate attributeName="x1" dur="7s" repeatCount="indefinite" calcMode="linear" keyTimes="0;0.2857;0.4286;0.8571;1" values="-160;-160;-174;-174;-160"/>
 <animate attributeName="y1" dur="7s" repeatCount="indefinite" calcMode="linear" keyTimes="0;0.2857;0.4286;0.8571;1" values="-148.4;-148.4;-140.3;-140.3;-148.4"/>
 <animate attributeName="x2" dur="7s" repeatCount="indefinite" calcMode="linear" keyTimes="0;0.2857;0.4286;0.8571;1" values="-36.5;-36.5;-50.5;-50.5;-36.5"/>
 <animate attributeName="y2" dur="7s" repeatCount="indefinite" calcMode="linear" keyTimes="0;0.2857;0.4286;0.8571;1" values="121.5;121.5;113.4;113.4;121.5"/>
-      <stop offset="0" stop-color="#7fbbb3"><animate attributeName="stop-color" dur="6s" repeatCount="indefinite" calcMode="linear" keyTimes="0;0.1667;0.3333;0.5;0.6667;0.8333;1" values="#7fbbb3;#d699b6;#e67e80;#e69875;#dbbc7f;#a7c080;#7fbbb3"/></stop>
-      <stop offset="1" stop-color="#a7c080"><animate attributeName="stop-color" dur="6s" repeatCount="indefinite" calcMode="linear" keyTimes="0;0.1667;0.3333;0.5;0.6667;0.8333;1" values="#a7c080;#7fbbb3;#d699b6;#e67e80;#e69875;#dbbc7f;#a7c080"/></stop>
+      <stop offset="0" stop-color="#7fbbb3"><animate attributeName="stop-color" dur="4s" repeatCount="indefinite" calcMode="linear" keyTimes="0;0.1667;0.3333;0.5;0.6667;0.8333;1" values="#7fbbb3;#d699b6;#e67e80;#e69875;#dbbc7f;#a7c080;#7fbbb3"/></stop>
+      <stop offset="1" stop-color="#a7c080"><animate attributeName="stop-color" dur="4s" repeatCount="indefinite" calcMode="linear" keyTimes="0;0.1667;0.3333;0.5;0.6667;0.8333;1" values="#a7c080;#7fbbb3;#d699b6;#e67e80;#e69875;#dbbc7f;#a7c080"/></stop>
     </linearGradient>
     <linearGradient id="hk-g4" gradientUnits="userSpaceOnUse" x1="48.5" y1="-212.8" x2="-123.5" y2="29.2">
 <animate attributeName="x1" dur="7s" repeatCount="indefinite" calcMode="linear" keyTimes="0;0.2857;0.4286;0.8571;1" values="48.5;48.5;34.5;34.5;48.5"/>
 <animate attributeName="y1" dur="7s" repeatCount="indefinite" calcMode="linear" keyTimes="0;0.2857;0.4286;0.8571;1" values="-212.8;-212.8;-220.8;-220.8;-212.8"/>
 <animate attributeName="x2" dur="7s" repeatCount="indefinite" calcMode="linear" keyTimes="0;0.2857;0.4286;0.8571;1" values="-123.5;-123.5;-123.5;-123.5;-123.5"/>
 <animate attributeName="y2" dur="7s" repeatCount="indefinite" calcMode="linear" keyTimes="0;0.2857;0.4286;0.8571;1" values="29.2;29.2;13;13;29.2"/>
-      <stop offset="0" stop-color="#d699b6"><animate attributeName="stop-color" dur="6s" repeatCount="indefinite" calcMode="linear" keyTimes="0;0.1667;0.3333;0.5;0.6667;0.8333;1" values="#d699b6;#e67e80;#e69875;#dbbc7f;#a7c080;#7fbbb3;#d699b6"/></stop>
-      <stop offset="1" stop-color="#7fbbb3"><animate attributeName="stop-color" dur="6s" repeatCount="indefinite" calcMode="linear" keyTimes="0;0.1667;0.3333;0.5;0.6667;0.8333;1" values="#7fbbb3;#d699b6;#e67e80;#e69875;#dbbc7f;#a7c080;#7fbbb3"/></stop>
+      <stop offset="0" stop-color="#d699b6"><animate attributeName="stop-color" dur="4s" repeatCount="indefinite" calcMode="linear" keyTimes="0;0.1667;0.3333;0.5;0.6667;0.8333;1" values="#d699b6;#e67e80;#e69875;#dbbc7f;#a7c080;#7fbbb3;#d699b6"/></stop>
+      <stop offset="1" stop-color="#7fbbb3"><animate attributeName="stop-color" dur="4s" repeatCount="indefinite" calcMode="linear" keyTimes="0;0.1667;0.3333;0.5;0.6667;0.8333;1" values="#7fbbb3;#d699b6;#e67e80;#e69875;#dbbc7f;#a7c080;#7fbbb3"/></stop>
     </linearGradient>
     <linearGradient id="hk-g5" gradientUnits="userSpaceOnUse" x1="208.5" y1="-64.4" x2="-87" y2="-92.4">
 <animate attributeName="x1" dur="7s" repeatCount="indefinite" calcMode="linear" keyTimes="0;0.2857;0.4286;0.8571;1" values="208.5;208.5;208.5;208.5;208.5"/>
 <animate attributeName="y1" dur="7s" repeatCount="indefinite" calcMode="linear" keyTimes="0;0.2857;0.4286;0.8571;1" values="-64.4;-64.4;-80.5;-80.5;-64.4"/>
 <animate attributeName="x2" dur="7s" repeatCount="indefinite" calcMode="linear" keyTimes="0;0.2857;0.4286;0.8571;1" values="-87;-87;-73;-73;-87"/>
 <animate attributeName="y2" dur="7s" repeatCount="indefinite" calcMode="linear" keyTimes="0;0.2857;0.4286;0.8571;1" values="-92.4;-92.4;-100.5;-100.5;-92.4"/>
-      <stop offset="0" stop-color="#e67e80"><animate attributeName="stop-color" dur="6s" repeatCount="indefinite" calcMode="linear" keyTimes="0;0.1667;0.3333;0.5;0.6667;0.8333;1" values="#e67e80;#e69875;#dbbc7f;#a7c080;#7fbbb3;#d699b6;#e67e80"/></stop>
-      <stop offset="1" stop-color="#d699b6"><animate attributeName="stop-color" dur="6s" repeatCount="indefinite" calcMode="linear" keyTimes="0;0.1667;0.3333;0.5;0.6667;0.8333;1" values="#d699b6;#e67e80;#e69875;#dbbc7f;#a7c080;#7fbbb3;#d699b6"/></stop>
+      <stop offset="0" stop-color="#e67e80"><animate attributeName="stop-color" dur="4s" repeatCount="indefinite" calcMode="linear" keyTimes="0;0.1667;0.3333;0.5;0.6667;0.8333;1" values="#e67e80;#e69875;#dbbc7f;#a7c080;#7fbbb3;#d699b6;#e67e80"/></stop>
+      <stop offset="1" stop-color="#d699b6"><animate attributeName="stop-color" dur="4s" repeatCount="indefinite" calcMode="linear" keyTimes="0;0.1667;0.3333;0.5;0.6667;0.8333;1" values="#d699b6;#e67e80;#e69875;#dbbc7f;#a7c080;#7fbbb3;#d699b6"/></stop>
     </linearGradient>
   </defs>
   <g>
