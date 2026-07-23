@@ -108,6 +108,7 @@ export function CodeChip({ children, fontSize }: { children: string; fontSize: n
     <code
       style={{
         wordBreak: 'break-all',
+        whiteSpace: 'nowrap',
         fontFamily: mono,
         fontSize,
         background: '#232a2e',

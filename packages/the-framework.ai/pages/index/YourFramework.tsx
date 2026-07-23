@@ -47,10 +47,10 @@ export function YourFramework() {
       <SectionHead
         title={
           <>
-            <em style={{ fontStyle: 'italic', color: '#a7c080' }}>Your</em> framework
+            <span style={{ color: '#a7c080' }}>Your</span> framework
           </>
         }
-        sub="It isn't our framework — it's yours."
+        sub="It isn't our framework. It's yours."
       />
       <div
         style={{
@@ -71,10 +71,10 @@ export function YourFramework() {
           <Item>No backdoors, no tracking</Item>
           <Item>
             <span>
-              Knowledge saved as <CodeChip fontSize={12.5}>knowledge-base/*.md</CodeChip> in your Git repository
+              Memory is saved in your Git repository (<CodeChip fontSize={12.5}>knowledge-base/*.md</CodeChip>)
             </span>
           </Item>
-          <Item>You fully own your data</Item>
+          <Item>The data is fully yours</Item>
         </Card>
         <Card title="100% Open Source">
           <Item>Transparent — no hidden code</Item>
