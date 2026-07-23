@@ -171,6 +171,20 @@ test('ActionsDriver gives each session a unique correlation prefix so a fresh pr
   assert.notEqual(a.id, b.id)
 })
 
+test('ActionsDriver names the branch each run pushes to, stable across turns (#1085)', async () => {
+  const { driver, calls } = makeDriver()
+  const session = await driver.start({ cwd: '/ws' })
+  await session.prompt('first')
+  await session.prompt('second')
+
+  const branches = calls.filter(c => c.url.includes('/dispatches')).map(c => (c.body as { inputs: Record<string, string> }).inputs['branch'])
+  // The driver names the branch instead of discovering it: the action leaves branch_name empty
+  // for a workflow_dispatch run, so this is the only thing that lets readCode + continuity work.
+  assert.equal(branches[0], `claude/framework-${session.id}`)
+  // Same branch every turn, so a later turn's push builds on the earlier one.
+  assert.equal(branches[0], branches[1])
+})
+
 test('ActionsDriver runs the next turn on the branch the last one pushed (#610)', async () => {
   const { driver, calls } = makeDriver()
   const session = await driver.start({ cwd: '/ws' })

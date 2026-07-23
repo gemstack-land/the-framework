@@ -21,10 +21,13 @@ on:
       resume_session_id:
         description: A prior agent session id to continue instead of starting fresh.
         required: false
+      branch:
+        description: Branch to push the run's work to, so the driver can read it back and continue on it (#1085).
+        required: false
 
-# The agent pushes a branch and may open a PR. `id-token: write` is not optional: the
-# action exchanges an OIDC token to authenticate the subscription OAuth token, and without
-# it every run fails with "Could not fetch an OIDC token".
+# The workflow pushes the run branch and the agent may open a PR. `id-token: write` is not
+# optional: the action exchanges an OIDC token to authenticate the subscription OAuth token,
+# and without it every run fails with "Could not fetch an OIDC token".
 permissions:
   contents: write
   pull-requests: write
@@ -68,13 +71,46 @@ jobs:
           prompt: ${{ inputs.prompt }}
           claude_args: ${{ steps.args.outputs.value }}
 
+      # The runner and its checkout vanish when the job ends, so the only way the driver can
+      # read the agent's work (diffs, file contents) or run the next turn on top of it is a
+      # branch on origin. The action does not create one for a workflow_dispatch run, so we
+      # push it here, to the name the driver chose. This mirrors the local flow, where the
+      # framework (not the agent) pushes the session branch (#799); the agent just commits.
+      - name: Push the run branch
+        if: always()
+        id: runbranch
+        env:
+          RUN_BRANCH: ${{ inputs.branch }}
+          DISPATCH_REF: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          if [ -z "$RUN_BRANCH" ]; then echo "no run branch requested"; exit 0; fi
+          git config user.name "framework-agent"
+          git config user.email "framework-agent@users.noreply.github.com"
+          # Commit anything the agent left uncommitted so it is not lost with the runner.
+          if [ -n "$(git status --porcelain)" ]; then
+            git add -A
+            git commit -m "framework agent run ($RUN_BRANCH)" --quiet
+          fi
+          # Don't create an empty branch for a no-op turn: only push when the run advanced
+          # past the ref it checked out. If that ref can't be resolved, err toward pushing.
+          base="$(git rev-parse --verify --quiet "origin/$DISPATCH_REF" || true)"
+          if [ -n "$base" ] && [ "$(git rev-parse HEAD)" = "$base" ]; then
+            echo "no new commits; nothing to push"
+            exit 0
+          fi
+          git push origin "HEAD:refs/heads/$RUN_BRANCH"
+          echo "branch=$RUN_BRANCH" >> "$GITHUB_OUTPUT"
+
       # The only REST-readable channel out of a run. `always()` so a failed turn still
       # returns its transcript, which is exactly when we most want to read it.
       - name: Collect the transcript
         if: always()
         env:
           EXECUTION_FILE: ${{ steps.claude.outputs.execution_file }}
-          BRANCH: ${{ steps.claude.outputs.branch_name }}
+          # The branch we actually pushed above, not the action's branch_name, which stays
+          # empty for a workflow_dispatch agent run (#1085).
+          BRANCH: ${{ steps.runbranch.outputs.branch }}
           SESSION_ID: ${{ steps.claude.outputs.session_id }}
         run: |
           set -euo pipefail

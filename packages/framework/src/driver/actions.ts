@@ -78,6 +78,13 @@ export interface ActionsDriverOptions {
    * every run's first turn is `actions-1-turn-1` and runs collide (see {@link ActionsSession}).
    */
   runTag?: () => string
+  /**
+   * Prefix for the branch each run pushes its work to (#1085). Default `"claude/"`. The
+   * driver names the branch (prefix + session id) and passes it to the workflow, rather than
+   * discovering it after the fact: the action leaves `branch_name` empty for a
+   * `workflow_dispatch` run, so there is nothing to discover.
+   */
+  branchPrefix?: string
 }
 
 /** The slice of `fetch` this driver uses. */
@@ -92,8 +99,10 @@ const randomRunTag = (): string => randomUUID().slice(0, 8)
 export class ActionsSession implements DriverSession {
   readonly id: string
   readonly cwd: string
-  /** The branch the last successful run pushed; the next turn builds on it. */
+  /** The branch the last run pushed; set once the run reports it, and the next turn builds on it. */
   private branch: string | undefined
+  /** The branch this session asks each run to push to. Stable across turns, so they chain. */
+  private readonly runBranch: string
   /** The agent's own session id, carried across turns so `resume` can continue it. */
   private lastSessionId: string | undefined
   private turnCounter = 0
@@ -106,6 +115,7 @@ export class ActionsSession implements DriverSession {
     // The counter reads well in logs within one process; the random tag is what keeps the
     // correlation id unique across processes, since the daemon spawns a fresh one per run.
     this.id = `actions-${++sessionCounter}-${(config.runTag ?? randomRunTag)()}`
+    this.runBranch = `${config.branchPrefix ?? 'claude/'}framework-${this.id}`
     this.lastSessionId = startOpts.resumeSessionId
   }
 
@@ -159,7 +169,7 @@ export class ActionsSession implements DriverSession {
   /** Fire the workflow. Returns nothing useful: dispatch is 204 with no body, hence the correlation id. */
   private async dispatch(prompt: string, correlationId: string, resume: string | undefined): Promise<void> {
     const workflow = this.config.workflow ?? 'framework-agent.yml'
-    const inputs: Record<string, string> = { prompt, correlation_id: correlationId }
+    const inputs: Record<string, string> = { prompt, correlation_id: correlationId, branch: this.runBranch }
     // These reach a shell on the runner as environment variables. They are ids and
     // model names, so anything outside that alphabet is a bug or an attack.
     if (this.startOpts.model) inputs['model'] = assertToken(this.startOpts.model, 'model')
