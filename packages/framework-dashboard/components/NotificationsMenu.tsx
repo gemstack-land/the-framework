@@ -1,8 +1,7 @@
 import { Bell, BellOff } from 'lucide-react'
 import { useNotificationPermission } from '../lib/notification-permission.js'
 import { usePreferences, updatePreferences, notificationsEnabled, discordEnabled, discordBotEnabled, newActivityEnabled, humanInterventionEnabled } from '../lib/preferences.js'
-import { onNotifyChannels, type NotifyChannels } from '../server/preferences.telefunc.js'
-import { useLoaded } from '../lib/use-async.js'
+import { useNotifyChannels } from '../lib/notify-channels.js'
 import { cn } from '../lib/utils.js'
 import { OptionLabel } from './OptionsMenu.js'
 import {
@@ -33,10 +32,11 @@ export function NotificationsMenu() {
   const permission = useNotificationPermission()
   const browserSupported = permission !== 'unsupported'
   const blocked = permission === 'denied'
-  // Whether the daemon can actually deliver on Discord (#948): the toggle is a preference,
-  // the env var is the capability. `null` until the one-shot read lands — treated as capable
-  // so the bell does not flicker for a properly configured setup.
-  const channels = useLoaded<NotifyChannels | null>(onNotifyChannels, null, [])
+  // Whether the daemon can actually deliver on Discord (#948): the toggle is a preference, the
+  // credential is the capability. `null` until the first read lands — treated as capable so the
+  // bell does not flicker for a properly configured setup. Shared with the settings page (#1095),
+  // so setting a credential there settles this too.
+  const channels = useNotifyChannels()
   const webhookReady = channels === null || channels.discordWebhook
   const botReady = channels === null || channels.discordBot
   // Browser only actually fires once the browser has granted permission; Discord counts once
@@ -90,12 +90,12 @@ export function NotificationsMenu() {
           <DropdownMenuCheckboxItem
             checked={discord}
             onCheckedChange={next => updatePreferences({ notifyDiscord: next })}
-            title={webhookReady ? 'Reaches you with no dashboard open' : 'Set DISCORD_WEBHOOK on the daemon, then restart it, to deliver here'}
+            title={webhookReady ? 'Reaches you with no dashboard open' : 'Add a webhook on the settings page to deliver here'}
             className="items-start"
           >
             <OptionLabel
               label="Discord"
-              description={webhookReady ? 'Reaches you with no dashboard open' : 'Not configured — DISCORD_WEBHOOK is not set on the daemon'}
+              description={webhookReady ? 'Reaches you with no dashboard open' : 'Not configured — add a webhook in Settings'}
             />
           </DropdownMenuCheckboxItem>
         </DropdownMenuGroup>
@@ -129,12 +129,12 @@ export function NotificationsMenu() {
           <DropdownMenuCheckboxItem
             checked={discordBot}
             onCheckedChange={next => updatePreferences({ discordBot: next })}
-            title={botReady ? 'Lets Discord messages start and steer sessions' : 'Set DISCORD_BOT_TOKEN on the daemon, then restart it, to enable the bot'}
+            title={botReady ? 'Lets Discord messages start and steer sessions' : 'Add a bot token on the settings page to enable the bot'}
             className="items-start"
           >
             <OptionLabel
               label="Discord bot"
-              description={botReady ? 'Start and steer sessions from Discord' : 'Not configured — DISCORD_BOT_TOKEN is not set on the daemon'}
+              description={botReady ? 'Start and steer sessions from Discord' : 'Not configured — add a bot token in Settings'}
             />
           </DropdownMenuCheckboxItem>
         </DropdownMenuGroup>

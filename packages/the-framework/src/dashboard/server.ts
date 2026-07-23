@@ -3,6 +3,8 @@ import { timingSafeEqual } from 'node:crypto'
 import type { AddressInfo } from 'node:net'
 import type { ProjectsProvider } from './projects.js'
 import { registryPreferencesStore, type PreferencesStore } from '../registry.js'
+import { registryDiscordCredentialsStore } from '../discord-credentials-store.js'
+import type { DiscordCredentialsStore } from '../discord-credentials.js'
 import { defaultQuotaSource, type QuotaSource } from './quota.js'
 import { serveClientBundle } from './static.js'
 import { BROWSER_PROXY_PREFIX, handleBrowserProxy } from './browser-proxy.js'
@@ -62,6 +64,13 @@ export interface DashboardOptions {
    * never wires one, so preferences stay inert there.
    */
   preferences?: PreferencesStore
+  /**
+   * The Discord credentials store (#1095): `onNotifyChannels` reports what it holds and
+   * `saveDiscordCredentials` writes through it. Defaults to the registry file; the daemon passes
+   * one that also reloads its Discord services, so a pasted token takes effect with no restart.
+   * The relay wires none, so nothing there can be configured.
+   */
+  discord?: DiscordCredentialsStore
   /**
    * Where the usage panel reads the quota from (#533). Defaults to the daemon's
    * own poller; the relay passes nothing and mounts no panel.
@@ -151,6 +160,7 @@ export function startDashboard(opts: DashboardOptions = {}): Promise<Dashboard> 
     ...(opts.eventsSource ? { eventsSource: opts.eventsSource } : {}),
     ...(opts.remote ? { remote: opts.remote } : {}),
     preferences: opts.preferences ?? registryPreferencesStore(),
+    discord: opts.discord ?? registryDiscordCredentialsStore(),
     quota,
   })
 

@@ -3,9 +3,13 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import type { Preferences } from '@gemstack/the-framework'
 
 const updatePreferences = vi.hoisted(() => vi.fn())
-// The daemon's channel capability (#948): both configured unless a test overrides it.
-const onNotifyChannels = vi.hoisted(() => vi.fn(async () => ({ discordWebhook: true, discordBot: true })))
-vi.mock('../server/preferences.telefunc.js', () => ({ onNotifyChannels }))
+// The daemon's channel capability (#948), read through the shared store since #1095: both
+// configured unless a test overrides it. Mocked at the lib layer like the preferences below,
+// so a test sets the fact directly rather than racing a module-level cache to fill.
+const channels = vi.hoisted(() => ({
+  value: { discordWebhook: true, discordBot: true, sources: {}, editable: true } as unknown,
+}))
+vi.mock('../lib/notify-channels.js', () => ({ useNotifyChannels: () => channels.value }))
 let prefs: Preferences = {}
 vi.mock('../lib/preferences.js', () => ({
   usePreferences: () => prefs,
@@ -21,6 +25,7 @@ const { NotificationsMenu } = await import('./NotificationsMenu.js')
 
 beforeEach(() => {
   prefs = {}
+  channels.value = { discordWebhook: true, discordBot: true, sources: {}, editable: true }
   updatePreferences.mockReset()
   vi.stubGlobal('Notification', { permission: 'granted', requestPermission: vi.fn() })
 })
@@ -108,16 +113,16 @@ describe('NotificationsMenu (#676)', () => {
 
   // #948: the toggle is a preference; delivery needs the daemon env var. An unconfigured
   // channel must neither light the bell nor read as if it will page you.
-  test('Discord on without DISCORD_WEBHOOK does not light the bell and says why', async () => {
-    onNotifyChannels.mockResolvedValueOnce({ discordWebhook: false, discordBot: false })
+  test('Discord on with no webhook does not light the bell and says why', async () => {
+    channels.value = { discordWebhook: false, discordBot: false, sources: {}, editable: true }
     prefs = { notifyDiscord: true, notifyBrowser: false }
     render(<NotificationsMenu />)
     await waitFor(() =>
       expect(screen.getByRole('button', { name: /notifications/i }).getAttribute('title')).toBe('Notifications'),
     )
     open()
-    expect(screen.getByText('Not configured — DISCORD_WEBHOOK is not set on the daemon')).toBeTruthy()
-    expect(screen.getByText('Not configured — DISCORD_BOT_TOKEN is not set on the daemon')).toBeTruthy()
+    expect(screen.getByText('Not configured — add a webhook in Settings')).toBeTruthy()
+    expect(screen.getByText('Not configured — add a bot token in Settings')).toBeTruthy()
   })
 
   test('a configured webhook keeps the bell lit for Discord delivery', async () => {

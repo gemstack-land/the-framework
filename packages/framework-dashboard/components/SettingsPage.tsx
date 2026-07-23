@@ -1,15 +1,16 @@
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import type { Preferences } from '@gemstack/the-framework'
 import { AGENTS, AGENT_LABELS, MAX_SPEND_OFFSET } from '@gemstack/the-framework/client'
 import { useDetectedEditors } from '../lib/editors.js'
 import { usePreferences, updatePreferences, themePreference, type ThemePreference } from '../lib/preferences.js'
 import { runOptionRows, type OptionRow } from '../lib/run-option-rows.js'
 import { useNotificationPermission } from '../lib/notification-permission.js'
-import { useLoaded } from '../lib/use-async.js'
-import { onNotifyChannels, type NotifyChannels } from '../server/preferences.telefunc.js'
+import { useNotifyChannels, reloadNotifyChannels } from '../lib/notify-channels.js'
 import { OnboardingChecklist } from './OnboardingChecklist.js'
 import { DevicesSettings } from './DevicesSettings.js'
+import { DiscordBotDialog, DiscordWebhookDialog } from './DiscordDialogs.js'
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card.js'
+import { Button } from './ui/button.js'
 import { Checkbox } from './ui/checkbox.js'
 import { ScrollArea } from './ui/scroll-area.js'
 import { cn } from '../lib/utils.js'
@@ -35,10 +36,14 @@ export function SettingsPage({ onSelectProject }: { onSelectProject?: ((id: stri
   // A notification toggle is a preference; whether it can deliver is a capability (#948). Both are
   // shown, the same way the bell does, so a row cannot promise delivery that will not happen.
   const permission = useNotificationPermission()
-  const channels = useLoaded<NotifyChannels | null>(onNotifyChannels, null, [])
+  // Shared with the checklist above and the bell (#1095), so a credential saved in one of the
+  // setup dialogs settles every one of them at once rather than each on its own timer.
+  const channels = useNotifyChannels()
   const webhookReady = channels === null || channels.discordWebhook
   const botReady = channels === null || channels.discordBot
   const browserBlocked = permission === 'denied'
+  const [discordBotOpen, setDiscordBotOpen] = useState(false)
+  const [discordWebhookOpen, setDiscordWebhookOpen] = useState(false)
 
   return (
     <ScrollArea className="min-h-0 flex-1">
@@ -142,10 +147,15 @@ export function SettingsPage({ onSelectProject }: { onSelectProject?: ((id: stri
             description={
               webhookReady
                 ? 'Deliver to Discord, so notifications reach you with no dashboard open.'
-                : 'Not configured — DISCORD_WEBHOOK is not set on the daemon'
+                : 'Not configured — no webhook is set on the daemon'
             }
             checked={preferences.notifyDiscord ?? false}
             onChange={next => updatePreferences({ notifyDiscord: next })}
+            action={
+              <Button variant="outline" size="sm" onClick={() => setDiscordWebhookOpen(true)}>
+                {channels?.discordWebhook ? 'Webhook' : 'Set up'}
+              </Button>
+            }
           />
           <ToggleRow
             label="Needs you"
@@ -164,10 +174,15 @@ export function SettingsPage({ onSelectProject }: { onSelectProject?: ((id: stri
             description={
               botReady
                 ? 'Let Discord messages start and steer sessions.'
-                : 'Not configured — DISCORD_BOT_TOKEN is not set on the daemon'
+                : 'Not configured — no bot token is set on the daemon'
             }
             checked={preferences.discordBot ?? false}
             onChange={next => updatePreferences({ discordBot: next })}
+            action={
+              <Button variant="outline" size="sm" onClick={() => setDiscordBotOpen(true)}>
+                {channels?.discordBot ? 'Bot token' : 'Set up'}
+              </Button>
+            }
           />
         </Section>
 
@@ -190,6 +205,14 @@ export function SettingsPage({ onSelectProject }: { onSelectProject?: ((id: stri
           />
         </Section>
       </div>
+
+      <DiscordBotDialog open={discordBotOpen} onOpenChange={setDiscordBotOpen} channels={channels} onSaved={reloadNotifyChannels} />
+      <DiscordWebhookDialog
+        open={discordWebhookOpen}
+        onOpenChange={setDiscordWebhookOpen}
+        channels={channels}
+        onSaved={reloadNotifyChannels}
+      />
     </ScrollArea>
   )
 }
@@ -263,6 +286,7 @@ function ToggleRow({
   checked,
   onChange,
   disabled = false,
+  action,
 }: {
   label: string
   description: string
@@ -270,6 +294,8 @@ function ToggleRow({
   onChange: (next: boolean) => void
   /** A capability the daemon or browser withholds, e.g. notifications the browser has blocked. */
   disabled?: boolean
+  /** What supplies the capability the toggle needs (#1095): the Discord rows open their setup dialog. */
+  action?: ReactNode
 }) {
   return (
     <Row
@@ -277,12 +303,15 @@ function ToggleRow({
       description={description}
       dimmed={disabled}
       control={
-        <Checkbox
-          checked={checked}
-          disabled={disabled}
-          onCheckedChange={next => onChange(next === true)}
-          aria-label={label}
-        />
+        <span className="flex items-center gap-2">
+          {action}
+          <Checkbox
+            checked={checked}
+            disabled={disabled}
+            onCheckedChange={next => onChange(next === true)}
+            aria-label={label}
+          />
+        </span>
       }
     />
   )

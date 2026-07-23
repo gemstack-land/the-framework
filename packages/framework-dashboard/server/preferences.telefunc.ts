@@ -16,6 +16,7 @@ import {
   saveProjectPresets,
   onEditors,
   onNotifyChannels,
+  saveDiscordCredentials,
 } from '@gemstack/the-framework/dashboard-rpc'
 
 export {
@@ -27,5 +28,12 @@ export {
   saveProjectPresets,
   onEditors,
   onNotifyChannels,
+  saveDiscordCredentials,
 }
-export type { EditorInfo, NotifyChannels } from '@gemstack/the-framework/dashboard-rpc'
+export type {
+  EditorInfo,
+  NotifyChannels,
+  CredentialSource,
+  DiscordCredentialStatus,
+  DiscordCredentialsPatch,
+} from '@gemstack/the-framework/dashboard-rpc'

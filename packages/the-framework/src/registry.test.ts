@@ -16,7 +16,10 @@ import {
   removeProject,
   writePreferences,
   writeProjectPreferences,
+  readSecrets,
+  writeSecrets,
   REGISTRY_FILE,
+  REGISTRY_FILE_MODE,
   MAX_SPEND_OFFSET,
   type Preferences,
   type ProjectRecord,
@@ -33,10 +36,12 @@ import {
 function memFs(
   seed: Record<string, string> = {},
   options: { failWritesTo?: string; slow?: boolean } = {},
-): RegistryFs & { files: Map<string, string>; dirs: string[]; written: string[] } {
+): RegistryFs & { files: Map<string, string>; dirs: string[]; written: string[]; modes: Map<string, number> } {
   const files = new Map<string, string>(Object.entries(seed))
   const dirs: string[] = []
   const written: string[] = []
+  // Permission bits, so the owner-only write (#1095) is observable without a real filesystem.
+  const modes = new Map<string, number>()
   // An await point inside read and write, so concurrent callers interleave rather than each
   // running start to finish.
   const pause = async () => {
@@ -46,6 +51,7 @@ function memFs(
     files,
     dirs,
     written,
+    modes,
     async read(path) {
       await pause()
       const v = files.get(path)
@@ -67,6 +73,13 @@ function memFs(
       if (contents === undefined) throw new Error(`ENOENT: ${from}`)
       files.delete(from)
       files.set(to, contents)
+      const mode = modes.get(from)
+      modes.delete(from)
+      if (mode !== undefined) modes.set(to, mode)
+    },
+    async chmod(path, mode) {
+      if (!files.has(path)) throw new Error(`ENOENT: ${path}`)
+      modes.set(path, mode)
     },
   }
 }
@@ -551,4 +564,86 @@ test('two concurrent first-binds settle on one shared token, not two (#1051)', a
   const fs = memFs({ [FILE]: JSON.stringify({ projects: [], preferences: {} }) }, { slow: true })
   const [a, b] = await Promise.all([ensureDaemonToken(fs, ENV), ensureDaemonToken(fs, ENV)])
   assert.equal(a, b)
+})
+
+// The stored credentials (#1095). They sit at the daemon-token tier — top level, never in
+// `preferences` — so they cannot reach the browser bundle or a per-project override.
+
+test('a saved secret round-trips and lands at the top level, not in preferences (#1095)', async () => {
+  const fs = memFs()
+  await writeSecrets({ discordBotToken: 'a-token-long-enough-to-pass' }, fs, ENV)
+
+  assert.deepEqual(await readSecrets(fs, ENV), { discordBotToken: 'a-token-long-enough-to-pass' })
+  const written = JSON.parse(fs.files.get(FILE)!)
+  assert.equal(written.secrets.discordBotToken, 'a-token-long-enough-to-pass')
+  assert.deepEqual(written.preferences, {})
+})
+
+test('a secrets patch leaves the credential it does not mention alone (#1095)', async () => {
+  const fs = memFs()
+  await writeSecrets({ discordBotToken: 'a-token-long-enough-to-pass', discordWebhook: 'https://hook' }, fs, ENV)
+  await writeSecrets({ discordWebhook: 'https://other' }, fs, ENV)
+
+  assert.deepEqual(await readSecrets(fs, ENV), {
+    discordBotToken: 'a-token-long-enough-to-pass',
+    discordWebhook: 'https://other',
+  })
+})
+
+test('null clears one credential, and clearing the last one drops the block (#1095)', async () => {
+  const fs = memFs()
+  await writeSecrets({ discordBotToken: 'a-token-long-enough-to-pass', discordWebhook: 'https://hook' }, fs, ENV)
+
+  await writeSecrets({ discordWebhook: null }, fs, ENV)
+  assert.deepEqual(await readSecrets(fs, ENV), { discordBotToken: 'a-token-long-enough-to-pass' })
+
+  await writeSecrets({ discordBotToken: null }, fs, ENV)
+  assert.deepEqual(await readSecrets(fs, ENV), {})
+  assert.equal('secrets' in JSON.parse(fs.files.get(FILE)!), false)
+})
+
+test('a hand-edited secrets block is sanitized: unknown keys and non-strings dropped (#1095)', async () => {
+  const raw = JSON.stringify({
+    projects: [],
+    preferences: {},
+    secrets: { discordWebhook: '  https://hook  ', discordBotToken: 42, sshKey: 'nope' },
+  })
+  assert.deepEqual(await readSecrets(memFs({ [FILE]: raw }), ENV), { discordWebhook: 'https://hook' })
+})
+
+test('saving a secret keeps the project list and preferences (#1095)', async () => {
+  const fs = memFs()
+  await addProject('/repos/app-a', APP_A.addedAt, fs, ENV)
+  await writePreferences({ autopilot: true }, fs, ENV)
+  await writeSecrets({ discordWebhook: 'https://hook' }, fs, ENV)
+
+  assert.deepEqual(await listProjects(fs, ENV), [APP_A])
+  assert.deepEqual(await readPreferences(fs, ENV), { autopilot: true })
+  assert.deepEqual(await readSecrets(fs, ENV), { discordWebhook: 'https://hook' })
+})
+
+test('the registry file is written owner-only, and the mode is set before the rename (#1095)', async () => {
+  const fs = memFs()
+  await writeSecrets({ discordWebhook: 'https://hook' }, fs, ENV)
+
+  assert.equal(fs.modes.get(FILE), REGISTRY_FILE_MODE)
+  // The temp file carried the mode across the rename, so the real path was never world-readable.
+  assert.deepEqual([...fs.modes.keys()], [FILE])
+})
+
+test('a filesystem with no chmod still writes the registry (#1095)', async () => {
+  const fs = memFs()
+  const { chmod: _dropped, ...noChmod } = fs
+  await writeSecrets({ discordWebhook: 'https://hook' }, noChmod, ENV)
+
+  assert.deepEqual(await readSecrets(noChmod, ENV), { discordWebhook: 'https://hook' })
+})
+
+test('a token stays put when a secret is saved beside it (#1051/#1095)', async () => {
+  const fs = memFs()
+  const token = await ensureDaemonToken(fs, ENV)
+  await writeSecrets({ discordBotToken: 'a-token-long-enough-to-pass' }, fs, ENV)
+
+  assert.equal(await readDaemonToken(fs, ENV), token)
+  assert.deepEqual(await readSecrets(fs, ENV), { discordBotToken: 'a-token-long-enough-to-pass' })
 })

@@ -5,6 +5,7 @@ import { registerDashboardTelefunctions } from '../dashboard-rpc/register.js'
 import type { ProjectsProvider } from './projects.js'
 import type { FrameworkEvent } from '../events.js'
 import type { PreferencesStore } from '../registry.js'
+import type { DiscordCredentialsStore } from '../discord-credentials.js'
 import type { QuotaSource } from './quota.js'
 import type { AddProjectResult, PreviewResult, PreviewStatus, StartRunKind, StartRunOptions, StartRunResult } from './types.js'
 import type { ServeTarget } from '../preview.js'
@@ -68,6 +69,9 @@ export interface DashboardContext {
   /** The quota source behind the usage panel (#533). The daemon wires a live poller;
    * a public host (the relay) leaves it unset, so `onQuota` reports it has no reading. */
   quota?: QuotaSource
+  /** The Discord credentials store (#1095). The daemon wires one that also reloads its Discord
+   * services on a save; a public host leaves it unset, so nothing there is configurable. */
+  discord?: DiscordCredentialsStore
 }
 
 let instance: Telefunc | undefined

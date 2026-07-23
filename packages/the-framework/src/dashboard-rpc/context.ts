@@ -3,6 +3,7 @@ import { resolveRunCheckout } from '../store/index.js'
 import { defaultProjectsProvider, type ProjectsProvider } from '../dashboard/projects.js'
 import type { DashboardContext, EventsSource, RemoteRuns } from '../dashboard/telefunc-serve.js'
 import type { PreferencesStore } from '../registry.js'
+import type { DiscordCredentialsStore } from '../discord-credentials.js'
 import type { QuotaSource } from '../dashboard/quota.js'
 
 /**
@@ -85,6 +86,16 @@ export function contextRemote(): RemoteRuns | undefined {
  */
 export function contextPreferences(): PreferencesStore | undefined {
   return fromContext(ctx => ctx.preferences)
+}
+
+/**
+ * The Discord credentials store on the context, or undefined (#1095). The daemon wires one that
+ * persists to the registry and reloads its own Discord services; a public host leaves it unset, so
+ * the credential RPCs report nothing configured and refuse the write — a shared host has no
+ * business holding one user's bot token, let alone letting a visitor set it.
+ */
+export function contextDiscord(): DiscordCredentialsStore | undefined {
+  return fromContext(ctx => ctx.discord)
 }
 
 /**

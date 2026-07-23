@@ -331,12 +331,12 @@ export function notificationsEnabled(preferences: Preferences): boolean {
   return notificationEnabled(preferences, 'notifyBrowser')
 }
 
-/** Discord delivery. The daemon's `DISCORD_WEBHOOK` is the other gate (where to post; this is whether to). */
+/** Discord delivery. The daemon's webhook is the other gate (where to post; this is whether to). */
 export function discordEnabled(preferences: Preferences): boolean {
   return notificationEnabled(preferences, 'notifyDiscord')
 }
 
-/** The Discord chatbot (#680). The daemon's `DISCORD_BOT_TOKEN` is the other gate. */
+/** The Discord chatbot (#680). The daemon's bot token is the other gate. */
 export function discordBotEnabled(preferences: Preferences): boolean {
   return notificationEnabled(preferences, 'discordBot')
 }

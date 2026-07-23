@@ -4,13 +4,13 @@ import { presets } from '@gemstack/the-framework/client'
 import { Check, Circle, X } from 'lucide-react'
 import { onDashboard } from '../server/reads.telefunc.js'
 import { onOnboarding, sendAddProject } from '../server/projects.telefunc.js'
-import { onNotifyChannels, type NotifyChannels } from '../server/preferences.telefunc.js'
-import { usePolled, useLoaded } from '../lib/use-async.js'
+import { usePolled } from '../lib/use-async.js'
 import { usePreferences, updatePreferences, notificationsEnabled } from '../lib/preferences.js'
+import { useNotifyChannels, reloadNotifyChannels } from '../lib/notify-channels.js'
 import { useNotificationPermission } from '../lib/notification-permission.js'
 import { useStartRun } from '../lib/use-start-run.js'
 import { AddProjectPanel } from './AddProjectPanel.js'
-import { DiscordBotDialog, DISCORD_BOT_DESCRIPTION } from './DiscordBotDialog.js'
+import { DiscordBotDialog, DiscordWebhookDialog, DISCORD_BOT_DESCRIPTION, DISCORD_WEBHOOK_DESCRIPTION } from './DiscordDialogs.js'
 import { Button } from './ui/button.js'
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card.js'
 
@@ -46,7 +46,9 @@ export function OnboardingChecklist({
   // read fans out over every project to answer the tickets question.
   const { value: data, reload } = usePolled<DashboardData | null>(onDashboard, null, 10_000, [])
   const { value: suggestion, reload: reloadSuggestion } = usePolled<OnboardingSuggestion | null>(onOnboarding, null, 30_000, [])
-  const channels = useLoaded<NotifyChannels | null>(onNotifyChannels, null, [])
+  // Shared with the settings rows and the bell (#1095): a credential saved in a dialog below has
+  // to tick its row here too, and a second poll of the same fact is how those two disagree.
+  const channels = useNotifyChannels()
   const preferences = usePreferences()
   const permission = useNotificationPermission()
   const { start, busy: starting, error: startError } = useStartRun()
@@ -54,7 +56,8 @@ export function OnboardingChecklist({
   const [addingProject, setAddingProject] = useState(false)
   const [addingCwd, setAddingCwd] = useState(false)
   const [addError, setAddError] = useState<string | null>(null)
-  const [discordOpen, setDiscordOpen] = useState(false)
+  const [discordBotOpen, setDiscordBotOpen] = useState(false)
+  const [discordWebhookOpen, setDiscordWebhookOpen] = useState(false)
 
   // The project onboarding acts on: the one this server runs in when it is registered, else the
   // only/most recent one. Onboarding is a first-run flow, so there is rarely a second candidate.
@@ -142,8 +145,8 @@ export function OnboardingChecklist({
       description: DISCORD_BOT_DESCRIPTION,
       done: channels?.discordBot ?? false,
       action: (
-        <Button size="sm" variant="outline" onClick={() => setDiscordOpen(true)}>
-          {channels?.discordBot ? 'Bot settings' : 'Set up the bot'}
+        <Button size="sm" variant="outline" onClick={() => setDiscordBotOpen(true)}>
+          Set up the bot
         </Button>
       ),
     },
@@ -166,12 +169,12 @@ export function OnboardingChecklist({
     {
       key: 'discord-notification',
       label: 'Add Discord notifications',
-      description: 'Delivers the same notifications to Discord, so they reach you with no dashboard open.',
+      description: DISCORD_WEBHOOK_DESCRIPTION,
       done: channels?.discordWebhook ?? false,
       action: (
-        <span className="text-right text-xs text-muted-foreground">
-          Set <code className="rounded bg-muted px-1 py-0.5">DISCORD_WEBHOOK</code> on the daemon, then restart it
-        </span>
+        <Button size="sm" variant="outline" onClick={() => setDiscordWebhookOpen(true)}>
+          Add the webhook
+        </Button>
       ),
     },
   ]
@@ -229,7 +232,18 @@ export function OnboardingChecklist({
           onClose={() => setAddingProject(false)}
         />
       )}
-      <DiscordBotDialog open={discordOpen} onOpenChange={setDiscordOpen} configured={channels?.discordBot ?? false} />
+      <DiscordBotDialog
+        open={discordBotOpen}
+        onOpenChange={setDiscordBotOpen}
+        channels={channels}
+        onSaved={reloadNotifyChannels}
+      />
+      <DiscordWebhookDialog
+        open={discordWebhookOpen}
+        onOpenChange={setDiscordWebhookOpen}
+        channels={channels}
+        onSaved={reloadNotifyChannels}
+      />
     </Card>
   )
 }

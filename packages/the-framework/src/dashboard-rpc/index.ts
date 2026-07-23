@@ -15,9 +15,11 @@ export {
   saveProjectPresets,
   onEditors,
   onNotifyChannels,
+  saveDiscordCredentials,
   type SavePreferencesResult,
   type NotifyChannels,
 } from './preferences.telefunc.js'
+export type { CredentialSource, DiscordCredentialStatus, DiscordCredentialsPatch } from '../discord-credentials.js'
 export { type EditorInfo } from '../dashboard/open-in-app.js'
 export { onQuota } from './quota.telefunc.js'
 export { checkDevices, type DeviceCheck } from './devices.telefunc.js'

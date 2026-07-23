@@ -6,10 +6,11 @@ import { startDashboard, type Dashboard, type StartRunOptions } from './dashboar
 import { createProjectRuntime, delay, resolveSpawnBin, spawnDetached, terminate } from './daemon-runtime.js'
 export { startOptionFlags } from './daemon-runtime.js'
 import { defaultQuotaSource } from './dashboard/quota.js'
-import { startBackgroundServices, resumeSuspendedRuns } from './daemon-services.js'
+import { startBackgroundServices, resumeSuspendedRuns, type BackgroundServices } from './daemon-services.js'
 import { resolveDashboardBundle } from './dashboard/bundle.js'
 import { isActivated } from './project.js'
 import { addProject, ensureDaemonToken, listProjects } from './registry.js'
+import { registryDiscordCredentialsStore } from './discord-credentials-store.js'
 import { JsonlTailer } from './jsonl-tail.js'
 
 /**
@@ -359,6 +360,9 @@ export async function runDaemon(cwd: string, opts: RunDaemonOptions = {}): Promi
   // Owned here rather than left to the dashboard (#685): auto PM has to consult the same
   // long-lived meter the usage panel draws, and a second poller would double a rate-limited read.
   const quota = defaultQuotaSource()
+  // Assigned below, read from the credentials store's `onChange` (#1095): the dashboard mount has
+  // to exist before the services do, and a save can only arrive over a mount that is already up.
+  let services: BackgroundServices | undefined
   const dashboard: Dashboard = await startDashboard({
     host,
     port,
@@ -372,6 +376,10 @@ export async function runDaemon(cwd: string, opts: RunDaemonOptions = {}): Promi
     eventsSource: runtime.remoteEventsSource,
     remote: runtime.remoteRuns,
     relay: { tailEvents: runtime.tailRelayEvents, rpc: runtime.onRelayRpc },
+    // Configure Discord from the dashboard (#1095). `onChange` is the half that makes the step
+    // finishable in-product: the credential is written to the registry, then this daemon's own
+    // Discord services are rebuilt against it, so the bot connects without a restart.
+    discord: registryDiscordCredentialsStore({ env, onChange: () => services?.reloadDiscord() }),
     ...(token ? { token } : {}),
     ...(clientBundleDir ? { clientBundleDir } : {}),
   })
@@ -403,7 +411,7 @@ export async function runDaemon(cwd: string, opts: RunDaemonOptions = {}): Promi
   // committer, and the chatbot. Fire-and-forget: a resume that fails must not stop the daemon
   // coming up, and there is nothing to return to.
   void resumeSuspendedRuns(env, startRun, console.log).catch(err => console.log(`[framework] could not resume suspended sessions: ${err}`))
-  const services = startBackgroundServices({
+  services = startBackgroundServices({
     cwd,
     env,
     dashboardUrl: dashboard.url,
