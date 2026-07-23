@@ -163,6 +163,14 @@ test('ActionsDriver dispatches the prompt with a correlation id and the framing 
   assert.equal(body.inputs['correlation_id'], `${session.id}-turn-1`)
 })
 
+test('ActionsDriver gives each session a unique correlation prefix so a fresh process never matches a stale run (#1050)', async () => {
+  // The daemon spawns a fresh process per run, restarting the session counter, so without a
+  // random tag two runs would both be `actions-1-...` and one could latch onto the other's run.
+  const a = await makeDriver().driver.start({ cwd: '/ws' })
+  const b = await makeDriver().driver.start({ cwd: '/ws' })
+  assert.notEqual(a.id, b.id)
+})
+
 test('ActionsDriver runs the next turn on the branch the last one pushed (#610)', async () => {
   const { driver, calls } = makeDriver()
   const session = await driver.start({ cwd: '/ws' })
