@@ -13,7 +13,14 @@
     "test": "turbo run test",
     "changeset": "changeset",
     "changeset:version": "changeset version",
-    "release": "turbo run build bundle:dashboard --filter=./packages/* && changeset publish"
+    "release": "turbo run build bundle:dashboard --filter=./packages/* && changeset publish",
+    "========= Website": "",
+    "// Develop website https://the-framework.ai locally": "",
+    "website": "cd packages/the-framework.ai/ && pnpm run dev",
+    "// Build website for production": "",
+    "website:build": "cd packages/the-framework.ai/ && pnpm run build",
+    "// Test website (CI)": "",
+    "docs:test": "cd packages/the-framework.ai/ && echo 'no tests yet'"
   },
   "devDependencies": {
     "@changesets/cli": "^2.27.0",
