@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import type { Preferences } from '@gemstack/framework'
+import { addProfile } from '../lib/profiles.js'
+import { selectRemoteDevice } from '../lib/remote-target.js'
 
 // Preferences are the shared daemon store; stub them so the composer reads a fixed value.
 const updatePreferences = vi.hoisted(() => vi.fn())
@@ -22,8 +24,10 @@ vi.mock('../lib/preferences.js', () => ({
 vi.mock('../lib/editors.js', () => ({ useDetectedEditors: () => [] }))
 // Composer loads its own projects for the `@` picker (#743); stub the read to none.
 vi.mock('../server/projects.telefunc.js', () => ({ onProjects: () => Promise.resolve([]) }))
-// The device health poll (#1072) reaches the daemon over Telefunc; stub it to no devices reachable.
-vi.mock('../server/devices.telefunc.js', () => ({ checkDevices: () => Promise.resolve({}) }))
+// The device health poll (#1072) reaches the daemon over Telefunc; a hoisted stub so each test can
+// answer online/offline for the "Run on" target (#1073).
+const checkDevices = vi.hoisted(() => vi.fn())
+vi.mock('../server/devices.telefunc.js', () => ({ checkDevices }))
 
 // Stub the Tiptap editor (it needs a real DOM/ProseMirror): a plain input driving onChange, a
 // "type-submit" button firing onSubmit, and a ref exposing the same handle the composer calls.
@@ -73,8 +77,14 @@ beforeEach(() => {
   prefs = {}
   updatePreferences.mockReset()
   sessionStorage.clear()
+  localStorage.clear()
+  selectRemoteDevice(null)
+  checkDevices.mockReset()
+  checkDevices.mockResolvedValue({}) // default: no devices reachable
 })
 afterEach(cleanup)
+
+const STUDIO = 'http://192.168.1.5:4200'
 
 describe('Composer (#721)', () => {
   test('renders the full control row: agent/model, options gear, and the submit button', () => {
@@ -213,5 +223,36 @@ describe('Composer (#721)', () => {
     fireEvent.change(screen.getByLabelText('prompt'), { target: { value: 'just a question' } })
     fireEvent.click(screen.getByRole('button', { name: 'Send' }))
     expect(onSubmit).toHaveBeenCalledWith('just a question', 'build', { newSession: false })
+  })
+
+  // #1073: pressing Start on an offline "Run on" device would silently attempt the ~15s relay, so
+  // Start is blocked with a reason pointing back to the gear. No auto-fallback: the target stays.
+  test('an offline "Run on" device disables Start and shows the reason (#1073)', async () => {
+    checkDevices.mockResolvedValue({ [STUDIO]: false })
+    addProfile({ url: STUDIO, token: 'aaa', label: 'Studio' })
+    selectRemoteDevice(STUDIO)
+    const { onSubmit } = renderComposer()
+    fireEvent.change(screen.getByLabelText('prompt'), { target: { value: 'ship it' } })
+    await waitFor(() => expect(screen.getByText(/Studio is offline/)).toBeTruthy())
+    const submit = screen.getByRole('button', { name: 'Send' })
+    expect(submit.hasAttribute('disabled')).toBe(true)
+    // Both the click and the editor shortcut are blocked.
+    fireEvent.click(submit)
+    fireEvent.click(screen.getByText('editor-submit'))
+    expect(onSubmit).not.toHaveBeenCalled()
+  })
+
+  test('an online "Run on" device leaves Start enabled with no offline note (#1073)', async () => {
+    checkDevices.mockResolvedValue({ [STUDIO]: true })
+    addProfile({ url: STUDIO, token: 'aaa', label: 'Studio' })
+    selectRemoteDevice(STUDIO)
+    const { onSubmit } = renderComposer()
+    fireEvent.change(screen.getByLabelText('prompt'), { target: { value: 'ship it' } })
+    await waitFor(() => expect(checkDevices).toHaveBeenCalled())
+    expect(screen.queryByText(/is offline/)).toBeNull()
+    const submit = screen.getByRole('button', { name: 'Send' })
+    expect(submit.hasAttribute('disabled')).toBe(false)
+    fireEvent.click(submit)
+    expect(onSubmit).toHaveBeenCalledWith('ship it', 'build', { newSession: false })
   })
 })

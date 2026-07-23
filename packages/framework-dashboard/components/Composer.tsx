@@ -132,6 +132,9 @@ export const Composer = forwardRef<ComposerHandle, {
   const profiles = useConnectionProfiles()
   const deviceStatus = useDeviceStatus(profiles) // #1072: online/offline per saved device
   const selectedDeviceId = useSelectedRemoteDeviceId() // #1067: the device this run targets, if any
+  const selectedDevice = selectedDeviceId ? profiles.find(p => p.id === selectedDeviceId) : undefined
+  // #1073: block Start when the target device is known-offline; an absent/unknown status must not block.
+  const targetOffline = !!selectedDeviceId && deviceStatus[selectedDeviceId] === 'offline'
   const currentUrl = typeof window === 'undefined' ? null : window.location.origin
   const isLocalConnection = typeof window === 'undefined' ? true : isLoopbackHost(window.location.hostname)
   // The registered projects for the `@` picker — the same list the launcher reads.
@@ -208,7 +211,8 @@ export const Composer = forwardRef<ComposerHandle, {
   const submit = (e?: FormEvent) => {
     e?.preventDefault()
     const text = prompt.trim()
-    if (!text || busy || submittingRef.current) return
+    // #1073: a keyboard submit must be blocked too when the target device is offline.
+    if (!text || busy || submittingRef.current || targetOffline) return
     submittingRef.current = true
     void Promise.resolve(onSubmit(text, kind, { newSession })).finally(() => {
       submittingRef.current = false
@@ -368,7 +372,7 @@ export const Composer = forwardRef<ComposerHandle, {
       type="submit"
       size="icon-sm"
       onClick={submit}
-      disabled={busy || !hasPrompt}
+      disabled={busy || !hasPrompt || targetOffline}
       aria-hidden={!hasPrompt}
       tabIndex={hasPrompt ? undefined : -1}
       aria-label={submitLabel}
@@ -386,6 +390,13 @@ export const Composer = forwardRef<ComposerHandle, {
     >
       {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowUp className="h-4 w-4" />}
     </Button>
+  )
+
+  // #1073: an offline target blocks Start; say so and point back to the "Run on" gear. No auto-fallback.
+  const offlineNote = targetOffline && (
+    <p role="alert" className="mt-2 text-xs text-danger">
+      {`${selectedDevice?.label ?? 'The selected device'} is offline. Pick another target in "Run on" to start.`}
+    </p>
   )
 
   // The "Add a device" modal (#1052), rendered by both forms since the gear is in both. A portal, so
@@ -425,6 +436,8 @@ export const Composer = forwardRef<ComposerHandle, {
           </div>
         </div>
       </div>
+
+      {offlineNote}
 
       {/* The "In play" row (#842/#1046): the Enhanced System Prompt dropdown at the start, the
           resolved-options strip at the end. Off in the compact row (one line) and in-session
