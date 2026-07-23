@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import { StreamJsonParser } from './claude-code.js'
 import { readZip } from './actions-zip.js'
 import { combineFraming, makeEmit } from './session-support.js'
@@ -71,12 +72,21 @@ export interface ActionsDriverOptions {
   now?: () => number
   /** Sleep override for tests. Default a real timer. */
   sleep?: (ms: number) => Promise<void>
+  /**
+   * Unique tag mixed into the correlation id. Default a random token; injected in tests for
+   * a stable id. Without it a fresh driver process restarts the session counter at 1, so
+   * every run's first turn is `actions-1-turn-1` and runs collide (see {@link ActionsSession}).
+   */
+  runTag?: () => string
 }
 
 /** The slice of `fetch` this driver uses. */
 export type FetchLike = (url: string, init?: RequestInit) => Promise<Response>
 
 let sessionCounter = 0
+
+/** A short random tag so correlation ids stay unique across driver processes. */
+const randomRunTag = (): string => randomUUID().slice(0, 8)
 
 /** One Actions-backed session. Each `prompt` is one workflow run. */
 export class ActionsSession implements DriverSession {
@@ -93,7 +103,9 @@ export class ActionsSession implements DriverSession {
     private readonly startOpts: DriverStartOptions,
   ) {
     this.cwd = startOpts.cwd
-    this.id = `actions-${++sessionCounter}`
+    // The counter reads well in logs within one process; the random tag is what keeps the
+    // correlation id unique across processes, since the daemon spawns a fresh one per run.
+    this.id = `actions-${++sessionCounter}-${(config.runTag ?? randomRunTag)()}`
     this.lastSessionId = startOpts.resumeSessionId
   }
 
@@ -107,8 +119,9 @@ export class ActionsSession implements DriverSession {
     const prompt = framing ? `${framing}\n\n${text}` : text
     emit({ type: 'start', prompt })
 
-    // Deterministic, so no clock or randomness leaks into the correlation: the
-    // dispatch API returns no run id, and this is how we find our run among others.
+    // How we find our run: the dispatch API returns no run id, so the workflow echoes this
+    // into its run-name and artifact name and we match on it. It must be unique per run (the
+    // session's random tag) so a fresh process never latches onto a stale same-named run.
     const correlationId = `${this.id}-turn-${++this.turnCounter}`
     const resume = opts.resume ? this.lastSessionId : undefined
 
