@@ -1,5 +1,29 @@
 # @gemstack/ai-sdk
 
+## 0.6.1
+
+### Patch Changes
+
+- cd121f4: fix(ai-sdk): a store whose unscoped `list()` hides other users' threads no longer fails open on resume-by-id
+
+  The #984 owner check settles ownership from `ConversationStoreListEntry.userId`, falling back to an unscoped `store.list()` when the caller's scoped listing does not hold the thread. A thread missing from that unscoped listing was read as "no owner recorded" and allowed, which is right for a pre-#984 ownerless row but wrong for a store whose `list()` with no user id returns nothing. Such a store implements `list(userId)` correctly and is fully owner-aware, and a cross-user resume was still allowed.
+
+  The unscoped listing reporting nothing at all, while the store demonstrably holds rows (the caller has threads of their own, or the target thread has messages), now proves the listing is not enumerating the backend, and the resume is refused with `ConversationOwnershipError`.
+
+  Deliberately unchanged: a listing that reports rows but not this one stays permissive, since an absent thread and a partial listing are indistinguishable there. Ownerless legacy threads on a store that enumerates normally stay resumable, with or without a user on the run, and a store that omits `userId` from its entries keeps its old permissive behavior.
+
+  `ConversationStore` gains no members. The listing contract the check depends on is now documented on the interface itself, where an implementer sees it, rather than only on the entry type's `userId` field.
+
+- 780ef3e: Internal: the provider layer no longer carries four copies of the same code. Every adapter builds its SDK client through one shared `lazyClient()` helper, the five pure OpenAI-compatible providers (`xai`, `groq`, `deepseek`, `ollama`, `azure`) come from one factory, and the Anthropic stream-event mapping is shared with Bedrock instead of being inlined twice.
+
+  Two side effects worth naming. A first client build is now memoised as a promise, so two concurrent calls share one client rather than racing to construct two, and a failed dynamic import no longer caches. And `XaiProvider.name` and friends are typed `string` rather than the literal `'xai'`, matching the `ProviderFactory` contract they are consumed through.
+
+  All public exports keep their names, constructor signatures, and default base URLs.
+
+- 23c1fb7: `CachedSubAgentRunStore.load()` now returns `null` (not `undefined`) when a `CacheAdapter` resolves `undefined` on a miss, matching `CachedAgentRunStore.load()`. The `CacheAdapter` contract already declares `Promise<T | null>`, so adapters that honour it are unaffected; adapters that resolve `undefined` now get the documented `null`.
+
+  Internal: both run-store families now share one storage implementation. All public exports (`InMemoryAgentRunStore`, `CachedAgentRunStore`, `newAgentRunId`, `InMemorySubAgentRunStore`, `CachedSubAgentRunStore` and their types) keep the same shape.
+
 ## 0.6.0
 
 ### Minor Changes

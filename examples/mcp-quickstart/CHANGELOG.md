@@ -1,5 +1,12 @@
 # @gemstack/example-mcp-quickstart
 
+## 0.0.3
+
+### Patch Changes
+
+- Updated dependencies [9258b84]
+  - @gemstack/mcp@0.5.0
+
 ## 0.0.2
 
 ### Patch Changes
