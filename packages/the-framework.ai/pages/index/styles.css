@@ -48,8 +48,10 @@ section[id] {
 .copy-box:hover {
   background: rgba(167, 192, 128, 0.04) !important;
 }
+/* Same hover tint as .copy-box (#a7c080 = rgb(167, 192, 128) at 4%), pre-composited
+ * over the chip's own #232a2e base since its background is opaque. */
 .install-chip:hover {
-  border-color: #859289 !important;
+  background: color-mix(in srgb, #a7c080 4%, #232a2e) !important;
 }
 .cta-primary:hover {
   background: #b5cc92 !important;

@@ -210,7 +210,7 @@ export function Hero() {
                   <span style={dollarStyle}>$ </span>
                   {cmds.try}
                 </span>
-                <span style={commentStyle}># One-shot run</span>
+                <span style={commentStyle}># One-shot (no install)</span>
               </div>
             </div>
           </div>
@@ -228,7 +228,7 @@ export function Hero() {
             maxWidth: '100%',
           }}
         >
-          Or permanent install:
+          Or install:
           <span
             className="install-chip"
             onClick={(e) => installCopy.copy(`${cmds.install} && the-framework`, e)}
