@@ -228,7 +228,7 @@ export function Hero() {
             maxWidth: '100%',
           }}
         >
-          Or permanent install:
+          Or install:
           <span
             className="install-chip"
             onClick={(e) => installCopy.copy(`${cmds.install} && the-framework`, e)}
