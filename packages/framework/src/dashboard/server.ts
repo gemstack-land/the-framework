@@ -199,7 +199,8 @@ export function authorizeDaemonRequest(req: IncomingMessage, res: ServerResponse
     url.searchParams.delete('token')
     const query = url.searchParams.toString()
     res.writeHead(302, {
-      'set-cookie': `${DAEMON_COOKIE}=${token}; HttpOnly; SameSite=Strict; Path=/`,
+      // Lax, not Strict: the #1052 device-hop is a cross-origin top-level nav, and a Strict cookie set on it is withheld from the redirect right after, so the clean path 401s. Lax still rides top-level GET navs; CSRF stays covered by the same-origin check on /_telefunc.
+      'set-cookie': `${DAEMON_COOKIE}=${token}; HttpOnly; SameSite=Lax; Path=/`,
       location: url.pathname + (query ? `?${query}` : ''),
     })
     res.end()
