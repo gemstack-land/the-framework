@@ -74,14 +74,14 @@ export function TopNav() {
           <GitHubIcon size={16} />
           <span>GitHub</span>
         </a>
+        {/* Primary via green border, not fill — the multicolor logo drowns on a green background. */}
         <a
           href="/go-to-dashboard"
           className="nav-btn-primary"
           style={{
             ...navBtnStyle,
-            background: '#a7c080',
             border: '1px solid #a7c080',
-            color: '#2d353b',
+            color: '#a7c080',
             fontWeight: 600,
           }}
         >

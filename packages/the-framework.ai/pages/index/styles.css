@@ -43,7 +43,7 @@ section[id] {
   border-color: #859289 !important;
 }
 .nav-btn-primary:hover {
-  background: #b5cc92 !important;
+  background: rgba(167, 192, 128, 0.08) !important;
   border-color: #b5cc92 !important;
 }
 .pm-tab:hover {
