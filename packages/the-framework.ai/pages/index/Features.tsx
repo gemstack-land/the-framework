@@ -26,20 +26,20 @@ export function Features() {
         <div style={{ ...featureCardStyle, gap: 12 }}>
           <h3 style={{ margin: 0, fontSize: 19, fontWeight: 600 }}>Bring your own subscription</h3>
           <FeatureText>
-            Use your existing AI subscription — The Framework orchestrates agents via your Claude Code / Codex
-            installation.
+            Use your AI subscription — The Framework orchestrates agents via your Claude Code / Codex
+            installation, like humans do.
           </FeatureText>
         </div>
         <div style={{ ...featureCardStyle, gap: 14 }}>
           <h3 style={{ margin: 0, fontSize: 19, fontWeight: 600 }}>Dashboard</h3>
           <FeatureText>
-            See your pro-rata usage quota, the list of current and <a href="#how-it-works">queued AI tasks</a>, the{' '}
-            <a href="#how-it-works">reviews required</a> from you, and more.
+            Pro-rata usage quota, current AI agents, <a href="#how-it-works">queued AI tasks</a>, {' '}
+            <a href="#how-it-works">queue of required reviews</a>, "hot" tickets, and more.
           </FeatureText>
         </div>
         <div style={{ ...featureCardStyle, gap: 12 }}>
           <h3 style={{ margin: 0, fontSize: 19, fontWeight: 600 }}>Notifications</h3>
-          <FeatureText>Get notified when AI is finished or needs you.</FeatureText>
+          <FeatureText>Get browser and/or Discord notifications when AI is finished or needs you.</FeatureText>
         </div>
         <div style={{ ...featureCardStyle, gap: 12 }}>
           <h3 style={{ margin: 0, fontSize: 19, fontWeight: 600 }}>Claude Code Web</h3>
@@ -51,6 +51,10 @@ export function Features() {
         <div style={{ ...featureCardStyle, gap: 12 }}>
           <h3 style={{ margin: 0, fontSize: 19, fontWeight: 600 }}>Swarm of local computers</h3>
           <FeatureText>Orchestrate agents across multiple local computers.</FeatureText>
+        </div>
+        <div style={{ ...featureCardStyle, gap: 12 }}>
+          <h3 style={{ margin: 0, fontSize: 19, fontWeight: 600 }}>Discord bot</h3>
+          <FeatureText>Use the discord bot for agentic team conversations.</FeatureText>
         </div>
       </div>
     </section>
