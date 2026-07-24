@@ -17,6 +17,7 @@ export function RunActionBar({
   onWorktreeRemoved,
   onDeleted,
   label,
+  projectName,
   summary,
   expanded = false,
   onToggle,
@@ -28,6 +29,8 @@ export function RunActionBar({
   events: FrameworkEvent[]
   /** The session's name — leads the bar, so the branch is git context, not the identity (#1030). */
   label?: string | undefined
+  /** The session's project, shown as a `project / session` breadcrumb before the name. */
+  projectName?: string | null | undefined
   /** True when this finished run still has a worktree on disk, so it can be removed (#737). */
   retainedWorktree?: boolean
   /** Told after that worktree is removed, so the menu item goes. */
@@ -49,7 +52,7 @@ export function RunActionBar({
     <div className="@container flex items-center gap-2 overflow-hidden border-b border-border px-4 py-2">
       {/* Where this session is working (#798/#809): its branch, whether it holds uncommitted work,
           its size on disk, and the PR its branch has — read from this session's own worktree. */}
-      <GitStatusBar projectId={projectId} runId={runId} inline label={label} summary={summary} expanded={expanded} onToggle={onToggle} />
+      <GitStatusBar projectId={projectId} runId={runId} inline label={label} projectName={projectName} summary={summary} expanded={expanded} onToggle={onToggle} />
       {/* What the session IS sits at the start; what you can DO to it sits at the end. The spacer
           grows but never shrinks (#1030), so a tight row takes its width from the label. */}
       <div className="grow shrink-0" />

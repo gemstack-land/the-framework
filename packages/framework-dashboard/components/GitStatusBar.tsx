@@ -25,6 +25,7 @@ export function GitStatusBar({
   runId,
   inline = false,
   label,
+  projectName,
   summary,
   expanded = false,
   onToggle,
@@ -36,6 +37,9 @@ export function GitStatusBar({
   /** The session's name (#1030). Given, it leads as the bold identity and the branch drops to
    * muted git context beside it; absent (the project home), the branch stays the identity. */
   label?: string | undefined
+  /** The project the session belongs to. Given alongside a label, it prefixes the name as a
+   * `project / session` breadcrumb; it gives up width first, so the session name truncates last. */
+  projectName?: string | null | undefined
   /** What the branch holds, in a phrase — rendered beside the branch's own status. */
   summary?: ReactNode
   expanded?: boolean
@@ -85,8 +89,22 @@ export function GitStatusBar({
           change under you, unlike the branch, which the agent renames near the end (#736). It is
           the one element that shrinks, so it truncates last and the identity never disappears. */}
       {label && (
-        <span className="min-w-0 truncate font-medium text-foreground" title={label}>
-          {label}
+        <span className="flex min-w-0 items-center gap-1.5 overflow-hidden">
+          {/* The project, as a breadcrumb parent: muted, and the first to give up width (shrink-999)
+              so a long project name truncates before the session name does. */}
+          {projectName && (
+            <span className="flex min-w-0 shrink-[999] items-center gap-1.5 overflow-hidden text-muted-foreground">
+              <span className="truncate" title={projectName}>
+                {projectName}
+              </span>
+              <span className="shrink-0 text-muted-foreground/60" aria-hidden>
+                /
+              </span>
+            </span>
+          )}
+          <span className="min-w-0 truncate font-medium text-foreground" title={label}>
+            {label}
+          </span>
         </span>
       )}
       {/* The branch: the identity when there is no session label (the project home), otherwise

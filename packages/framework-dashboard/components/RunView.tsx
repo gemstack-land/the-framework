@@ -32,6 +32,7 @@ export function RunView({
   events,
   live,
   label,
+  projectName,
   target,
   remoteLabel,
   files,
@@ -52,6 +53,8 @@ export function RunView({
    * the stable identity, so the branch renaming itself near the end of a run (#736) reads as a
    * detail changing rather than the whole view changing. */
   label?: string | undefined
+  /** The session's project, shown as a `project / session` breadcrumb in the action bar. */
+  projectName?: string | null | undefined
   /** Where the run executes (#1053): `actions` swaps the live feed for a burst-mode affordance; `remote` is relayed to a device (#1067). */
   target?: 'local' | 'actions' | 'remote' | undefined
   /** The device this run executes on (#1067), when it is relayed to a connected one. Set only for a
@@ -112,6 +115,7 @@ export function RunView({
         runId={runId}
         events={shown}
         label={label ?? progress.sessionName}
+        projectName={projectName}
         retainedWorktree={hasWorktree}
         onWorktreeRemoved={onWorktreeRemoved}
         onDeleted={onDeleted}
