@@ -2,9 +2,9 @@ import { cardStyle, Emoji, h3Style, Note } from './ui'
 
 const ITEMS = [
   'Anti-laziness',
-  'No non-consensual decisions without asking',
+  'No important decisions without asking',
+  'Improved user interaction',
   'Improved planning',
-  'Improved user confirmation',
 ]
 
 export function EnhancedSystemPrompt() {
@@ -20,8 +20,8 @@ export function EnhancedSystemPrompt() {
         style={{ ...cardStyle, padding: 'clamp(16px, 4.5vw, 24px)', display: 'flex', flexDirection: 'column', gap: 14 }}
       >
         <p style={{ margin: 0, fontSize: 15, lineHeight: 1.6, color: '#9da9a0', textWrap: 'pretty' }}>
-          The Framework appends its own system prompt that instructs AI to follow highly effective practices — such as
-          dividing large work into subtasks and listing significant alternative solutions.
+          The Framework appends a system prompt instructing AI to follow highly effective practices — such as
+          dividing large work into subtasks, and listing significant alternative solutions.
         </p>
         <ul
           style={{

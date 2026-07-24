@@ -2,8 +2,6 @@ import type { ReactNode } from 'react'
 import type { EmojiChar } from './ui'
 import { cardStyle, CodeChip, Emoji, h3Style } from './ui'
 
-const leadStyle = { color: '#d3c6aa', fontWeight: 600 } as const
-
 function P({ children }: { children: ReactNode }) {
   return <p style={{ margin: 0, fontSize: 14, lineHeight: 1.6, color: '#9da9a0' }}>{children}</p>
 }
@@ -38,12 +36,11 @@ export function Queues() {
         <QueueCard title="AI Queue" icon="🤖">
           <P>
             Queue of future AI tasks — tasks are added by humans, or by{' '}
-            product management agents (autonomously if highly confident, or after your
+            agents (autonomously if highly confident, or after human
             confirmation otherwise).
           </P>
           <P>
-            <a href="#autonomous-ai" style={{ fontWeight: 600 }}>Powers the AI autonomousity</a> — essentially driven by agents autonomously populating
-            the AI queue.
+    Agents autonomously populating the AI queue is what <a href="#autonomous-ai" style={{ fontWeight: 600 }}>makes AI autonomous</a>.
           </P>
           <P>
             Technically, it's just a <CodeChip fontSize={12}>TODO_AGENTS.md</CodeChip> file in your Git repositories.
@@ -51,14 +48,14 @@ export function Queues() {
         </QueueCard>
         <QueueCard title="Human Queue" icon="🙋">
           <P>
-            Queue of human reviews required — populated when agents ask you to review
+            Queue of pending human reviews — populated when agents need you to review
             (important) decisions with subtle pros and cons.
           </P>
           <P>
             <a href="#features" style={{ fontWeight: 600 }}>
-              Your cockpit
+              It's your cockpit
             </a>{' '}
-            — it's basically what keeps you in control.
+            — it keeps humans under control.
           </P>
         </QueueCard>
       </div>

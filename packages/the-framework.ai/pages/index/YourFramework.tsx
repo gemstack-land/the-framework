@@ -74,7 +74,7 @@ export function YourFramework() {
               Memory is saved in your Git repository (<CodeChip fontSize={12.5}>knowledge-base/*.md</CodeChip>)
             </span>
           </Item>
-          <Item>The data is fully yours</Item>
+          <Item>Data is fully yours</Item>
         </Card>
         <Card title="100% Open Source">
           <Item>Transparent — no hidden code</Item>
