@@ -2,10 +2,11 @@ import '../index/styles.css'
 import type { CSSProperties, ReactNode } from 'react'
 import { TopNav } from '../index/TopNav'
 import { Footer } from '../index/Footer'
+import { CodeChip } from '../index/ui'
 import { useCopy } from '../index/copy'
 import { currentPm, pickPm, PMS } from '../index/Hero'
 import type { Pm } from '../index/Hero'
-import { h2Style, kickerStyle, mono } from '../index/ui'
+import { h2Style, kickerStyle, mono, Note } from '../index/ui'
 
 const tipStyle: CSSProperties = {
   position: 'absolute',
@@ -119,6 +120,10 @@ export default function Page() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           <h1 style={h2Style}>Go to your dashboard</h1>
           <p style={pStyle}>The dashboard runs 100% locally — you open it from your terminal.</p>
+          <Note>
+            When The Framework is running, refresh this page — you'll be redirected to the Dashboard (
+            <CodeChip fontSize={12}>the-framework.local</CodeChip>).
+          </Note>
         </div>
         <Step kicker="Run">
           <p style={pStyle}>If The Framework is installed, run it:</p>
