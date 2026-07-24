@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Plus, ChevronDown, MonitorSmartphone, Settings, LayoutDashboard, FolderGit2 } from 'lucide-react'
 import type { RunMeta, RunStatus, RecentRun, ProjectSummary } from '@gemstack/the-framework'
 import { AGENT_LABELS, agentForDriver } from '@gemstack/the-framework/client'
@@ -460,6 +460,15 @@ function RunRow({
   // Only a live run can be waiting on you; a finished one is just finished.
   const parked = waiting && status === 'running'
   const agent = agentForDriver(driver)
+  // The title only fades + marquees when it actually overflows the fixed-width rail; a short one
+  // shows plainly. Measured here since CSS cannot tell. The rail width is fixed, so intent is the
+  // only thing that changes the answer.
+  const titleRef = useRef<HTMLSpanElement>(null)
+  const [overflowing, setOverflowing] = useState(false)
+  useEffect(() => {
+    const el = titleRef.current
+    if (el) setOverflowing(el.scrollWidth > el.clientWidth + 1)
+  }, [intent])
   return (
     <Button
       variant="ghost"
@@ -496,7 +505,7 @@ function RunRow({
           </span>
         )}
       </span>
-      <span className="rail-title w-full px-2 text-sm font-normal">
+      <span ref={titleRef} className={cn('rail-title w-full px-2 text-sm font-normal', overflowing && 'is-overflowing')}>
         <span className="rail-title-inner">{intent || 'New session'}</span>
       </span>
     </Button>

@@ -134,11 +134,15 @@ body {
   overflow: hidden;
   white-space: nowrap;
   container-type: inline-size;
+}
+/* Only a title that actually overflows fades and marquees (the `is-overflowing` class is set by a
+   measure in RunRow); a short one shows plainly, with no gradient. */
+.rail-title.is-overflowing {
   -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 1.25rem), transparent);
   mask-image: linear-gradient(to right, #000 calc(100% - 1.25rem), transparent);
 }
 /* While marqueeing, fade both borders so the title dissolves at each card edge, not only the end. */
-.rail-row:hover .rail-title {
+.rail-row:hover .rail-title.is-overflowing {
   -webkit-mask-image: linear-gradient(to right, transparent, #000 1.25rem, #000 calc(100% - 1.25rem), transparent);
   mask-image: linear-gradient(to right, transparent, #000 1.25rem, #000 calc(100% - 1.25rem), transparent);
 }
@@ -146,7 +150,7 @@ body {
   display: inline-block;
   will-change: transform;
 }
-.rail-row:hover .rail-title-inner {
+.rail-row:hover .rail-title.is-overflowing .rail-title-inner {
   animation: rail-marquee 4s ease-in-out 0.35s infinite alternate;
 }
 @keyframes rail-marquee {
