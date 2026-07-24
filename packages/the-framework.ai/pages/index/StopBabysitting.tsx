@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import type { EmojiChar } from './ui'
-import { cardStyle, Emoji, mono, SectionHead, sectionStyle } from './ui'
+import { cardStyle, CodeChip, Emoji, mono, SectionHead, sectionStyle } from './ui'
 
 const ROW_STYLES = {
   bad: { bg: '#2d353b', border: '#3d484d', labelColor: '#859289' },
@@ -44,7 +44,7 @@ const PROBLEMS: { title: string; desc?: string; rows: Row[] }[] = [
       bad('Explicitly tell AI to deep dive important aspects.'),
       good(
         <>
-          Automatic loop of feedback <Arrow glyph="↔" /> research <Arrow glyph="↔" /> implementation.
+          Automatic loop of critcal feedback <Arrow glyph="↔" /> research <Arrow glyph="↔" /> confidence <Arrow glyph="↔" /> implementation.
         </>,
       ),
     ],
@@ -58,7 +58,8 @@ const PROBLEMS: { title: string; desc?: string; rows: Row[] }[] = [
           Appending "Write the BEST code you ever wrote" to your prompts <Arrow glyph="→" /> minimal improvement.
         </>,
       ),
-      good("The Framework makes AI question and review itself until it's highly confident about its implementation."),
+      good(<>When an agent makes complex changes, the agent adds <b>post-merge refactoring</b> prompts to the AI Queue (with low priority).</>),
+      good(<>Automatic <b>regular security and code quality prompts</b> (when your usage quota has plenty of capacity).</>),
     ],
   },
   {
@@ -66,7 +67,12 @@ const PROBLEMS: { title: string; desc?: string; rows: Row[] }[] = [
     rows: [
       bad('Tell AI "don\'t do this, research alternatives".'),
       good(
-        'The Framework makes AI gauge the variability of its implementation: if there are alternatives with pros and cons, show them to the user.',
+        <>
+        The Framework makes AI <b>self-gauge its confidence</b> before starting to work.
+        </>,
+      ),
+      good(
+        <>It also makes AI <b>self-gauge the variability</b> of its plan: if there are alternatives with subtle pros and cons, show them to the user.</>,
       ),
     ],
   },
@@ -75,7 +81,7 @@ const PROBLEMS: { title: string; desc?: string; rows: Row[] }[] = [
     rows: [
       bad('You keep repeating yourself (previous decisions, business context, …).'),
       good(
-        "The Framework's Enhanced System Prompt tells AI to retain knowledge in files such as knowledge-base/DECISIONS.md and knowledge-base/INSIGHTS.md. (See section 03 below.)",
+        <><b>AI retains knowledge via files</b> such as <CodeChip fontSize={13}>knowledge-base/DECISIONS.md</CodeChip> and <CodeChip fontSize={13}>knowledge-base/INSIGHTS.md</CodeChip>.</>,
       ),
     ],
   },
