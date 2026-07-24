@@ -111,7 +111,7 @@ export function RunComposer({
   }
 
   return (
-    <div className="border-t border-border p-2">
+    <div className="p-2">
       <Note live={live} resumable={resumable} outcome={outcome} queued={queued} muted={Boolean(error ?? startError)} />
       {(error ?? startError) && <p role="alert" className="mb-1 px-2 text-xs text-danger">{error ?? startError}</p>}
       <Composer
@@ -129,12 +129,22 @@ export function RunComposer({
         placeholder={
           live
             ? 'Message the session…  ( / commands · < tags · @ projects · # files )'
-            : 'Message the session to continue it…  ( / commands · < tags · @ projects · # files )'
+            : resumable
+              ? 'Message the session to continue it…  ( / commands · < tags · @ projects · # files )'
+              : // Not a continuation at all, so the box says so itself rather than a note above it
+                // saying one thing and the box below inviting another (see {@link Note}).
+                NOT_CONTINUABLE
         }
       />
     </div>
   )
 }
+
+/** A run that ended before reporting a session id cannot be resumed by any agent — the one state
+ *  where the box is not a continuation. It is the composer's own placeholder rather than a note
+ *  above it: the message is about what typing here does, so it belongs where you type. */
+const NOT_CONTINUABLE =
+  'This session can’t be continued — it ended before the agent reported a session id. Your next message starts a new one.'
 
 /** What a send will do from here, in one line — it is not the same thing in all three states. */
 function Note({
@@ -158,11 +168,11 @@ function Note({
       </p>
     )
   }
-  // A run that ended before reporting a session id cannot be resumed by any agent, so say what
-  // the send will actually do rather than offering a continuation that isn't one.
-  const text = !resumable
-    ? 'This session can’t be continued — it ended before the agent reported a session id. Your next message starts a new one.'
-    : outcome && !outcome.ok && !outcome.stopped
+  // The one case that is not a continuation says so in the composer's placeholder (NOT_CONTINUABLE),
+  // so it is not also said here.
+  if (!resumable) return null
+  const text =
+    outcome && !outcome.ok && !outcome.stopped
       ? 'Session failed — your next message resumes it where it stopped.'
       : outcome?.stopped
         ? 'Session stopped — your next message resumes it.'

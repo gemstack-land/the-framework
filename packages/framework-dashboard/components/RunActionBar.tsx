@@ -2,6 +2,8 @@ import type { ReactNode } from 'react'
 import type { FrameworkEvent } from '@gemstack/the-framework'
 import { GitStatusBar } from './GitStatusBar.js'
 import { SessionActionsMenu } from './SessionActionsMenu.js'
+import { runStatusPill } from '../lib/run-status.js'
+import { cn } from '../lib/utils.js'
 
 // One run's action bar: what the session IS (its branch / PR / summary, as a disclosure) on the
 // left, and what you can DO to it on the right. The doing is a single ⋮ overflow menu
@@ -46,6 +48,10 @@ export function RunActionBar({
   /** The session's next step (push, open PR), kept in the bar rather than in the ⋮ menu. */
   actions?: ReactNode
 }) {
+  // What state the session is in, said once, here: it used to be a banner over the feed, which
+  // spent a full row on one word and pushed the output down. Ranked in runStatusPill, so exactly
+  // one of stopped / ready for merge / failed / building / finished is ever shown.
+  const status = runStatusPill(events)
   return (
     // One row, always (#1026). The branch and its summary give up width as the row fills; the
     // controls never drop under them, because a bar that reflows moves everything below it.
@@ -60,6 +66,17 @@ export function RunActionBar({
         {/* The handoff's next step stays visible — the one thing here that moves the session forward
             rather than just opening it somewhere. Everything else is in the ⋮ menu. */}
         {actions}
+        {/* The status sits next to the ⋮ rather than beside the name: it changes as the run goes,
+            and the end of the row is the one place a changing width shifts nothing after it. */}
+        {status && (
+          // Capped, because one of these labels is not a word: a failure carries its reason, which
+          // had a banner row to itself and would otherwise take the row from the branch. The full
+          // text stays on hover, and the feed's own `end` event has it in full either way.
+          <span className="flex items-center gap-1.5" title={status.label}>
+            <span className={cn('h-2 w-2 shrink-0 rounded-full', status.dot)} aria-hidden />
+            <span className={cn('max-w-40 truncate text-xs', status.tone)}>{status.label}</span>
+          </span>
+        )}
         <SessionActionsMenu
           projectId={projectId}
           runId={runId}

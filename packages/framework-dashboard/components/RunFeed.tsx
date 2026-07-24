@@ -13,6 +13,7 @@ export function RunFeed({
   events,
   showSessionLink = true,
   showName = true,
+  showStatus = true,
   lost = false,
   stick = true,
   openAt,
@@ -22,6 +23,8 @@ export function RunFeed({
   showSessionLink?: boolean
   /** The run's own view sets this false: its action bar's breadcrumb already names the session. */
   showName?: boolean
+  /** The run's own view sets this false: its action bar carries the status beside the ⋮ menu. */
+  showStatus?: boolean
   lost?: boolean
   /** A finished log is static (#1026): it does not follow new output, and opens at its end. */
   stick?: boolean
@@ -46,7 +49,7 @@ export function RunFeed({
   return (
     <>
       {lostBanner}
-      <RunOverview events={events} showSessionLink={showSessionLink} showName={showName} />
+      <RunOverview events={events} showSessionLink={showSessionLink} showName={showName} showStatus={showStatus} />
       <EventList events={events} stick={stick} {...(openAt ? { openAt } : {})} />
     </>
   )

@@ -173,6 +173,7 @@ export function RunView({
           events={shown}
           showSessionLink={false}
           showName={false}
+          showStatus={false}
           lost={lost}
           {...(live ? {} : { stick: false, openAt: 'end' as const, emptyLabel: 'This session has no events.' })}
         />

@@ -1,7 +1,7 @@
 import type { FrameworkEvent } from '@gemstack/the-framework'
 import { loopStatus, sessionInfo, deployPlan, runProgress } from '@gemstack/the-framework/client'
 import { Badge } from './ui/badge.js'
-import { isRunActive, runOutcome } from '../lib/live-state.js'
+import { runStatusPill } from '../lib/run-status.js'
 import { describeSessionLink } from '../lib/session-link.js'
 import { cn } from '../lib/utils.js'
 
@@ -14,6 +14,7 @@ export function RunOverview({
   events,
   showSessionLink = true,
   showName = true,
+  showStatus = true,
 }: {
   events: FrameworkEvent[]
   showSessionLink?: boolean
@@ -21,29 +22,16 @@ export function RunOverview({
    *  so the status line just shows the state (and reads the same whether or not the agent reported a
    *  name). The relay watch and project home keep it, since they have no breadcrumb. */
   showName?: boolean
+  /** The run's own view sets this false too: the status is a label in its toolbar, beside the ⋮
+   *  menu, rather than a banner over the feed. The relay watch and project home have no toolbar,
+   *  so they keep the line. */
+  showStatus?: boolean
 }) {
   const loop = loopStatus(events)
   const session = sessionInfo(events)
   const deploy = deployPlan(events)
   const progress = runProgress(events)
-  // A run only pulses "building…" while it's live (#695/U20): once the `end` event lands the
-  // pill must settle to the final state instead of pulsing on. How it ended matters (#948):
-  // a crash or a user stop must not read as a plain "finished", and it outranks an earlier
-  // ready-for-merge — the green would be a lie about a run that then failed.
-  const active = isRunActive(events)
-  const outcome = runOutcome(events)
-  const failed = outcome !== undefined && !outcome.ok && !outcome.stopped
-  const stopped = outcome?.stopped === true
-  const hasProgress = Boolean(progress.sessionName) || progress.readyForMerge || failed || stopped
-  const status = failed
-    ? { dot: 'bg-danger', label: outcome?.detail ? `failed — ${outcome.detail}` : 'failed', tone: 'text-danger' }
-    : stopped
-      ? { dot: 'bg-warning', label: 'stopped', tone: 'text-warning' }
-      : progress.readyForMerge
-        ? { dot: 'bg-success', label: 'ready for merge', tone: 'text-muted-foreground' }
-        : active
-          ? { dot: 'animate-pulse bg-warning', label: 'building…', tone: 'text-muted-foreground' }
-          : { dot: 'bg-muted-foreground', label: 'finished', tone: 'text-muted-foreground' }
+  const status = showStatus ? runStatusPill(events) : null
 
   // The "Open session" link, labeled honestly: a headless Claude Code run has no per-session
   // URL, so the generic app entry (claude.ai/code) is shown as "Open Claude Code" with the id
@@ -51,11 +39,11 @@ export function RunOverview({
   // run's own view moves this into its action bar, so it opts out via `showSessionLink={false}`.
   const sessionLink = showSessionLink ? describeSessionLink(session) : null
 
-  if (!loop && !deploy && !sessionLink && !hasProgress) return null
+  if (!loop && !deploy && !sessionLink && !status) return null
 
   return (
     <div className="grid gap-3 border-b border-border p-4 md:grid-cols-2">
-      {hasProgress && (
+      {status && (
         <div className="flex items-center gap-2 text-sm md:col-span-2">
           <span className={cn('h-2.5 w-2.5 shrink-0 rounded-full', status.dot)} aria-hidden />
           {showName && progress.sessionName && <span className="font-medium">{progress.sessionName}</span>}

@@ -32,7 +32,7 @@ vi.mock('./Composer.js', async () => {
         submit-new-session
       </button>
       <span data-testid="composer-props">
-        {JSON.stringify({ showAgentModel: props.showAgentModel, busyLabel: props.submitBusyLabel })}
+        {JSON.stringify({ showAgentModel: props.showAgentModel, busyLabel: props.submitBusyLabel, placeholder: props.placeholder })}
       </span>
     </div>
   ))
@@ -49,7 +49,7 @@ function renderComposer(over: Partial<Parameters<typeof RunComposer>[0]> = {}) {
   return { onRunStarted }
 }
 
-const props = (): { showAgentModel: boolean; busyLabel: string } =>
+const props = (): { showAgentModel: boolean; busyLabel: string; placeholder: string } =>
   JSON.parse(screen.getByTestId('composer-props').textContent ?? '{}')
 
 beforeEach(() => {
@@ -159,8 +159,12 @@ describe('RunComposer, finished with no session id (#1026)', () => {
   test('stays, and says the send starts a new session instead of vanishing', () => {
     renderComposer({ live: false })
     // The dead-end note used to replace the composer entirely, so a run that stopped early left
-    // nowhere to type.
-    expect(screen.getByText(/can’t be continued/i)).toBeTruthy()
+    // nowhere to type. It is now the placeholder rather than a note above the box: the message is
+    // about what typing here does, so it is said where you type — and only once.
+    expect(props().placeholder).toMatch(/can’t be continued/i)
+    // And only there: no note paragraph above the box repeating it (the note is the only <p> this
+    // component renders, short of an error alert).
+    expect(document.querySelector('p')).toBeNull()
     expect(screen.getByText('submit-normal')).toBeTruthy()
     expect(props().busyLabel).toBe('Starting…')
   })
