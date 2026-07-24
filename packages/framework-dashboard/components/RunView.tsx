@@ -172,6 +172,7 @@ export function RunView({
         <RunFeed
           events={shown}
           showSessionLink={false}
+          showName={false}
           lost={lost}
           {...(live ? {} : { stick: false, openAt: 'end' as const, emptyLabel: 'This session has no events.' })}
         />

@@ -10,7 +10,18 @@ import { cn } from '../lib/utils.js'
 // in @gemstack/the-framework) — the production-grade loop status, the deploy plan, and a link
 // to the live session. Cards render only when their data has arrived, so an early run
 // shows nothing extra.
-export function RunOverview({ events, showSessionLink = true }: { events: FrameworkEvent[]; showSessionLink?: boolean }) {
+export function RunOverview({
+  events,
+  showSessionLink = true,
+  showName = true,
+}: {
+  events: FrameworkEvent[]
+  showSessionLink?: boolean
+  /** The run's own view sets this false: its action bar already names the session in the breadcrumb,
+   *  so the status line just shows the state (and reads the same whether or not the agent reported a
+   *  name). The relay watch and project home keep it, since they have no breadcrumb. */
+  showName?: boolean
+}) {
   const loop = loopStatus(events)
   const session = sessionInfo(events)
   const deploy = deployPlan(events)
@@ -47,7 +58,7 @@ export function RunOverview({ events, showSessionLink = true }: { events: Framew
       {hasProgress && (
         <div className="flex items-center gap-2 text-sm md:col-span-2">
           <span className={cn('h-2.5 w-2.5 shrink-0 rounded-full', status.dot)} aria-hidden />
-          {progress.sessionName && <span className="font-medium">{progress.sessionName}</span>}
+          {showName && progress.sessionName && <span className="font-medium">{progress.sessionName}</span>}
           <span className={cn('text-xs', status.tone)}>{status.label}</span>
         </div>
       )}

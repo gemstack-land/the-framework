@@ -49,7 +49,7 @@ export function RunActionBar({
   return (
     // One row, always (#1026). The branch and its summary give up width as the row fills; the
     // controls never drop under them, because a bar that reflows moves everything below it.
-    <div className="@container flex items-center gap-2 overflow-hidden border-b border-border px-4 py-2">
+    <div className="@container flex items-center gap-2 overflow-hidden px-4 py-2">
       {/* Where this session is working (#798/#809): its branch, whether it holds uncommitted work,
           its size on disk, and the PR its branch has — read from this session's own worktree. */}
       <GitStatusBar projectId={projectId} runId={runId} inline label={label} projectName={projectName} summary={summary} expanded={expanded} onToggle={onToggle} />
