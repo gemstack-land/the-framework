@@ -1,18 +1,7 @@
 import type { CSSProperties } from 'react'
 import { cardStyle, noteContainerStyle, noteLabelStyle } from './ui'
 
-const CARDS = [
-  { title: 'Security audit', desc: 'Prompts that scrutinize your code for security vulnerabilities.' },
-  {
-    title: 'Code quality',
-    desc: 'Prompts improving maintainability (e.g. DRY and simplicity), as well as making code more human readable.',
-  },
-  { title: 'Research', desc: 'Prompts for planning complex implementations, market research, and more.' },
-  {
-    title: 'Product Management',
-    desc: 'Prompts for managing tickets (spiking & planning, creating tickets from team conversations), creating roadmaps, suggesting new features, and more.',
-  },
-]
+const PACKS = ['Security audit', 'Code quality', 'Research', 'Product Management']
 
 const chipStyle: CSSProperties = {
   borderRadius: 8,
@@ -23,8 +12,7 @@ const chipStyle: CSSProperties = {
 }
 
 // A demoted band, not a third pillar, in the site's Note dress — a <div> rather
-// than the Note component because the chip row can't live inside its <p>. Each
-// chip's full description is tucked into its title tooltip.
+// than the Note component because the chip row can't live inside its <p>.
 export function Prompts() {
   return (
     <section id="prompts">
@@ -37,15 +25,12 @@ export function Prompts() {
           </span>
         </p>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
-          {CARDS.map((c) => (
-            <span key={c.title} title={c.desc} style={{ ...cardStyle, ...chipStyle }}>
-              {c.title}
+          {PACKS.map((title) => (
+            <span key={title} style={{ ...cardStyle, ...chipStyle }}>
+              {title}
             </span>
           ))}
-          <span
-            title="Save your own tailored prompts."
-            style={{ ...chipStyle, background: 'transparent', border: '1.5px dashed #4f585e', color: '#a7c080' }}
-          >
+          <span style={{ ...chipStyle, background: 'transparent', border: '1.5px dashed #4f585e', color: '#a7c080' }}>
             ＋ Add yours
           </span>
         </div>
