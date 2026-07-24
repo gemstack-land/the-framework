@@ -71,7 +71,7 @@ export function YourFramework() {
           <Item>No backdoors, no tracking</Item>
           <Item>
             <span>
-              Memory is saved in your Git repository (<CodeChip fontSize={12.5}>knowledge-base/*.md</CodeChip>)
+              Memory is saved in your Git repository at <CodeChip fontSize={12.5}>knowledge-base/*.md</CodeChip>
             </span>
           </Item>
           <Item>Data is fully yours</Item>
