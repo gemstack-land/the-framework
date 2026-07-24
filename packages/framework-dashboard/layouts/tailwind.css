@@ -134,8 +134,17 @@ body {
   overflow: hidden;
   white-space: nowrap;
   container-type: inline-size;
+  /* Bleed to the card border (cancel the row's px-2) so the clip and the fade land on the border,
+     not a row-padding inside it; the text still starts a row-padding in via the matching inner pad. */
+  margin-inline: -0.5rem;
+  padding-inline: 0.5rem;
   -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 1.25rem), transparent);
   mask-image: linear-gradient(to right, #000 calc(100% - 1.25rem), transparent);
+}
+/* While marqueeing, fade both borders so the title dissolves at each card edge, not only the end. */
+.rail-row:hover .rail-title {
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 1.25rem, #000 calc(100% - 1.25rem), transparent);
+  mask-image: linear-gradient(to right, transparent, #000 1.25rem, #000 calc(100% - 1.25rem), transparent);
 }
 .rail-title-inner {
   display: inline-block;
