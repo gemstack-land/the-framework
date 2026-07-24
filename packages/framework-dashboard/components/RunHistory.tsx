@@ -258,8 +258,8 @@ function OverviewButton({ active, count, onClick }: { active: boolean; count: nu
       onClick={onClick}
       aria-current={active ? 'page' : undefined}
       className={cn(
-        // Same box as New (h-9 px-2 gap-2) so the two rows' icons and labels line up exactly.
-        'flex h-9 w-full items-center gap-2 rounded-md px-2 text-sm transition-colors',
+        // Same box as New (px-2 py-1.5 gap-2) so the two rows' icons and labels line up exactly.
+        'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors',
         active ? 'bg-sidebar-accent text-sidebar-accent-foreground' : 'text-foreground hover:bg-sidebar-accent/60',
       )}
     >
@@ -300,7 +300,7 @@ function ProjectsNav({
         type="button"
         onClick={() => setOpen(o => !o)}
         aria-expanded={open}
-        className="flex h-9 w-full items-center gap-2 rounded-md px-2 text-sm text-foreground transition-colors hover:bg-sidebar-accent/60"
+        className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm text-foreground transition-colors hover:bg-sidebar-accent/60"
       >
         <FolderGit2 className="h-4 w-4 shrink-0" aria-hidden />
         <span className="flex-1 text-left">Projects</span>
@@ -370,10 +370,13 @@ function NewButton({
   onProjectAdded?: (() => void) | undefined
 }) {
   const [adding, setAdding] = useState(false)
-  // Same box as the Overview row (h-9 px-2 gap-2) so their icons and labels align; px-2 overrides
-  // the button size's default px-4. The active fill (same tokens as Overview) only on this project's
-  // launcher; otherwise plain, since New is an action rather than a place.
-  const cls = cn('h-9 w-full justify-start gap-2 px-2 font-normal', active && 'bg-sidebar-accent text-sidebar-accent-foreground')
+  // Same box as the Overview row (px-2 py-1.5 gap-2) so their icons and labels align; h-auto/px-2/
+  // py-1.5 override the button size's default h-9/px-4/py-2. The active fill (same tokens as
+  // Overview) only on this project's launcher; otherwise plain, since New is an action, not a place.
+  const cls = cn(
+    'h-auto w-full justify-start gap-2 px-2 py-1.5 font-normal',
+    active && 'bg-sidebar-accent text-sidebar-accent-foreground',
+  )
   const start = (id: string) => (onNewSessionInProject ? onNewSessionInProject(id) : onSelect(null))
 
   // In a project, or on the Overview with exactly one: start a session straight away.
