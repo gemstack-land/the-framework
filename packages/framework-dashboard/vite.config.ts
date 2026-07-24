@@ -26,9 +26,18 @@ function frameworkDevDaemon(): Plugin {
       if (!process.env.FRAMEWORK_DEV_DAEMON) return
       let target: { hostname: string; port: string } | null = null
       const ready = (async () => {
-        const { ensureDaemon } = await import('@gemstack/the-framework')
+        const [{ ensureDaemon }, { fileURLToPath }, path] = await Promise.all([
+          import('@gemstack/the-framework'),
+          import('node:url'),
+          import('node:path'),
+        ])
+        // The daemon spawns a detached child of the framework CLI; without an explicit binPath it
+        // would re-invoke `process.argv[1]`, which here is vite, not the framework. Point it at the
+        // framework's own bin (dist/bin.js, beside its resolved dist/index.js). The package is
+        // ESM-only (no CJS main), so resolve via the ESM resolver rather than require.resolve.
+        const binPath = path.join(path.dirname(fileURLToPath(import.meta.resolve('@gemstack/the-framework'))), 'bin.js')
         const cwd = process.env.FRAMEWORK_DEV_DAEMON_CWD || process.cwd()
-        const { state, alreadyRunning } = await ensureDaemon(cwd)
+        const { state, alreadyRunning } = await ensureDaemon(cwd, { binPath })
         const url = new URL(state.url)
         target = { hostname: url.hostname, port: url.port || '4200' }
         server.config.logger.info(
@@ -46,16 +55,11 @@ function frameworkDevDaemon(): Plugin {
       server.middlewares.use((req, res, next) => {
         const url = req.originalUrl ?? req.url ?? ''
         if (!url.startsWith('/_telefunc')) return next()
-        const forward = (): void => {
-          if (!target) {
-            res.statusCode = 503
-            res.end('framework dev daemon is not available')
-            return
-          }
+        const forward = (dest: { hostname: string; port: string }): void => {
           // Host header left as the browser sent it (localhost:<devport>), so the daemon's same-origin
           // guard passes; the SSE Channel just rides the piped response.
           const proxyReq = http.request(
-            { hostname: target.hostname, port: target.port, method: req.method, path: url, headers: req.headers },
+            { hostname: dest.hostname, port: dest.port, method: req.method, path: url, headers: req.headers },
             proxyRes => {
               res.writeHead(proxyRes.statusCode ?? 502, proxyRes.headers)
               proxyRes.pipe(res)
@@ -69,8 +73,11 @@ function frameworkDevDaemon(): Plugin {
           })
           req.pipe(proxyReq)
         }
-        if (target) forward()
-        else void ready.then(forward)
+        if (target) return forward(target)
+        // Daemon still coming up, or it failed: once `ready` settles, proxy if it is up, otherwise
+        // fall through to Vite's own telefunc handling so reads keep working (sendStart just reports
+        // it is not enabled there) instead of erroring every request.
+        void ready.then(() => (target ? forward(target) : next()))
       })
     },
   }
