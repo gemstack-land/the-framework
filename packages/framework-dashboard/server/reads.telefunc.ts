@@ -5,6 +5,6 @@
 // Imported then exported, not re-exported (#1014): telefunc's dev transform appends
 // `__decorateTelefunction(<name>, ...)` per export, which needs a local binding. An
 // `export ... from` creates none, so `pnpm dev` died with `<name> is not defined`.
-import { onRuns, onRun, onDocs, onProjectLog, onQueue, onOverview, onRecentRuns, onInterventions, onActivity, onDashboard, onGithubUrl, onGitStatus, onProjectFiles, onProjectFileStatus, onFileDiff, onRunChanges, onFileContent, onTickets, onRetainedWorktrees, onRunWorktree, onRunHandoff, onSystemPromptUser } from '@gemstack/the-framework/dashboard-rpc'
+import { onRuns, onRun, onDocs, onProjectLog, onQueue, onOverview, onRecentRuns, onHotTickets, onInterventions, onActivity, onDashboard, onGithubUrl, onGitStatus, onProjectFiles, onProjectFileStatus, onFileDiff, onRunChanges, onFileContent, onTickets, onRetainedWorktrees, onRunWorktree, onRunHandoff, onSystemPromptUser } from '@gemstack/the-framework/dashboard-rpc'
 
-export { onRuns, onRun, onDocs, onProjectLog, onQueue, onOverview, onRecentRuns, onInterventions, onActivity, onDashboard, onGithubUrl, onGitStatus, onProjectFiles, onProjectFileStatus, onFileDiff, onRunChanges, onFileContent, onTickets, onRetainedWorktrees, onRunWorktree, onRunHandoff, onSystemPromptUser }
+export { onRuns, onRun, onDocs, onProjectLog, onQueue, onOverview, onRecentRuns, onHotTickets, onInterventions, onActivity, onDashboard, onGithubUrl, onGitStatus, onProjectFiles, onProjectFileStatus, onFileDiff, onRunChanges, onFileContent, onTickets, onRetainedWorktrees, onRunWorktree, onRunHandoff, onSystemPromptUser }

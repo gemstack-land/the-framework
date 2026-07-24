@@ -1,6 +1,7 @@
 import { readAllRuns, readLiveMetas, type LiveRun, type RunMeta, type RunStatus } from '../store/index.js'
 import type { ProjectSummary } from './projects.js'
 import { collectQueue, type ProjectQueue } from './queue.js'
+import { readTickets, type WorkspaceTicket } from './tickets.js'
 
 // The first-sidebar Overview (#437, part of #314): a cross-project glance at what the agent
 // is working on right now, the size of the backlog, and the recently active projects. It
@@ -79,6 +80,60 @@ export async function buildRecentRuns(projects: ProjectSummary[], deps: RecentRu
   }
   all.sort((a, b) => (b.run.startedAt ?? '').localeCompare(a.run.startedAt ?? ''))
   return all.slice(0, RECENT_RUNS_LIMIT)
+}
+
+/** Which lane of the "hot tickets" overview (#1112) a ticket sits in. */
+export type HotBucket = 'in-progress' | 'next' | 'queued'
+
+/** One ticket surfaced on the Overview's hot-tickets card, tagged with its project and lane. */
+export interface HotTicket {
+  projectId: string
+  projectName: string
+  bucket: HotBucket
+  ticket: WorkspaceTicket
+}
+
+/** Priority values that read as "do this soon" — the "likely next" lane (#1112). */
+const HIGH_PRIORITY = new Set(['high', 'urgent', 'critical', 'p0', 'p1', '0', '1'])
+
+/**
+ * A ticket's lane (#1112):
+ * - in-progress: the agent has planned or spiked it, i.e. work is under way. (There is no run↔ticket
+ *   link, so a ticket being *implemented* right now is only visible through the plan/spike it left.)
+ * - next: no plan/spike yet, but flagged high priority — likely the next thing picked up.
+ * - queued: everything else open, the backlog waiting its turn.
+ */
+export function ticketBucket(ticket: WorkspaceTicket): HotBucket {
+  if (ticket.planned || ticket.spiked) return 'in-progress'
+  if (ticket.priority && HIGH_PRIORITY.has(ticket.priority)) return 'next'
+  return 'queued'
+}
+
+/** How many hot tickets the Overview pools before the card trims per lane. */
+const HOT_TICKETS_LIMIT = 60
+
+/** Injectable reader so {@link buildHotTickets} is unit-testable off disk. */
+export interface HotTicketsDeps {
+  tickets?: (cwd: string) => Promise<WorkspaceTicket[]>
+}
+
+/**
+ * Every project's tickets pooled and bucketed for the Overview's "hot tickets" card (#1112): what
+ * is being worked on (planned/spiked), what is likely next (high priority), and the queued rest.
+ * Ordered lane-first (in-progress, then next, then queued), file order within a lane. Forgiving —
+ * a project whose tickets cannot be read simply contributes nothing.
+ */
+export async function buildHotTickets(projects: ProjectSummary[], deps: HotTicketsDeps = {}): Promise<HotTicket[]> {
+  const readT = deps.tickets ?? readTickets
+  const all: HotTicket[] = []
+  for (const project of projects) {
+    for (const ticket of await readT(project.path).catch(() => [])) {
+      all.push({ projectId: project.id, projectName: project.name, bucket: ticketBucket(ticket), ticket })
+    }
+  }
+  const lane: Record<HotBucket, number> = { 'in-progress': 0, next: 1, queued: 2 }
+  all.sort((a, b) => lane[a.bucket] - lane[b.bucket])
+  return all.slice(0, HOT_TICKETS_LIMIT)
 }
 
 /** Injectable readers so {@link buildOverview} is unit-testable off disk. */

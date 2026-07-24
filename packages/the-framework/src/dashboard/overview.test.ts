@@ -1,8 +1,9 @@
 import { strict as assert } from 'node:assert'
 import { test } from 'node:test'
-import { buildOverview, buildRecentRuns } from './overview.js'
+import { buildOverview, buildRecentRuns, buildHotTickets, ticketBucket } from './overview.js'
 import type { ProjectSummary } from './projects.js'
 import type { ProjectQueue } from './queue.js'
+import type { WorkspaceTicket } from './tickets.js'
 import type { RunMeta } from '../store/index.js'
 
 const project = (id: string, path: string, lastActivityAt?: string): ProjectSummary => ({
@@ -90,4 +91,52 @@ test('buildRecentRuns tolerates a project whose runs cannot be read', async () =
     },
   })
   assert.deepEqual(recent.map(r => r.run.id), ['x'])
+})
+
+const ticket = (file: string, over: Partial<WorkspaceTicket> = {}): WorkspaceTicket => ({
+  file,
+  title: file,
+  summary: '',
+  spiked: false,
+  planned: false,
+  ...over,
+})
+
+test('ticketBucket: planned/spiked is in-progress, high priority is next, else queued', () => {
+  assert.equal(ticketBucket(ticket('a', { planned: true })), 'in-progress')
+  assert.equal(ticketBucket(ticket('b', { spiked: true })), 'in-progress')
+  assert.equal(ticketBucket(ticket('c', { priority: 'high' })), 'next')
+  assert.equal(ticketBucket(ticket('d', { priority: 'p1' })), 'next')
+  assert.equal(ticketBucket(ticket('e')), 'queued')
+  assert.equal(ticketBucket(ticket('f', { priority: 'low' })), 'queued')
+  // A planned high-prio ticket is in-progress, not next: work already started outranks the flag.
+  assert.equal(ticketBucket(ticket('g', { planned: true, priority: 'high' })), 'in-progress')
+})
+
+test('buildHotTickets pools every project, buckets each, and orders lane-first', async () => {
+  const tickets: Record<string, WorkspaceTicket[]> = {
+    '/a': [ticket('a1.md', { planned: true }), ticket('a2.md', { priority: 'high' })],
+    '/b': [ticket('b1.md')],
+  }
+  const hot = await buildHotTickets([project('alpha', '/a'), project('beta', '/b')], {
+    tickets: async cwd => tickets[cwd] ?? [],
+  })
+  assert.deepEqual(
+    hot.map(h => ({ p: h.projectName, f: h.ticket.file, b: h.bucket })),
+    [
+      { p: 'alpha', f: 'a1.md', b: 'in-progress' },
+      { p: 'alpha', f: 'a2.md', b: 'next' },
+      { p: 'beta', f: 'b1.md', b: 'queued' },
+    ],
+  )
+})
+
+test('buildHotTickets tolerates a project whose tickets cannot be read', async () => {
+  const hot = await buildHotTickets([project('ok', '/ok'), project('bad', '/bad')], {
+    tickets: async cwd => {
+      if (cwd === '/bad') throw new Error('unreadable')
+      return [ticket('x.md', { priority: 'high' })]
+    },
+  })
+  assert.deepEqual(hot.map(h => h.ticket.file), ['x.md'])
 })

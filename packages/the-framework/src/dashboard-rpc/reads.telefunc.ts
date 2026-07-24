@@ -5,7 +5,7 @@ import { readLogs, type LogEntry } from '../logs.js'
 import { readDocs, type WorkspaceDoc } from '../dashboard/docs.js'
 import { readTickets, type WorkspaceTicket } from '../dashboard/tickets.js'
 import { collectQueue, type ProjectQueue } from '../dashboard/queue.js'
-import { buildOverview, buildRecentRuns, type Overview, type RecentRun } from '../dashboard/overview.js'
+import { buildOverview, buildRecentRuns, buildHotTickets, type Overview, type RecentRun, type HotTicket } from '../dashboard/overview.js'
 import { buildInterventions, type Intervention } from '../dashboard/interventions.js'
 import { buildActivity, type Activity } from '../dashboard/activity.js'
 import { buildDashboard, type DashboardData } from '../dashboard/dashboard.js'
@@ -180,6 +180,11 @@ export async function onOverview(): Promise<Overview> {
 /** Recent sessions pooled across every project (#shared-shell), newest first, for the home rail. */
 export async function onRecentRuns(): Promise<RecentRun[]> {
   return withProjects(projects => buildRecentRuns(projects))
+}
+
+/** Hot tickets across every project (#1112): being worked on, likely next, and queued. */
+export async function onHotTickets(): Promise<HotTicket[]> {
+  return withProjects(projects => buildHotTickets(projects))
 }
 
 /** The cross-project interventions queue (#632, Queue #624): open PRs that need review, newest first. */
