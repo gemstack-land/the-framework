@@ -10,7 +10,7 @@ export const mono = "'IBM Plex Mono', monospace" as const
 export const sectionStyle: CSSProperties = {
   maxWidth: 1120,
   margin: '0 auto',
-  padding: 'clamp(64px, 11vw, 110px) clamp(14px, 4vw, 24px) 0',
+  padding: 'clamp(72px, 13vw, 140px) clamp(14px, 4vw, 24px) 0',
   display: 'flex',
   flexDirection: 'column',
   gap: 36,
