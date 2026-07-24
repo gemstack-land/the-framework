@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from 'react'
 import type { CSSProperties, ReactNode } from 'react'
 
 export const DISCORD_URL = 'https://discord.gg/qc8zvdzWNR'
@@ -48,8 +49,30 @@ export const kickerStyle: CSSProperties = {
 
 // Centered chapter break: the one centered element on a left-anchored page, so
 // the eye finds section boundaries instantly. The accent bar is straight — at
-// this size a tilt reads as misalignment, not as a hero-strike echo.
+// this size a tilt reads as misalignment, not as a hero-strike echo — but it
+// grows in like the strike when first scrolled into view. Pre-reveal (and
+// without JS) it's a nub, not invisible, mirroring the strike's scaleX start.
 export function SectionHead({ title, sub }: { title: ReactNode; sub?: string | React.ReactNode }) {
+  const barRef = useRef<HTMLSpanElement>(null)
+  const [bar, setBar] = useState<'pending' | 'grown' | 'instant'>('pending')
+  useEffect(() => {
+    const el = barRef.current
+    if (!el || matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      setBar('instant')
+      return
+    }
+    const io = new IntersectionObserver(
+      ([entry]) => {
+        if (entry?.isIntersecting) {
+          setBar('grown')
+          io.disconnect()
+        }
+      },
+      { threshold: 0.5 },
+    )
+    io.observe(el)
+    return () => io.disconnect()
+  }, [])
   return (
     <div
       style={{
@@ -63,7 +86,18 @@ export function SectionHead({ title, sub }: { title: ReactNode; sub?: string | R
       }}
     >
       <h2 style={h2Style}>{title}</h2>
-      <span aria-hidden style={{ width: 68, height: 4, borderRadius: 2, background: '#a7c080' }} />
+      <span
+        ref={barRef}
+        aria-hidden
+        style={{
+          width: 68,
+          height: 4,
+          borderRadius: 2,
+          background: '#a7c080',
+          transform: bar === 'pending' ? 'scaleX(0.15)' : 'scaleX(1)',
+          transition: bar === 'grown' ? 'transform 0.9s cubic-bezier(0.65, 0, 0.35, 1)' : 'none',
+        }}
+      />
       {sub && <p style={{ margin: 0, fontSize: 17, lineHeight: 1.6, color: '#9da9a0' }}>{sub}</p>}
     </div>
   )
