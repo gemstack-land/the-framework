@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Plus, ChevronDown, MonitorSmartphone } from 'lucide-react'
+import { Plus, ChevronDown, MonitorSmartphone, Settings, LayoutDashboard } from 'lucide-react'
 import type { RunMeta, RunStatus, RecentRun, ProjectSummary } from '@gemstack/the-framework'
 import { AGENT_LABELS, agentForDriver } from '@gemstack/the-framework/client'
 import { Button, buttonVariants } from './ui/button.js'
@@ -18,10 +18,18 @@ import {
   SidebarGroupContent,
   SidebarGroupLabel,
   SidebarHeader,
+  SidebarFooter,
   SidebarMenu,
   SidebarMenuItem,
 } from './ui/sidebar.js'
 import { ScrollArea } from './ui/scroll-area.js'
+// Global chrome relocated off the removed top navbar (#772 follow-up): the sidebar is the app's
+// chrome now, so the workspace keeps the full width.
+import { BrandLink } from './BrandLink.js'
+import { ProjectPicker } from './ProjectPicker.js'
+import { ConnectionIndicator } from './ConnectionIndicator.js'
+import { ThemeToggle } from './ThemeToggle.js'
+import { NotificationsMenu } from './NotificationsMenu.js'
 
 // One rendered row of the rail, from either source (a project's own run, or a pooled cross-project
 // recent): the RunMeta to show, an optional project label (only on the Overview, where the rail
@@ -50,11 +58,27 @@ export function RunHistory({
   startTick = 0,
   startIntent = '',
   followLive = false,
+  working = false,
+  onDashboard = () => {},
+  onSelectProject = () => {},
+  onSettings = () => {},
+  interventionCount = 0,
 }: {
   projectId: string | null
   runs: RunMeta[]
   selectedRunId: string | null
   onSelect: (runId: string | null) => void
+  /** The brand mark animates while any agent is working (moved off the navbar with the brand). */
+  working?: boolean
+  /** Go to the Overview (no project): the brand mark and the Overview item both call it. Defaults
+   *  to a no-op so a focused unit test can mount the rail without wiring the shell's chrome. */
+  onDashboard?: () => void
+  /** Select a project in the picker (its own element now, not fused with Overview). */
+  onSelectProject?: (projectId: string) => void
+  /** Open Settings, from the sidebar footer where the navbar gear moved. */
+  onSettings?: () => void
+  /** Human Queue count, shown on the Overview item and the picker (#632). */
+  interventionCount?: number
   /** Cross-project recents for the Overview (no project selected): every project's sessions pooled. */
   recentRuns?: RecentRun[]
   /** Select a pooled recent: jump into its project's session (project + run both change). */
@@ -127,10 +151,15 @@ export function RunHistory({
   const hasRecents = rows.length > 0 || showOptimistic
 
   return (
-    // A fixed-width, in-flow column (`collapsible="none"`): the shell already owns the top nav and
-    // the right rail, so the sidebar slots between them the way the old <aside> did.
+    // A fixed-width, in-flow column (`collapsible="none"`): with the top navbar gone (#772
+    // follow-up), the sidebar carries the app's chrome — brand, global nav, and the utility
+    // controls in the footer — so the workspace and right rail get the full height.
     <Sidebar collapsible="none" className="w-(--sidebar-width) border-r border-sidebar-border">
-      <SidebarHeader className="pb-0">
+      <SidebarHeader className="gap-3 pb-0">
+        {/* The mark + wordmark, the way home (#909), now that there is no navbar to hold them. */}
+        <div className="px-1 pt-1">
+          <BrandLink working={working} onNavigate={onDashboard} />
+        </div>
         {/* "New" starts a session — but where depends on what exists: with no project it prompts to
             add one first, with one project it starts there, with several it opens a picker. In a
             project already, it just starts another session there. */}
@@ -142,10 +171,23 @@ export function RunHistory({
           onSelect={onSelect}
           onProjectAdded={onProjectAdded}
         />
+        {/* The project selector is its own element now, no longer fused with Overview. Its exact
+            filter-vs-navigate behaviour is still open; today's navigate-on-select is the interim. */}
+        <ProjectPicker
+          selectedId={projectId}
+          onSelect={onSelectProject}
+          onDashboard={onDashboard}
+          interventionCount={interventionCount}
+        />
       </SidebarHeader>
       {/* The themed ScrollArea (#913) instead of the sidebar's native overflow bar, matching the
           Overview: suppress SidebarContent's own `overflow-auto` and let the ScrollArea own it. */}
       <SidebarContent className="overflow-hidden">
+        {/* Overview: the way home, pinned above the session list and given prominence (its own
+            entry now, not buried in the picker menu). Active when no project is selected. */}
+        <div className="px-2 pt-1">
+          <OverviewButton active={projectId === null} count={interventionCount} onClick={onDashboard} />
+        </div>
         <ScrollArea className="min-h-0 flex-1">
           <SidebarGroup className="pt-1">
             {/* Recents label sits under the launcher, over the run list (not a page-wide header). */}
@@ -185,7 +227,48 @@ export function RunHistory({
           </SidebarGroup>
         </ScrollArea>
       </SidebarContent>
+      {/* The navbar's utility controls, relocated to the foot of the sidebar (#772 follow-up):
+          which daemon this is (Local/remote), theme, notifications, and Settings. */}
+      <SidebarFooter className="border-t border-sidebar-border">
+        <div className="flex items-center gap-1">
+          <ConnectionIndicator />
+          <div className="min-w-0 flex-1" />
+          <ThemeToggle />
+          <NotificationsMenu />
+          <Button variant="ghost" size="sm" onClick={onSettings} title="Settings" aria-label="Settings">
+            <Settings className="h-4 w-4" aria-hidden />
+          </Button>
+        </div>
+      </SidebarFooter>
     </Sidebar>
+  )
+}
+
+// The Overview entry (Rom): the way home, pinned above the session list and more prominent than a
+// menu row. Carries the Human Queue count (#632) so the one cross-project signal stays visible, and
+// highlights while it is the current view.
+function OverviewButton({ active, count, onClick }: { active: boolean; count: number; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-current={active ? 'page' : undefined}
+      className={cn(
+        'flex w-full items-center gap-2 rounded-md px-2 py-2 text-sm font-medium transition-colors',
+        active ? 'bg-sidebar-accent text-sidebar-accent-foreground' : 'text-foreground hover:bg-sidebar-accent/60',
+      )}
+    >
+      <LayoutDashboard className="h-4 w-4 shrink-0" aria-hidden />
+      <span className="flex-1 text-left">Overview</span>
+      {count > 0 && (
+        <span
+          className="min-w-5 rounded-full bg-primary px-1.5 text-center text-xs font-semibold text-primary-foreground tabular-nums"
+          title={`${count} item${count === 1 ? '' : 's'} in your Human Queue`}
+        >
+          {count}
+        </span>
+      )}
+    </button>
   )
 }
 

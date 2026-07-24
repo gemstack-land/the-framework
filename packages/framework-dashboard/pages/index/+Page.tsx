@@ -2,12 +2,6 @@ import { useEffect, useState } from 'react'
 import type { Intervention, Activity, ProjectSummary, RecentRun } from '@gemstack/the-framework'
 import { onProjectFiles, onInterventions, onActivity, onRecentRuns } from '../../server/reads.telefunc.js'
 import { onProjects } from '../../server/projects.telefunc.js'
-import { ProjectPicker } from '../../components/ProjectPicker.js'
-import { BrandLink } from '../../components/BrandLink.js'
-import { ThemeToggle } from '../../components/ThemeToggle.js'
-import { ConnectionIndicator } from '../../components/ConnectionIndicator.js'
-import { NotificationsMenu } from '../../components/NotificationsMenu.js'
-import { Button } from '../../components/ui/button.js'
 import { RunHistory } from '../../components/RunHistory.js'
 import { SidebarProvider } from '../../components/ui/sidebar.js'
 import { ProjectHome } from '../../components/ProjectHome.js'
@@ -30,7 +24,7 @@ import { useDocumentTitle } from '../../lib/document-title.js'
 import { useWorking } from '../../lib/use-working.js'
 import { useFavicon } from '../../lib/favicon.js'
 import { useDaemonHealth } from '../../lib/use-daemon-health.js'
-import { TriangleAlert, Settings } from 'lucide-react'
+import { TriangleAlert } from 'lucide-react'
 
 /** Stable, so `files` keeps one identity while no project is selected. */
 const EMPTY_FILES: string[] = []
@@ -307,30 +301,8 @@ export default function Page() {
     // the `--sidebar-width` var) is available on every route, home and session alike. Its wrapper is
     // the column that used to be a plain div.
     <SidebarProvider className="h-screen flex-col overflow-hidden">
-      <header className="flex items-center gap-3 border-b border-border px-4 py-3">
-        <BrandLink working={working} onNavigate={showDashboard} />
-        {/* The project selection lives in the nav now (#772), not in a rail of its own: always
-            shown, on every page including the Overview. Nudged off the brand mark so the two do
-            not read as one unit. */}
-        <div className="ms-10">
-          <ProjectPicker
-            selectedId={projectId}
-            onSelect={selectProject}
-            onDashboard={showDashboard}
-            interventionCount={interventions.length}
-          />
-        </div>
-        <div className="min-w-0 flex-1" />
-        <div className="flex shrink-0 items-center gap-1">
-          {/* Which daemon this dashboard is talking to (#1052) — obvious once you can hop devices. */}
-          <ConnectionIndicator />
-          <ThemeToggle />
-          <NotificationsMenu />
-          <Button variant="ghost" size="sm" onClick={showSettings} title="Settings" aria-label="Settings">
-            <Settings className="h-4 w-4" aria-hidden />
-          </Button>
-        </div>
-      </header>
+      {/* The top navbar is gone (#772 follow-up): its brand, global nav and utility controls moved
+          into the sidebar (RunHistory), so the workspace and right rail get the full height. */}
       {!healthy && (
         <div role="alert" className="flex items-center gap-2 border-b border-border bg-warning/10 px-4 py-2 text-xs text-warning">
           <TriangleAlert className="h-3.5 w-3.5 shrink-0" aria-hidden />
@@ -364,6 +336,11 @@ export default function Page() {
           startTick={runStart.tick}
           startIntent={runStart.intent}
           followLive={adopting}
+          working={working}
+          onDashboard={showDashboard}
+          onSelectProject={selectProject}
+          onSettings={showSettings}
+          interventionCount={interventions.length}
         />
         <main className="flex min-w-0 flex-1 flex-col">{renderMain()}</main>
         <RightRail
