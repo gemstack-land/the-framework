@@ -199,7 +199,7 @@ export function RunHistory({
                 fades the rows into the background as they scroll up beneath the label. */}
             {hasRecents && (
               <div className="sticky top-0 z-10">
-                <SidebarGroupLabel className="bg-background font-normal tracking-wide text-muted-foreground">Recents</SidebarGroupLabel>
+                <SidebarGroupLabel className="rounded-none bg-background font-normal tracking-wide text-muted-foreground">Recents</SidebarGroupLabel>
                 {/* Absolute (hanging just below the label) so it does not push the first row down; it
                     still overlays the rows scrolling up under it. */}
                 <div aria-hidden className="pointer-events-none absolute inset-x-0 top-full h-4 bg-gradient-to-b from-background to-transparent" />
