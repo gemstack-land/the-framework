@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { ChoiceRequest } from '@gemstack/the-framework'
+import type { LoopStatus } from '@gemstack/the-framework/client'
+import { LoopStatusCard } from './LoopStatusCard.js'
 import { DocsPanel } from './DocsPanel.js'
 import { ProjectLogPanel } from './ProjectLogPanel.js'
 import { ChoicesRail } from './ChoicesRail.js'
@@ -29,6 +31,7 @@ export function RightRail({
   toggleContext,
   hasBrowser = false,
   target,
+  loop,
   onRunStarted,
 }: {
   projectId: string | null
@@ -46,6 +49,10 @@ export function RightRail({
   hasBrowser?: boolean
   /** Where the selected run executes (#1053): an `actions` run has no browser on the runner, so no pane; `remote` (#1067) has none locally either. */
   target?: 'local' | 'actions' | 'remote' | undefined
+  /** The selected run's production-grade loop verdict, pinned under the tabs rather than given a tab
+   *  of its own: it is a standing fact about the run, not a panel you browse, so it stays readable
+   *  whichever tab is open. Null for a run that never looped (a prototype scope, or a plain prompt). */
+  loop?: LoopStatus | null | undefined
   /** Told when a panel starts a session (the tickets import, #948), so the shell shows it. */
   onRunStarted?: ((intent: string, runId?: string) => void) | undefined
 }) {
@@ -135,6 +142,16 @@ export function RightRail({
           </Button>
         ))}
       </div>
+      {/* Under the tabs, not one of them: the loop's verdict belongs to the run, so it holds still
+          while you move between panels. It never grows past a third of the rail — a pass with many
+          blockers scrolls inside itself rather than squeezing the panel below. */}
+      {loop && (
+        <div className="max-h-[33%] shrink-0 overflow-y-auto border-b border-border p-2">
+          <LoopStatusCard loop={loop} />
+        </div>
+      )}
+      {/* Whatever is left is the panel's, and never less than nothing: min-h-0 lets it scroll inside
+          rather than push the block above it off the rail. */}
       <div className="flex min-h-0 flex-1 flex-col">
         {tab === 'files' && hasFiles ? (
           <FileTree projectId={projectId} runId={runId} files={files} selected={context} onToggle={toggleContext} />

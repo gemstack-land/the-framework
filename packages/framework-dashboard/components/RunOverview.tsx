@@ -1,6 +1,6 @@
 import type { FrameworkEvent } from '@gemstack/the-framework'
 import { loopStatus, sessionInfo, deployPlan, runProgress } from '@gemstack/the-framework/client'
-import { Badge } from './ui/badge.js'
+import { LoopStatusCard } from './LoopStatusCard.js'
 import { runStatusPill } from '../lib/run-status.js'
 import { describeSessionLink } from '../lib/session-link.js'
 import { cn } from '../lib/utils.js'
@@ -15,6 +15,7 @@ export function RunOverview({
   showSessionLink = true,
   showName = true,
   showStatus = true,
+  showLoop = true,
 }: {
   events: FrameworkEvent[]
   showSessionLink?: boolean
@@ -26,8 +27,11 @@ export function RunOverview({
    *  menu, rather than a banner over the feed. The relay watch and project home have no toolbar,
    *  so they keep the line. */
   showStatus?: boolean
+  /** And this: the session view pins the loop's verdict in its right rail, under the tabs, where it
+   *  stays readable on every tab instead of taking a card off the top of the log. */
+  showLoop?: boolean
 }) {
-  const loop = loopStatus(events)
+  const loop = showLoop ? loopStatus(events) : null
   const session = sessionInfo(events)
   const deploy = deployPlan(events)
   const progress = runProgress(events)
@@ -50,32 +54,7 @@ export function RunOverview({
           <span className={cn('text-xs', status.tone)}>{status.label}</span>
         </div>
       )}
-      {loop && (
-        <section className="rounded-lg border border-border p-3">
-          <h3 className="mb-1 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-            Loop status
-            {/* "ended early", not "stopped": the loop finishing without passing is not the user
-                stopping the session, and the status pill above may say "stopped" for that. */}
-            <Badge className={loop.productionGrade ? 'text-primary' : loop.finished ? 'text-muted-foreground' : ''}>
-              {loop.productionGrade ? 'production-grade' : loop.finished ? 'ended early' : `pass ${loop.pass}`}
-            </Badge>
-          </h3>
-          {loop.blockers.length > 0 ? (
-            <ul className="space-y-0.5 text-xs">
-              {loop.blockers.map((b, i) => (
-                <li key={i} className="text-foreground">
-                  <span className="mr-1.5 inline-block h-1 w-1 shrink-0 rounded-full bg-muted-foreground align-middle" aria-hidden />
-                  {b}
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="text-xs text-muted-foreground">
-              {loop.passing ? 'No blockers — the checklist passed.' : `Pass ${loop.pass} in progress…`}
-            </p>
-          )}
-        </section>
-      )}
+      {loop && <LoopStatusCard loop={loop} />}
 
       {deploy && (
         <section className="rounded-lg border border-border p-3 md:col-span-2">

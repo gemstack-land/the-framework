@@ -67,3 +67,28 @@ describe('RightRail browser tab (#1053)', () => {
     expect(screen.queryByRole('tab', { name: /browser/i })).toBeNull()
   })
 })
+
+// The loop's verdict is pinned under the tabs rather than being one of them: it is a standing fact
+// about the run, so it stays put while you move between panels.
+describe('RightRail loop status', () => {
+  const loop = { pass: 2, passing: false, blockers: ['no tests'], productionGrade: false, finished: false }
+
+  test('a run that never looped pins nothing', () => {
+    render(<RightRail {...baseProps} loop={null} />)
+    expect(screen.queryByText(/loop status/i)).toBeNull()
+  })
+
+  test('the verdict shows, and is not a tab', () => {
+    render(<RightRail {...baseProps} loop={loop} />)
+    expect(screen.getByText(/loop status/i)).toBeTruthy()
+    expect(screen.getByText('no tests')).toBeTruthy()
+    expect(screen.queryByRole('tab', { name: /loop/i })).toBeNull()
+  })
+
+  test('it survives a tab switch, since it belongs to the run and not to a panel', () => {
+    render(<RightRail {...baseProps} loop={loop} />)
+    fireEvent.click(screen.getByRole('tab', { name: /log/i }))
+    expect(screen.getByText('log')).toBeTruthy()
+    expect(screen.getByText(/loop status/i)).toBeTruthy()
+  })
+})

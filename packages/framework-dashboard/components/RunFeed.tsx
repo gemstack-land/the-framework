@@ -14,6 +14,7 @@ export function RunFeed({
   showSessionLink = true,
   showName = true,
   showStatus = true,
+  showLoop = true,
   lost = false,
   stick = true,
   openAt,
@@ -25,6 +26,8 @@ export function RunFeed({
   showName?: boolean
   /** The run's own view sets this false: its action bar carries the status beside the ⋮ menu. */
   showStatus?: boolean
+  /** The run's own view sets this false: its right rail pins the loop's verdict under the tabs. */
+  showLoop?: boolean
   lost?: boolean
   /** A finished log is static (#1026): it does not follow new output, and opens at its end. */
   stick?: boolean
@@ -49,7 +52,7 @@ export function RunFeed({
   return (
     <>
       {lostBanner}
-      <RunOverview events={events} showSessionLink={showSessionLink} showName={showName} showStatus={showStatus} />
+      <RunOverview events={events} showSessionLink={showSessionLink} showName={showName} showStatus={showStatus} showLoop={showLoop} />
       <EventList events={events} stick={stick} {...(openAt ? { openAt } : {})} />
     </>
   )
