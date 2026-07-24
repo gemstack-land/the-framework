@@ -13,7 +13,9 @@ const navBtnStyle: CSSProperties = {
   fontWeight: 500,
 }
 
-function scrollTopClear(e: MouseEvent) {
+// On the landing page the logo scrolls back up; on subpages it navigates home.
+function goHome(e: MouseEvent) {
+  if (window.location.pathname !== '/') return
   e.preventDefault()
   history.replaceState(null, '', window.location.pathname + window.location.search)
   window.scrollTo({ top: 0, behavior: 'smooth' })
@@ -35,8 +37,8 @@ export function TopNav() {
     >
       {/* Right-clicking the logo opens the press page (logo downloads etc.). */}
       <a
-        href="#top"
-        onClick={scrollTopClear}
+        href="/"
+        onClick={goHome}
         onContextMenu={(e) => {
           e.preventDefault()
           window.location.href = '/press'
