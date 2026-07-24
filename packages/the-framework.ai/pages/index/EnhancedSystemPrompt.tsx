@@ -15,6 +15,9 @@ export function EnhancedSystemPrompt() {
         style={{ ...cardStyle, padding: 'clamp(16px, 4.5vw, 24px)', display: 'flex', flexDirection: 'column', gap: 14 }}
       >
         <p style={{ margin: 0, fontSize: 15, lineHeight: 1.6, color: '#9da9a0', textWrap: 'pretty' }}>
+          <span aria-hidden style={{ marginRight: 8 }}>
+            🧭
+          </span>
           The Framework appends its own system prompt that instructs AI to follow highly effective practices — such as
           dividing large work into subtasks and listing significant alternative solutions.
         </p>
