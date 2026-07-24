@@ -121,11 +121,23 @@ export function SectionNav() {
             whiteSpace: 'nowrap',
           }}
         >
+          {/* The back-to-top logo appears only once the bar is stuck (fades in;
+              keeps its layout slot so the links never shift). */}
           <a
             href="#top"
             onClick={scrollTop}
             title="Back to top"
-            style={{ flex: 'none', display: 'flex', alignItems: 'center', padding: '11px 2px' }}
+            aria-hidden={!stuck}
+            tabIndex={stuck ? undefined : -1}
+            style={{
+              flex: 'none',
+              display: 'flex',
+              alignItems: 'center',
+              padding: '11px 2px',
+              opacity: stuck ? 1 : 0,
+              transition: 'opacity 0.35s ease',
+              pointerEvents: stuck ? 'auto' : 'none',
+            }}
           >
             <img
               src="/assets/logo.svg"
