@@ -55,11 +55,11 @@ const PROBLEMS: { title: string; desc?: string; rows: Row[] }[] = [
     rows: [
       bad(
         <>
-          Appending "Write the BEST code you ever wrote" to your prompts <Arrow glyph="→" /> minimal improvement.
+          Appending "WRITE CLEAN CODE" to your prompts <Arrow glyph="→" /> minimal improvement.
         </>,
       ),
       good(<>When an agent makes complex changes, the agent adds <b>post-merge refactoring</b> prompts to the AI Queue (with low priority).</>),
-      good(<>Automatic <b>regular security and code quality prompts</b> (when your usage quota has plenty of capacity).</>),
+      good(<>Automatic <b>routine security and code quality prompts</b> (when your usage quota has plenty of capacity).</>),
     ],
   },
   {

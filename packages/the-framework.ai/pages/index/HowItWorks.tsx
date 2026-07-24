@@ -6,7 +6,7 @@ import { Queues } from './Queues'
 export function HowItWorks() {
   return (
     <section id="how-it-works" style={sectionStyle}>
-      <SectionHead title="How it works" sub="The Framework introduces two things:" />
+      <SectionHead title="How it works" sub="The Framework introduces two major building blocks:" />
       <div style={{ display: 'flex', flexDirection: 'column', gap: 'clamp(44px, 8vw, 64px)' }}>
         {/* The two introduced things side by side, in the subtext's enumeration order. */}
         <div
