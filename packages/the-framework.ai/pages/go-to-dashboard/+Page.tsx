@@ -121,7 +121,7 @@ export default function Page() {
           <p style={pStyle}>The dashboard runs 100% locally — you open it from your terminal.</p>
         </div>
         <Step kicker="Run">
-          <p style={pStyle}>If The Framework is installed, run it in one of your Git repositories:</p>
+          <p style={pStyle}>If The Framework is installed, run it:</p>
           <Cmd body="the-framework" resolve={() => 'the-framework'} />
         </Step>
         <Step kicker="Install">
@@ -130,7 +130,7 @@ export default function Page() {
           <PmCmd get={(pm) => PMS[pm].install} />
         </Step>
         <Step kicker="One-time run">
-          <p style={pStyle}>Just trying it out? Run it once, no install:</p>
+          <p style={pStyle}>You just want to try it out? Run it once, no install:</p>
           <PmCmd get={(pm) => PMS[pm].try} />
         </Step>
       </main>
