@@ -1,5 +1,5 @@
 import { mkdir, readFile, writeFile, rename, rm } from 'node:fs/promises'
-import { basename, dirname, join, relative, isAbsolute } from 'node:path'
+import { basename, dirname, join, relative, resolve, isAbsolute } from 'node:path'
 import type { FrameworkEvent } from './events.js'
 import { FRAMEWORK_DIR, isPidAlive, reconcileOrphanedRuns } from './store/index.js'
 import { startDashboard, type Dashboard, type StartRunOptions } from './dashboard/index.js'
@@ -9,7 +9,8 @@ import { defaultQuotaSource } from './dashboard/quota.js'
 import { startBackgroundServices, resumeSuspendedRuns, type BackgroundServices } from './daemon-services.js'
 import { resolveDashboardBundle } from './dashboard/bundle.js'
 import { isActivated } from './project.js'
-import { addProject, ensureDaemonToken, listProjects } from './registry.js'
+import { addProject, ensureDaemonToken, listProjects, readPreferences, type Preferences } from './registry.js'
+import { listReposInDirectory } from './repos-directory.js'
 import { registryDiscordCredentialsStore } from './discord-credentials-store.js'
 import { JsonlTailer } from './jsonl-tail.js'
 
@@ -89,6 +90,25 @@ export async function registerHomeProject(cwd: string, env: NodeJS.ProcessEnv = 
   const existing = await listProjects(undefined, env).catch(() => [])
   if (existing.some(p => isNestedWithin(cwd, p.path))) return
   await addProject(cwd, new Date().toISOString(), undefined, env).catch(() => {})
+}
+
+/**
+ * Auto-register every git repo in the user's repos directory (#1123), when they turned the opt-in on.
+ *
+ * Off unless `reposDirectoryAutoGrant` is set: it grants the app filesystem access to a whole
+ * directory of repos at once, so it stays an explicit choice, and the blast radius is contained to
+ * that one directory. Idempotent (addProject dedupes by path); logs one line per newly added repo.
+ * Best-effort, so a bad path never blocks the daemon coming up.
+ */
+export async function registerReposDirectory(env: NodeJS.ProcessEnv = process.env): Promise<void> {
+  const { reposDirectory, reposDirectoryAutoGrant } = await readPreferences(undefined, env).catch((): Preferences => ({}))
+  if (!reposDirectoryAutoGrant || !reposDirectory) return
+  const known = new Set((await listProjects(undefined, env).catch(() => [])).map(p => resolve(p.path)))
+  for (const repo of await listReposInDirectory(reposDirectory).catch(() => [])) {
+    if (known.has(resolve(repo))) continue
+    await addProject(repo, new Date().toISOString(), undefined, env).catch(() => {})
+    console.log(`[framework] auto-added repo ${basename(repo)} from ${reposDirectory}`)
+  }
 }
 
 /**
@@ -338,6 +358,9 @@ export async function runDaemon(cwd: string, opts: RunDaemonOptions = {}): Promi
 
   // Multi-project (#392): make sure an activated home repo shows up in the Projects list.
   await registerHomeProject(cwd, env)
+
+  // Repos directory (#1123): when the opt-in is on, add every git repo in the user's repos dir.
+  await registerReposDirectory(env)
 
   // Crash recovery (#642): a fresh daemon drives no in-flight run, so any run a dead
   // process left marked `running` is orphaned — it would show as active forever with a

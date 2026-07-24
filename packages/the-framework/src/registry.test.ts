@@ -237,6 +237,7 @@ test('every boolean preference survives a save; the sanitizer cannot silently dr
     notifyHumanIntervention: true,
     autoPm: true,
     onboardingDismissed: true,
+    reposDirectoryAutoGrant: true,
   }
   const fs = memFs()
   await writePreferences(allOn, fs, ENV)
@@ -251,6 +252,25 @@ test('sanitizePreferences keeps a valid run target and drops junk (#1050)', asyn
   assert.deepEqual(await readPreferences(fs, ENV), { target: 'actions' })
   await writePreferences({ target: 'moon' } as never, fs, ENV)
   assert.deepEqual(await readPreferences(fs, ENV), {})
+})
+
+test('sanitizePreferences keeps an absolute reposDirectory and drops junk (#1123)', async () => {
+  // Another string preference the boolean-only loop would eat: kept only as a non-empty absolute
+  // path, so a relative or blank value never lands in the file.
+  const fs = memFs()
+  await writePreferences({ reposDirectory: '/home/u/repos' }, fs, ENV)
+  assert.deepEqual(await readPreferences(fs, ENV), { reposDirectory: '/home/u/repos' })
+  await writePreferences({ reposDirectory: 'relative/repos' }, fs, ENV)
+  assert.deepEqual(await readPreferences(fs, ENV), {})
+  await writePreferences({ reposDirectory: '   ' }, fs, ENV)
+  assert.deepEqual(await readPreferences(fs, ENV), {})
+})
+
+test('reposDirectoryAutoGrant is a boolean preference, off by default (#1123)', async () => {
+  const fs = memFs()
+  assert.equal((await readPreferences(fs, ENV)).reposDirectoryAutoGrant, undefined) // absent = off
+  await writePreferences({ reposDirectory: '/home/u/repos', reposDirectoryAutoGrant: true }, fs, ENV)
+  assert.deepEqual(await readPreferences(fs, ENV), { reposDirectory: '/home/u/repos', reposDirectoryAutoGrant: true })
 })
 
 test('a project may override the run target (#1050)', async () => {
