@@ -65,7 +65,9 @@ export function ProjectPicker({
           // which does not say it is a picker.
           aria-label={`Project: ${label}`}
           title="Select a project"
-          className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'max-w-56 gap-1.5 font-normal')}
+          // Capped narrower below sm so a long project name cannot push the nav past a narrow
+          // viewport (#980); the label truncates. Full width returns at sm.
+          className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'max-w-40 gap-1.5 font-normal sm:max-w-56')}
         >
           <span className="truncate">{label}</span>
           {interventionCount > 0 && selectedId !== null && (
