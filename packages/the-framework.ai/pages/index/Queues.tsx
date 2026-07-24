@@ -54,7 +54,10 @@ export function Queues() {
             (important) decisions with subtle pros and cons.
           </P>
           <P>
-            <b style={leadStyle}>Your cockpit</b> — it's basically what keeps you in control.
+            <a href="#features" style={{ fontWeight: 600 }}>
+              Your cockpit
+            </a>{' '}
+            — it's basically what keeps you in control.
           </P>
         </QueueCard>
       </div>
