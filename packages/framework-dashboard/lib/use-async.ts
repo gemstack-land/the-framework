@@ -15,6 +15,7 @@ function useAsyncValue<T>(
   initial: T,
   everyMs: number | null,
   deps: DependencyList,
+  keepPrevious = false,
 ): { value: T; reload: () => void; loaded: boolean } {
   const [value, setValue] = useState<T>(initial)
   // Whether `value` is an answer rather than the initial. Only a successful read sets it, so a
@@ -43,7 +44,10 @@ function useAsyncValue<T>(
   useEffect(() => {
     const token = { live: true }
     liveRef.current = token
-    setValue(initialRef.current) // a switch shows nothing rather than the last project's data
+    // A switch normally shows nothing rather than the last target's data. `keepPrevious` opts out:
+    // the toolbar keeps its resolved header (branch/PR/github) visible while the next one loads, so
+    // navigating between sessions updates it in place instead of blanking and popping (the flicker).
+    if (!keepPrevious) setValue(initialRef.current)
     setLoaded(false)
     if (!load) return () => void (token.live = false)
     const run = (): void => apply(token, load)
@@ -73,8 +77,13 @@ function useAsyncValue<T>(
  * Pass `null` for `load` when there is nothing to read yet (no project selected): the
  * value stays `initial` and no read is made. `load` must close over exactly `deps`.
  */
-export function useLoaded<T>(load: (() => Promise<T>) | null, initial: T, deps: DependencyList): T {
-  return useAsyncValue(load, initial, null, deps).value
+export function useLoaded<T>(
+  load: (() => Promise<T>) | null,
+  initial: T,
+  deps: DependencyList,
+  keepPrevious = false,
+): T {
+  return useAsyncValue(load, initial, null, deps, keepPrevious).value
 }
 
 /**
@@ -91,6 +100,7 @@ export function usePolled<T>(
   initial: T,
   everyMs: number,
   deps: DependencyList,
+  keepPrevious = false,
 ): { value: T; reload: () => void; loaded: boolean } {
-  return useAsyncValue(load, initial, everyMs, deps)
+  return useAsyncValue(load, initial, everyMs, deps, keepPrevious)
 }

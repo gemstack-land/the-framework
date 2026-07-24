@@ -52,6 +52,9 @@ export function GitStatusBar({
     null,
     everyMs,
     [projectId, runId, everyMs],
+    // Keep the previous status visible while the next session's loads, so the whole left cluster
+    // (branch/dirty/PR/chevron) updates in place instead of vanishing to null and popping back.
+    true,
   )
   useEffect(() => setEveryMs(status?.prPending ? 1_000 : 10_000), [status?.prPending])
 

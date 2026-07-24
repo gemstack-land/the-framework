@@ -39,7 +39,9 @@ export function WorkspaceActions({
 }) {
   // The repo link is the project's either way: a session is a branch of that same repo, and its
   // branch may not be pushed anywhere yet. Its PR, when there is one, shows in the git status.
-  const githubUrl = useLoaded<string | null>(() => onGithubUrl(projectId), null, [projectId])
+  // keepPrevious: hold the GitHub icon while a new project's URL loads, so it does not pop out and
+  // back and shove the icon row (within a project it is already stable, keyed on projectId).
+  const githubUrl = useLoaded<string | null>(() => onGithubUrl(projectId), null, [projectId], true)
   const { busy, error, reset, run } = useAction()
   // The preferred editor lives with the action that opens it now (#727), not off in the options
   // gear: click to open, or pick which editor to remember. The stored one shows as a "custom" row
