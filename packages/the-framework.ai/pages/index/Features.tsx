@@ -23,28 +23,26 @@ export function Features() {
           gap: 18,
         }}
       >
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-          <div style={{ ...featureCardStyle, gap: 12 }}>
-            <h3 style={{ margin: 0, fontSize: 19, fontWeight: 600 }}>Bring your own subscription</h3>
-            <FeatureText>
-              Use your existing AI subscription — The Framework orchestrates agents via your Claude Code / Codex
-              installation.
-            </FeatureText>
-            <Note label={<WipBadge style={{ marginRight: 3, display: 'inline-block' }} />}>
-              Orchestrate agents via Claude Code Web for 0% local CPU usage.
-            </Note>
-          </div>
-          <div style={{ ...featureCardStyle, gap: 12 }}>
-            <h3 style={{ margin: 0, fontSize: 19, fontWeight: 600 }}>Notifications</h3>
-            <FeatureText>Get notified when AI is finished or needs you.</FeatureText>
-          </div>
+        <div style={{ ...featureCardStyle, gap: 12 }}>
+          <h3 style={{ margin: 0, fontSize: 19, fontWeight: 600 }}>Bring your own subscription</h3>
+          <FeatureText>
+            Use your existing AI subscription — The Framework orchestrates agents via your Claude Code / Codex
+            installation.
+          </FeatureText>
+          <Note label={<WipBadge style={{ marginRight: 3, display: 'inline-block' }} />}>
+            Orchestrate agents via Claude Code Web for 0% local CPU usage.
+          </Note>
         </div>
         <div style={{ ...featureCardStyle, gap: 14 }}>
           <h3 style={{ margin: 0, fontSize: 19, fontWeight: 600 }}>Dashboard</h3>
           <FeatureText>
-            See your pro-rata usage quota, the list of current and <a href="#how-it-works">queued AI tasks</a>, the
+            See your pro-rata usage quota, the list of current and <a href="#how-it-works">queued AI tasks</a>, the{' '}
             <a href="#how-it-works">reviews required</a> from you, and more.
           </FeatureText>
+        </div>
+        <div style={{ ...featureCardStyle, gap: 12 }}>
+          <h3 style={{ margin: 0, fontSize: 19, fontWeight: 600 }}>Notifications</h3>
+          <FeatureText>Get notified when AI is finished or needs you.</FeatureText>
         </div>
       </div>
     </section>
