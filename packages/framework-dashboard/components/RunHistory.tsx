@@ -196,7 +196,7 @@ export function RunHistory({
           <SidebarGroup className="pt-1">
             {/* Recents label sits under the launcher, over the run list (not a page-wide header). */}
             {hasRecents && (
-              <SidebarGroupLabel className="uppercase tracking-wide text-muted-foreground">Recents</SidebarGroupLabel>
+              <SidebarGroupLabel className="mt-2 font-normal uppercase tracking-wide text-muted-foreground">Recents</SidebarGroupLabel>
             )}
             <SidebarGroupContent>
               <SidebarMenu className="gap-0.5">
@@ -279,8 +279,8 @@ function OverviewButton({ active, count, onClick }: { active: boolean; count: nu
 
 // Projects: the project selector as an expandable nav item (Rom), the same row style as Overview,
 // opening an indented sub-list rather than a dropdown. Selecting a project navigates into it (the
-// interim behaviour; the filter-vs-navigate call is still open). Starts open when a project is
-// selected, so the active one is in view. Uses the `projects` the shell already loaded.
+// interim behaviour; the filter-vs-navigate call is still open). Starts collapsed — you open it to
+// switch projects. Uses the `projects` the shell already loaded.
 function ProjectsNav({
   projects,
   selectedId,
@@ -292,7 +292,7 @@ function ProjectsNav({
   onSelect: (projectId: string) => void
   onProjectAdded?: (() => void) | undefined
 }) {
-  const [open, setOpen] = useState(selectedId !== null)
+  const [open, setOpen] = useState(false)
   const [adding, setAdding] = useState(false)
   return (
     <div className="flex flex-col">
