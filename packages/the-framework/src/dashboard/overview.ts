@@ -1,4 +1,4 @@
-import { readLiveMetas, type LiveRun, type RunStatus } from '../store/index.js'
+import { readAllRuns, readLiveMetas, type LiveRun, type RunMeta, type RunStatus } from '../store/index.js'
 import type { ProjectSummary } from './projects.js'
 import { collectQueue, type ProjectQueue } from './queue.js'
 
@@ -45,8 +45,41 @@ export interface Overview {
   recent: RecentProject[]
 }
 
+/** One recent session, tagged with the project it belongs to, for the cross-project rail. */
+export interface RecentRun {
+  projectId: string
+  projectName: string
+  run: RunMeta
+}
+
 /** How many recent projects the Overview surfaces. */
 const RECENT_LIMIT = 5
+
+/** How many recent sessions the home rail pools across every project. */
+const RECENT_RUNS_LIMIT = 30
+
+/** Injectable reader so {@link buildRecentRuns} is unit-testable off disk. */
+export interface RecentRunsDeps {
+  runs?: (cwd: string) => Promise<RunMeta[]>
+}
+
+/**
+ * Every project's sessions pooled and sorted newest-first (capped), so the shared sidebar (#shared-
+ * shell) can show recents on the home/Overview where no single project is selected. Each row carries
+ * the project it belongs to, so selecting it jumps into that project's session. Forgiving — a project
+ * whose runs cannot be read simply contributes nothing.
+ */
+export async function buildRecentRuns(projects: ProjectSummary[], deps: RecentRunsDeps = {}): Promise<RecentRun[]> {
+  const readRuns = deps.runs ?? readAllRuns
+  const all: RecentRun[] = []
+  for (const project of projects) {
+    for (const run of await readRuns(project.path).catch(() => [])) {
+      all.push({ projectId: project.id, projectName: project.name, run })
+    }
+  }
+  all.sort((a, b) => (b.run.startedAt ?? '').localeCompare(a.run.startedAt ?? ''))
+  return all.slice(0, RECENT_RUNS_LIMIT)
+}
 
 /** Injectable readers so {@link buildOverview} is unit-testable off disk. */
 export interface OverviewDeps {

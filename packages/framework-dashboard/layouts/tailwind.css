@@ -94,6 +94,19 @@
   --color-warning: var(--warning);
   --color-danger: var(--danger);
   --color-info: var(--info);
+
+  /* The shadcn sidebar reads its own `--sidebar-*` family so a sidebar can be themed apart from
+     the page. We keep it in step with the rest of the palette (the rail is the app's own surface,
+     not a contrasting slab): background canvas, accent for the hover/active fill, the shared border
+     and the primary ring. */
+  --color-sidebar: var(--background);
+  --color-sidebar-foreground: var(--foreground);
+  --color-sidebar-primary: var(--primary);
+  --color-sidebar-primary-foreground: var(--primary-foreground);
+  --color-sidebar-accent: var(--accent);
+  --color-sidebar-accent-foreground: var(--accent-foreground);
+  --color-sidebar-border: var(--border);
+  --color-sidebar-ring: var(--primary);
 }
 
 body {

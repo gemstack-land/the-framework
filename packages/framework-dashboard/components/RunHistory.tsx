@@ -1,47 +1,75 @@
 import { useEffect, useState } from 'react'
-import { Plus, MonitorSmartphone } from 'lucide-react'
-import type { RunMeta, RunStatus } from '@gemstack/the-framework'
+import { Plus, ChevronDown, MonitorSmartphone } from 'lucide-react'
+import type { RunMeta, RunStatus, RecentRun, ProjectSummary } from '@gemstack/the-framework'
 import { AGENT_LABELS, agentForDriver } from '@gemstack/the-framework/client'
-import { Button } from './ui/button.js'
+import { Button, buttonVariants } from './ui/button.js'
 import { Badge } from './ui/badge.js'
 import { cn } from '../lib/utils.js'
 import { formatRelative } from '../lib/format-date.js'
 import { STATUS_TONE } from '../lib/status-tone.js'
 import { runLabel } from '../lib/run-label.js'
 import { AgentLogo } from './agent-logos.js'
-import { ScrollArea } from './ui/scroll-area.js'
+import { AddProjectPanel } from './AddProjectPanel.js'
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from './ui/dropdown-menu.js'
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarGroupLabel,
+  SidebarHeader,
+  SidebarMenu,
+  SidebarMenuItem,
+} from './ui/sidebar.js'
 
-/** A label hidden in the collapsed strip, revealed by hover/focus on the rail (#862). */
-const FADED_LABEL = 'opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100'
+// One rendered row of the rail, from either source (a project's own run, or a pooled cross-project
+// recent): the RunMeta to show, an optional project label (only on the Overview, where the rail
+// pools every project), whether it is the selected row, and what selecting it does.
+type Row = { key: string; run: RunMeta; project?: string; active: boolean; onClick: () => void }
 
-// The Runs rail (#314 second sidebar). "New session" is the permanent home/launcher — selecting it
-// shows the Start form + cards (ProjectHome), and it is never consumed by a run. Every run
-// (live + archived, from `onRuns`) is its own row below it; selecting a run shows that run's
-// own view (its live output while running, a replay once finished). `runs` is owned by the
-// shell so the rail and the main pane share one list. `startTick`/`startIntent` seed an
-// optimistic "starting…" row the instant Start is clicked, until the real run.json lands.
+// The Runs rail (#314 second sidebar), now the shadcn Sidebar (#shared-shell): one component on
+// every route, so the home/Overview and a session page share the exact same left column instead of
+// the rail vanishing the moment no project is selected. "New" is the permanent home/launcher —
+// selecting it shows the Start form + cards (ProjectHome), and it is never consumed by a run. Below
+// it sit the recent sessions: a project's own runs when one is selected, and — on the Overview,
+// where no project is — every project's sessions pooled newest-first (`recentRuns`), each row
+// naming its project and jumping into it when selected. `runs`/`recentRuns` are owned by the shell
+// so the rail and the main pane share one list. `startTick`/`startIntent` seed an optimistic
+// "starting…" row the instant Start is clicked, until the real run.json lands.
 export function RunHistory({
   projectId,
   runs,
   selectedRunId,
   onSelect,
+  recentRuns,
+  onSelectRecent,
+  projects = [],
+  onNewSessionInProject,
+  onProjectAdded,
   startTick = 0,
   startIntent = '',
   followLive = false,
-  collapsed = false,
 }: {
   projectId: string | null
   runs: RunMeta[]
   selectedRunId: string | null
   onSelect: (runId: string | null) => void
+  /** Cross-project recents for the Overview (no project selected): every project's sessions pooled. */
+  recentRuns?: RecentRun[]
+  /** Select a pooled recent: jump into its project's session (project + run both change). */
+  onSelectRecent?: (projectId: string, runId: string) => void
+  /** Every registered project, so "New" knows whether to add one, start in the only one, or pick. */
+  projects?: ProjectSummary[]
+  /** Start a new session in a project (its launcher). */
+  onNewSessionInProject?: (projectId: string) => void
+  /** A project was just added, so the shell can refresh its list. */
+  onProjectAdded?: () => void
   startTick?: number
   startIntent?: string
   /** Just started a run that reported no id, so there is nothing selected to highlight yet (#705):
-   *  put the highlight on the running/optimistic row rather than the Live home row until the
-   *  shell adopts the run's real id. A run that did report one is selected by URL instead (#784). */
+   *  put the highlight on the running/optimistic row rather than the New row until the shell adopts
+   *  the run's real id. A run that did report one is selected by URL instead (#784). */
   followLive?: boolean
-  /** Give the room to a big view (#862): narrow to a strip, expanded again on hover or focus. */
-  collapsed?: boolean
 }) {
   const [optimistic, setOptimistic] = useState<string | null>(null)
 
@@ -66,89 +94,164 @@ export function RunHistory({
     return () => clearTimeout(timer)
   }, [optimistic, hasRunning])
 
-  if (!projectId) return null
+  // The Overview pools every project's sessions; a selected project shows just its own.
+  const crossProject = projectId === null && recentRuns !== undefined
+  // On the Overview the optimistic launch row belongs to a project, so it only applies in-project.
+  const showOptimistic = !crossProject && optimistic !== null && !hasRunning
 
   // While following a just-started run, the highlight belongs on that run (its optimistic row,
-  // then its real row) — not the Live home row, even though no run id is selected yet (#705).
+  // then its real row) — not the New row, even though no run id is selected yet (#705).
   const atHome = selectedRunId === null && !followLive
   // A session selected but not in the list is one just started, whose row lands with its run.json
   // a beat later (#784): the optimistic row is standing in for it, so highlight that.
   const starting = followLive || (selectedRunId !== null && !runs.some(run => run.id === selectedRunId))
 
-  // Collapsed, the strip is too narrow for words, and clipped half-words read as broken rather
-  // than as deliberate. Fade the labels out and leave the status dots, which is all that fits;
-  // opening the rail brings them back. Fading rather than unmounting keeps one DOM, so the
-  // reveal is CSS and the rows stay tab-reachable while narrow.
-  const label = collapsed ? FADED_LABEL : ''
+  const rows: Row[] = crossProject
+    ? recentRuns!.map(rr => ({
+        key: `${rr.projectId}:${rr.run.id}`,
+        run: rr.run,
+        project: rr.projectName,
+        active: false, // nothing is selected on the Overview; a row navigates into its project
+        onClick: () => onSelectRecent?.(rr.projectId, rr.run.id),
+      }))
+    : runs.map(run => ({
+        key: run.id,
+        run,
+        // Following live highlights the newest running run, not every one of them (#738):
+        // `runs` is newest-first, so that is the first with a running status.
+        active: run.id === selectedRunId || (followLive && run.id === newestRunningId),
+        onClick: () => onSelect(run.id),
+      }))
+
+  const hasRecents = rows.length > 0 || showOptimistic
 
   return (
-    // Collapsed (#862), the rail reserves only a strip and its panel floats over the main pane
-    // when opened, so hovering it does not reflow what you are reading. Focus-within opens it
-    // too: hover is a mouse affordance, and the rows are still tab-reachable while narrow.
-    <aside
-      className={cn(
-        'group relative shrink-0 transition-[width] duration-150',
-        collapsed ? 'w-12' : 'w-60',
-      )}
-    >
-      <div
-        className={cn(
-          'flex h-full flex-col overflow-hidden border-r border-border bg-background transition-[width] duration-150',
-          collapsed
-            ? 'absolute inset-y-0 left-0 z-20 w-12 group-hover:w-60 group-hover:shadow-lg group-focus-within:w-60 group-focus-within:shadow-lg'
-            : 'w-full',
-        )}
-      >
-      <ScrollArea className="min-h-0 flex-1">
-        {/* Extra right padding clears the overlay scrollbar (w-2.5) so a row's hover fill doesn't
-            run under the bar. */}
-        <div className="pl-2 pr-3.5 pt-3">
-        {/* Permanent home / launcher — always present, never a run: starting a new session. */}
-        <Button
-          variant="ghost"
-          className={cn('mb-1 w-full justify-start gap-2', collapsed && 'justify-center px-0', atHome && 'bg-accent text-accent-foreground')}
-          onClick={() => onSelect(null)}
-          title={collapsed ? 'New session' : undefined}
-        >
+    // A fixed-width, in-flow column (`collapsible="none"`): the shell already owns the top nav and
+    // the right rail, so the sidebar slots between them the way the old <aside> did.
+    <Sidebar collapsible="none" className="w-(--sidebar-width) border-r border-sidebar-border">
+      <SidebarHeader className="pb-0">
+        {/* "New" starts a session — but where depends on what exists: with no project it prompts to
+            add one first, with one project it starts there, with several it opens a picker. In a
+            project already, it just starts another session there. */}
+        <NewButton
+          projectId={projectId}
+          projects={projects}
+          atHome={atHome}
+          onNewSessionInProject={onNewSessionInProject}
+          onSelect={onSelect}
+          onProjectAdded={onProjectAdded}
+        />
+      </SidebarHeader>
+      <SidebarContent>
+        <SidebarGroup className="pt-1">
+          {/* Recents label sits under the launcher, over the run list (not a page-wide header). */}
+          {hasRecents && (
+            <SidebarGroupLabel className="uppercase tracking-wide text-muted-foreground">Recents</SidebarGroupLabel>
+          )}
+          <SidebarGroupContent>
+            <SidebarMenu className="gap-0.5">
+              {/* A just-started run, before its run.json exists — highlighted while following it. */}
+              {showOptimistic && (
+                <SidebarMenuItem>
+                  <RunRow status="running" intent={optimistic ?? undefined} subtitle="starting…" active={starting} dim onClick={() => onSelect(null)} />
+                </SidebarMenuItem>
+              )}
+              {rows.map(row => (
+                <SidebarMenuItem key={row.key}>
+                  <RunRow
+                    status={row.run.status}
+                    intent={runLabel(row.run)}
+                    driver={row.run.driver}
+                    // On the Overview the project is what tells the rows apart, so it leads the meta
+                    // line; a project's own rail already knows its project, so it shows just the time.
+                    subtitle={row.project ? `${row.project} · ${formatRelative(row.run.startedAt)}` : formatRelative(row.run.startedAt)}
+                    active={row.active}
+                    waiting={row.run.settledAt !== undefined}
+                    remote={row.run.target === 'remote'}
+                    {...(row.run.remoteLabel ? { remoteLabel: row.run.remoteLabel } : {})}
+                    onClick={row.onClick}
+                  />
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+            {!hasRecents && (
+              <p className="whitespace-nowrap px-2 py-1 text-sm text-muted-foreground">No sessions yet.</p>
+            )}
+          </SidebarGroupContent>
+        </SidebarGroup>
+      </SidebarContent>
+    </Sidebar>
+  )
+}
+
+// The "New" launcher, project-count aware (#new-button). In a project, it starts another session
+// there. On the Overview it adapts to how many projects exist: none -> open the add-project dialog
+// (you cannot start a session with nowhere to run it); one -> start there; several -> a small picker
+// so you choose where. The label + Plus stay the same in every case, so it reads as one button.
+function NewButton({
+  projectId,
+  projects,
+  atHome,
+  onNewSessionInProject,
+  onSelect,
+  onProjectAdded,
+}: {
+  projectId: string | null
+  projects: ProjectSummary[]
+  atHome: boolean
+  onNewSessionInProject?: ((projectId: string) => void) | undefined
+  onSelect: (runId: string | null) => void
+  onProjectAdded?: (() => void) | undefined
+}) {
+  const [adding, setAdding] = useState(false)
+  const cls = cn('w-full justify-start gap-2', atHome && 'bg-accent text-accent-foreground')
+  const start = (id: string) => (onNewSessionInProject ? onNewSessionInProject(id) : onSelect(null))
+
+  // In a project, or on the Overview with exactly one: start a session straight away.
+  if (projectId !== null || projects.length === 1) {
+    const target = projectId ?? projects[0]!.id
+    return (
+      <Button variant="ghost" className={cls} onClick={() => start(target)}>
+        <Plus className="h-4 w-4 shrink-0" />
+        <span className="whitespace-nowrap">New</span>
+      </Button>
+    )
+  }
+
+  // No projects: there is nowhere to run a session, so prompt to add one first.
+  if (projects.length === 0) {
+    return (
+      <>
+        <Button variant="ghost" className={cls} onClick={() => setAdding(true)} title="Add a project to start a session">
           <Plus className="h-4 w-4 shrink-0" />
-          <span className={cn('whitespace-nowrap', label)}>New</span>
+          <span className="whitespace-nowrap">New</span>
         </Button>
-        {/* Recents label sits under the launcher, over the run list (not a page-wide header). */}
-        {(runs.length > 0 || optimistic !== null) && (
-          <div className={cn('whitespace-nowrap px-2 pb-1 pt-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground', label)}>
-            Recents
-          </div>
-        )}
+        {adding && <AddProjectPanel onAdded={() => onProjectAdded?.()} onClose={() => setAdding(false)} />}
+      </>
+    )
+  }
 
-        {/* A just-started run, before its run.json exists — highlighted while following it. */}
-        {optimistic !== null && !hasRunning && (
-          <RunRow status="running" intent={optimistic} subtitle="starting…" active={starting} dim collapsed={collapsed} onClick={() => onSelect(null)} />
-        )}
-
-        {runs.length === 0 && optimistic === null && (
-          <p className={cn('whitespace-nowrap px-2 py-1 text-sm text-muted-foreground', label)}>No sessions yet.</p>
-        )}
-        {runs.map(run => (
-          <RunRow
-            key={run.id}
-            status={run.status}
-            intent={runLabel(run)}
-            driver={run.driver}
-            subtitle={formatRelative(run.startedAt)}
-            // Following live highlights the newest running run, not every one of them (#738):
-            // `runs` is newest-first, so that is the first with a running status.
-            active={run.id === selectedRunId || (followLive && run.id === newestRunningId)}
-            waiting={run.settledAt !== undefined}
-            remote={run.target === 'remote'}
-            {...(run.remoteLabel ? { remoteLabel: run.remoteLabel } : {})}
-            collapsed={collapsed}
-            onClick={() => onSelect(run.id)}
-          />
+  // Several projects: pick which one the new session runs in.
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger aria-label="New session" className={cn(buttonVariants({ variant: 'ghost' }), cls)}>
+        <Plus className="h-4 w-4 shrink-0" />
+        <span className="whitespace-nowrap">New</span>
+        <ChevronDown className="ml-auto h-3.5 w-3.5 shrink-0 opacity-70" />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="w-[13.5rem]">
+        {projects.map(p => (
+          <DropdownMenuItem key={p.id} onClick={() => start(p.id)}>
+            {/* Match the picker's activated dot so the two project lists read the same (#695/U33). */}
+            <span
+              aria-hidden
+              className={cn('h-2 w-2 shrink-0 rounded-full', p.activated ? 'bg-primary' : 'bg-muted-foreground')}
+            />
+            <span className="flex-1 truncate">{p.name}</span>
+          </DropdownMenuItem>
         ))}
-        </div>
-      </ScrollArea>
-      </div>
-    </aside>
+      </DropdownMenuContent>
+    </DropdownMenu>
   )
 }
 
@@ -165,7 +268,6 @@ function RunRow({
   waiting = false,
   remote = false,
   remoteLabel,
-  collapsed = false,
 }: {
   status: RunStatus
   intent: string | undefined
@@ -181,26 +283,19 @@ function RunRow({
   remote?: boolean
   /** The device's label, for the glyph's tooltip. */
   remoteLabel?: string | undefined
-  /** In the narrow strip (#862): labels fade out, so the row is carried by its dot alone. */
-  collapsed?: boolean
 }) {
   // Only a live run can be waiting on you; a finished one is just finished.
   const parked = waiting && status === 'running'
-  const label = collapsed ? FADED_LABEL : ''
   const agent = agentForDriver(driver)
   return (
     <Button
       variant="ghost"
       className={cn(
-        'mb-0.5 h-auto w-full flex-col items-start gap-0.5 px-2 py-2 text-left',
-        collapsed && 'px-0',
+        'h-auto w-full flex-col items-start gap-0.5 px-2 py-2 text-left',
         active && 'bg-accent text-accent-foreground',
         dim && 'opacity-70',
       )}
       onClick={onClick}
-      // Collapsed, the visible labels fade and the row is carried by a colour dot; keep the
-      // whole story reachable by hover and assistive tech (#948).
-      {...(collapsed ? { title: `${parked ? 'waiting' : status}: ${intent || 'New session'}`, 'aria-label': `${parked ? 'waiting' : status}: ${intent || 'New session'}` } : {})}
     >
       <span className="flex w-full items-center gap-2">
         {/* The dot means "the agent is working", so a run parked on you gets a still one (#785):
@@ -208,21 +303,15 @@ function RunRow({
         {status === 'running' && (
           <span className={cn('inline-block h-2 w-2 shrink-0 rounded-full', parked ? 'bg-muted-foreground' : 'animate-pulse bg-primary')} />
         )}
-        {/* Collapsed, a finished run has no dot of its own and its badge has faded, so the row
-            would be an empty line. Give it one in the status' colour: the strip is a list of
-            sessions by state, which is as much as fits. */}
-        {collapsed && status !== 'running' && (
-          <span className={cn('inline-block h-2 w-2 shrink-0 rounded-full bg-current', STATUS_TONE[status])} />
-        )}
-        <Badge className={cn('shrink-0 border-transparent px-0 text-[10px] uppercase', parked ? 'text-muted-foreground' : STATUS_TONE[status], label)}>
+        <Badge className={cn('shrink-0 border-transparent px-0 text-[10px] uppercase', parked ? 'text-muted-foreground' : STATUS_TONE[status])}>
           {parked ? 'waiting' : status}
         </Badge>
-        <span className={cn('truncate text-xs font-normal text-muted-foreground', label)}>{subtitle}</span>
+        <span className="truncate text-xs font-normal text-muted-foreground">{subtitle}</span>
         {/* Right cluster: a device glyph when the run is relayed to a connected device (#1067),
             then the agent logo. The logo is the only thing naming the agent on this row, so it
             carries a title rather than being decorative. */}
         {(remote || agent) && (
-          <span className={cn('ml-auto flex shrink-0 items-center gap-1.5', label)}>
+          <span className="ml-auto flex shrink-0 items-center gap-1.5">
             {remote && (
               <span title={remoteLabel ? `Runs on ${remoteLabel}` : 'Runs on a connected device'} className="flex items-center">
                 <MonitorSmartphone className="h-3 w-3 text-muted-foreground" aria-label={remoteLabel ? `Runs on ${remoteLabel}` : 'Runs on a connected device'} />
@@ -232,7 +321,7 @@ function RunRow({
           </span>
         )}
       </span>
-      <span className={cn('w-full truncate text-sm font-medium', label)}>{intent || 'New session'}</span>
+      <span className="w-full truncate text-sm font-medium">{intent || 'New session'}</span>
     </Button>
   )
 }

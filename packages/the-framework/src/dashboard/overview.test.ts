@@ -1,6 +1,6 @@
 import { strict as assert } from 'node:assert'
 import { test } from 'node:test'
-import { buildOverview } from './overview.js'
+import { buildOverview, buildRecentRuns } from './overview.js'
 import type { ProjectSummary } from './projects.js'
 import type { ProjectQueue } from './queue.js'
 import type { RunMeta } from '../store/index.js'
@@ -59,4 +59,35 @@ test('buildOverview omits projects with no activity from recent', async () => {
     queue: async () => [],
   })
   assert.deepEqual(overview.recent.map(r => r.projectId), ['b'])
+})
+
+const run = (id: string, startedAt: string): RunMeta =>
+  ({ version: 1, status: 'done', id, startedAt, updatedAt: startedAt, passes: 0 }) as RunMeta
+
+test('buildRecentRuns pools every project newest-first and tags each with its project', async () => {
+  const runs: Record<string, RunMeta[]> = {
+    '/a': [run('a2', '2026-07-13T12:00:00Z'), run('a1', '2026-07-13T09:00:00Z')],
+    '/b': [run('b1', '2026-07-13T11:00:00Z')],
+  }
+  const recent = await buildRecentRuns([project('alpha', '/a'), project('beta', '/b')], {
+    runs: async cwd => runs[cwd] ?? [],
+  })
+  assert.deepEqual(
+    recent.map(r => ({ project: r.projectName, id: r.run.id })),
+    [
+      { project: 'alpha', id: 'a2' },
+      { project: 'beta', id: 'b1' },
+      { project: 'alpha', id: 'a1' },
+    ],
+  )
+})
+
+test('buildRecentRuns tolerates a project whose runs cannot be read', async () => {
+  const recent = await buildRecentRuns([project('ok', '/ok'), project('bad', '/bad')], {
+    runs: async cwd => {
+      if (cwd === '/bad') throw new Error('unreadable')
+      return [run('x', '2026-07-13T10:00:00Z')]
+    },
+  })
+  assert.deepEqual(recent.map(r => r.run.id), ['x'])
 })
