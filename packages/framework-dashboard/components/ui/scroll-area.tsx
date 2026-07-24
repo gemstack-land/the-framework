@@ -38,7 +38,10 @@ export function ScrollArea({
         ref={viewportRef}
         data-slot="scroll-area-viewport"
         className={cn(
-          'w-full rounded-[inherit] outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)]',
+          // No focus ring on the viewport: a scroll region is not a control, and the ring painted a
+          // green box down the sidebar edge whenever it took focus. Keep it focusable for keyboard
+          // scrolling, just without the outline.
+          'w-full rounded-[inherit] outline-none',
           // Default: fill a definite-height Root. A caller that caps the viewport (a dropdown, the
           // editor) passes its own `max-h-*` here instead of relying on the Root.
           viewportClassName ?? 'h-full',

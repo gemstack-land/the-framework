@@ -124,11 +124,9 @@ export function RunHistory({
   // On the Overview the optimistic launch row belongs to a project, so it only applies in-project.
   const showOptimistic = !crossProject && optimistic !== null && !hasRunning
 
-  // While following a just-started run, the highlight belongs on that run (its optimistic row,
-  // then its real row) — not the New row, even though no run id is selected yet (#705).
-  const atHome = selectedRunId === null && !followLive
   // A session selected but not in the list is one just started, whose row lands with its run.json
-  // a beat later (#784): the optimistic row is standing in for it, so highlight that.
+  // a beat later (#784): the optimistic row is standing in for it, so highlight that. Following a
+  // just-started run (#705) counts too, before its id is known.
   const starting = followLive || (selectedRunId !== null && !runs.some(run => run.id === selectedRunId))
 
   const rows: Row[] = crossProject
@@ -166,11 +164,13 @@ export function RunHistory({
         <NewButton
           projectId={projectId}
           projects={projects}
-          atHome={atHome}
           onNewSessionInProject={onNewSessionInProject}
           onSelect={onSelect}
           onProjectAdded={onProjectAdded}
         />
+        {/* Overview: the way home, its own nav item directly under New and above the session list,
+            more prominent than a menu row. Only this — the current view — carries the active fill. */}
+        <OverviewButton active={projectId === null} count={interventionCount} onClick={onDashboard} />
         {/* The project selector is its own element now, no longer fused with Overview. Its exact
             filter-vs-navigate behaviour is still open; today's navigate-on-select is the interim. */}
         <ProjectPicker
@@ -183,11 +183,6 @@ export function RunHistory({
       {/* The themed ScrollArea (#913) instead of the sidebar's native overflow bar, matching the
           Overview: suppress SidebarContent's own `overflow-auto` and let the ScrollArea own it. */}
       <SidebarContent className="overflow-hidden">
-        {/* Overview: the way home, pinned above the session list and given prominence (its own
-            entry now, not buried in the picker menu). Active when no project is selected. */}
-        <div className="px-2 pt-1">
-          <OverviewButton active={projectId === null} count={interventionCount} onClick={onDashboard} />
-        </div>
         <ScrollArea className="min-h-0 flex-1">
           <SidebarGroup className="pt-1">
             {/* Recents label sits under the launcher, over the run list (not a page-wide header). */}
@@ -279,20 +274,20 @@ function OverviewButton({ active, count, onClick }: { active: boolean; count: nu
 function NewButton({
   projectId,
   projects,
-  atHome,
   onNewSessionInProject,
   onSelect,
   onProjectAdded,
 }: {
   projectId: string | null
   projects: ProjectSummary[]
-  atHome: boolean
   onNewSessionInProject?: ((projectId: string) => void) | undefined
   onSelect: (runId: string | null) => void
   onProjectAdded?: (() => void) | undefined
 }) {
   const [adding, setAdding] = useState(false)
-  const cls = cn('w-full justify-start gap-2', atHome && 'bg-accent text-accent-foreground')
+  // Plain, never "active": New is an action, not the current view. Only the current nav item
+  // (Overview) carries the active fill, so the two no longer both look selected.
+  const cls = 'w-full justify-start gap-2'
   const start = (id: string) => (onNewSessionInProject ? onNewSessionInProject(id) : onSelect(null))
 
   // In a project, or on the Overview with exactly one: start a session straight away.
