@@ -1,5 +1,50 @@
 # @gemstack/the-framework
 
+## 1.4.0
+
+### Minor Changes
+
+- 79d1689: Re-skin the dashboard onto the landing page's Everforest identity (IBM Plex Sans, warm dark palette, squarer corners) and rename the two queues to "Human Queue" and "AI Queue" so the dashboard and the-framework.ai read as one product.
+- 23385a1: Dashboard: remove the top navbar and move its chrome into the sidebar (brand, a prominent Overview, an expandable Projects nav, and the Local/theme/notifications/Settings controls in a footer). Add a `project / session` breadcrumb and an always-available session-details disclosure (agent + spend) to the session toolbar, and fold the toolbar's actions (GitHub, folder, editor, Serve, Stop, Remove worktree, Delete, Open session) into a single overflow menu. Polish the Recents rail: themed scrollbar, a sticky label with a scroll-driven fade, lighter weights, and a hover marquee for long titles. Stop the toolbar flickering on session navigation (keep-previous on the git status / GitHub reads). Add an opt-in `pnpm dev:daemon` so the dev server can start runs by proxying to the daemon.
+- ef0d941: Add a "Hot tickets" overview to the dashboard.
+
+  The Overview now has a cross-project glance at the tickets that matter right now, in three lanes: In progress (tickets the agent has planned or spiked), Up next (high priority, not started yet), and Queued (the rest of the open backlog). Each row names its project and jumps into it when selected.
+
+  It pools every project's `tickets/`, so it is a projection of the same files the agent plans from, polled so it stays live. Empty lanes collapse to a single header line, so an import-heavy repo where everything sits queued still reads as designed.
+
+- 2c1e6d4: Start a run with no project, in a neutral scratch directory.
+
+  A "topic" run starts project-less: it spawns in a neutral scratch dir under the config home with no repo or worktree, so the agent has no code to touch. This is the "ask a question, plan, or draft a ticket without a repo" path. It still produces the normal run lifecycle (events.jsonl, run.json, settle) inside the scratch dir.
+
+  A new `sendStartTopic` RPC starts one beside the project-scoped `sendStart`, keeping the home-default behavior untouched. The scratch dir is retained on failure or stop and removed on a clean finish, mirroring the worktree retention rule. The UI for it is tracked separately.
+
+- f674fbc: Add a repos-directory preference with an opt-in auto-grant (#1123): a root directory the project-registration flow will default into, plus an off-by-default toggle that auto-adds every git repo directly inside it on daemon boot.
+- 2581fce: One shared sidebar on every route, rebuilt on the shadcn Base UI sidebar.
+
+  The sessions rail used to vanish the moment no project was selected, so the home/Overview had no left column while a session page did. It is now the shadcn Base UI sidebar, rendered on every route, so the two read as the same app.
+
+  On the Overview it pools recent sessions across every project (a new cross-project read), each row naming its project and jumping into it when selected; a selected project still shows its own runs.
+
+  "New" is now project-aware: with no project it opens the add-project dialog (there is nowhere to run a session yet), with one project it starts there, and with several it opens a picker so you choose where. In a project already, it starts another session there.
+
+- 7509a4c: feat(the-framework): let a project-less topic run bind to a project via an await gate, with the registered projects injected into its context as the list to pick from (#1121)
+- 8ddbade: feat(the-framework): re-home a bound topic run into its project (#1122): the daemon watches for the recorded bind, allocates a worktree in the chosen project, resumes the same agent session there via continue-run, and tears down the scratch, so a bound topic run becomes an ordinary run living in the project's worktree
+
+### Patch Changes
+
+- f09a5d8: Fix the navbar overflowing the page at narrow widths.
+
+  Below a narrow viewport the top nav pushed the whole document wider than the screen, so the page scrolled sideways and slid the app off-screen. The cause was the nav's fixed clusters: the brand mark plus wordmark on one side and the "New session" button plus the icon buttons on the other were both `shrink-0`, so together with the project picker they could not fit a phone-width viewport.
+
+  Below `sm` the nav now folds down to what fits: the brand keeps its mark (still the link home) but drops the "The Framework" wordmark, the "New session" button collapses to its `+` icon (still labelled for a screen reader), and the project picker caps narrower and truncates a long name. At `sm` and up everything is exactly as before. Verified by driving a real browser at 375px and 420px (no page scroll) and at 1200px (labels back); jsdom cannot see this class of layout bug.
+
+- e1765be: Dashboard: the session's status (stopped, ready for merge, failed) is a small label beside the ⋮ menu in the session toolbar instead of a banner over the feed, and the one session that cannot be continued says so in the composer's placeholder rather than in a note above it.
+- 0e37ffd: Add a "Suggest new features" preset.
+
+  The Agentic-PM presets covered proposing work items you describe (Suggest new tickets), researching the outside market (Market research), and choosing among tickets that already exist (Suggest tickets to work on) — but not proposing net-new features from the product itself. This fills that corner: it studies what the product does today and proposes features it should have next, writing each as a ticket under `tickets/` for the normal triage pipeline to pick up.
+
+  Autonomous rather than gated, like the other suggest-class presets: a proposal is a reviewable ticket, so the human triages later instead of approving mid-run, which also keeps it usable on a schedule. Paramless — it scopes itself to the whole product, so there is no blank to fill.
+
 ## 1.3.0
 
 ### Minor Changes
