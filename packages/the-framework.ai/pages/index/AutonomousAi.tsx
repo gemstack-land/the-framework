@@ -74,7 +74,7 @@ export function AutonomousAi() {
       </div>
       <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap' }}>
         <Note style={noteFlexStyle}>Agents still ask for your confirmation for non-obvious decisions.</Note>
-        <Note style={noteFlexStyle}>You're still in control: only pick the autonomicity that works for you.</Note>
+        <Note style={noteFlexStyle}>You're still in control — only pick the autonomicity that works for you.</Note>
       </div>
     </section>
   )

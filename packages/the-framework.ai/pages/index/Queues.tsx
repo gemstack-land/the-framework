@@ -37,7 +37,7 @@ export function Queues() {
       >
         <QueueCard title="AI Queue" icon="🤖">
           <P>
-            Queue of future AI tasks — tasks are added by humans, or by{' '}
+            Queue of upcoming AI tasks — tasks are added by humans, or by{' '}
             agents (autonomously if highly confident, or after human
             confirmation otherwise).
           </P>

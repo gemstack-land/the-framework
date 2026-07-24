@@ -61,7 +61,7 @@ export function YourFramework() {
         }}
       >
         <Card title="Flexible">
-          <Item>The Framework doesn't force anything: pick only the features you need</Item>
+          <Item>The Framework doesn't force anything — pick only the features you need</Item>
           <Item marker={<Emoji e="🚧" />}>
             <WipBadge icon={false} /> Customize anything to fit your needs
           </Item>
