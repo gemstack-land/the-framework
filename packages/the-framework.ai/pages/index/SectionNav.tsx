@@ -5,8 +5,7 @@ import { mono } from './ui'
 export const SECTIONS = [
   { id: 'stop-babysitting', title: 'Stop babysitting' },
   { id: 'autonomous-ai', title: 'Autonomous AI' },
-  { id: 'enhanced-system-prompt', title: 'Enhanced System Prompt' },
-  { id: 'prompts', title: 'High-quality prompts' },
+  { id: 'how-it-works', title: 'How it works' },
   { id: 'features', title: 'Features' },
   { id: 'your-framework', title: 'Your framework', italicFirst: true },
 ] as const

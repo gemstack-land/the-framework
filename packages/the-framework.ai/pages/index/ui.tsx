@@ -23,6 +23,14 @@ export const h2Style: CSSProperties = {
   letterSpacing: '-0.015em',
 }
 
+// Subsection heading (the "How it works" children).
+export const h3Style: CSSProperties = {
+  margin: 0,
+  fontSize: 'clamp(23px, 4.5vw, 28px)',
+  fontWeight: 700,
+  letterSpacing: '-0.01em',
+}
+
 export const cardStyle: CSSProperties = {
   background: '#343f44',
   border: '1px solid #3d484d',
@@ -38,11 +46,12 @@ export const kickerStyle: CSSProperties = {
   color: '#a7c080',
 }
 
-export function SectionHead({ title, sub }: { title: ReactNode; sub?: string }) {
+export function SectionHead({ title, sub, small }: { title: ReactNode; sub?: string; small?: boolean }) {
+  const H = small ? 'h3' : 'h2'
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12, maxWidth: 640 }}>
-      <h2 style={h2Style}>{title}</h2>
-      {sub && <p style={{ margin: 0, fontSize: 17, lineHeight: 1.6, color: '#9da9a0' }}>{sub}</p>}
+      <H style={small ? h3Style : h2Style}>{title}</H>
+      {sub && <p style={{ margin: 0, fontSize: small ? 16 : 17, lineHeight: 1.6, color: '#9da9a0' }}>{sub}</p>}
     </div>
   )
 }

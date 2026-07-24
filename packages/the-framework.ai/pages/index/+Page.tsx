@@ -4,8 +4,7 @@ import { Hero } from './Hero'
 import { SectionNav } from './SectionNav'
 import { StopBabysitting } from './StopBabysitting'
 import { AutonomousAi } from './AutonomousAi'
-import { EnhancedSystemPrompt } from './EnhancedSystemPrompt'
-import { Prompts } from './Prompts'
+import { HowItWorks } from './HowItWorks'
 import { Features } from './Features'
 import { YourFramework } from './YourFramework'
 import { Cta } from './Cta'
@@ -19,8 +18,7 @@ export default function Page() {
       <SectionNav />
       <StopBabysitting />
       <AutonomousAi />
-      <EnhancedSystemPrompt />
-      <Prompts />
+      <HowItWorks />
       <Features />
       <YourFramework />
       <Cta />

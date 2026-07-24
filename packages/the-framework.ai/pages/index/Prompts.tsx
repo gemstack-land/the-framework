@@ -1,5 +1,5 @@
 import type { CSSProperties } from 'react'
-import { cardStyle, SectionHead, sectionStyle } from './ui'
+import { cardStyle, SectionHead } from './ui'
 
 const CARDS = [
   { title: 'Security audit', desc: 'Prompts that scrutinize your code for security vulnerabilities.' },
@@ -23,8 +23,8 @@ const promptCardStyle: CSSProperties = {
 
 export function Prompts() {
   return (
-    <section id="prompts" style={sectionStyle}>
-      <SectionHead title="High-quality prompts" sub="Use state-of-the-art open source prompts, or bring your own." />
+    <section id="prompts" style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+      <SectionHead small title="High-quality prompts" sub="Use state-of-the-art open source prompts, or bring your own." />
       <div
         style={{
           display: 'grid',
@@ -34,12 +34,12 @@ export function Prompts() {
       >
         {CARDS.map((c) => (
           <div key={c.title} style={{ ...cardStyle, ...promptCardStyle }}>
-            <h3 style={{ margin: 0, fontSize: 17, fontWeight: 600 }}>{c.title}</h3>
+            <h4 style={{ margin: 0, fontSize: 17, fontWeight: 600 }}>{c.title}</h4>
             <p style={{ margin: 0, fontSize: 14, lineHeight: 1.6, color: '#9da9a0' }}>{c.desc}</p>
           </div>
         ))}
         <div style={{ background: 'transparent', border: '1.5px dashed #4f585e', borderRadius: 12, ...promptCardStyle }}>
-          <h3 style={{ margin: 0, fontSize: 17, fontWeight: 600, color: '#a7c080' }}>＋ Add yours</h3>
+          <h4 style={{ margin: 0, fontSize: 17, fontWeight: 600, color: '#a7c080' }}>＋ Add yours</h4>
           <p style={{ margin: 0, fontSize: 14, lineHeight: 1.6, color: '#9da9a0' }}>Save your own tailored prompts.</p>
         </div>
       </div>
