@@ -149,7 +149,7 @@ export async function resolveAwaitGate(
     // is unreachable in practice. It stays as a safety net rather than an assumed-present lookup.
     const project = projects.find(p => p.id === picked)
     if (!project) return NO_PROJECTS_TO_BIND
-    // #1122 re-homes the run into the bound project's worktree; here the bind is only recorded.
+    // The gate only records the bind; the daemon watches for it and re-homes the run (#1122).
     deps.bind.recordBind(project.id)
     return `Bound this run to ${project.path}.`
   }
@@ -175,7 +175,7 @@ export async function resolveAwaitGate(
     // path declines back to the agent, so a bad path can never crash the run.
     const result = await deps.bind.addProject(gate.path)
     if (!result.ok) return `Could not register that project: ${result.error}. Continue without a project, or give an existing absolute repo path.`
-    // #1122 re-homes the run into the bound project's worktree; here the bind is only recorded.
+    // The gate only records the bind; the daemon watches for it and re-homes the run (#1122).
     deps.bind.recordBind(result.project.id)
     return result.created
       ? `Registered and bound this run to ${result.project.path}.`
