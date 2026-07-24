@@ -1,9 +1,80 @@
+import http from 'node:http'
 import { fileURLToPath } from 'node:url'
 import react from '@vitejs/plugin-react'
 import vike from 'vike/plugin'
 import { telefunc } from 'telefunc/vite'
 import tailwindcss from '@tailwindcss/vite'
 import { defineConfig, type Plugin, type UserConfig } from 'vite'
+
+// Opt-in (`pnpm dev:daemon`, i.e. FRAMEWORK_DEV_DAEMON=1): let the dev server actually start runs.
+//
+// `pnpm dev` alone is the Vite dev server with no Telefunc context, so `sendStart` reports "starting
+// a session is not enabled on this server" (same gap that leaves preferences unpersisted in dev).
+// Only the daemon has the `startRun` handler. This plugin brings up that daemon (the framework's own
+// `ensureDaemon`, idempotent — it reuses one already running) and proxies `/_telefunc` (RPCs and the
+// SSE Channel) to it, so the live-reload UI gets the full backend, run-starting included.
+//
+// The proxy middleware is registered synchronously so it lands ahead of Telefunc's own middleware;
+// it holds requests until the daemon is up. Left out by default so the plain dev server stays a
+// pure UI harness with no detached process spawned behind it. The daemon is detached and outlives
+// the dev server (stop it with `the-framework stop`).
+function frameworkDevDaemon(): Plugin {
+  return {
+    name: 'framework:dev-daemon',
+    apply: 'serve',
+    configureServer(server) {
+      if (!process.env.FRAMEWORK_DEV_DAEMON) return
+      let target: { hostname: string; port: string } | null = null
+      const ready = (async () => {
+        const { ensureDaemon } = await import('@gemstack/the-framework')
+        const cwd = process.env.FRAMEWORK_DEV_DAEMON_CWD || process.cwd()
+        const { state, alreadyRunning } = await ensureDaemon(cwd)
+        const url = new URL(state.url)
+        target = { hostname: url.hostname, port: url.port || '4200' }
+        server.config.logger.info(
+          `\n[framework] dev daemon ${alreadyRunning ? 'reused' : 'started'} at ${state.url} — starting runs is enabled\n`,
+        )
+      })().catch((err: unknown) => {
+        server.config.logger.error(
+          `[framework] dev daemon did not start (${err instanceof Error ? err.message : String(err)}); ` +
+            `reads still work, but starting a run stays disabled`,
+        )
+      })
+
+      // Registered up front (not after the await) so it sits ahead of Telefunc's middleware; the
+      // request waits on `ready` when it arrives before the daemon has come up.
+      server.middlewares.use((req, res, next) => {
+        const url = req.originalUrl ?? req.url ?? ''
+        if (!url.startsWith('/_telefunc')) return next()
+        const forward = (): void => {
+          if (!target) {
+            res.statusCode = 503
+            res.end('framework dev daemon is not available')
+            return
+          }
+          // Host header left as the browser sent it (localhost:<devport>), so the daemon's same-origin
+          // guard passes; the SSE Channel just rides the piped response.
+          const proxyReq = http.request(
+            { hostname: target.hostname, port: target.port, method: req.method, path: url, headers: req.headers },
+            proxyRes => {
+              res.writeHead(proxyRes.statusCode ?? 502, proxyRes.headers)
+              proxyRes.pipe(res)
+            },
+          )
+          proxyReq.on('error', () => {
+            if (!res.headersSent) {
+              res.statusCode = 502
+              res.end('framework dev daemon proxy error')
+            }
+          })
+          req.pipe(proxyReq)
+        }
+        if (target) forward()
+        else void ready.then(forward)
+      })
+    },
+  }
+}
 
 // `pnpm dev` only. Telefunc's client marks every request URL with its kind
 // (`/_telefunc?_telefunc=txt`, `sse` for a Channel) and may append an advisory `session`, but its
@@ -37,7 +108,7 @@ function telefuncDevUrlFix(): Plugin {
 // a custom endpoint anymore. Side-by-side with the MVP page.ts dashboard; nothing
 // there is touched. Production serving (daemon serves the built bundle) is next (#405).
 export default defineConfig({
-  plugins: [telefuncDevUrlFix(), react(), vike(), telefunc(), tailwindcss()],
+  plugins: [frameworkDevDaemon(), telefuncDevUrlFix(), react(), vike(), telefunc(), tailwindcss()],
   // `@/*` -> package root, matching tsconfig `paths` (used by the copied-in animate-ui components).
   resolve: {
     alias: { '@': fileURLToPath(new URL('.', import.meta.url)) },

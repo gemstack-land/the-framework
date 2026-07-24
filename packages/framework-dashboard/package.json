@@ -10,6 +10,7 @@
   },
   "scripts": {
     "dev": "vite",
+    "dev:daemon": "FRAMEWORK_DEV_DAEMON=1 vite",
     "build": "vite build",
     "design:build": "tsx design/build.mts",
     "preview": "vite preview",
