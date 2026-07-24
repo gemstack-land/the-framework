@@ -171,8 +171,11 @@ export function CodeChip({ children, fontSize }: { children: string; fontSize: n
         fontFamily: mono,
         fontSize,
         background: '#232a2e',
+        // The border keeps the chip visible even on #232a2e surfaces (e.g. the
+        // good-solution rows), where the background alone disappears.
+        border: '1px solid #475258',
         borderRadius: 5,
-        padding: '2px 6px',
+        padding: '1px 6px',
         color: '#dbbc7f',
       }}
     >
