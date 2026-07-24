@@ -40,6 +40,12 @@ export type ControlEntry =
    * event, which is what puts it on the meta the checkboxes read.
    */
   | { kind: 'handoff'; push: boolean; pr: boolean }
+  /**
+   * Bind a project-less topic run to a project (#1121): the await-gate resolver appends this once
+   * it registers + binds the picked project, and the run folds `projectId` onto its meta. Same
+   * shape as the tools-variant spike, so only the trigger differs. The worktree re-home is #1122.
+   */
+  | { kind: 'bind'; projectId: string }
 
 /** The control log path for a workspace. */
 export function controlPath(cwd: string): string {
@@ -93,6 +99,8 @@ function isControlEntry(value: unknown): value is ControlEntry {
   // Both halves must be real booleans: a half-written entry would otherwise disarm by accident,
   // and this decides whether the session's work reaches the remote at all.
   if (v['kind'] === 'handoff') return typeof v['push'] === 'boolean' && typeof v['pr'] === 'boolean'
+  // A bind needs a non-empty projectId; it decides which project the run re-homes into (#1121).
+  if (v['kind'] === 'bind') return typeof v['projectId'] === 'string' && v['projectId'].length > 0
   // `via` is optional (older entries have none), but a present one must be a safe transport name:
   // it is written into a line-parsed conversation heading, and a surface names itself (#917).
   if (v['kind'] === 'message') {

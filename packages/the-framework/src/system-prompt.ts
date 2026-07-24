@@ -2,6 +2,27 @@ import { renderTemplate } from './prompt-template.js'
 import { SYSTEM_PROMPT } from './prompts.generated.js'
 import { AWAIT_PROTOCOL, BROWSER_PROTOCOL, SIGNAL_PROTOCOL } from './turn-gate.js'
 
+/**
+ * Topic-run bind protocol (#1121, gates spike): told only to a project-less "topic" run (#1120) so
+ * the agent knows it can bind to a project mid-run, and how. It reuses the await-block emit format
+ * {@link AWAIT_PROTOCOL} already taught, so it only names the two topic-specific tags. It lives in
+ * this runtime append layer (a plain string) rather than the drift-guarded base prompt, so this
+ * spike needs no `.md` edit and a normal run's channel stays byte-identical (#547). Kept topic-only.
+ */
+export const TOPIC_BIND_PROTOCOL = [
+  '## Binding this run to a project',
+  'This run started with no project, in a scratch directory with no repo. When your work needs a real project to act on, end your turn with one fenced block, then stop.',
+  'To bind to a project that is already registered, tag it `await-bind-project` (the framework shows you the list of projects to pick from):',
+  '```await-bind-project',
+  '{ "title": "<why you need a project>" }',
+  '```',
+  'To register a new project by its absolute path and bind this run to it, tag it `await-create-project`:',
+  '```await-create-project',
+  '{ "title": "<what this project is>", "path": "<absolute repo path>" }',
+  '```',
+  'The framework registers and binds it, then re-prompts you with the result. Do not bind unless the work actually needs a repo.',
+].join('\n')
+
 // No Node imports here, deliberately. This module composes the prompt and the
 // dashboard renders it in the browser (#520), so reading the user's SYSTEM.md off
 // disk lives in `system-prompt-file.ts` instead. Keep it that way: one `node:fs`
@@ -232,6 +253,11 @@ export interface SystemPromptOptions {
    * them — so it reaches for `WebFetch`, and the browser (and its preview) sits unused.
    */
   browser?: boolean | undefined
+  /**
+   * This is a project-less "topic" run (#1120). Appends {@link TOPIC_BIND_PROTOCOL} so the agent
+   * knows it can bind to a project mid-run (#1121). Topic-only: a normal run's channel is unchanged.
+   */
+  topic?: boolean | undefined
 }
 
 /**
@@ -293,5 +319,8 @@ export function composeRunSystem(opts: RunSystemOptions = {}): string {
   // tools are there either way.
   // Ahead of the protocols, so the signal protocol stays the last thing in the channel (#547).
   const browser = opts.browser ? [BROWSER_PROTOCOL] : []
-  return [...(promptBlock ? [promptBlock] : []), ...browser, AWAIT_PROTOCOL, SIGNAL_PROTOCOL].join('\n\n')
+  // Topic-run bind (#1121): rides with the await protocol (it is an await gate), so it sits right
+  // after it and keeps the signal protocol last (#547). Topic-only, so a normal channel is unchanged.
+  const topicBind = opts.topic ? [TOPIC_BIND_PROTOCOL] : []
+  return [...(promptBlock ? [promptBlock] : []), ...browser, AWAIT_PROTOCOL, ...topicBind, SIGNAL_PROTOCOL].join('\n\n')
 }

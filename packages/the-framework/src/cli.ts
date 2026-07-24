@@ -51,15 +51,15 @@ import { loadUserSystemPrompt, SYSTEM_PROMPT_FILE } from './system-prompt-file.j
 import { checkForUpdate, formatUpdateStatus, nodeVersionFetcher, type VersionFetcher } from './update-check.js'
 import { appendLog, type LogEntry } from './logs.js'
 import { appendMessage, isSafeVia } from './conversations.js'
-import type { RecordMessage } from './await-gate.js'
+import type { BindProjectDeps, RecordMessage } from './await-gate.js'
 import { preflight } from './preflight.js'
 import { RunStore, commitPendingWork, currentBranch, nodeStoreFs, renameRunBranch, runBranchName, type StoreFs } from './store/index.js'
 import { materializePresets } from './presets.js'
 import { daemonStatus, ensureDaemon, isLoopbackHost, registerHomeProject, runDaemon, stopDaemon, DEFAULT_DAEMON_HOST, DEFAULT_DAEMON_PORT } from './daemon.js'
-import { resetControl, watchControl, type ControlWatcher } from './control.js'
+import { appendControl, resetControl, watchControl, type ControlWatcher } from './control.js'
 import { RunMessageQueue } from './run-messages.js'
 import { nodeGitRunner } from './project.js'
-import { ensureDaemonToken, listProjects, readDaemonToken, readPreferences } from './registry.js'
+import { addProject, ensureDaemonToken, listProjects, readDaemonToken, readPreferences } from './registry.js'
 import { startConsumptionGuard } from './consumption-guard.js'
 import {
   planMaintenanceSweep,
@@ -1431,6 +1431,10 @@ async function runBuild(opts: CliOptions, io: CliIO): Promise<number> {
   // Assigned once the journal exists, which is after the control watcher is wired: a change that
   // arrives before then still lands on `armedHandoff`, it just has no event to announce it yet.
   let announceHandoff: ((push: boolean, pr: boolean) => void) | undefined
+  // Same deferral as announceHandoff: an await-bind-project / await-create-project gate binds this
+  // topic run to a project (#1121, gates spike), and only an event puts that on the meta a later-
+  // opened tab can read. Wired once the journal exists (below).
+  let recordBind: ((projectId: string) => void) | undefined
 
   let control: ControlWatcher | undefined
   if (isSteerable(opts, newDashboard, await daemonStatus() !== undefined)) {
@@ -1450,6 +1454,11 @@ async function runBuild(opts: CliOptions, io: CliIO): Promise<number> {
           armedHandoff.push = entry.push || entry.pr
           armedHandoff.pr = entry.pr
           announceHandoff?.(armedHandoff.push, armedHandoff.pr)
+          return
+        }
+        if (entry.kind === 'bind') {
+          // #1122 re-homes the run into the bound project's worktree; here we only record it.
+          recordBind?.(entry.projectId)
           return
         }
         const resolve = pendingChoices.get(entry.id)
@@ -1527,6 +1536,8 @@ async function runBuild(opts: CliOptions, io: CliIO): Promise<number> {
   // only thing a dashboard tab opened mid-run can read the boxes back from.
   announceHandoff = (push, pr) => onEvent({ kind: 'handoff-armed', push, pr })
   announceHandoff(armedHandoff.push, armedHandoff.pr)
+  // Wired now the journal exists: a bind resolved from a topic run's gate folds to meta (#1121).
+  recordBind = projectId => onEvent({ kind: 'bind', projectId })
 
   // Fire the #326 on-before-mergeable prompt once a --on-before-mergeable run has settled and the agent
   // signalled setReadyForMerge(). Skipped for a fake/offline run and when the run was stopped —
@@ -1709,11 +1720,27 @@ async function runBuild(opts: CliOptions, io: CliIO): Promise<number> {
   // it reads, and who can answer it. They were written out twice, thirteen conditional spreads
   // each, so a new one had to be added to both by hand — and a run started as a build and a run
   // started as a prompt are the same run in every respect but the scaffolding around the prompt.
+  // A project-less topic run (#1120) can bind to a project mid-run via an await gate (#1121, gates
+  // spike): the resolver lists / registers projects against the real registry and signals the bind
+  // over the control channel, which the watcher above folds to the run's meta. Topic runs only.
+  const bindDeps: BindProjectDeps | undefined = opts.topic
+    ? {
+        listProjects: () => listProjects(),
+        addProject: async path => {
+          const record = await addProject(path, new Date().toISOString())
+          return { id: record.id, path: record.path }
+        },
+        recordBind: projectId => void appendControl(cwd, { kind: 'bind', projectId }),
+      }
+    : undefined
+
   const sharedRunOptions = {
     driver,
     cwd,
     onEvent,
     signal: controller.signal,
+    ...(opts.topic ? { topic: true } : {}),
+    ...(bindDeps ? { bind: bindDeps } : {}),
     ...(requestChoice ? { requestChoice } : {}),
     ...chatQueue,
     ...(recordMessage ? { recordMessage } : {}),

@@ -26,7 +26,7 @@ import type { Driver, DriverSession } from './driver/index.js'
 import { composeRunSystem, type EcoOptions, type TfContext } from './system-prompt.js'
 import { createRunControls, emitSessionStart, endStopDetail } from './run-telemetry.js'
 import { AWAIT_PROTOCOL, createTurnSignalEmitter } from './turn-gate.js'
-import { drainGates, runChatPhase, type RecordMessage } from './await-gate.js'
+import { drainGates, runChatPhase, type BindProjectDeps, type RecordMessage } from './await-gate.js'
 import { leaveResumeNote, runTodoLoop, type TodoLoopResult } from './todo-loop.js'
 import { continueAfterChoice, decideDeploy, deployWith, domainLoopChecklist, driverBuild, driverChecklist, driverImprove, driverLoopPrompts } from './steps.js'
 import { OPEN_LOOP_MODES, type ChoicePick, type ChoiceRequest, type FrameworkEvent } from './events.js'
@@ -103,6 +103,13 @@ export interface RunFrameworkOptions {
   antiLazyPill?: boolean
   /** This run has a real browser (#824), so the system channel says so. */
   browser?: boolean
+  /**
+   * This is a project-less "topic" run (#1120): advertise the bind gate (#1121) in the system
+   * channel and wire {@link bind} so an `await-bind-project` / `await-create-project` gate resolves.
+   */
+  topic?: boolean
+  /** The bind seams (#1121) a topic run's gate resolves against. Only meaningful with {@link topic}. */
+  bind?: BindProjectDeps
   /** Transparent mode (#625): empty the system channel entirely (raw `claude -p`); overrides antiLazyPill/eco. */
   transparent?: boolean
   /** Eco fine-grained control (#314): drop the enabled #326 sections to save tokens. */
@@ -299,6 +306,7 @@ export async function runFramework(opts: RunFrameworkOptions): Promise<RunFramew
   const system = composeRunSystem({
     antiLazyPill: opts.antiLazyPill,
     browser: opts.browser,
+    topic: opts.topic,
     transparent: opts.transparent,
     user: opts.systemPrompt,
     tf,
@@ -380,6 +388,8 @@ export async function runFramework(opts: RunFrameworkOptions): Promise<RunFramew
     emit,
     signal: runSignal,
     onDecline: () => declineController.abort(new Error('[framework] plan declined')),
+    // Topic runs only (#1121): resolves an await-bind-project / await-create-project gate.
+    ...(opts.bind ? { bind: opts.bind } : {}),
   }
   let preview: AppPreview | undefined
   try {
@@ -538,6 +548,8 @@ function agentAwaitGate(
     signal?: AbortSignal
     /** Called when a confirmation gate is declined (#358): the run stops instead of building on. */
     onDecline?: () => void
+    /** The bind seams for a topic run (#1121); absent for every other run. */
+    bind?: BindProjectDeps
   },
 ): (ctx: BuildContext) => Promise<SupervisorRun> {
   return async ctx => {

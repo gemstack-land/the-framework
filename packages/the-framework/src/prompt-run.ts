@@ -1,6 +1,6 @@
 import type { Driver, DriverSession } from './driver/index.js'
 import { type ChoicePick, type ChoiceRequest, type FrameworkEvent } from './events.js'
-import { runAwaitRounds, type RecordMessage } from './await-gate.js'
+import { runAwaitRounds, type BindProjectDeps, type RecordMessage } from './await-gate.js'
 import { composeRunSystem, renderSystemPrompt, type EcoOptions, type TfContext } from './system-prompt.js'
 import { createRunControls, emitSessionStart, endStopDetail } from './run-telemetry.js'
 import { createTurnSignalEmitter } from './turn-gate.js'
@@ -42,6 +42,13 @@ export interface RunPromptOptions {
   antiLazyPill?: boolean
   /** This run has a real browser (#824), so the system channel says so. */
   browser?: boolean
+  /**
+   * This is a project-less "topic" run (#1120): advertise the bind gate (#1121) in the system
+   * channel and wire {@link bind} so an `await-bind-project` / `await-create-project` gate resolves.
+   */
+  topic?: boolean
+  /** The bind seams (#1121) a topic run's gate resolves against. Only meaningful with {@link topic}. */
+  bind?: BindProjectDeps
   /** Transparent mode (#625): empty the system channel and pass the prompt verbatim (raw `claude -p`). */
   transparent?: boolean
   /** Whether autopilot mode is on: steers the #326 prompt's maintenance stance (#325). Default false. */
@@ -116,7 +123,7 @@ export async function runPrompt(opts: RunPromptOptions): Promise<RunPromptResult
     prompt: opts.prompt,
     params: { autopilot: opts.autopilot === true, ...(opts.eco ? { eco: opts.eco } : {}) },
   }
-  const system = composeRunSystem({ antiLazyPill: opts.antiLazyPill, browser: opts.browser, transparent: opts.transparent, user: opts.systemPrompt, tf, context: opts.context })
+  const system = composeRunSystem({ antiLazyPill: opts.antiLazyPill, browser: opts.browser, topic: opts.topic, transparent: opts.transparent, user: opts.systemPrompt, tf, context: opts.context })
   // The template's `# User prompt` half carries the prompt (today it renders to
   // exactly `opts.prompt`; any framing Rom adds around the slot rides along). With
   // the built-in prompt off (or transparent, #625), the raw prompt is sent as-is.
@@ -164,6 +171,7 @@ export async function runPrompt(opts: RunPromptOptions): Promise<RunPromptResult
       requestChoice: opts.requestChoice,
       emit,
       signal: runSignal,
+      ...(opts.bind ? { bind: opts.bind } : {}),
       ...(resuming ? { resume: true } : {}),
       ...(opts.messages ? { messages: opts.messages } : {}),
       ...(opts.recordMessage ? { recordMessage: opts.recordMessage } : {}),
