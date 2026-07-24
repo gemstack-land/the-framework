@@ -12,7 +12,7 @@ export function EnhancedSystemPrompt() {
     <section id="enhanced-system-prompt" style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       <h3 style={h3Style}>
         1. Enhanced System Prompt{' '}
-        <span aria-hidden style={{ marginLeft: 4, fontSize: 19, verticalAlign: 2 }}>
+        <span aria-hidden style={{ marginLeft: 4, fontSize: 22, verticalAlign: -1 }}>
           <Emoji e="🧭" />
         </span>
       </h3>
