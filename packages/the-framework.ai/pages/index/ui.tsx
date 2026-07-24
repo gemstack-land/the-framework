@@ -171,6 +171,8 @@ export function CodeChip({ children, fontSize }: { children: string; fontSize: n
         overflowWrap: 'anywhere',
         boxDecorationBreak: 'clone',
         WebkitBoxDecorationBreak: 'clone',
+        // Upright even inside italic contexts (notes).
+        fontStyle: 'normal',
         fontFamily: mono,
         fontSize,
         background: '#232a2e',
