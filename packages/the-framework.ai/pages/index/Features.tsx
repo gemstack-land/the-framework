@@ -41,7 +41,7 @@ export function Features() {
           <h3 style={{ margin: 0, fontSize: 19, fontWeight: 600 }}>Notifications</h3>
           <FeatureText>Get notified when AI is finished or needs you.</FeatureText>
         </div>
-        <div style={{ ...featureCardStyle, gap: 12, gridColumn: '1 / -1' }}>
+        <div style={{ ...featureCardStyle, gap: 12 }}>
           <h3 style={{ margin: 0, fontSize: 19, fontWeight: 600 }}>Claude Code Web</h3>
           <FeatureText>
             <WipBadge style={{ marginRight: 3, display: 'inline-block' }} /> Orchestrate agents via Claude Code Web for
