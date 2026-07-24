@@ -125,6 +125,36 @@ body {
   color: var(--foreground);
 }
 
+/* Recents row title: the truncated end fades out (like the reference) instead of a hard ellipsis,
+   and hovering the row marquees a long title by exactly its overflow so it can be read without a
+   tooltip. `container-type: inline-size` lets the keyframe measure the overflow itself — 100cqw is
+   the visible width, 100% the text's own width, so `min(0, 100cqw - 100%)` is 0 for a title that
+   fits and the negative overflow for one that does not (short titles never move). */
+.rail-title {
+  overflow: hidden;
+  white-space: nowrap;
+  container-type: inline-size;
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 1.25rem), transparent);
+  mask-image: linear-gradient(to right, #000 calc(100% - 1.25rem), transparent);
+}
+.rail-title-inner {
+  display: inline-block;
+  will-change: transform;
+}
+.rail-row:hover .rail-title-inner {
+  animation: rail-marquee 4s ease-in-out 0.35s infinite alternate;
+}
+@keyframes rail-marquee {
+  to {
+    transform: translateX(min(0px, calc(100cqw - 100%)));
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .rail-row:hover .rail-title-inner {
+    animation: none;
+  }
+}
+
 /* Prompt editor (#470): live-markdown prose + token chips. Kept lightweight — the box is a
    prompt input, not a document, so just enough structure for lists/emphasis/code to read. */
 .pe-prose {

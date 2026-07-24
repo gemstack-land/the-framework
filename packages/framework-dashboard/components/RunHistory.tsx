@@ -193,7 +193,8 @@ export function RunHistory({
           Overview: suppress SidebarContent's own `overflow-auto` and let the ScrollArea own it. */}
       <SidebarContent className="overflow-hidden">
         <ScrollArea className="min-h-0 flex-1">
-          <SidebarGroup className="pt-1">
+          {/* pr-3 keeps the rows (and the active card) clear of the overlaid scrollbar (w-2.5). */}
+          <SidebarGroup className="pt-1 pr-3">
             {/* Recents label sits under the launcher, over the run list (not a page-wide header). */}
             {hasRecents && (
               <SidebarGroupLabel className="mt-2 font-normal uppercase tracking-wide text-muted-foreground">Recents</SidebarGroupLabel>
@@ -463,7 +464,7 @@ function RunRow({
     <Button
       variant="ghost"
       className={cn(
-        'h-auto w-full flex-col items-start gap-0.5 px-2 py-2 text-left',
+        'rail-row h-auto w-full flex-col items-start gap-0.5 px-2 py-2 text-left',
         active && 'bg-accent text-accent-foreground',
         dim && 'opacity-70',
       )}
@@ -493,7 +494,9 @@ function RunRow({
           </span>
         )}
       </span>
-      <span className="w-full truncate text-sm">{intent || 'New session'}</span>
+      <span className="rail-title w-full text-sm font-normal">
+        <span className="rail-title-inner">{intent || 'New session'}</span>
+      </span>
     </Button>
   )
 }
