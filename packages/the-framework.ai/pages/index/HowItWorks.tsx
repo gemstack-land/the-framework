@@ -10,11 +10,7 @@ export function HowItWorks() {
     <section id="how-it-works" style={sectionStyle}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12, maxWidth: 640 }}>
         <h2 style={h2Style}>How it works</h2>
-        <p style={subStyle}>The Framework introduces:</p>
-        <ol style={{ ...subStyle, paddingLeft: 24 }}>
-          <li>"Enhanced System Prompt" — the system prompt owned by The Framework (and you)</li>
-          <li>"Queues" — most notably the queue of AI tasks</li>
-        </ol>
+        <p style={subStyle}>The Framework introduces two things:</p>
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 'clamp(44px, 8vw, 64px)' }}>
         {/* The two introduced things side by side, in the subtext's enumeration order. */}
