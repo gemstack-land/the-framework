@@ -41,21 +41,12 @@ export function Features() {
           <h3 style={{ margin: 0, fontSize: 19, fontWeight: 600 }}>Notifications</h3>
           <FeatureText>Get notified when AI is finished or needs you.</FeatureText>
         </div>
-        {/* A future feature: dashed, like the prompts band's "＋ Add yours". */}
-        <div
-          style={{
-            ...featureCardStyle,
-            gap: 12,
-            gridColumn: '1 / -1',
-            background: 'transparent',
-            border: '1.5px dashed #4f585e',
-          }}
-        >
-          <h3 style={{ margin: 0, fontSize: 19, fontWeight: 600 }}>
-            Claude Code Web{' '}
-            <WipBadge style={{ marginLeft: 4, verticalAlign: 2, display: 'inline-block' }} />
-          </h3>
-          <FeatureText>Orchestrate agents via Claude Code Web for 0% local CPU usage.</FeatureText>
+        <div style={{ ...featureCardStyle, gap: 12, gridColumn: '1 / -1' }}>
+          <h3 style={{ margin: 0, fontSize: 19, fontWeight: 600 }}>Claude Code Web</h3>
+          <FeatureText>
+            <WipBadge style={{ marginRight: 3, display: 'inline-block' }} /> Orchestrate agents via Claude Code Web for
+            0% local CPU usage.
+          </FeatureText>
         </div>
       </div>
     </section>
