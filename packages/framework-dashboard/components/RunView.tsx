@@ -11,7 +11,8 @@ import { RunFeed } from './RunFeed.js'
 import { ActionsRunNotice } from './ActionsRunNotice.js'
 import { RemoteRunNotice } from './RemoteRunNotice.js'
 import { ChangesSummary, RunChanges } from './RunChanges.js'
-import { HandoffActions, HandoffArm, HandoffSummary, RunHandoffDetails, handoffExpandable } from './RunHandoff.js'
+import { HandoffActions, HandoffArm, HandoffSummary, RunHandoffDetails } from './RunHandoff.js'
+import { SessionDetails } from './SessionDetails.js'
 
 // One session's view, whether it is running or finished (#1026).
 //
@@ -101,9 +102,8 @@ export function RunView({
   const armed = handoffState(shown)
   // Until the handoff has actually loaded, a just-stopped run keeps showing the file counts it
   // ended with (#1030): the summary swaps once, from the live counts to the handoff, instead of
-  // blanking for the beat the handoff read takes. Same for the chevron, so it does not blink out.
+  // blanking for the beat the handoff read takes.
   const showHandoff = !live && handoff.loaded
-  const canExpand = showHandoff ? handoffExpandable(handoff.handoff) : changes.count > 0
 
   return (
     <>
@@ -131,7 +131,7 @@ export function RunView({
           )
         }
         expanded={open}
-        {...(canExpand ? { onToggle: toggle } : {})}
+        onToggle={toggle}
         actions={
           runId ? (
             live ? (
@@ -142,6 +142,9 @@ export function RunView({
           ) : undefined
         }
       />
+      {/* The always-available session-details strip: agent + spend (#322). Sits above the changes/
+          handoff detail, so the disclosure holds the "about this run" facts plus what it touched. */}
+      {open && <SessionDetails events={shown} />}
       {/* What the session has touched, behind the branch row's disclosure. While it runs that is
           its worktree; once it ends, the branch it left behind. The live read needs the run's id:
           without one it falls back to the project root and would report the user's own dirty
