@@ -46,7 +46,7 @@ export const kickerStyle: CSSProperties = {
   color: '#a7c080',
 }
 
-export function SectionHead({ title, sub, small }: { title: ReactNode; sub?: string; small?: boolean }) {
+export function SectionHead({ title, sub, small }: { title: ReactNode; sub?: string | React.ReactNode; small?: boolean }) {
   const H = small ? 'h3' : 'h2'
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12, maxWidth: 640 }}>
