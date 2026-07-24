@@ -123,7 +123,11 @@ export async function runPrompt(opts: RunPromptOptions): Promise<RunPromptResult
     prompt: opts.prompt,
     params: { autopilot: opts.autopilot === true, ...(opts.eco ? { eco: opts.eco } : {}) },
   }
-  const system = composeRunSystem({ antiLazyPill: opts.antiLazyPill, browser: opts.browser, topic: opts.topic, transparent: opts.transparent, user: opts.systemPrompt, tf, context: opts.context })
+  // The "read" half of the bind mechanism (#1121/#1129): a topic run's channel lists the projects
+  // it can bind to, read through the same injected seam the gate resolves against so no `node:fs`
+  // reaches this path. Absent for a non-topic run.
+  const topicProjects = opts.topic && opts.bind ? (await opts.bind.listProjects()).map(p => p.path) : undefined
+  const system = composeRunSystem({ antiLazyPill: opts.antiLazyPill, browser: opts.browser, topic: opts.topic, ...(topicProjects ? { topicProjects } : {}), transparent: opts.transparent, user: opts.systemPrompt, tf, context: opts.context })
   // The template's `# User prompt` half carries the prompt (today it renders to
   // exactly `opts.prompt`; any framing Rom adds around the slot rides along). With
   // the built-in prompt off (or transparent, #625), the raw prompt is sent as-is.

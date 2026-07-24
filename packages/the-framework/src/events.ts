@@ -213,7 +213,7 @@ export type FrameworkEvent =
    * A project-less topic run (#1120) bound itself to a project (#1121): the agent ended a turn on
    * an `await-bind-project` / `await-create-project` gate, which the framework resolved by
    * registering + binding the project. Recorded so the run's meta names the project it re-homes
-   * into (#1122). Spike: the await-gates bind variant (the trigger differs from the tools variant).
+   * into (#1122).
    */
   | { kind: 'bind'; projectId: string }
   /**

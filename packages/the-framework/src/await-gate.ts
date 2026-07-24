@@ -30,6 +30,15 @@ export interface BindProjectChoice {
 }
 
 /**
+ * The outcome of an `await-create-project` registration (#1121). A result rather than a throw so an
+ * unusable path (relative, missing, not a directory) declines cleanly back to the agent instead of
+ * crashing the run; `created` is false when the path was already registered, so the gate can say so.
+ */
+export type AddProjectResult =
+  | { ok: true; project: BindProjectChoice; created: boolean }
+  | { ok: false; error: string }
+
+/**
  * The registry + recording seams a bind gate (#1121) resolves against, injected so the await
  * machinery stays orchestrator-free: the CLI wires these to the real registry + control channel,
  * a test to spies. Present only for a project-less topic run (#1120); absent for every other run.
@@ -37,8 +46,8 @@ export interface BindProjectChoice {
 export interface BindProjectDeps {
   /** The projects an `await-bind-project` gate offers, from the registry. */
   listProjects: () => Promise<BindProjectChoice[]>
-  /** Register (idempotent) a project by path, for an `await-create-project` gate. */
-  addProject: (path: string) => Promise<BindProjectChoice>
+  /** Validate + register (idempotent) a project by path, for an `await-create-project` gate. */
+  addProject: (path: string) => Promise<AddProjectResult>
   /** Record the bind onto the run once a project is picked or created (#1121). */
   recordBind: (projectId: string) => void
 }
@@ -136,6 +145,8 @@ export async function resolveAwaitGate(
       ...choiceOpt,
       ...signalOpt,
     })
+    // Defensive: requestChoices coerces any invalid pick back to a valid registry id, so this miss
+    // is unreachable in practice. It stays as a safety net rather than an assumed-present lookup.
     const project = projects.find(p => p.id === picked)
     if (!project) return NO_PROJECTS_TO_BIND
     // #1122 re-homes the run into the bound project's worktree; here the bind is only recorded.
@@ -158,10 +169,17 @@ export async function resolveAwaitGate(
       ...choiceOpt,
       ...signalOpt,
     })
-    if (picked === 'decline' || !gate.path || !deps.bind) return 'You chose not to register a project; continue without one.'
-    const project = await deps.bind.addProject(gate.path)
-    deps.bind.recordBind(project.id)
-    return `Registered and bound this run to ${project.path}.`
+    if (picked === 'decline' || !deps.bind) return 'You chose not to register a project; continue without one.'
+    if (!gate.path) return 'No path was given, so nothing was registered; continue without a project, or bind to a registered one.'
+    // The seam validates the path (absolute, exists, is a directory) and never throws: an unusable
+    // path declines back to the agent, so a bad path can never crash the run.
+    const result = await deps.bind.addProject(gate.path)
+    if (!result.ok) return `Could not register that project: ${result.error}. Continue without a project, or give an existing absolute repo path.`
+    // #1122 re-homes the run into the bound project's worktree; here the bind is only recorded.
+    deps.bind.recordBind(result.project.id)
+    return result.created
+      ? `Registered and bound this run to ${result.project.path}.`
+      : `That project was already registered; bound this run to ${result.project.path}.`
   }
   const pickedId = await requestChoices({
     id,

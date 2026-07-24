@@ -301,12 +301,17 @@ export async function runFramework(opts: RunFrameworkOptions): Promise<RunFramew
     prompt: opts.intent,
     params: { autopilot: opts.modes?.includes('autopilot') ?? false, ...(opts.eco ? { eco: opts.eco } : {}) },
   }
+  // The "read" half of the bind mechanism (#1121/#1129): a topic run's channel lists the projects
+  // it can bind to. Read through the same injected seam the gate resolves against, so no `node:fs`
+  // reaches this path; absent for a non-topic run, which gets no bind block at all.
+  const topicProjects = opts.topic && opts.bind ? (await opts.bind.listProjects()).map(p => p.path) : undefined
   // One assembly path for the whole system channel (#501), shared with the
   // direct-prompt path so the two can never drift (the drift behind #500).
   const system = composeRunSystem({
     antiLazyPill: opts.antiLazyPill,
     browser: opts.browser,
     topic: opts.topic,
+    ...(topicProjects ? { topicProjects } : {}),
     transparent: opts.transparent,
     user: opts.systemPrompt,
     tf,

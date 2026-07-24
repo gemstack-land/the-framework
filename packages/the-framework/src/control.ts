@@ -42,8 +42,8 @@ export type ControlEntry =
   | { kind: 'handoff'; push: boolean; pr: boolean }
   /**
    * Bind a project-less topic run to a project (#1121): the await-gate resolver appends this once
-   * it registers + binds the picked project, and the run folds `projectId` onto its meta. Same
-   * shape as the tools-variant spike, so only the trigger differs. The worktree re-home is #1122.
+   * it registers + binds the picked project, and the run folds `projectId` onto its meta. The
+   * worktree re-home this implies is #1122.
    */
   | { kind: 'bind'; projectId: string }
 
