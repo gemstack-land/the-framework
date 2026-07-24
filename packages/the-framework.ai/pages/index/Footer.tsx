@@ -6,6 +6,7 @@ const linkStyle = { display: 'inline-flex', alignItems: 'center', gap: 7, color:
 export function Footer() {
   return (
     <footer
+      className="site-footer"
       style={{
         borderTop: '1px solid #3d484d',
         padding: '28px clamp(14px, 4vw, 24px)',

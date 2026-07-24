@@ -173,6 +173,14 @@ html:not([data-pm]) .pm-tab-npm {
   .nav-btn {
     padding: 7px 10px !important;
   }
+  /* Stacked and centered footer. */
+  .site-footer {
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 16px !important;
+    padding: 30px 16px 36px !important;
+  }
 }
 @media (max-width: 860px) {
   .on-this-page,
