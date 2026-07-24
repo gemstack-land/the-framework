@@ -72,8 +72,9 @@ export function TopNav() {
           className="nav-btn-primary"
           style={{
             ...navBtnStyle,
-            border: '1px solid #a7c080',
-            color: '#a7c080',
+            // 1.5px border with compensated padding: same outer box as the secondaries.
+            border: '1.5px solid #a7c080',
+            padding: '7px 13.5px',
             fontWeight: 600,
           }}
         >

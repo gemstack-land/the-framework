@@ -175,9 +175,11 @@ html:not([data-pm]) .pm-tab-npm {
   .nav-btn-primary span {
     display: none;
   }
-  .nav-btn,
-  .nav-btn-primary {
+  .nav-btn {
     padding: 7px 10px !important;
+  }
+  .nav-btn-primary {
+    padding: 7px 9.5px !important;
   }
   /* Stacked and centered footer. */
   .site-footer {
