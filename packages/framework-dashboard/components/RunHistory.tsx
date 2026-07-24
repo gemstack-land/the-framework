@@ -146,6 +146,11 @@ export function RunHistory({
         onClick: () => onSelect(run.id),
       }))
 
+  // New is the active view when a project is open on its launcher (its "New" / Start-a-session
+  // screen: a project selected, no run picked, not following a live one). On the Overview that role
+  // belongs to the Overview item instead, so the two are never active at once.
+  const atProjectLauncher = projectId !== null && selectedRunId === null && !followLive
+
   const hasRecents = rows.length > 0 || showOptimistic
 
   return (
@@ -164,6 +169,7 @@ export function RunHistory({
         <NewButton
           projectId={projectId}
           projects={projects}
+          active={atProjectLauncher}
           onNewSessionInProject={onNewSessionInProject}
           onSelect={onSelect}
           onProjectAdded={onProjectAdded}
@@ -274,20 +280,24 @@ function OverviewButton({ active, count, onClick }: { active: boolean; count: nu
 function NewButton({
   projectId,
   projects,
+  active = false,
   onNewSessionInProject,
   onSelect,
   onProjectAdded,
 }: {
   projectId: string | null
   projects: ProjectSummary[]
+  /** On a project's launcher (its "New" screen), so New reads as the current view. Off on the
+   *  Overview, where the Overview item is the active one instead — the two are never both active. */
+  active?: boolean
   onNewSessionInProject?: ((projectId: string) => void) | undefined
   onSelect: (runId: string | null) => void
   onProjectAdded?: (() => void) | undefined
 }) {
   const [adding, setAdding] = useState(false)
-  // Plain, never "active": New is an action, not the current view. Only the current nav item
-  // (Overview) carries the active fill, so the two no longer both look selected.
-  const cls = 'w-full justify-start gap-2'
+  // The active fill (same tokens as the Overview item) only when this project's launcher is the
+  // current view; otherwise plain, since New is an action rather than a place.
+  const cls = cn('w-full justify-start gap-2', active && 'bg-sidebar-accent text-sidebar-accent-foreground')
   const start = (id: string) => (onNewSessionInProject ? onNewSessionInProject(id) : onSelect(null))
 
   // In a project, or on the Overview with exactly one: start a session straight away.
