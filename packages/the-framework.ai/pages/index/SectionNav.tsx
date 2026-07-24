@@ -31,6 +31,8 @@ export function SectionNav() {
         const el = document.getElementById(s.id)
         if (el && el.getBoundingClientRect().top <= 130) a = s.id
       }
+      // At the very bottom — the closing Cta screen — highlight nothing.
+      if (window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 120) a = ''
       setActive(a)
       setStuck(barRef.current ? barRef.current.getBoundingClientRect().top <= 0 : false)
       // keep URL hash in sync with the visible section
