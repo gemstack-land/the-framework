@@ -21,7 +21,7 @@ export function DocsPanel({ projectId }: { projectId: string | null }) {
 
   const current = docs[Math.min(active, docs.length - 1)]!
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div className="flex min-h-0 flex-auto flex-col">
       <div className="flex flex-wrap gap-1 border-b border-border p-2">
         {docs.map((d, i) => (
           <Button
@@ -35,7 +35,7 @@ export function DocsPanel({ projectId }: { projectId: string | null }) {
           </Button>
         ))}
       </div>
-      <ScrollArea className="min-h-0 flex-1">
+      <ScrollArea className="min-h-0 flex-auto">
         <div className="p-4">
           <Markdown text={current.content} />
         </div>

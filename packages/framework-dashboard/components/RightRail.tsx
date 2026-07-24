@@ -142,17 +142,11 @@ export function RightRail({
           </Button>
         ))}
       </div>
-      {/* Directly under the tabs, and not one of them: the loop's verdict belongs to the run, so it
-          holds still while you move between panels. It never takes more than a third of the rail —
-          a pass with many blockers scrolls inside itself rather than squeezing the panel below. */}
-      {loop && (
-        <div className="max-h-[33%] shrink-0 overflow-y-auto px-2 pb-2">
-          <LoopStatusCard loop={loop} />
-        </div>
-      )}
-      {/* The panel takes what is left of the rail, and no more: min-h-0 lets it scroll inside itself
-          rather than push the verdict above it off the top. */}
-      <div className="flex min-h-0 flex-1 flex-col">
+      {/* The panel is as tall as it needs to be, and no taller than the rail allows: it sizes to its
+          own content (so a short file list does not stretch to the floor), and shrinks with its own
+          scroller once the content outgrows what is left. That is what puts the verdict below
+          directly under the last row rather than at the foot of an empty column. */}
+      <div className="flex min-h-0 flex-col overflow-hidden">
         {tab === 'files' && hasFiles ? (
           <FileTree projectId={projectId} runId={runId} files={files} selected={context} onToggle={toggleContext} />
         ) : tab === 'choices' && hasChoices ? (
@@ -169,6 +163,15 @@ export function RightRail({
           <DocsPanel projectId={projectId} />
         )}
       </div>
+      {/* Straight under the panel's content, not one of the tabs and not pinned to the floor: the
+          loop's verdict belongs to the run, so it holds still while you move between panels, and it
+          reads as the end of what the rail is saying rather than a footer you scroll to. Its own
+          scroller keeps a pass with many blockers from taking the rail. */}
+      {loop && (
+        <div className="max-h-[33%] shrink-0 overflow-y-auto px-2 pb-2">
+          <LoopStatusCard loop={loop} />
+        </div>
+      )}
     </aside>
   )
 }
