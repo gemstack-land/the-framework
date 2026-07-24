@@ -69,36 +69,33 @@ export function SectionHead({ title, sub }: { title: ReactNode; sub?: string | R
   )
 }
 
+// The note look, shared with note-shaped blocks that can't be a <p> (e.g. the
+// prompts band, whose chip row needs a block container).
+export const noteContainerStyle: CSSProperties = {
+  margin: 0,
+  fontSize: 14,
+  lineHeight: 1.6,
+  color: '#9da9a0',
+  background: 'rgba(219, 188, 127, 0.07)',
+  borderLeft: '3px solid #dbbc7f',
+  borderRadius: '0 8px 8px 0',
+  padding: '12px 16px',
+}
+
+export const noteLabelStyle: CSSProperties = {
+  fontFamily: mono,
+  fontSize: 11,
+  fontWeight: 600,
+  letterSpacing: '0.1em',
+  textTransform: 'uppercase',
+  color: '#dbbc7f',
+  marginRight: 10,
+}
+
 export function Note({ children, style, label }: { children: ReactNode; style?: CSSProperties; label?: ReactNode }) {
   return (
-    <p
-      style={{
-        margin: 0,
-        fontSize: 14,
-        lineHeight: 1.6,
-        color: '#9da9a0',
-        background: 'rgba(219, 188, 127, 0.07)',
-        borderLeft: '3px solid #dbbc7f',
-        borderRadius: '0 8px 8px 0',
-        padding: '12px 16px',
-        ...style,
-      }}
-    >
-      {label ?? (
-        <span
-          style={{
-            fontFamily: mono,
-            fontSize: 11,
-            fontWeight: 600,
-            letterSpacing: '0.1em',
-            textTransform: 'uppercase',
-            color: '#dbbc7f',
-            marginRight: 10,
-          }}
-        >
-          Note
-        </span>
-      )}{' '}
+    <p style={{ ...noteContainerStyle, ...style }}>
+      {label ?? <span style={noteLabelStyle}>Note</span>}{' '}
       <span
         style={{
           fontStyle: 'italic',

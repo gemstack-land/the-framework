@@ -1,5 +1,5 @@
 import type { CSSProperties } from 'react'
-import { cardStyle } from './ui'
+import { cardStyle, noteContainerStyle, noteLabelStyle } from './ui'
 
 const CARDS = [
   { title: 'Security audit', desc: 'Prompts that scrutinize your code for security vulnerabilities.' },
@@ -22,27 +22,19 @@ const chipStyle: CSSProperties = {
   color: '#d3c6aa',
 }
 
-// A demoted band, not a third pillar — a "super note": the Note visual language
-// (accent bar + tint) in the brand green rather than the caveat yellow, upright
-// rather than italic, since it holds rich content. Each chip's full description
-// is tucked into its title tooltip.
+// A demoted band, not a third pillar, in the site's Note dress — a <div> rather
+// than the Note component because the chip row can't live inside its <p>. Each
+// chip's full description is tucked into its title tooltip.
 export function Prompts() {
   return (
     <section id="prompts">
-      <div
-        style={{
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 12,
-          background: 'rgba(167, 192, 128, 0.06)',
-          borderLeft: '3px solid #a7c080',
-          borderRadius: '0 8px 8px 0',
-          padding: '14px 18px',
-        }}
-      >
-        <p style={{ margin: 0, fontSize: 15, lineHeight: 1.6, color: '#9da9a0', textWrap: 'pretty' }}>
-          Powered by <b style={{ color: '#d3c6aa', fontWeight: 600 }}>high-quality prompts</b> — state-of-the-art open source, or
-          bring your own:
+      <div style={{ ...noteContainerStyle, display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <p style={{ margin: 0, textWrap: 'pretty' }}>
+          <span style={noteLabelStyle}>Note</span>{' '}
+          <span style={{ fontStyle: 'italic' }}>
+            Powered by <b style={{ color: '#d3c6aa', fontWeight: 600 }}>high-quality prompts</b> — state-of-the-art
+            open source, or bring your own:
+          </span>
         </p>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
           {CARDS.map((c) => (

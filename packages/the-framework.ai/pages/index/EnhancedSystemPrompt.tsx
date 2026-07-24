@@ -1,4 +1,4 @@
-import { h3Style, Note } from './ui'
+import { cardStyle, h3Style, Note } from './ui'
 
 const ITEMS = [
   'Anti-laziness',
@@ -26,21 +26,19 @@ export function EnhancedSystemPrompt() {
         </p>
         <Note>You can customize it, or fully opt-out.</Note>
       </div>
-      <ul style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <ul
+        style={{
+          ...cardStyle,
+          margin: 0,
+          listStyle: 'none',
+          padding: '18px 20px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 12,
+        }}
+      >
         {ITEMS.map((item) => (
-          <li
-            key={item}
-            style={{
-              background: '#343f44',
-              border: '1px solid #3d484d',
-              borderRadius: 10,
-              padding: '16px 20px',
-              fontSize: 15,
-              lineHeight: 1.6,
-              display: 'flex',
-              gap: 12,
-            }}
-          >
+          <li key={item} style={{ fontSize: 15, lineHeight: 1.6, display: 'flex', gap: 12 }}>
             <span style={{ color: '#a7c080' }}>✓</span>
             {item}
           </li>
