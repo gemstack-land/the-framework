@@ -2,6 +2,50 @@ import { renderTemplate } from './prompt-template.js'
 import { SYSTEM_PROMPT } from './prompts.generated.js'
 import { AWAIT_PROTOCOL, BROWSER_PROTOCOL, SIGNAL_PROTOCOL } from './turn-gate.js'
 
+/**
+ * Topic-run bind protocol (#1121): told only to a project-less "topic" run (#1120) so the agent
+ * knows it can bind to a project mid-run, and how. It reuses the await-block emit format
+ * {@link AWAIT_PROTOCOL} already taught, so it only names the two topic-specific tags. It lives in
+ * this runtime append layer (a plain string) rather than the drift-guarded base prompt, so it needs
+ * no `.md` edit and a normal run's channel stays byte-identical (#547). Kept topic-only.
+ */
+export const TOPIC_BIND_PROTOCOL = [
+  '## Binding this run to a project',
+  'This run started with no project, in a scratch directory with no repo. When your work needs a real project to act on, end your turn with one fenced block, then stop.',
+  'To bind to a project that is already registered, tag it `await-bind-project` (the framework shows you the list of projects to pick from):',
+  '```await-bind-project',
+  '{ "title": "<why you need a project>" }',
+  '```',
+  'To register a new project by its absolute path and bind this run to it, tag it `await-create-project`:',
+  '```await-create-project',
+  '{ "title": "<what this project is>", "path": "<absolute repo path>" }',
+  '```',
+  'The framework registers and binds it, then re-prompts you with the result. Do not bind unless the work actually needs a repo.',
+].join('\n')
+
+/** Node-free basename: the last non-empty segment of a posix or Windows path, for the project list. */
+function projectName(path: string): string {
+  const segments = path.split(/[\\/]/).filter(Boolean)
+  return segments[segments.length - 1] ?? path
+}
+
+/**
+ * The registered-projects context injected for a topic run (#1121): the "read" half of the bind
+ * mechanism (#1129). Reading the list IS injecting it into the channel, not a tool the agent calls,
+ * so the agent can weigh `await-bind-project` (one of these) against `await-create-project` (a new
+ * path) up front. `undefined` means the caller did not wire the registry (a browser preview), so
+ * only the how-to shows; `[]` means nothing is registered, so the agent is steered to create one.
+ * Paths, not records, keep this module node-free; the display name is derived here.
+ */
+export function topicBindBlock(projects: readonly string[] | undefined): string {
+  if (projects === undefined) return TOPIC_BIND_PROTOCOL
+  if (projects.length === 0) {
+    return `${TOPIC_BIND_PROTOCOL}\n\nNo projects are registered yet, so you will most likely need \`await-create-project\` to register one by its absolute path.`
+  }
+  const list = projects.map(p => `- ${projectName(p)}: \`${p}\``).join('\n')
+  return `${TOPIC_BIND_PROTOCOL}\n\nProjects already registered that you can bind to with \`await-bind-project\`:\n${list}`
+}
+
 // No Node imports here, deliberately. This module composes the prompt and the
 // dashboard renders it in the browser (#520), so reading the user's SYSTEM.md off
 // disk lives in `system-prompt-file.ts` instead. Keep it that way: one `node:fs`
@@ -232,6 +276,18 @@ export interface SystemPromptOptions {
    * them — so it reaches for `WebFetch`, and the browser (and its preview) sits unused.
    */
   browser?: boolean | undefined
+  /**
+   * This is a project-less "topic" run (#1120). Appends {@link TOPIC_BIND_PROTOCOL} so the agent
+   * knows it can bind to a project mid-run (#1121). Topic-only: a normal run's channel is unchanged.
+   */
+  topic?: boolean | undefined
+  /**
+   * The absolute paths of the registered projects, injected into a topic run's channel as the
+   * "read" half of the bind mechanism (#1121/#1129): context, not a tool. `undefined` = the caller
+   * did not wire the registry (e.g. a browser preview); `[]` = none registered. Ignored unless
+   * {@link topic}. The node side reads {@link ./registry.listProjects} and passes the paths in.
+   */
+  topicProjects?: readonly string[] | undefined
 }
 
 /**
@@ -293,5 +349,9 @@ export function composeRunSystem(opts: RunSystemOptions = {}): string {
   // tools are there either way.
   // Ahead of the protocols, so the signal protocol stays the last thing in the channel (#547).
   const browser = opts.browser ? [BROWSER_PROTOCOL] : []
-  return [...(promptBlock ? [promptBlock] : []), ...browser, AWAIT_PROTOCOL, SIGNAL_PROTOCOL].join('\n\n')
+  // Topic-run bind (#1121): rides with the await protocol (it is an await gate), so it sits right
+  // after it and keeps the signal protocol last (#547). Carries the registered-project list as
+  // context (#1129). Topic-only, so a normal channel is unchanged.
+  const topicBind = opts.topic ? [topicBindBlock(opts.topicProjects)] : []
+  return [...(promptBlock ? [promptBlock] : []), ...browser, AWAIT_PROTOCOL, ...topicBind, SIGNAL_PROTOCOL].join('\n\n')
 }

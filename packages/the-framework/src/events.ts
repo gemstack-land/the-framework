@@ -210,6 +210,13 @@ export type FrameworkEvent =
    */
   | { kind: 'settled' }
   /**
+   * A project-less topic run (#1120) bound itself to a project (#1121): the agent ended a turn on
+   * an `await-bind-project` / `await-create-project` gate, which the framework resolved by
+   * registering + binding the project. Recorded so the run's meta names the project it re-homes
+   * into (#1122).
+   */
+  | { kind: 'bind'; projectId: string }
+  /**
    * Cumulative token + cost usage for the run so far (#322). Emitted after each
    * agent turn that reports usage; the dashboard renders a live spend readout and
    * the run stops itself once `costUsd` reaches the budget cap, if one is set.

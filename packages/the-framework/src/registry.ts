@@ -587,6 +587,28 @@ export async function listProjects(
   return (await readRegistry(fs, env)).projects
 }
 
+/** A validated project path (#1121), or the reason it was rejected. */
+export type ProjectPathResult = { ok: true; path: string } | { ok: false; error: string }
+
+/**
+ * Validate a path a topic run wants to register + bind to (#1121): it must be a non-empty,
+ * absolute path to an existing directory. `resolve` collapses any `.`/`..` before it reaches the
+ * registry, so a relative-based traversal can never smuggle in a path the agent did not name; the
+ * absolute requirement is the guard, mirroring how {@link addProject} normalizes what it stores.
+ * `isDirectory` is injected so this is unit-testable without touching disk; it defaults to real fs.
+ */
+export async function resolveProjectPath(
+  path: string,
+  isDirectory: (p: string) => Promise<boolean> = p => nodeFs().isDirectory(p),
+): Promise<ProjectPathResult> {
+  const trimmed = typeof path === 'string' ? path.trim() : ''
+  if (!trimmed) return { ok: false, error: 'no path was given' }
+  if (!isAbsolute(trimmed)) return { ok: false, error: `the path must be absolute: ${trimmed}` }
+  const absolute = resolve(trimmed)
+  if (!(await isDirectory(absolute))) return { ok: false, error: `no such directory: ${absolute}` }
+  return { ok: true, path: absolute }
+}
+
 /**
  * Register a project. Idempotent by resolved path: when the path is already
  * registered, the existing record is returned untouched (addedAt survives);
