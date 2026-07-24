@@ -39,6 +39,18 @@ describe('BrandLink', () => {
     expect(onNavigate).not.toHaveBeenCalled()
   })
 
+  test('folds the wordmark away below sm so the nav fits a narrow viewport (#980)', () => {
+    // jsdom has no layout engine and does not apply the utility CSS, so the actual hide can only
+    // be proved by driving a real browser (done for the PR). This just pins that the wordmark keeps
+    // its responsive classes, so a future tidy-up cannot silently bring the overflow back. The mark
+    // stays visible either way, and it is still the link home (#909).
+    const { container } = render(<BrandLink working={false} onNavigate={vi.fn()} />)
+    const wordmark = screen.getByText('The Framework')
+    expect(wordmark.className).toContain('hidden')
+    expect(wordmark.className).toContain('sm:inline')
+    expect(container.querySelector('svg')).not.toBeNull() // the mark is not hidden
+  })
+
   test('carries the working state through to the mark', () => {
     const { container, rerender } = render(<BrandLink working onNavigate={vi.fn()} />)
     expect(container.querySelector('path')?.getAttribute('fill')).toBe('url(#hexknot-0)')

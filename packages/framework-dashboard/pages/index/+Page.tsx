@@ -29,7 +29,7 @@ import { useDocumentTitle } from '../../lib/document-title.js'
 import { useWorking } from '../../lib/use-working.js'
 import { useFavicon } from '../../lib/favicon.js'
 import { useDaemonHealth } from '../../lib/use-daemon-health.js'
-import { TriangleAlert, Settings } from 'lucide-react'
+import { TriangleAlert, Settings, Plus } from 'lucide-react'
 
 /** Stable, so `files` keeps one identity while no project is selected. */
 const EMPTY_FILES: string[] = []
@@ -306,14 +306,18 @@ export default function Page() {
         <div className="flex shrink-0 items-center gap-1">
           {/* Which daemon this dashboard is talking to (#1052) — obvious once you can hop devices. */}
           <ConnectionIndicator />
+          {/* Below sm the label folds to the icon alone so the nav fits a narrow viewport (#980);
+              the aria-label keeps it named for a screen reader either way. */}
           <Button
             variant="outline"
             size="sm"
             onClick={newSession}
             disabled={!projectId}
-            title={projectId ? undefined : 'Select a project first'}
+            title={projectId ? 'New session' : 'Select a project first'}
+            aria-label="New session"
           >
-            New session
+            <Plus className="h-4 w-4 shrink-0 sm:hidden" aria-hidden />
+            <span className="hidden sm:inline">New session</span>
           </Button>
           <ThemeToggle />
           <NotificationsMenu />

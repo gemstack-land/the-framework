@@ -18,7 +18,9 @@ export function BrandLink({ working, onNavigate }: { working: boolean; onNavigat
       className="flex shrink-0 items-center gap-3 rounded-md transition-opacity hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)]"
     >
       <Logo className="h-5 w-auto shrink-0" working={working} />
-      <span className="shrink-0 font-semibold">The Framework</span>
+      {/* Below sm the wordmark folds away so the nav fits a narrow viewport (#980); the mark stays,
+          and it is still the link home (#909). */}
+      <span className="hidden shrink-0 font-semibold sm:inline">The Framework</span>
     </a>
   )
 }
