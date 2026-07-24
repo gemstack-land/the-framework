@@ -464,13 +464,15 @@ function RunRow({
     <Button
       variant="ghost"
       className={cn(
-        'rail-row h-auto w-full flex-col items-start gap-0.5 px-2 py-2 text-left',
+        // No horizontal padding on the card itself: the title spans edge to edge so its clip/fade
+        // land on the border. The rows that need the inset carry their own px-2.
+        'rail-row h-auto w-full flex-col items-start gap-0.5 py-2 text-left',
         active && 'bg-accent text-accent-foreground',
         dim && 'opacity-70',
       )}
       onClick={onClick}
     >
-      <span className="flex w-full items-center gap-2">
+      <span className="flex w-full items-center gap-2 px-2">
         {/* The dot means "the agent is working", so a run parked on you gets a still one (#785):
             it used to pulse identically whether it was mid-edit or had been idle for an hour. */}
         {status === 'running' && (
