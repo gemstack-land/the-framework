@@ -77,9 +77,17 @@ export default function Page() {
           </p>
         </Step>
         <Step kicker="Banner">
+          <a href="/banner.jpg" style={{ alignSelf: 'flex-start' }}>
+            <img
+              src="/banner.jpg"
+              alt="The Framework banner"
+              style={{ width: 'min(476px, 100%)', height: 'auto', display: 'block', outline: '1px solid #3d484d', borderRadius: 4 }}
+            />
+          </a>
           <p style={pStyle}>
-            <a href="/banner">/banner</a> renders a 1200×630 banner (the Open Graph size) — screenshot it for social
-            images and link previews.
+            <a href="/banner.jpg">banner.jpg</a> (1200×630, the Open Graph size) is a screenshot of{' '}
+            <a href="/banner">/banner</a> — to regenerate it, follow{' '}
+            <a href="https://gist.github.com/brillout/e7d0a5585471c4ea40d43d2caaadafad">the instructions</a>.
           </p>
         </Step>
         <Step kicker="Brand assets">
