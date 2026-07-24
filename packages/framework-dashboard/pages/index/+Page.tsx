@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import type { Intervention, Activity, ProjectSummary } from '@gemstack/the-framework'
-import { onProjectFiles, onInterventions, onActivity } from '../../server/reads.telefunc.js'
+import type { Intervention, Activity, ProjectSummary, RecentRun } from '@gemstack/the-framework'
+import { onProjectFiles, onInterventions, onActivity, onRecentRuns } from '../../server/reads.telefunc.js'
 import { onProjects } from '../../server/projects.telefunc.js'
 import { ProjectPicker } from '../../components/ProjectPicker.js'
 import { BrandLink } from '../../components/BrandLink.js'
@@ -9,6 +9,7 @@ import { ConnectionIndicator } from '../../components/ConnectionIndicator.js'
 import { NotificationsMenu } from '../../components/NotificationsMenu.js'
 import { Button } from '../../components/ui/button.js'
 import { RunHistory } from '../../components/RunHistory.js'
+import { SidebarProvider } from '../../components/ui/sidebar.js'
 import { ProjectHome } from '../../components/ProjectHome.js'
 import { DashboardPage } from '../../components/DashboardPage.js'
 import { SettingsPage } from '../../components/SettingsPage.js'
@@ -42,6 +43,9 @@ const EMPTY_INTERVENTIONS: Intervention[] = []
 
 /** Stable initial for the activity poll (#627), so it does not churn on every render. */
 const EMPTY_ACTIVITY: Activity[] = []
+
+/** Stable initial for the cross-project recents poll, so it does not churn on every render. */
+const EMPTY_RECENT: RecentRun[] = []
 
 // The dashboard shell (#405 phase 2): Sessions | main | Docs/Log rail, with the project
 // selection in the top nav as a dropdown since #772 (it used to be a rail of its own). The main pane
@@ -109,7 +113,9 @@ export default function Page() {
   // The registered projects, loaded once for the browser-tab title (#695/U3): the selected
   // project's name plus the needs-you count drive `document.title` so a backgrounded tab tells
   // you which project needs attention. The sidebar keeps its own poll; this is a cheap one-shot.
-  const projects = useLoaded<ProjectSummary[]>(onProjects, EMPTY_PROJECTS, [])
+  // Reloadable so adding a project from the sidebar's "New" reflects at once (bump the key).
+  const [projectsKey, setProjectsKey] = useState(0)
+  const projects = useLoaded<ProjectSummary[]>(onProjects, EMPTY_PROJECTS, [projectsKey])
   const projectName = projectId ? projects.find(p => p.id === projectId)?.name : null
   useDocumentTitle(interventions.length, projectName)
   // A URL naming a project that is not registered (renamed, removed, mistyped). A non-empty list
@@ -130,6 +136,11 @@ export default function Page() {
   const browserActivity = newActivityEnabled(preferences) && notificationsEnabled(preferences)
   const { value: activity } = usePolled<Activity[]>(browserActivity ? onActivity : null, EMPTY_ACTIVITY, 15000, [browserActivity])
   useActivityNotifications(activity, browserActivity)
+
+  // The shared sidebar's recents on the Overview (#shared-shell): with no project selected the rail
+  // has no project runs to show, so it pools every project's sessions here. Polled only on the home
+  // route — a selected project's own `runs` (above) carry its rail.
+  const { value: recentRuns } = usePolled<RecentRun[]>(projectId === null ? onRecentRuns : null, EMPTY_RECENT, 10_000, [projectId])
 
   const onRunStarted = (intent: string, startedId?: string, runsOn?: string) => {
     setRunStart(prev => ({ tick: prev.tick + 1, intent, id: startedId ?? null, ...(runsOn ? { runsOn } : {}) }))
@@ -165,6 +176,15 @@ export default function Page() {
   const selectProject = (id: string) => {
     setAdopting(false)
     go({ projectId: id, runId: null }) // switching projects always returns to the home launcher
+  }
+
+  // "New" in the sidebar: start a fresh session in a named project (the sidebar decides which —
+  // the current one, the only one, or a picked one). resetContext explicitly, since staying in the
+  // same project would not trip the project-change effect above.
+  const newSessionInProject = (id: string) => {
+    setAdopting(false)
+    resetContext()
+    go({ projectId: id, runId: null })
   }
 
   // "New session" (#772): back to the selected project's launcher — the Live home row — with a
@@ -291,7 +311,10 @@ export default function Page() {
   }
 
   return (
-    <div className="flex h-screen flex-col">
+    // The whole shell lives inside the SidebarProvider so the sidebar's context (state + Cmd/Ctrl+B,
+    // the `--sidebar-width` var) is available on every route, home and session alike. Its wrapper is
+    // the column that used to be a plain div.
+    <SidebarProvider className="h-screen flex-col overflow-hidden">
       <header className="flex items-center gap-3 border-b border-border px-4 py-3">
         <BrandLink working={working} onNavigate={showDashboard} />
         {/* The project selection lives in the nav now (#772), not in a rail of its own: always
@@ -345,6 +368,17 @@ export default function Page() {
           runs={runs}
           selectedRunId={runId}
           onSelect={selectRun}
+          recentRuns={recentRuns}
+          onSelectRecent={(pid, rid) => {
+            setAdopting(false)
+            go({ projectId: pid, runId: rid })
+          }}
+          projects={projects}
+          onNewSessionInProject={newSessionInProject}
+          onProjectAdded={() => {
+            setProjectsKey(k => k + 1)
+            reload()
+          }}
           startTick={runStart.tick}
           startIntent={runStart.intent}
           followLive={adopting}
@@ -363,6 +397,6 @@ export default function Page() {
           onRunStarted={onRunStarted}
         />
       </div>
-    </div>
+    </SidebarProvider>
   )
 }
