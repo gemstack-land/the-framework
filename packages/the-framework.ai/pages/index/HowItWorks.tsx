@@ -10,10 +10,10 @@ export function HowItWorks() {
     <section id="how-it-works" style={sectionStyle}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12, maxWidth: 640 }}>
         <h2 style={h2Style}>How it works</h2>
-        <p style={subStyle}>The Framework essentially does two things:</p>
+        <p style={subStyle}>The Framework introduces:</p>
         <ol style={{ ...subStyle, paddingLeft: 24 }}>
-          <li>Adds its own system prompt (the "Enhanced System Prompt")</li>
-          <li>Introduces a queue of AI tasks</li>
+          <li>"Enhanced System Prompt" — the system prompt owned by The Framework (and you)</li>
+          <li>"Queues" — most notably the queue of AI tasks</li>
         </ol>
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 'clamp(44px, 8vw, 64px)' }}>

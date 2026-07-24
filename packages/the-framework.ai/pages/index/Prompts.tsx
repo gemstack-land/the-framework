@@ -24,7 +24,7 @@ const promptCardStyle: CSSProperties = {
 export function Prompts() {
   return (
     <section id="prompts" style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-      <SectionHead small title="High-quality prompts" sub="Use state-of-the-art open source prompts, or bring your own." />
+      <SectionHead small title="High-quality prompts" sub="Powered by state-of-the-art open source prompts, or bring your own." />
       <div
         style={{
           display: 'grid',

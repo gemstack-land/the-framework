@@ -5,7 +5,10 @@ const QUEUES: { title: string; paragraphs: ReactNode[] }[] = [
   {
     title: 'AI Queue',
     paragraphs: [
-      'Queue of future AI tasks — tasks can be added by humans, or by product management agents (autonomously if highly confident, or after your confirmation otherwise).',
+      'Queue of future AI tasks — tasks are added by humans, or by product management agents (autonomously if highly confident, or after your confirmation otherwise).',
+      <>
+        The AI autonomousity is essentially powered by agents autonomously populating the AI queue.
+      </>,
       <>
         Technically, it's just a <CodeChip fontSize={12}>TODO_AGENTS.md</CodeChip> file in your Git repositories.
       </>,
@@ -14,7 +17,8 @@ const QUEUES: { title: string; paragraphs: ReactNode[] }[] = [
   {
     title: 'Human Queue',
     paragraphs: [
-      'Queue of human reviews required — agents ask you to review (important) decisions with subtle pros and cons.',
+      'Queue of human reviews required — populated when agents ask you to review (important) decisions with subtle pros and cons.',
+      "It's basically your cockpit that keeps you in control."
     ],
   },
 ]
