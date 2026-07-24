@@ -27,6 +27,7 @@ export function GitStatusBar({
   label,
   projectName,
   summary,
+  runState,
   expanded = false,
   onToggle,
 }: {
@@ -42,6 +43,10 @@ export function GitStatusBar({
   projectName?: string | null | undefined
   /** What the branch holds, in a phrase — rendered beside the branch's own status. */
   summary?: ReactNode
+  /** What state the run itself is in (stopped, ready for merge, …), said beside the tree's own
+   *  clean/dirty rather than at the far end of the bar: they are one line of facts about the
+   *  session, where the bar's end is where its controls live. */
+  runState?: ReactNode
   expanded?: boolean
   /** Given, the branch reads as a disclosure for the detail the caller renders below. */
   onToggle?: (() => void) | undefined
@@ -137,6 +142,7 @@ export function GitStatusBar({
         />
         <span className="text-muted-foreground">{status.dirty ? 'dirty' : 'clean'}</span>
       </span>
+      {runState}
       {/* Only a worktree has a size worth showing, and only once nothing is writing to it (#798). */}
       {size && (
         <span className="hidden shrink-0 text-muted-foreground @4xl:inline" title="This session's worktree on disk">

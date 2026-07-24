@@ -81,9 +81,9 @@ export function TicketsPanel({
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div className="flex min-h-0 flex-auto flex-col">
       {error && <p className="border-b border-border p-2 text-xs text-danger">{error}</p>}
-      <ScrollArea className="min-h-0 flex-1">
+      <ScrollArea className="min-h-0 flex-auto">
         <div className="p-2">
         {tickets.map(ticket => (
           <div key={ticket.file} className="mb-1 rounded border border-border p-2">

@@ -20,7 +20,7 @@ export function ProjectLogPanel({ projectId }: { projectId: string | null }) {
   if (logs.length === 0) return <p className="p-4 text-sm text-muted-foreground">No committed log entries yet.</p>
 
   return (
-    <ScrollArea className="min-h-0 flex-1">
+    <ScrollArea className="min-h-0 flex-auto">
       <ul className="divide-y divide-border">
       {logs.map((log, i) => (
         <li key={i} className="px-4 py-2">

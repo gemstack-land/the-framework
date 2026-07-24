@@ -28,7 +28,7 @@ export function ChoicesRail({
   const jump = (id: string) => panels.current.get(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div className="flex min-h-0 flex-auto flex-col">
       {choices.length > 1 && (
         <nav className="sticky top-0 z-10 flex flex-wrap gap-1 border-b border-border bg-background/95 p-2 backdrop-blur">
           {choices.map((c, i) => (
@@ -44,7 +44,7 @@ export function ChoicesRail({
           ))}
         </nav>
       )}
-      <ScrollArea viewportRef={scroller} className="min-h-0 flex-1">
+      <ScrollArea viewportRef={scroller} className="min-h-0 flex-auto">
         {choices.map((c, i) => (
           <div
             key={c.id}

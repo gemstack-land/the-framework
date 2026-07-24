@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { ChoiceRequest } from '@gemstack/the-framework'
+import type { LoopStatus } from '@gemstack/the-framework/client'
+import { LoopStatusCard } from './LoopStatusCard.js'
 import { DocsPanel } from './DocsPanel.js'
 import { ProjectLogPanel } from './ProjectLogPanel.js'
 import { ChoicesRail } from './ChoicesRail.js'
@@ -29,6 +31,7 @@ export function RightRail({
   toggleContext,
   hasBrowser = false,
   target,
+  loop,
   onRunStarted,
 }: {
   projectId: string | null
@@ -46,6 +49,10 @@ export function RightRail({
   hasBrowser?: boolean
   /** Where the selected run executes (#1053): an `actions` run has no browser on the runner, so no pane; `remote` (#1067) has none locally either. */
   target?: 'local' | 'actions' | 'remote' | undefined
+  /** The selected run's production-grade loop verdict, pinned under the tabs rather than given a tab
+   *  of its own: it is a standing fact about the run, not a panel you browse, so it stays readable
+   *  whichever tab is open. Null for a run that never looped (a prototype scope, or a plain prompt). */
+  loop?: LoopStatus | null | undefined
   /** Told when a panel starts a session (the tickets import, #948), so the shell shows it. */
   onRunStarted?: ((intent: string, runId?: string) => void) | undefined
 }) {
@@ -119,7 +126,7 @@ export function RightRail({
     >
       {/* flex-wrap: up to 7 tabs share a w-80 rail, and without it the tail clipped (#948).
           Announced as the tabset it visually is. */}
-      <div role="tablist" aria-label="Rail panels" className="flex flex-wrap gap-1 border-b border-border p-2">
+      <div role="tablist" aria-label="Rail panels" className="flex flex-wrap gap-1 p-2">
         {tabs.map(t => (
           <Button
             key={t}
@@ -135,7 +142,11 @@ export function RightRail({
           </Button>
         ))}
       </div>
-      <div className="flex min-h-0 flex-1 flex-col">
+      {/* The panel is as tall as it needs to be, and no taller than the rail allows: it sizes to its
+          own content (so a short file list does not stretch to the floor), and shrinks with its own
+          scroller once the content outgrows what is left. That is what puts the verdict below
+          directly under the last row rather than at the foot of an empty column. */}
+      <div className="flex min-h-0 flex-col overflow-hidden">
         {tab === 'files' && hasFiles ? (
           <FileTree projectId={projectId} runId={runId} files={files} selected={context} onToggle={toggleContext} />
         ) : tab === 'choices' && hasChoices ? (
@@ -152,6 +163,15 @@ export function RightRail({
           <DocsPanel projectId={projectId} />
         )}
       </div>
+      {/* Straight under the panel's content, not one of the tabs and not pinned to the floor: the
+          loop's verdict belongs to the run, so it holds still while you move between panels, and it
+          reads as the end of what the rail is saying rather than a footer you scroll to. Its own
+          scroller keeps a pass with many blockers from taking the rail. */}
+      {loop && (
+        <div className="max-h-[33%] shrink-0 overflow-y-auto px-2 pb-2">
+          <LoopStatusCard loop={loop} />
+        </div>
+      )}
     </aside>
   )
 }

@@ -151,7 +151,7 @@ export function FileTree({
   if (files.length === 0) return null
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col p-2">
+    <div className="flex min-h-0 flex-auto flex-col p-2">
       <input
         type="search"
         value={query}
@@ -170,7 +170,11 @@ export function FileTree({
               {visible.length} of {files.length} files
             </p>
           )}
-          <Files className="min-h-0 flex-1 text-sm">{renderNode(tree)}</Files>
+          {/* p-0 overrides the primitive's own p-2: the panel around it already sets the inset, and
+              the doubled padding pushed the tree off the filter box above it. The tree is the one
+              panel with no scroller of its own, so it carries one: a long repo scrolls here rather
+              than stretching the rail past what follows it. */}
+          <Files className="min-h-0 flex-auto overflow-y-auto p-0 text-sm">{renderNode(tree)}</Files>
         </>
       )}
     </div>

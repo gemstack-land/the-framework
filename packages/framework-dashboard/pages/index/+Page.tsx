@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { Intervention, Activity, ProjectSummary, RecentRun } from '@gemstack/the-framework'
+import type { LoopStatus } from '@gemstack/the-framework/client'
 import { onProjectFiles, onInterventions, onActivity, onRecentRuns } from '../../server/reads.telefunc.js'
 import { onProjects } from '../../server/projects.telefunc.js'
 import { RunHistory } from '../../components/RunHistory.js'
@@ -201,6 +202,10 @@ export default function Page() {
   const { events, lost } = useLiveEvents(projectId, runId, runStart.tick)
   const choices = projectId ? pendingChoices(events) : []
   const views = projectId ? agentViews(events) : []
+  // The selected session's loop verdict, for the rail's pinned block under the tabs. It comes up
+  // from RunView rather than being folded here: a finished run's events live in its archived log,
+  // which that view is the one to read.
+  const [loop, setLoop] = useState<LoopStatus | null>(null)
 
   // On the relay (#426), the URL carries `?run=<id>` and there is no local registry or
   // files — show that one run read-only. `window` is absent during prerender (ssr:false),
@@ -241,7 +246,7 @@ export default function Page() {
     if (runId === null) {
       // Just pressed Start on a project with no worktree: follow the live output until the poll
       // surfaces the run and the effect above adopts its id.
-      if (adopting) return <RunView projectId={projectId} runId={null} events={events} live label={runStart.intent || undefined} projectName={projectName} remoteLabel={runStart.runsOn} files={files} addContext={addContext} removeContext={removeContext} lost={lost} onRunStarted={onRunStarted} />
+      if (adopting) return <RunView projectId={projectId} runId={null} events={events} live label={runStart.intent || undefined} projectName={projectName} remoteLabel={runStart.runsOn} files={files} addContext={addContext} removeContext={removeContext} lost={lost} onRunStarted={onRunStarted} onLoopStatus={setLoop} />
       return (
         <ProjectHome
           projectId={projectId}
@@ -260,7 +265,7 @@ export default function Page() {
       // list we have not read yet. Both are live views; only a session that is genuinely absent
       // from a list we did read is gone.
       if (runId === runStart.id || !runsLoaded)
-        return <RunView projectId={projectId} runId={runId} events={events} live label={runStart.intent || undefined} projectName={projectName} remoteLabel={runId === runStart.id ? runStart.runsOn : undefined} files={files} addContext={addContext} removeContext={removeContext} lost={lost} onRunStarted={onRunStarted} />
+        return <RunView projectId={projectId} runId={runId} events={events} live label={runStart.intent || undefined} projectName={projectName} remoteLabel={runId === runStart.id ? runStart.runsOn : undefined} files={files} addContext={addContext} removeContext={removeContext} lost={lost} onRunStarted={onRunStarted} onLoopStatus={setLoop} />
       return (
         <NotFound
           title="This session is gone"
@@ -287,6 +292,7 @@ export default function Page() {
         target={selectedRun.target}
         remoteLabel={selectedRun.remoteLabel}
         onRunStarted={onRunStarted}
+        onLoopStatus={setLoop}
         onDeleted={() => {
           // Its view is about to point at a session that no longer exists; go home and refresh
           // the rail so the row is gone (#1032).
@@ -354,6 +360,7 @@ export default function Page() {
           toggleContext={toggleContext}
           hasBrowser={selectedRun?.status === 'running' && selectedRun.browserStreamPort !== undefined}
           target={selectedRun?.target}
+          loop={loop}
           onRunStarted={onRunStarted}
         />
       </div>

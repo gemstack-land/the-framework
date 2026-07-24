@@ -31,7 +31,7 @@ export function ViewsRail({ views }: { views: AgentView[] }) {
   if (!current) return <p className="p-4 text-sm text-muted-foreground">No views yet.</p>
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div className="flex min-h-0 flex-auto flex-col">
       {views.length > 1 && (
         <nav className="sticky top-0 z-10 flex flex-wrap gap-1 border-b border-border bg-background/95 p-2 backdrop-blur">
           {views.map((v, i) => (
@@ -50,7 +50,7 @@ export function ViewsRail({ views }: { views: AgentView[] }) {
           ))}
         </nav>
       )}
-      <ScrollArea viewportRef={scroller} className="min-h-0 flex-1">
+      <ScrollArea viewportRef={scroller} className="min-h-0 flex-auto">
         <div className="p-4">
           <h2 className="mb-2 flex items-center gap-1.5 text-sm font-semibold">
             {current.title}

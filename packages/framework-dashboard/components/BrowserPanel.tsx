@@ -68,8 +68,8 @@ export function BrowserPanel({ projectId, runId }: { projectId: string; runId: s
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      <div className="min-h-0 flex-1 overflow-auto p-2">
+    <div className="flex min-h-0 flex-auto flex-col">
+      <div className="min-h-0 flex-auto overflow-auto p-2">
         {/* tabIndex makes the frame focusable so keystrokes have somewhere to land; the ring
             shows where they will land. */}
         <img
