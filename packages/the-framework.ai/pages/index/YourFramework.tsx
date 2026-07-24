@@ -32,11 +32,12 @@ function Card({ title, children }: { title: string; children: ReactNode }) {
   )
 }
 
-function Item({ children }: { children: ReactNode }) {
+function Item({ children, marker }: { children: ReactNode; marker?: ReactNode }) {
   return (
     <li style={{ display: 'flex', gap: 10 }}>
-      <span style={{ color: '#a7c080' }}>✓</span>
-      {children}
+      {/* Fixed marker width: every row's text (and its wrapped lines) starts in the same column. */}
+      <span style={{ color: '#a7c080', flex: 'none', width: 18 }}>{marker ?? '✓'}</span>
+      <span>{children}</span>
     </li>
   )
 }
@@ -61,11 +62,9 @@ export function YourFramework() {
       >
         <Card title="Flexible">
           <Item>The Framework doesn't force anything: pick only the features you need</Item>
-          <li>
-            <WipBadge />
-            {' '}
-            Customize anything to fit your needs
-          </li>
+          <Item marker="🚧">
+            <WipBadge icon={false} /> Customize anything to fit your needs
+          </Item>
         </Card>
         <Card title="100% Local">
           <Item>Runs locally on your machine, like a desktop app</Item>

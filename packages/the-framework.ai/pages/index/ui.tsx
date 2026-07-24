@@ -107,11 +107,10 @@ export function Note({ children, style, label }: { children: ReactNode; style?: 
   )
 }
 
-export function WipBadge({ style }: { style?: CSSProperties }) {
+export function WipBadge({ style, icon = true }: { style?: CSSProperties; icon?: boolean }) {
   return (
     <>
-      🚧
-      {' '}
+      {icon && '🚧 '}
       <span
         style={{
           fontStyle: 'normal',
