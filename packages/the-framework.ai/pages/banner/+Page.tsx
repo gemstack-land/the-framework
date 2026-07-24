@@ -52,7 +52,6 @@ export default function Page() {
       />
 
       <div style={{ position: 'relative', flex: 1, display: 'flex', flexDirection: 'column', gap: 26 }}>
-        <div style={{ fontSize: 21, fontWeight: 600, color: '#9da9a0', letterSpacing: '0.01em' }}>The Framework</div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           <span style={{ position: 'relative', alignSelf: 'flex-start', fontSize: 40, fontWeight: 500, color: '#9da9a0' }}>
             Babysit AI
@@ -100,7 +99,30 @@ export default function Page() {
         </div>
       </div>
 
-      <img src="/assets/logo.svg" alt="" style={{ position: 'relative', width: 360, height: 408, flex: 'none' }} />
+      {/* Brand lockup: the name lives with the mark, not as orphan text. */}
+      <div
+        style={{
+          position: 'relative',
+          flex: 'none',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: 26,
+        }}
+      >
+        <img src="/assets/logo.svg" alt="" style={{ width: 320, height: 363 }} />
+        <div
+          style={{
+            fontFamily: mono,
+            fontSize: 22,
+            letterSpacing: '0.16em',
+            textTransform: 'uppercase',
+            color: '#a7c080',
+          }}
+        >
+          The Framework
+        </div>
+      </div>
     </div>
   )
 }
