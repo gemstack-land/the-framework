@@ -15,6 +15,9 @@ export function Footer() {
         display: 'flex',
         flexWrap: 'wrap',
         alignItems: 'center',
+        // space-between (not an auto margin on the links) so that when the
+        // links wrap onto their own line they align left under the brand.
+        justifyContent: 'space-between',
         gap: 24,
         rowGap: 12,
         fontSize: 13.5,
@@ -25,7 +28,7 @@ export function Footer() {
         <img src="/assets/logo.svg" alt="" style={{ width: 20, height: 23 }} />
         The Framework
       </span>
-      <span style={{ marginLeft: 'auto', display: 'flex', gap: 20 }}>
+      <span style={{ display: 'flex', flexWrap: 'wrap', gap: '12px 20px' }}>
         <a href={DISCORD_URL} className="footer-link" style={linkStyle}>
           <DiscordIcon width={15} height={12} />
           Discord
