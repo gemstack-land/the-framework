@@ -30,7 +30,7 @@ import { useDocumentTitle } from '../../lib/document-title.js'
 import { useWorking } from '../../lib/use-working.js'
 import { useFavicon } from '../../lib/favicon.js'
 import { useDaemonHealth } from '../../lib/use-daemon-health.js'
-import { TriangleAlert, Settings, Plus } from 'lucide-react'
+import { TriangleAlert, Settings } from 'lucide-react'
 
 /** Stable, so `files` keeps one identity while no project is selected. */
 const EMPTY_FILES: string[] = []
@@ -187,14 +187,6 @@ export default function Page() {
     go({ projectId: id, runId: null })
   }
 
-  // "New session" (#772): back to the selected project's launcher — the Live home row — with a
-  // fresh Context, so the navbar button starts a run the same way the rail's Live row does. The
-  // de-facto standard button rather than a second textarea in the nav.
-  const newSession = () => {
-    selectRun(null)
-    resetContext()
-  }
-
   // The Overview dashboard (#471): no project selected.
   const showDashboard = () => {
     setAdopting(false)
@@ -318,30 +310,20 @@ export default function Page() {
       <header className="flex items-center gap-3 border-b border-border px-4 py-3">
         <BrandLink working={working} onNavigate={showDashboard} />
         {/* The project selection lives in the nav now (#772), not in a rail of its own: always
-            shown, on every page including the Overview. */}
-        <ProjectPicker
-          selectedId={projectId}
-          onSelect={selectProject}
-          onDashboard={showDashboard}
-          interventionCount={interventions.length}
-        />
+            shown, on every page including the Overview. Nudged off the brand mark so the two do
+            not read as one unit. */}
+        <div className="ms-10">
+          <ProjectPicker
+            selectedId={projectId}
+            onSelect={selectProject}
+            onDashboard={showDashboard}
+            interventionCount={interventions.length}
+          />
+        </div>
         <div className="min-w-0 flex-1" />
         <div className="flex shrink-0 items-center gap-1">
           {/* Which daemon this dashboard is talking to (#1052) — obvious once you can hop devices. */}
           <ConnectionIndicator />
-          {/* Below sm the label folds to the icon alone so the nav fits a narrow viewport (#980);
-              the aria-label keeps it named for a screen reader either way. */}
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={newSession}
-            disabled={!projectId}
-            title={projectId ? 'New session' : 'Select a project first'}
-            aria-label="New session"
-          >
-            <Plus className="h-4 w-4 shrink-0 sm:hidden" aria-hidden />
-            <span className="hidden sm:inline">New session</span>
-          </Button>
           <ThemeToggle />
           <NotificationsMenu />
           <Button variant="ghost" size="sm" onClick={showSettings} title="Settings" aria-label="Settings">

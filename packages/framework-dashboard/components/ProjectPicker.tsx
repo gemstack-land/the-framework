@@ -88,7 +88,7 @@ export function ProjectPicker({
             {interventionCount > 0 && (
               <span
                 className="min-w-5 rounded-full bg-primary px-1.5 text-center text-xs font-semibold text-primary-foreground tabular-nums"
-                title={`${interventionCount} item${interventionCount === 1 ? '' : 's'} need${interventionCount === 1 ? 's' : ''} you`}
+                title={`${interventionCount} item${interventionCount === 1 ? '' : 's'} in your Human Queue`}
               >
                 {interventionCount}
               </span>

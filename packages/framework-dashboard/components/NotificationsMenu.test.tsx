@@ -37,19 +37,19 @@ afterEach(() => {
 const open = () => fireEvent.click(screen.getByRole('button', { name: /notifications/i }))
 
 describe('NotificationsMenu (#676)', () => {
-  test('the popover groups methods and categories, both "Needs you" and "New activity" toggleable', () => {
+  test('the popover groups methods and categories, both "Human Queue" and "New activity" toggleable', () => {
     render(<NotificationsMenu />)
     open()
     expect(screen.getByText('Deliver to')).toBeTruthy()
     expect(screen.getByText('Browser')).toBeTruthy()
     expect(screen.getByText('Discord')).toBeTruthy()
     expect(screen.getByText('Notify me about')).toBeTruthy()
-    expect(screen.getByText('Needs you')).toBeTruthy()
+    expect(screen.getByText('Human Queue')).toBeTruthy()
     expect(screen.queryByText('Always on')).toBeNull() // #627: now a real toggle, no static row
     expect(screen.getByText('New activity')).toBeTruthy()
   })
 
-  test('toggling Discord, New activity, and Needs you writes each preference through', () => {
+  test('toggling Discord, New activity, and Human Queue writes each preference through', () => {
     render(<NotificationsMenu />)
     open()
     fireEvent.click(screen.getByText('Discord'))
@@ -57,7 +57,7 @@ describe('NotificationsMenu (#676)', () => {
     fireEvent.click(screen.getByText('New activity'))
     expect(updatePreferences).toHaveBeenCalledWith({ notifyNewActivity: true })
     // Defaults on, so the click turns it OFF (#627).
-    fireEvent.click(screen.getByText('Needs you'))
+    fireEvent.click(screen.getByText('Human Queue'))
     expect(updatePreferences).toHaveBeenCalledWith({ notifyHumanIntervention: false })
   })
 

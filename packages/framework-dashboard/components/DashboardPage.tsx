@@ -96,7 +96,7 @@ export function DashboardPage({
                 </Card>
                 <Card>
                   <CardHeader>
-                    <CardTitle>Backlog</CardTitle>
+                    <CardTitle>AI Queue</CardTitle>
                   </CardHeader>
                   <CardContent className="pt-0">
                     <Backlog queue={data.queue} onSelectProject={onSelectProject} />
@@ -133,7 +133,7 @@ function NeedsYou({ items, onSelectProject }: { items: Intervention[]; onSelectP
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <Inbox className="h-4 w-4 text-muted-foreground" />
-          Needs you
+          Human Queue
           {items.length > 0 && (
             <span className="rounded-full bg-primary px-1.5 text-xs font-semibold text-primary-foreground tabular-nums">
               {items.length}

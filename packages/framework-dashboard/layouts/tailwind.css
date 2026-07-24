@@ -6,36 +6,45 @@
    `dark:text-*-400` unapplied, and picking Light on a dark OS applied them when it should not. */
 @custom-variant dark (&:where(.dark, .dark *));
 
-/* shadcn-style design tokens (neutral slate), light + dark. The Framework's MVP page
-   is dark-first; mirror that so the spike reads as the same product. */
+/* Design tokens, light + dark, on the landing page's Everforest identity (#1118) so the
+   dashboard and the-framework.ai read as one product. The dark theme mirrors the page's exact
+   palette (packages/the-framework.ai/pages/index/styles.css); the light theme is Everforest
+   Light, so the theme toggle still works rather than dropping to a single dark mode. Components
+   read the `--color-*` tokens surfaced in `@theme inline`, so this is a palette swap only.
+   The page is squarer than the old UI, so the radius tightens to ~2px to match. */
 @theme {
-  --radius: 0.5rem;
+  --radius: 0.125rem;
+  /* The landing page's typeface (#1118), loaded in pages/+Head.tsx. Overriding these two theme
+     keys retargets Tailwind's default body font and every `font-mono` to IBM Plex. */
+  --font-sans: 'IBM Plex Sans', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
 :root {
-  /* Let the browser paint native theme-matched scrollbars + form controls (the shadcn way),
-     instead of a light OS scrollbar on the dark UI. `.dark` flips it below. */
+  /* Let the browser paint native theme-matched scrollbars + form controls (the shadcn way).
+     `.dark` flips it below. */
   color-scheme: light;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --border: oklch(0.922 0 0);
-  --primary: oklch(0.58 0.16 264);
-  --primary-foreground: oklch(0.985 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
+  /* Everforest Light (medium). Cards recede a shade below the canvas, mirroring the dark theme
+     where panels are darker than the background. */
+  --background: #fdf6e3;
+  --foreground: #5c6a72;
+  --card: #f4f0d9;
+  --card-foreground: #5c6a72;
+  --muted: #efebd4;
+  --muted-foreground: #829181;
+  --border: #ddd8be;
+  --primary: #8da101;
+  --primary-foreground: #fdf6e3;
+  --accent: #efebd4;
+  --accent-foreground: #5c6a72;
 
   /* Status. Every status colour used to be a raw palette value, so "good" was six different
      greens and `amber-500` meant both "stopped" and "building, fine". These four are the whole
-     vocabulary. They are tuned per theme against that theme's canvas rather than picked once
-     from the middle of a ramp: the old flat `-500` tones sat at ~2:1 on white. */
-  --success: oklch(0.52 0.13 155);
-  --warning: oklch(0.52 0.12 70);
-  --danger: oklch(0.52 0.2 27);
-  --info: oklch(0.53 0.15 245);
+     vocabulary, now on the Everforest Light accents. */
+  --success: #8da101;
+  --warning: #dfa000;
+  --danger: #f85552;
+  --info: #3a94c5;
 
   /* The brand mark's six strands (#757), darkest first, exactly as the brand ships them.
      Kept as variables so the mark can be re-ramped for a dark canvas without touching the SVG. */
@@ -49,23 +58,25 @@
 
 .dark {
   color-scheme: dark;
-  --background: oklch(0.16 0.01 264);
-  --foreground: oklch(0.95 0 0);
-  --card: oklch(0.2 0.01 264);
-  --card-foreground: oklch(0.95 0 0);
-  --muted: oklch(0.27 0.01 264);
-  --muted-foreground: oklch(0.7 0 0);
-  --border: oklch(0.3 0.01 264);
-  --primary: oklch(0.62 0.17 264);
-  --primary-foreground: oklch(0.985 0 0);
-  --accent: oklch(0.27 0.01 264);
-  --accent-foreground: oklch(0.95 0 0);
+  /* Everforest Dark (medium) — the landing page's exact values: bg #2d353b, panels #232a2e,
+     text #d3c6aa, green accent #a7c080, borders #475258. */
+  --background: #2d353b;
+  --foreground: #d3c6aa;
+  --card: #232a2e;
+  --card-foreground: #d3c6aa;
+  --muted: #343f44;
+  --muted-foreground: #9da9a0;
+  --border: #475258;
+  --primary: #a7c080;
+  --primary-foreground: #2d353b;
+  --accent: #343f44;
+  --accent-foreground: #d3c6aa;
 
-  /* Same four meanings, lifted for the dark canvas. */
-  --success: oklch(0.78 0.16 155);
-  --warning: oklch(0.8 0.14 75);
-  --danger: oklch(0.71 0.18 25);
-  --info: oklch(0.75 0.13 240);
+  /* Same four meanings on the Everforest Dark accents. */
+  --success: #a7c080;
+  --warning: #dbbc7f;
+  --danger: #e67e80;
+  --info: #7fbbb3;
 
   /* The ramp inverted for a dark canvas: the shipped one starts at near-black, which would sink
      the leading strands into the background. Same order (leading strand lightest against dark),
@@ -172,7 +183,7 @@ body {
   align-items: center;
   border-radius: 0.3rem;
   padding: 0 0.3rem;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--font-mono);
   font-size: 0.8em;
   line-height: 1.4;
   white-space: nowrap;
