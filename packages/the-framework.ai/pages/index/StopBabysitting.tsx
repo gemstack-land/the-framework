@@ -10,7 +10,7 @@ const ROW_STYLES = {
 // Inline arrows in the mono font and accent green: the sans-serif glyphs are
 // thin and vanish in the muted body text.
 function Arrow({ glyph }: { glyph: '→' | '↔' }) {
-  return <span style={{ fontFamily: mono, color: '#a7c080', fontWeight: 600, fontSize: '1.15em' }}>{glyph}</span>
+  return <span style={{ fontFamily: mono, fontWeight: 500, fontSize: '1.25em' }}>{glyph}</span>
 }
 
 type Row = { kind: keyof typeof ROW_STYLES; emoji: EmojiChar; label: string; body: ReactNode }
@@ -41,10 +41,10 @@ const PROBLEMS: { title: string; desc?: string; rows: Row[] }[] = [
   {
     title: 'Lazy AI plans',
     rows: [
-      bad('Tell AI to deep dive for each important aspect.'),
+      bad('Explicitly tell AI to deep dive important aspects.'),
       good(
         <>
-          Automatic loop of critical self feedback <Arrow glyph="↔" /> research.
+          Automatic loop of feedback <Arrow glyph="↔" /> research <Arrow glyph="↔" /> implementation.
         </>,
       ),
     ],
