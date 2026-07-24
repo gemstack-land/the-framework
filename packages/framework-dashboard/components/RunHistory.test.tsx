@@ -6,7 +6,7 @@ import { SidebarProvider } from './ui/sidebar.js'
 
 // RunHistory pulls in AddProjectPanel, which imports the projects telefunc shim; stub it so the
 // import graph does not drag telefunc into jsdom. Import RunHistory after the mock is in place.
-// Resolves to an empty list: the rail now renders ProjectPicker, which fetches on mount.
+// Resolves to an empty list: AddProjectPanel (reachable from the rail) reads projects on demand.
 const onProjects = vi.hoisted(() => vi.fn(() => Promise.resolve([])))
 const sendAddProject = vi.hoisted(() => vi.fn())
 vi.mock('../server/projects.telefunc.js', () => ({ onProjects, sendAddProject }))

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Plus, ChevronDown, MonitorSmartphone, Settings, LayoutDashboard } from 'lucide-react'
+import { Plus, ChevronDown, MonitorSmartphone, Settings, LayoutDashboard, FolderGit2 } from 'lucide-react'
 import type { RunMeta, RunStatus, RecentRun, ProjectSummary } from '@gemstack/the-framework'
 import { AGENT_LABELS, agentForDriver } from '@gemstack/the-framework/client'
 import { Button, buttonVariants } from './ui/button.js'
@@ -26,7 +26,6 @@ import { ScrollArea } from './ui/scroll-area.js'
 // Global chrome relocated off the removed top navbar (#772 follow-up): the sidebar is the app's
 // chrome now, so the workspace keeps the full width.
 import { BrandLink } from './BrandLink.js'
-import { ProjectPicker } from './ProjectPicker.js'
 import { ConnectionIndicator } from './ConnectionIndicator.js'
 import { ThemeToggle } from './ThemeToggle.js'
 import { NotificationsMenu } from './NotificationsMenu.js'
@@ -178,13 +177,14 @@ export function RunHistory({
         {/* Overview: the way home, its own nav item directly under New and above the session list,
             more prominent than a menu row. Only this — the current view — carries the active fill. */}
         <OverviewButton active={projectId === null} count={interventionCount} onClick={onDashboard} />
-        {/* The project selector is its own element now, no longer fused with Overview. Its exact
-            filter-vs-navigate behaviour is still open; today's navigate-on-select is the interim. */}
-        <ProjectPicker
+        {/* Projects: its own nav item under Overview, same row style, expanding to an indented list
+            of projects (not a dropdown). Selecting one navigates into it — the interim, until the
+            filter-vs-navigate call is made. */}
+        <ProjectsNav
+          projects={projects}
           selectedId={projectId}
           onSelect={onSelectProject}
-          onDashboard={onDashboard}
-          interventionCount={interventionCount}
+          onProjectAdded={onProjectAdded}
         />
       </SidebarHeader>
       {/* The themed ScrollArea (#913) instead of the sidebar's native overflow bar, matching the
@@ -272,6 +272,77 @@ function OverviewButton({ active, count, onClick }: { active: boolean; count: nu
         </span>
       )}
     </button>
+  )
+}
+
+// Projects: the project selector as an expandable nav item (Rom), the same row style as Overview,
+// opening an indented sub-list rather than a dropdown. Selecting a project navigates into it (the
+// interim behaviour; the filter-vs-navigate call is still open). Starts open when a project is
+// selected, so the active one is in view. Uses the `projects` the shell already loaded.
+function ProjectsNav({
+  projects,
+  selectedId,
+  onSelect,
+  onProjectAdded,
+}: {
+  projects: ProjectSummary[]
+  selectedId: string | null
+  onSelect: (projectId: string) => void
+  onProjectAdded?: (() => void) | undefined
+}) {
+  const [open, setOpen] = useState(selectedId !== null)
+  const [adding, setAdding] = useState(false)
+  return (
+    <div className="flex flex-col">
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        aria-expanded={open}
+        className="flex h-9 w-full items-center gap-2 rounded-md px-2 text-sm font-medium text-foreground transition-colors hover:bg-sidebar-accent/60"
+      >
+        <FolderGit2 className="h-4 w-4 shrink-0" aria-hidden />
+        <span className="flex-1 text-left">Projects</span>
+        <ChevronDown className={cn('h-4 w-4 shrink-0 opacity-70 transition-transform', open || '-rotate-90')} aria-hidden />
+      </button>
+      {open && (
+        // The indented sub-list, with the connecting rule the reference draws down the group.
+        <div className="mt-0.5 ml-4 flex flex-col gap-0.5 border-l border-sidebar-border pl-2">
+          {projects.length === 0 && <p className="px-2 py-1 text-sm text-muted-foreground">No projects yet</p>}
+          {projects.map(p => (
+            <button
+              key={p.id}
+              type="button"
+              onClick={() => onSelect(p.id)}
+              aria-current={p.id === selectedId ? 'page' : undefined}
+              className={cn(
+                'flex h-8 w-full items-center gap-2 rounded-md px-2 text-sm transition-colors',
+                p.id === selectedId
+                  ? 'bg-sidebar-accent font-medium text-sidebar-accent-foreground'
+                  : 'text-foreground hover:bg-sidebar-accent/60',
+              )}
+            >
+              {/* The activated dot the picker used, kept so the two project lists still read alike. */}
+              <span
+                aria-hidden
+                className={cn('h-2 w-2 shrink-0 rounded-full', p.activated ? 'bg-primary' : 'bg-muted-foreground')}
+                title={p.activated ? 'activated' : 'not activated'}
+              />
+              <span className="sr-only">{p.activated ? 'Activated' : 'Not activated'}: </span>
+              <span className="flex-1 truncate text-left">{p.name}</span>
+            </button>
+          ))}
+          <button
+            type="button"
+            onClick={() => setAdding(true)}
+            className="flex h-8 w-full items-center gap-2 rounded-md px-2 text-sm text-muted-foreground transition-colors hover:bg-sidebar-accent/60 hover:text-foreground"
+          >
+            <Plus className="h-3.5 w-3.5 shrink-0" aria-hidden />
+            <span>Add project</span>
+          </button>
+        </div>
+      )}
+      {adding && <AddProjectPanel onAdded={() => onProjectAdded?.()} onClose={() => setAdding(false)} />}
+    </div>
   )
 }
 
