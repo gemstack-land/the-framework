@@ -37,11 +37,11 @@ export function Queues() {
         <QueueCard title="AI Queue" icon="🤖">
           <P>
             Queue of future AI tasks — tasks are added by humans, or by{' '}
-            <a href="#autonomous-ai">product management agents</a> (autonomously if highly confident, or after your
+            product management agents (autonomously if highly confident, or after your
             confirmation otherwise).
           </P>
           <P>
-            <b style={leadStyle}>Powers the AI autonomousity</b> — essentially driven by agents autonomously populating
+            <a href="#autonomous-ai" style={{ fontWeight: 600 }}>Powers the AI autonomousity</a> — essentially driven by agents autonomously populating
             the AI queue.
           </P>
           <P>
