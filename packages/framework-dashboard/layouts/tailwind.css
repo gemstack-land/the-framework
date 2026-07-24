@@ -125,6 +125,64 @@ body {
   color: var(--foreground);
 }
 
+/* Recents row title: the truncated end fades out (like the reference) instead of a hard ellipsis,
+   and hovering the row marquees a long title by exactly its overflow so it can be read without a
+   tooltip. `container-type: inline-size` lets the keyframe measure the overflow itself — 100cqw is
+   the visible width, 100% the text's own width, so `min(0, 100cqw - 100%)` is 0 for a title that
+   fits and the negative overflow for one that does not (short titles never move). */
+.rail-title {
+  overflow: hidden;
+  white-space: nowrap;
+  container-type: inline-size;
+}
+/* Only a title that actually overflows fades and marquees (the `is-overflowing` class is set by a
+   measure in RunRow); a short one shows plainly, with no gradient. */
+.rail-title.is-overflowing {
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 3rem), transparent);
+  mask-image: linear-gradient(to right, #000 calc(100% - 3rem), transparent);
+}
+/* While marqueeing, fade both borders so the title dissolves at each card edge, not only the end. */
+.rail-row:hover .rail-title.is-overflowing {
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 1.25rem, #000 calc(100% - 3rem), transparent);
+  mask-image: linear-gradient(to right, transparent, #000 1.25rem, #000 calc(100% - 3rem), transparent);
+}
+.rail-title-inner {
+  display: inline-block;
+  will-change: transform;
+}
+.rail-row:hover .rail-title.is-overflowing .rail-title-inner {
+  animation: rail-marquee 4s ease-in-out 0.35s infinite alternate;
+}
+@keyframes rail-marquee {
+  to {
+    transform: translateX(min(0px, calc(100cqw - 100%)));
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .rail-row:hover .rail-title-inner {
+    animation: none;
+  }
+}
+
+/* The Recents fade strip only appears once the list is scrolled, so it never dims the first row at
+   rest. Its opacity is driven by the rail's own scroll position (the same scroll-timeline mechanism
+   as the chat log's scroll-fade). Without scroll-timeline support it stays hidden. */
+.rail-fade {
+  opacity: 0;
+}
+@supports (animation-timeline: scroll()) {
+  .rail-fade {
+    animation: rail-fade-appear 1ms linear both;
+    animation-timeline: scroll(nearest y);
+    animation-range: 0 1.5rem;
+  }
+}
+@keyframes rail-fade-appear {
+  to {
+    opacity: 1;
+  }
+}
+
 /* Prompt editor (#470): live-markdown prose + token chips. Kept lightweight — the box is a
    prompt input, not a document, so just enough structure for lists/emphasis/code to read. */
 .pe-prose {

@@ -1,24 +1,14 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import type { ReactNode } from 'react'
 import type { FrameworkEvent } from '@gemstack/the-framework'
-import { sessionInfo } from '@gemstack/the-framework/client'
-import { Square, ExternalLink } from 'lucide-react'
-import { sendStop } from '../server/control.telefunc.js'
-import { useAction } from '../lib/use-action.js'
-import { isRunActive } from '../lib/live-state.js'
-import { describeSessionLink } from '../lib/session-link.js'
-import { RemoveWorktreeButton } from './RemoveWorktreeButton.js'
-import { DeleteSessionButton } from './DeleteSessionButton.js'
-import { WorkspaceActions } from './WorkspaceActions.js'
 import { GitStatusBar } from './GitStatusBar.js'
-import { Button, buttonVariants } from './ui/button.js'
-import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from './ui/tooltip.js'
+import { SessionActionsMenu } from './SessionActionsMenu.js'
 
-// One run's action bar: Serve, Stop, and Open session as a single row of icon buttons with
-// tooltips, instead of three stacked labeled rows. One bar for the session whether it is running
-// or finished (RunView), so the controls stay put when a run reaches Done. Serve is a
-// project-level action (always available); Stop shows only while the run is active; Open session
-// appears once the run has reported one (honestly labeled — see describeSessionLink). A finished
-// run that kept its worktree (#737) also gets a Remove.
+// One run's action bar: what the session IS (its branch / PR / summary, as a disclosure) on the
+// left, and what you can DO to it on the right. The doing is a single ⋮ overflow menu
+// (SessionActionsMenu) instead of a row of icon buttons that came and went with the run's state;
+// only the handoff's next step (Push / Open PR) stays out as a visible button, since it moves the
+// work forward. One bar for the session whether running or finished (RunView), so the controls stay
+// put when a run reaches Done.
 export function RunActionBar({
   projectId,
   runId,
@@ -27,6 +17,7 @@ export function RunActionBar({
   onWorktreeRemoved,
   onDeleted,
   label,
+  projectName,
   summary,
   expanded = false,
   onToggle,
@@ -38,9 +29,11 @@ export function RunActionBar({
   events: FrameworkEvent[]
   /** The session's name — leads the bar, so the branch is git context, not the identity (#1030). */
   label?: string | undefined
+  /** The session's project, shown as a `project / session` breadcrumb before the name. */
+  projectName?: string | null | undefined
   /** True when this finished run still has a worktree on disk, so it can be removed (#737). */
   retainedWorktree?: boolean
-  /** Told after that worktree is removed, so the button goes. */
+  /** Told after that worktree is removed, so the menu item goes. */
   onWorktreeRemoved?: () => void
   /** Told after this session is deleted, so the caller can leave it (#1032). Given only for a
    * finished run: absent, no delete is offered. */
@@ -50,98 +43,33 @@ export function RunActionBar({
   expanded?: boolean
   /** Given, the branch reads as a disclosure for the detail the caller renders under this bar. */
   onToggle?: (() => void) | undefined
-  /** The session's next step (push, open PR), kept in the bar rather than behind the disclosure. */
+  /** The session's next step (push, open PR), kept in the bar rather than in the ⋮ menu. */
   actions?: ReactNode
 }) {
-  // Stop routes through useAction like every other mutation: a click disables + shows "Stopping…"
-  // and a failed stop surfaces instead of silently doing nothing.
-  const { busy, error, run } = useAction()
-  const active = isRunActive(events)
-  // A landed stop keeps the button parked until the end event flips `active` (#948): useAction
-  // resets busy on success, and for that gap the enabled button invited a redundant second stop.
-  const [stopRequested, setStopRequested] = useState(false)
-  useEffect(() => setStopRequested(false), [runId])
-  const stopping = busy || (stopRequested && active)
-  // Only a real per-session deep link is shown; the generic claude.ai/code entry is a dead end.
-  // A session with an id but no deep link still gets its id offered for copy (#948): it is the
-  // exact string a --resume takes, and it used to live only as a mono line buried in the feed.
-  const info = sessionInfo(events)
-  const session = describeSessionLink(info)
-
   return (
     // One row, always (#1026). The branch and its summary give up width as the row fills; the
-    // buttons never drop under them, because a bar that reflows moves everything below it.
-    <div className="@container flex items-center gap-2 overflow-hidden border-b border-border px-4 py-2">
-      <TooltipProvider delay={300} closeDelay={0}>
-        {/* Where this session is working (#798/#809): the same status the project home shows,
-            read from this session's own worktree — its branch, whether it is holding uncommitted
-            work, its size on disk, and the PR its branch has. */}
-        <GitStatusBar projectId={projectId} runId={runId} inline label={label} summary={summary} expanded={expanded} onToggle={onToggle} />
-        {error && <span className="shrink-0 truncate text-xs text-danger">{error}</span>}
-        {/* What the session IS sits at the start of the bar; what you can DO to it sits at the end,
-            so the buttons keep one home as the row's contents come and go (Stop only while it runs,
-            Remove only on a retained worktree, Open session only once one is reported). The spacer
-            grows to fill but never shrinks (#1030), so a tight row takes its width from the label
-            (which truncates) rather than from the spacer collapsing and the label surviving whole. */}
-        <div className="grow shrink-0" />
-        <div className="flex shrink-0 items-center gap-2">
-        {/* The handoff's next step sits before the workspace icons: it is the one thing here that
-            moves the session forward rather than just opening it somewhere. */}
+    // controls never drop under them, because a bar that reflows moves everything below it.
+    <div className="@container flex items-center gap-2 overflow-hidden px-4 py-2">
+      {/* Where this session is working (#798/#809): its branch, whether it holds uncommitted work,
+          its size on disk, and the PR its branch has — read from this session's own worktree. */}
+      <GitStatusBar projectId={projectId} runId={runId} inline label={label} projectName={projectName} summary={summary} expanded={expanded} onToggle={onToggle} />
+      {/* What the session IS sits at the start; what you can DO to it sits at the end. The spacer
+          grows but never shrinks (#1030), so a tight row takes its width from the label. */}
+      <div className="grow shrink-0" />
+      <div className="flex shrink-0 items-center gap-2">
+        {/* The handoff's next step stays visible — the one thing here that moves the session forward
+            rather than just opening it somewhere. Everything else is in the ⋮ menu. */}
         {actions}
-        {/* GitHub, folder, editor and Serve, addressed to this session's worktree (#809). */}
-        <WorkspaceActions projectId={projectId} runId={runId} />
-        {active && (
-          <Tooltip>
-            <TooltipTrigger
-              render={
-                <Button
-                  variant="outline"
-                  size="icon-sm"
-                  aria-label="Stop session"
-                  disabled={stopping}
-                  onClick={() =>
-                    void run(() => sendStop(projectId, runId ?? undefined).then(() => true), 'Could not stop the session.').then(
-                      result => result && setStopRequested(true),
-                    )
-                  }
-                />
-              }
-            >
-              <Square className="h-3 w-3 fill-current" />
-            </TooltipTrigger>
-            <TooltipContent>{stopping ? 'Stopping…' : 'Stop session'}</TooltipContent>
-          </Tooltip>
-        )}
-        {/* A retained worktree only exists for a finished run, so this never sits beside Stop. */}
-        {retainedWorktree && !active && runId && (
-          <RemoveWorktreeButton projectId={projectId} runId={runId} onRemoved={() => onWorktreeRemoved?.()} />
-        )}
-        {/* Delete the whole session, records and all (#1032). Finished runs only, and it needs no
-            worktree — a clean run that kept none can still be cleared from the list. Sits after
-            Remove, the more destructive of the pair. */}
-        {onDeleted && !active && runId && (
-          <DeleteSessionButton projectId={projectId} runId={runId} label={label} onDeleted={onDeleted} />
-        )}
-        {session && (
-          <Tooltip>
-            <TooltipTrigger
-              render={
-                <a
-                  href={session.href}
-                  target="_blank"
-                  rel="noreferrer"
-                  aria-label={session.label.replace(' ↗', '')}
-                  className={buttonVariants({ variant: 'outline', size: 'icon-sm' })}
-                />
-              }
-            >
-              <ExternalLink className="h-3.5 w-3.5" />
-            </TooltipTrigger>
-            <TooltipContent>{session.label.replace(' ↗', '')}</TooltipContent>
-          </Tooltip>
-        )}
-        </div>
-      </TooltipProvider>
+        <SessionActionsMenu
+          projectId={projectId}
+          runId={runId}
+          events={events}
+          label={label}
+          retainedWorktree={retainedWorktree}
+          onWorktreeRemoved={onWorktreeRemoved}
+          onDeleted={onDeleted}
+        />
+      </div>
     </div>
   )
 }

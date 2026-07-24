@@ -6,9 +6,17 @@ import { SidebarProvider } from './ui/sidebar.js'
 
 // RunHistory pulls in AddProjectPanel, which imports the projects telefunc shim; stub it so the
 // import graph does not drag telefunc into jsdom. Import RunHistory after the mock is in place.
-const onProjects = vi.hoisted(() => vi.fn())
+// Resolves to an empty list: AddProjectPanel (reachable from the rail) reads projects on demand.
+const onProjects = vi.hoisted(() => vi.fn(() => Promise.resolve([])))
 const sendAddProject = vi.hoisted(() => vi.fn())
 vi.mock('../server/projects.telefunc.js', () => ({ onProjects, sendAddProject }))
+
+// The rail now also carries the app chrome moved off the top navbar (#772 follow-up). Three of
+// those pull the preferences/devices telefunc shims into jsdom, which this suite deliberately
+// avoids. It is about the runs list, not the chrome (each has its own suite), so stub them out.
+vi.mock('./ThemeToggle.js', () => ({ ThemeToggle: () => null }))
+vi.mock('./NotificationsMenu.js', () => ({ NotificationsMenu: () => null }))
+vi.mock('./ConnectionIndicator.js', () => ({ ConnectionIndicator: () => null }))
 
 const { RunHistory } = await import('./RunHistory.js')
 

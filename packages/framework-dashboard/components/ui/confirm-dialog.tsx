@@ -14,6 +14,8 @@ import { cn } from '../../lib/utils.js'
 // destructive confirm is a deliberate choice, not something a stray click past the edge triggers.
 export function ConfirmDialog({
   trigger,
+  open: controlledOpen,
+  onOpenChange,
   title,
   body,
   confirmLabel,
@@ -23,8 +25,12 @@ export function ConfirmDialog({
   fallbackError = 'Something went wrong.',
   destructive = true,
 }: {
-  /** The control that opens the dialog (an icon button, a menu item). */
-  trigger: ReactNode
+  /** The control that opens the dialog (an icon button). Omit when driving `open` yourself — e.g.
+   *  opening from a menu item, where the menu closes on click and cannot also be the trigger. */
+  trigger?: ReactNode
+  /** Controlled open state. Given, the dialog is opened/closed by the caller instead of its trigger. */
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
   title: ReactNode
   /** The consequence, said plainly — this is where the caveats live. */
   body: ReactNode
@@ -37,7 +43,9 @@ export function ConfirmDialog({
   fallbackError?: string
   destructive?: boolean
 }) {
-  const [open, setOpen] = useState(false)
+  const [uncontrolledOpen, setUncontrolledOpen] = useState(false)
+  const open = controlledOpen ?? uncontrolledOpen
+  const setOpen = onOpenChange ?? setUncontrolledOpen
   const { busy, error, run, reset } = useAction()
 
   const confirm = (): void => {
@@ -60,7 +68,7 @@ export function ConfirmDialog({
         if (next) reset()
       }}
     >
-      <AlertDialog.Trigger render={trigger as never} />
+      {trigger && <AlertDialog.Trigger render={trigger as never} />}
       <AlertDialog.Portal>
         <AlertDialog.Backdrop className="fixed inset-0 z-50 bg-black/40 backdrop-blur-[1px]" />
         <AlertDialog.Popup className="fixed left-1/2 top-1/2 z-50 w-[min(26rem,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 rounded-lg border border-border bg-card p-5 text-card-foreground shadow-lg">

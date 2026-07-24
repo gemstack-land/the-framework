@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import { Plus, ChevronDown, MonitorSmartphone } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { Plus, ChevronDown, MonitorSmartphone, Settings, LayoutDashboard, FolderGit2 } from 'lucide-react'
 import type { RunMeta, RunStatus, RecentRun, ProjectSummary } from '@gemstack/the-framework'
 import { AGENT_LABELS, agentForDriver } from '@gemstack/the-framework/client'
 import { Button, buttonVariants } from './ui/button.js'
@@ -18,10 +18,17 @@ import {
   SidebarGroupContent,
   SidebarGroupLabel,
   SidebarHeader,
+  SidebarFooter,
   SidebarMenu,
   SidebarMenuItem,
 } from './ui/sidebar.js'
 import { ScrollArea } from './ui/scroll-area.js'
+// Global chrome relocated off the removed top navbar (#772 follow-up): the sidebar is the app's
+// chrome now, so the workspace keeps the full width.
+import { BrandLink } from './BrandLink.js'
+import { ConnectionIndicator } from './ConnectionIndicator.js'
+import { ThemeToggle } from './ThemeToggle.js'
+import { NotificationsMenu } from './NotificationsMenu.js'
 
 // One rendered row of the rail, from either source (a project's own run, or a pooled cross-project
 // recent): the RunMeta to show, an optional project label (only on the Overview, where the rail
@@ -50,11 +57,27 @@ export function RunHistory({
   startTick = 0,
   startIntent = '',
   followLive = false,
+  working = false,
+  onDashboard = () => {},
+  onSelectProject = () => {},
+  onSettings = () => {},
+  interventionCount = 0,
 }: {
   projectId: string | null
   runs: RunMeta[]
   selectedRunId: string | null
   onSelect: (runId: string | null) => void
+  /** The brand mark animates while any agent is working (moved off the navbar with the brand). */
+  working?: boolean
+  /** Go to the Overview (no project): the brand mark and the Overview item both call it. Defaults
+   *  to a no-op so a focused unit test can mount the rail without wiring the shell's chrome. */
+  onDashboard?: () => void
+  /** Select a project in the picker (its own element now, not fused with Overview). */
+  onSelectProject?: (projectId: string) => void
+  /** Open Settings, from the sidebar footer where the navbar gear moved. */
+  onSettings?: () => void
+  /** Human Queue count, shown on the Overview item and the picker (#632). */
+  interventionCount?: number
   /** Cross-project recents for the Overview (no project selected): every project's sessions pooled. */
   recentRuns?: RecentRun[]
   /** Select a pooled recent: jump into its project's session (project + run both change). */
@@ -100,11 +123,9 @@ export function RunHistory({
   // On the Overview the optimistic launch row belongs to a project, so it only applies in-project.
   const showOptimistic = !crossProject && optimistic !== null && !hasRunning
 
-  // While following a just-started run, the highlight belongs on that run (its optimistic row,
-  // then its real row) — not the New row, even though no run id is selected yet (#705).
-  const atHome = selectedRunId === null && !followLive
   // A session selected but not in the list is one just started, whose row lands with its run.json
-  // a beat later (#784): the optimistic row is standing in for it, so highlight that.
+  // a beat later (#784): the optimistic row is standing in for it, so highlight that. Following a
+  // just-started run (#705) counts too, before its id is known.
   const starting = followLive || (selectedRunId !== null && !runs.some(run => run.id === selectedRunId))
 
   const rows: Row[] = crossProject
@@ -124,22 +145,47 @@ export function RunHistory({
         onClick: () => onSelect(run.id),
       }))
 
+  // New is the active view when a project is open on its launcher (its "New" / Start-a-session
+  // screen: a project selected, no run picked, not following a live one). On the Overview that role
+  // belongs to the Overview item instead, so the two are never active at once.
+  const atProjectLauncher = projectId !== null && selectedRunId === null && !followLive
+
   const hasRecents = rows.length > 0 || showOptimistic
 
   return (
-    // A fixed-width, in-flow column (`collapsible="none"`): the shell already owns the top nav and
-    // the right rail, so the sidebar slots between them the way the old <aside> did.
+    // A fixed-width, in-flow column (`collapsible="none"`): with the top navbar gone (#772
+    // follow-up), the sidebar carries the app's chrome — brand, global nav, and the utility
+    // controls in the footer — so the workspace and right rail get the full height.
     <Sidebar collapsible="none" className="w-(--sidebar-width) border-r border-sidebar-border">
-      <SidebarHeader className="pb-0">
+      <SidebarHeader className="gap-0.5 pb-2">
+        {/* The mark + wordmark, the way home (#909), now that there is no navbar to hold them.
+            A clear gap below it pushes New down; then New/Overview/Projects stack tight as one nav
+            group (gap-0.5), with a little space again below the group (the header's pb-2) before
+            Recents. */}
+        <div className="px-1 pt-1 pb-4">
+          <BrandLink working={working} onNavigate={onDashboard} />
+        </div>
         {/* "New" starts a session — but where depends on what exists: with no project it prompts to
             add one first, with one project it starts there, with several it opens a picker. In a
             project already, it just starts another session there. */}
         <NewButton
           projectId={projectId}
           projects={projects}
-          atHome={atHome}
+          active={atProjectLauncher}
           onNewSessionInProject={onNewSessionInProject}
           onSelect={onSelect}
+          onProjectAdded={onProjectAdded}
+        />
+        {/* Overview: the way home, its own nav item directly under New and above the session list,
+            more prominent than a menu row. Only this — the current view — carries the active fill. */}
+        <OverviewButton active={projectId === null} count={interventionCount} onClick={onDashboard} />
+        {/* Projects: its own nav item under Overview, same row style, expanding to an indented list
+            of projects (not a dropdown). Selecting one navigates into it — the interim, until the
+            filter-vs-navigate call is made. */}
+        <ProjectsNav
+          projects={projects}
+          selectedId={projectId}
+          onSelect={onSelectProject}
           onProjectAdded={onProjectAdded}
         />
       </SidebarHeader>
@@ -147,10 +193,18 @@ export function RunHistory({
           Overview: suppress SidebarContent's own `overflow-auto` and let the ScrollArea own it. */}
       <SidebarContent className="overflow-hidden">
         <ScrollArea className="min-h-0 flex-1">
-          <SidebarGroup className="pt-1">
-            {/* Recents label sits under the launcher, over the run list (not a page-wide header). */}
+          {/* pr-3 keeps the rows (and the active card) clear of the overlaid scrollbar (w-2.5). */}
+          <SidebarGroup className="pt-3 pr-3">
+            {/* The label sticks to the top of the scroll; the gradient strip under it (also sticky)
+                fades the rows into the background as they scroll up beneath the label. */}
             {hasRecents && (
-              <SidebarGroupLabel className="uppercase tracking-wide text-muted-foreground">Recents</SidebarGroupLabel>
+              <div className="sticky top-0 z-10">
+                <SidebarGroupLabel className="rounded-none bg-background font-normal tracking-wide text-muted-foreground">Recents</SidebarGroupLabel>
+                {/* Absolute (hanging just below the label) so it does not push the first row down; it
+                    still overlays the rows scrolling up under it. `rail-fade` keeps it invisible at
+                    the top of the scroll (so it never dims the first row) and fades it in on scroll. */}
+                <div aria-hidden className="rail-fade pointer-events-none absolute inset-x-0 top-full h-4 bg-gradient-to-b from-background to-transparent" />
+              </div>
             )}
             <SidebarGroupContent>
               <SidebarMenu className="gap-0.5">
@@ -185,7 +239,120 @@ export function RunHistory({
           </SidebarGroup>
         </ScrollArea>
       </SidebarContent>
+      {/* The navbar's utility controls, relocated to the foot of the sidebar (#772 follow-up):
+          which daemon this is (Local/remote), theme, notifications, and Settings. */}
+      <SidebarFooter className="border-t border-sidebar-border">
+        <div className="flex items-center gap-1">
+          <ConnectionIndicator />
+          <div className="min-w-0 flex-1" />
+          <ThemeToggle />
+          <NotificationsMenu />
+          <Button variant="ghost" size="sm" onClick={onSettings} title="Settings" aria-label="Settings">
+            <Settings className="h-4 w-4" aria-hidden />
+          </Button>
+        </div>
+      </SidebarFooter>
     </Sidebar>
+  )
+}
+
+// The Overview entry (Rom): the way home, pinned above the session list and more prominent than a
+// menu row. Carries the Human Queue count (#632) so the one cross-project signal stays visible, and
+// highlights while it is the current view.
+function OverviewButton({ active, count, onClick }: { active: boolean; count: number; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-current={active ? 'page' : undefined}
+      className={cn(
+        // Same box as New (px-2 py-1.5 gap-2) so the two rows' icons and labels line up exactly.
+        'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors',
+        active ? 'bg-sidebar-accent text-sidebar-accent-foreground' : 'text-foreground hover:bg-sidebar-accent/60',
+      )}
+    >
+      <LayoutDashboard className="h-4 w-4 shrink-0" aria-hidden />
+      <span className="flex-1 text-left">Overview</span>
+      {count > 0 && (
+        <span
+          className="min-w-5 rounded-full bg-primary px-1.5 text-center text-xs font-semibold text-primary-foreground tabular-nums"
+          title={`${count} item${count === 1 ? '' : 's'} in your Human Queue`}
+        >
+          {count}
+        </span>
+      )}
+    </button>
+  )
+}
+
+// Projects: the project selector as an expandable nav item (Rom), the same row style as Overview,
+// opening an indented sub-list rather than a dropdown. Selecting a project navigates into it (the
+// interim behaviour; the filter-vs-navigate call is still open). Starts collapsed — you open it to
+// switch projects. Uses the `projects` the shell already loaded.
+function ProjectsNav({
+  projects,
+  selectedId,
+  onSelect,
+  onProjectAdded,
+}: {
+  projects: ProjectSummary[]
+  selectedId: string | null
+  onSelect: (projectId: string) => void
+  onProjectAdded?: (() => void) | undefined
+}) {
+  const [open, setOpen] = useState(false)
+  const [adding, setAdding] = useState(false)
+  return (
+    <div className="flex flex-col">
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        aria-expanded={open}
+        className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm text-foreground transition-colors hover:bg-sidebar-accent/60"
+      >
+        <FolderGit2 className="h-4 w-4 shrink-0" aria-hidden />
+        <span className="flex-1 text-left">Projects</span>
+        <ChevronDown className={cn('h-4 w-4 shrink-0 opacity-70 transition-transform', open || '-rotate-90')} aria-hidden />
+      </button>
+      {open && (
+        // The indented sub-list, with the connecting rule the reference draws down the group.
+        <div className="mt-0.5 ml-4 flex flex-col gap-0.5 border-l border-sidebar-border pl-2">
+          {projects.length === 0 && <p className="px-2 py-1 text-sm text-muted-foreground">No projects yet</p>}
+          {projects.map(p => (
+            <button
+              key={p.id}
+              type="button"
+              onClick={() => onSelect(p.id)}
+              aria-current={p.id === selectedId ? 'page' : undefined}
+              className={cn(
+                'flex h-8 w-full items-center gap-2 rounded-md px-2 text-sm transition-colors',
+                p.id === selectedId
+                  ? 'bg-sidebar-accent font-medium text-sidebar-accent-foreground'
+                  : 'text-foreground hover:bg-sidebar-accent/60',
+              )}
+            >
+              {/* The activated dot the picker used, kept so the two project lists still read alike. */}
+              <span
+                aria-hidden
+                className={cn('h-2 w-2 shrink-0 rounded-full', p.activated ? 'bg-primary' : 'bg-muted-foreground')}
+                title={p.activated ? 'activated' : 'not activated'}
+              />
+              <span className="sr-only">{p.activated ? 'Activated' : 'Not activated'}: </span>
+              <span className="flex-1 truncate text-left">{p.name}</span>
+            </button>
+          ))}
+          <button
+            type="button"
+            onClick={() => setAdding(true)}
+            className="flex h-8 w-full items-center gap-2 rounded-md px-2 text-sm text-muted-foreground transition-colors hover:bg-sidebar-accent/60 hover:text-foreground"
+          >
+            <Plus className="h-3.5 w-3.5 shrink-0" aria-hidden />
+            <span>Add project</span>
+          </button>
+        </div>
+      )}
+      {adding && <AddProjectPanel onAdded={() => onProjectAdded?.()} onClose={() => setAdding(false)} />}
+    </div>
   )
 }
 
@@ -196,20 +363,28 @@ export function RunHistory({
 function NewButton({
   projectId,
   projects,
-  atHome,
+  active = false,
   onNewSessionInProject,
   onSelect,
   onProjectAdded,
 }: {
   projectId: string | null
   projects: ProjectSummary[]
-  atHome: boolean
+  /** On a project's launcher (its "New" screen), so New reads as the current view. Off on the
+   *  Overview, where the Overview item is the active one instead — the two are never both active. */
+  active?: boolean
   onNewSessionInProject?: ((projectId: string) => void) | undefined
   onSelect: (runId: string | null) => void
   onProjectAdded?: (() => void) | undefined
 }) {
   const [adding, setAdding] = useState(false)
-  const cls = cn('w-full justify-start gap-2', atHome && 'bg-accent text-accent-foreground')
+  // Same box as the Overview row (px-2 py-1.5 gap-2) so their icons and labels align; h-auto/px-2/
+  // py-1.5 override the button size's default h-9/px-4/py-2. The active fill (same tokens as
+  // Overview) only on this project's launcher; otherwise plain, since New is an action, not a place.
+  const cls = cn(
+    'h-auto w-full justify-start gap-2 px-2 py-1.5 font-normal',
+    active && 'bg-sidebar-accent text-sidebar-accent-foreground',
+  )
   const start = (id: string) => (onNewSessionInProject ? onNewSessionInProject(id) : onSelect(null))
 
   // In a project, or on the Overview with exactly one: start a session straight away.
@@ -292,17 +467,28 @@ function RunRow({
   // Only a live run can be waiting on you; a finished one is just finished.
   const parked = waiting && status === 'running'
   const agent = agentForDriver(driver)
+  // The title only fades + marquees when it actually overflows the fixed-width rail; a short one
+  // shows plainly. Measured here since CSS cannot tell. The rail width is fixed, so intent is the
+  // only thing that changes the answer.
+  const titleRef = useRef<HTMLSpanElement>(null)
+  const [overflowing, setOverflowing] = useState(false)
+  useEffect(() => {
+    const el = titleRef.current
+    if (el) setOverflowing(el.scrollWidth > el.clientWidth + 1)
+  }, [intent])
   return (
     <Button
       variant="ghost"
       className={cn(
-        'h-auto w-full flex-col items-start gap-0.5 px-2 py-2 text-left',
+        // px-0 (overriding the button base's px-4) so the card has no horizontal padding: the title
+        // spans edge to edge and its clip/fade land on the border. Inner rows carry their own px-2.
+        'rail-row h-auto w-full flex-col items-start gap-0.5 px-0 py-2 text-left',
         active && 'bg-accent text-accent-foreground',
         dim && 'opacity-70',
       )}
       onClick={onClick}
     >
-      <span className="flex w-full items-center gap-2">
+      <span className="flex w-full items-center gap-2 px-2">
         {/* The dot means "the agent is working", so a run parked on you gets a still one (#785):
             it used to pulse identically whether it was mid-edit or had been idle for an hour. */}
         {status === 'running' && (
@@ -326,7 +512,9 @@ function RunRow({
           </span>
         )}
       </span>
-      <span className="w-full truncate text-sm font-medium">{intent || 'New session'}</span>
+      <span ref={titleRef} className={cn('rail-title w-full px-2 text-sm font-normal', overflowing && 'is-overflowing')}>
+        <span className="rail-title-inner">{intent || 'New session'}</span>
+      </span>
     </Button>
   )
 }
