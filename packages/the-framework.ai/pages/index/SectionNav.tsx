@@ -26,10 +26,11 @@ export function SectionNav() {
 
   useEffect(() => {
     const onScroll = () => {
-      // A section claims the highlight as soon as its content enters the lower
-      // quarter of the viewport — eager on purpose: the moment the next title
-      // shows up, the nav follows. Nav clicks land content at y=76, within the line.
-      const spyLine = Math.max(130, window.innerHeight * 0.75)
+      // A section claims the highlight once its content crosses just below the
+      // viewport's midpoint — eager enough to follow the reader, without
+      // flipping while the title still hugs the bottom edge. Nav clicks land
+      // content at y=76, within the line.
+      const spyLine = Math.max(130, window.innerHeight * 0.55)
       let a = ''
       for (const s of SECTIONS) {
         const el = document.getElementById(s.id)
