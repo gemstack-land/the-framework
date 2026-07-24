@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
-import { readRunHandoff, runBranchFor, pushRunBranch, openRunPullRequest, gitReason, runAutoHandoff, isSessionBranch } from './run-handoff.js'
+import { readRunHandoff, runBranchFor, pushRunBranch, openRunPullRequest, gitReason, runAutoHandoff, isSessionBranch, prBaseName } from './run-handoff.js'
 import { nodeGitRunner, GIT_SLOW_TIMEOUT_MS, type GitRunner } from '../project.js'
 import { CliTimeoutError, isCliTimeout } from '../cli-exec.js'
 
@@ -385,4 +385,31 @@ test('a session branch is recognised by its prefix, a hand-made one is not (#110
   assert.equal(isSessionBranch('the-framework/x'), true)
   assert.equal(isSessionBranch('feat/mine'), false)
   assert.equal(isSessionBranch(undefined), false)
+})
+
+test('the PR base is the remote branch name, not the tracking ref (#1102)', async () => {
+  // Found by driving this against a real GitHub remote: `base` is `origin/main`, because that is
+  // what the log range and the merged check need, but `gh pr create --base origin/main` is
+  // rejected with "Base ref must be a branch". Pre-existing in #799's Open PR button; auto-handoff
+  // made it fire on every session.
+  assert.equal(prBaseName('origin/main'), 'main')
+  assert.equal(prBaseName('main'), 'main') // the no-remote fallback is already a branch name
+  assert.equal(prBaseName('origin/release/2.x'), 'release/2.x')
+
+  const ghCalls: string[][] = []
+  await openRunPullRequest(
+    '/repo',
+    'the-framework/x',
+    { title: 't', body: 'b', base: 'origin/main' },
+    {
+      git: async () => '',
+      gh: async args => {
+        ghCalls.push(args)
+        return 'https://github.com/o/r/pull/1\n'
+      },
+    },
+  )
+  const at = ghCalls[0]?.indexOf('--base') ?? -1
+  assert.notEqual(at, -1, 'the base should still be passed')
+  assert.equal(ghCalls[0]?.[at + 1], 'main')
 })

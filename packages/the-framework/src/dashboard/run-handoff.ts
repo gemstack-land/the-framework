@@ -1,5 +1,5 @@
 import { nodeGitRunner, type GitRunner } from '../project.js'
-import { cachedPrView, forgetPr, nodeGhRunner, type GhRunner, type LinkedPr, type BranchPrLookup } from './gh.js'
+import { cachedPrView, forgetPr, ghPrView, nodeGhRunner, type GhRunner, type LinkedPr, type BranchPrLookup } from './gh.js'
 import { parseNumstat } from './file-diff.js'
 import { errorMessage } from '../error-message.js'
 import type { AutoHandoffSkip } from '../events.js'
@@ -219,6 +219,22 @@ export async function pushRunBranch(
 }
 
 /**
+ * {@link RunHandoff.base} as a base a PR can actually be opened against.
+ *
+ * The field holds a git ref, because that is what every other use of it needs: `detectBase` reads
+ * `refs/remotes/origin/HEAD`, so it is `origin/main`, and the log range and merged check are both
+ * asking git a question about a remote-tracking ref. `gh pr create --base` is asking GitHub for a
+ * *branch on the remote*, and rejects `origin/main` with "Base ref must be a branch".
+ *
+ * So the conversion belongs at the `gh` boundary rather than in the field. Stripping `origin/`
+ * matches what the rest of this module already assumes: the remote is `origin` (`pushRunBranch`
+ * pushes there, `detectBase` reads its HEAD).
+ */
+export function prBaseName(base: string): string {
+  return base.startsWith('origin/') ? base.slice('origin/'.length) : base
+}
+
+/**
  * The line of a failed git invocation worth showing.
  *
  * `execFile` rejects with "Command failed: git push ..." and buries git's own `fatal:` line
@@ -266,7 +282,7 @@ export async function openRunPullRequest(
   if (!pushed.ok) return pushed
   try {
     const args = ['pr', 'create', '--head', branch, '--title', draft.title, '--body', draft.body]
-    if (draft.base) args.push('--base', draft.base)
+    if (draft.base) args.push('--base', prBaseName(draft.base))
     if (draft.draft) args.push('--draft')
     const out = (await gh(args, cwd)).trim()
     // The branch has a PR now, so the cached "no PR" must go or the bar would keep offering to
@@ -354,7 +370,12 @@ export async function runAutoHandoff(
   if (!intent.push && !intent.pr) return { outcome: 'skipped', reason: 'not-armed' }
   const branch = runBranchFor(run)
   const { gh, ...readDeps } = deps
-  const state = await readRunHandoff(cwd, branch, readDeps).catch(() => undefined)
+  // The UNcached PR lookup, deliberately. The dashboard's cache answers `prPending` rather than
+  // yes-or-no (#1028), which is right for a panel repainting every 15s and wrong here: "not known
+  // yet" would read as "no PR" and this would open a second one. Proved against a real remote —
+  // only `gh` refusing the duplicate stopped it. This runs once, at the end of a session, so it
+  // can afford to wait for a real answer.
+  const state = await readRunHandoff(cwd, branch, { pr: ghPrView, ...readDeps }).catch(() => undefined)
   if (!state || !state.exists) return { outcome: 'skipped', reason: 'branch-gone' }
   if (state.empty) return { outcome: 'skipped', reason: 'no-commits' }
   if (!state.hasRemote) return { outcome: 'skipped', reason: 'no-remote' }
