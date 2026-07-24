@@ -112,7 +112,11 @@ export function Note({ children, style, label }: { children: ReactNode; style?: 
 export function WipBadge({ style, icon = true }: { style?: CSSProperties; icon?: boolean }) {
   return (
     <>
-      {icon && '🚧 '}
+      {icon && (
+        <>
+          <Emoji e="🚧" />{' '}
+        </>
+      )}
       <span
         style={{
           fontStyle: 'normal',
@@ -131,6 +135,30 @@ export function WipBadge({ style, icon = true }: { style?: CSSProperties; icon?:
          Coming soon
       </span>
     </>
+  )
+}
+
+// Emoji as static SVGs (Chrome's Noto set, in public/assets): identical on
+// every platform instead of whatever the browser's emoji font ships.
+const EMOJIS = {
+  '💪': 'flex',
+  '🦾': 'mech-arm',
+  '🧭': 'compass',
+  '🤖': 'robot',
+  '🙋': 'hand-raised',
+  '😕': 'confused',
+  '🚀': 'rocket',
+  '🚧': 'construction',
+} as const
+export type EmojiChar = keyof typeof EMOJIS
+
+export function Emoji({ e, style }: { e: EmojiChar; style?: CSSProperties }) {
+  return (
+    <img
+      src={`/assets/emoji-${EMOJIS[e]}.svg`}
+      alt={e}
+      style={{ height: '1em', verticalAlign: '-0.12em', ...style }}
+    />
   )
 }
 

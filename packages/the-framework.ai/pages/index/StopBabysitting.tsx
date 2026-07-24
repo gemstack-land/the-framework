@@ -1,12 +1,13 @@
 import type { ReactNode } from 'react'
-import { cardStyle, mono, SectionHead, sectionStyle } from './ui'
+import type { EmojiChar } from './ui'
+import { cardStyle, Emoji, mono, SectionHead, sectionStyle } from './ui'
 
 const ROW_STYLES = {
   bad: { bg: '#2d353b', border: '#3d484d', labelColor: '#859289' },
   good: { bg: '#232a2e', border: '#475258', labelColor: '#a7c080' },
 } as const
 
-type Row = { kind: keyof typeof ROW_STYLES; emoji: string; label: string; body: ReactNode }
+type Row = { kind: keyof typeof ROW_STYLES; emoji: EmojiChar; label: string; body: ReactNode }
 const bad = (body: ReactNode): Row => ({ kind: 'bad', emoji: '😕', label: 'Bad fix', body })
 const good = (body: ReactNode): Row => ({ kind: 'good', emoji: '🚀', label: 'Solution', body })
 
@@ -113,7 +114,9 @@ export function StopBabysitting() {
                     }}
                   >
                     <span style={{ fontFamily: mono, fontSize: 12, color: s.labelColor, whiteSpace: 'nowrap' }}>
-                      <span style={{ fontSize: 16, verticalAlign: -2, marginRight: 4 }}>{r.emoji}</span>
+                      <span style={{ fontSize: 16, verticalAlign: -2, marginRight: 4 }}>
+                        <Emoji e={r.emoji} />
+                      </span>
                       {r.label}
                     </span>
                     <p style={{ margin: 0, fontSize: 14.5, lineHeight: 1.6, color: '#d3c6aa' }}>{r.body}</p>

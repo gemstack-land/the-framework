@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { cardStyle, CodeChip, SectionHead, sectionStyle, WipBadge } from './ui'
+import { cardStyle, CodeChip, Emoji, SectionHead, sectionStyle, WipBadge } from './ui'
 
 function Card({ title, children }: { title: string; children: ReactNode }) {
   return (
@@ -62,7 +62,7 @@ export function YourFramework() {
       >
         <Card title="Flexible">
           <Item>The Framework doesn't force anything: pick only the features you need</Item>
-          <Item marker="🚧">
+          <Item marker={<Emoji e="🚧" />}>
             <WipBadge icon={false} /> Customize anything to fit your needs
           </Item>
         </Card>

@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
-import { cardStyle, CodeChip, h3Style } from './ui'
+import type { EmojiChar } from './ui'
+import { cardStyle, CodeChip, Emoji, h3Style } from './ui'
 
 const leadStyle = { color: '#d3c6aa', fontWeight: 600 } as const
 
@@ -7,7 +8,7 @@ function P({ children }: { children: ReactNode }) {
   return <p style={{ margin: 0, fontSize: 14, lineHeight: 1.6, color: '#9da9a0' }}>{children}</p>
 }
 
-function QueueCard({ title, icon, children }: { title: string; icon: string; children: ReactNode }) {
+function QueueCard({ title, icon, children }: { title: string; icon: EmojiChar; children: ReactNode }) {
   return (
     <div
       style={{ ...cardStyle, padding: 'clamp(16px, 4.5vw, 24px)', display: 'flex', flexDirection: 'column', gap: 10 }}
@@ -15,7 +16,7 @@ function QueueCard({ title, icon, children }: { title: string; icon: string; chi
       <h4 style={{ margin: 0, fontSize: 17, fontWeight: 600 }}>
         {title}{' '}
         <span aria-hidden style={{ marginLeft: 4, verticalAlign: 2 }}>
-          {icon}
+          <Emoji e={icon} />
         </span>
       </h4>
       {children}

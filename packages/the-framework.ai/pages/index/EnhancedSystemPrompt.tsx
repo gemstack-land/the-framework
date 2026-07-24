@@ -1,4 +1,4 @@
-import { cardStyle, h3Style, Note } from './ui'
+import { cardStyle, Emoji, h3Style, Note } from './ui'
 
 const ITEMS = [
   'Anti-laziness',
@@ -13,7 +13,7 @@ export function EnhancedSystemPrompt() {
       <h3 style={h3Style}>
         1. Enhanced System Prompt{' '}
         <span aria-hidden style={{ marginLeft: 4, fontSize: 19, verticalAlign: 2 }}>
-          🧭
+          <Emoji e="🧭" />
         </span>
       </h3>
       <div

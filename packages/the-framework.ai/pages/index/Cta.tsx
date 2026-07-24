@@ -1,5 +1,5 @@
 import { DiscordIcon, GitHubIcon } from './icons'
-import { DISCORD_URL, GITHUB_URL } from './ui'
+import { DISCORD_URL, Emoji, GITHUB_URL } from './ui'
 
 export function Cta() {
   return (
@@ -25,9 +25,8 @@ export function Cta() {
           textWrap: 'pretty',
         }}
       >
-        Join our community of next-gen developers{' '}
-        <img src="/assets/emoji-flex.svg" alt="💪" style={{ height: '1em', verticalAlign: '-0.12em' }} />
-        <img src="/assets/emoji-mech-arm.svg" alt="🦾" style={{ height: '1em', verticalAlign: '-0.12em' }} />
+        Join our community of next-gen developers <Emoji e="💪" />
+        <Emoji e="🦾" />
       </h2>
       <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', justifyContent: 'center' }}>
         <a
