@@ -13,7 +13,7 @@ function QueueCard({ title, icon, children }: { title: string; icon: string; chi
       style={{ ...cardStyle, padding: 'clamp(16px, 4.5vw, 24px)', display: 'flex', flexDirection: 'column', gap: 10 }}
     >
       <h4 style={{ margin: 0, fontSize: 17, fontWeight: 600 }}>
-        <span aria-hidden style={{ marginRight: 8 }}>
+        <span aria-hidden style={{ marginRight: 8, verticalAlign: -1 }}>
           {icon}
         </span>
         {title}
