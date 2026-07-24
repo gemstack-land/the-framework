@@ -464,9 +464,9 @@ function RunRow({
     <Button
       variant="ghost"
       className={cn(
-        // No horizontal padding on the card itself: the title spans edge to edge so its clip/fade
-        // land on the border. The rows that need the inset carry their own px-2.
-        'rail-row h-auto w-full flex-col items-start gap-0.5 py-2 text-left',
+        // px-0 (overriding the button base's px-4) so the card has no horizontal padding: the title
+        // spans edge to edge and its clip/fade land on the border. Inner rows carry their own px-2.
+        'rail-row h-auto w-full flex-col items-start gap-0.5 px-0 py-2 text-left',
         active && 'bg-accent text-accent-foreground',
         dim && 'opacity-70',
       )}
@@ -496,7 +496,7 @@ function RunRow({
           </span>
         )}
       </span>
-      <span className="rail-title w-full text-sm font-normal">
+      <span className="rail-title w-full px-2 text-sm font-normal">
         <span className="rail-title-inner">{intent || 'New session'}</span>
       </span>
     </Button>
