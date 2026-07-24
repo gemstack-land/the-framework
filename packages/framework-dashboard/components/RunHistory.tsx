@@ -157,11 +157,12 @@ export function RunHistory({
     // follow-up), the sidebar carries the app's chrome — brand, global nav, and the utility
     // controls in the footer — so the workspace and right rail get the full height.
     <Sidebar collapsible="none" className="w-(--sidebar-width) border-r border-sidebar-border">
-      <SidebarHeader className="gap-1 pb-2">
+      <SidebarHeader className="gap-0.5 pb-2">
         {/* The mark + wordmark, the way home (#909), now that there is no navbar to hold them.
-            A little space below it, then New/Overview/Projects sit tight as one nav group, with a
-            little space again below the group (the header's pb-2) before Recents. */}
-        <div className="px-1 pt-1 pb-2">
+            A clear gap below it pushes New down; then New/Overview/Projects stack tight as one nav
+            group (gap-0.5), with a little space again below the group (the header's pb-2) before
+            Recents. */}
+        <div className="px-1 pt-1 pb-4">
           <BrandLink working={working} onNavigate={onDashboard} />
         </div>
         {/* "New" starts a session — but where depends on what exists: with no project it prompts to
