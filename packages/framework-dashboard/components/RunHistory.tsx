@@ -201,8 +201,9 @@ export function RunHistory({
               <div className="sticky top-0 z-10">
                 <SidebarGroupLabel className="rounded-none bg-background font-normal tracking-wide text-muted-foreground">Recents</SidebarGroupLabel>
                 {/* Absolute (hanging just below the label) so it does not push the first row down; it
-                    still overlays the rows scrolling up under it. */}
-                <div aria-hidden className="pointer-events-none absolute inset-x-0 top-full h-4 bg-gradient-to-b from-background to-transparent" />
+                    still overlays the rows scrolling up under it. `rail-fade` keeps it invisible at
+                    the top of the scroll (so it never dims the first row) and fades it in on scroll. */}
+                <div aria-hidden className="rail-fade pointer-events-none absolute inset-x-0 top-full h-4 bg-gradient-to-b from-background to-transparent" />
               </div>
             )}
             <SidebarGroupContent>
