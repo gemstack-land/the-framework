@@ -166,8 +166,11 @@ export function CodeChip({ children, fontSize }: { children: string; fontSize: n
   return (
     <code
       style={{
-        wordBreak: 'break-all',
-        whiteSpace: 'nowrap',
+        // Wraps only when a line can't hold it (long paths on mobile); clone
+        // keeps the border/padding on every line fragment.
+        overflowWrap: 'anywhere',
+        boxDecorationBreak: 'clone',
+        WebkitBoxDecorationBreak: 'clone',
         fontFamily: mono,
         fontSize,
         background: '#232a2e',
