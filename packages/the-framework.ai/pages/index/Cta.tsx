@@ -7,7 +7,7 @@ export function Cta() {
       style={{
         maxWidth: 880,
         margin: '0 auto',
-        padding: 'clamp(72px, 13vw, 140px) clamp(14px, 4vw, 24px) clamp(120px, 18vw, 260px)',
+        padding: 'clamp(96px, 16vw, 200px) clamp(14px, 4vw, 24px) clamp(120px, 18vw, 260px)',
         textAlign: 'center',
         display: 'flex',
         flexDirection: 'column',
