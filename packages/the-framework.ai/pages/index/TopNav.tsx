@@ -33,9 +33,14 @@ export function TopNav() {
         rowGap: 14,
       }}
     >
+      {/* Right-clicking the logo opens the press page (logo downloads etc.). */}
       <a
         href="#top"
         onClick={scrollTopClear}
+        onContextMenu={(e) => {
+          e.preventDefault()
+          window.location.href = '/press'
+        }}
         style={{
           display: 'flex',
           alignItems: 'center',
