@@ -3,10 +3,10 @@ import assert from 'node:assert/strict'
 import { mkdtemp, mkdir, writeFile, readFile, rm, stat, realpath } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
-import { createProjectRuntime, cleanupTimedOutWorktree, tearDownTopicScratch } from './daemon-runtime.js'
+import { createProjectRuntime, cleanupTimedOutWorktree, tearDownTopicScratch, moveTopicRunHistory } from './daemon-runtime.js'
 import { CliTimeoutError } from './cli-exec.js'
-import { FRAMEWORK_DIR, WORKTREES_DIR, worktreePath, RUN_META_VERSION, type RunMeta } from './store/index.js'
-import { topicScratchPath } from './registry.js'
+import { FRAMEWORK_DIR, WORKTREES_DIR, EVENTS_FILE, META_FILE, worktreePath, runBranchName, RUN_META_VERSION, type RunMeta } from './store/index.js'
+import { topicScratchPath, addProject, projectId } from './registry.js'
 import { nodeGitRunner } from './project.js'
 
 /**
@@ -192,5 +192,189 @@ test('a SIGTERMed worktree add has its partial checkout removed, other failures 
     assert.equal(await exists(), false, 'a timeout kill takes its half-written checkout with it')
   } finally {
     await rm(repo, { recursive: true, force: true })
+  }
+})
+
+/** A committed git repo to re-home a run into, path realpath'd so it matches what git reports. */
+async function initRepo(prefix: string): Promise<string> {
+  const repo = await realpath(await mkdtemp(join(tmpdir(), prefix)))
+  const git = nodeGitRunner()
+  await git(['init'], repo)
+  await git(['config', 'user.email', 't@t'], repo)
+  await git(['config', 'user.name', 't'], repo)
+  await writeFile(join(repo, 'README.md'), '# t\n')
+  await git(['add', '-A'], repo)
+  await git(['commit', '-m', 'init'], repo)
+  return repo
+}
+
+/**
+ * A stub CLI that records its argv, then (for a topic run only) stays alive until the daemon
+ * terminates it on re-home (a real topic run parks in the chat loop the same way). The continued
+ * `prompt` run exits at once, so it never lingers past the test.
+ */
+async function writeTopicStub(dir: string, log: string): Promise<string> {
+  const stub = join(dir, 'topic-stub.cjs')
+  await writeFile(
+    stub,
+    `const fs = require('node:fs')\n` +
+      `const argv = process.argv.slice(2)\n` +
+      `fs.appendFileSync(${JSON.stringify(log)}, JSON.stringify(argv) + '\\n')\n` +
+      `if (argv.includes('--topic')) {\n` +
+      `  const t = setInterval(() => {}, 1000)\n` +
+      `  process.on('SIGTERM', () => { clearInterval(t); process.exit(0) })\n` +
+      `}\n`,
+  )
+  return stub
+}
+
+/** Write a topic run's scratch state (as its own process would), then record the bind that fires re-home. */
+async function seedBoundTopicRun(scratch: string, runId: string, projectId: string, sessionId: string): Promise<void> {
+  const dir = join(scratch, FRAMEWORK_DIR)
+  await mkdir(dir, { recursive: true })
+  const meta: RunMeta = {
+    version: RUN_META_VERSION,
+    status: 'running',
+    id: runId,
+    startedAt: '2026-07-24T00:00:00.000Z',
+    updatedAt: '2026-07-24T00:00:00.000Z',
+    passes: 0,
+    topic: true,
+    sessionId,
+  }
+  await writeFile(join(dir, META_FILE), JSON.stringify(meta))
+  // The bind the run recorded (#1121): the event the daemon tails for and re-homes on (#1122).
+  await writeFile(join(dir, EVENTS_FILE), JSON.stringify({ kind: 'bind', projectId }) + '\n')
+}
+
+/** Poll the stub's recorded starts until at least `expected` land, or time out. */
+async function waitForArgs(log: string, expected: number): Promise<string[][]> {
+  let lines: string[] = []
+  for (let i = 0; i < 300 && lines.length < expected; i++) {
+    await new Promise(r => setTimeout(r, 20))
+    lines = await readFile(log, 'utf8').then(s => s.split('\n').filter(Boolean), () => [])
+  }
+  return lines.map(line => JSON.parse(line) as string[])
+}
+
+test('binding a topic run re-homes it into the bound project: a worktree there, its session resumed, the scratch gone (#1122)', async () => {
+  const home = await realpath(await mkdtemp(join(tmpdir(), 'framework-rehome-home-')))
+  const config = await realpath(await mkdtemp(join(tmpdir(), 'framework-rehome-cfg-')))
+  const target = await initRepo('framework-rehome-target-')
+  const env = { XDG_CONFIG_HOME: config }
+  const runtime = createProjectRuntime({ cwd: home, env, binPath: await writeTopicStub(home, join(home, 'started.log')) })
+  try {
+    // The DIFFERENT, newly chosen project the run will move into: the #1122 delta over continue-run,
+    // which only ever re-homed a run into the project it already belonged to.
+    const record = await addProject(target, new Date().toISOString(), undefined, env)
+    const boundId = projectId(target)
+    assert.equal(record.id, boundId)
+
+    const started = (await runtime.onStart('draft a plan', 'build', { topic: true })) as { ok: boolean; runId?: string }
+    assert.equal(started.ok, true)
+    const runId = started.runId!
+    const scratch = topicScratchPath(env, runId)
+
+    // The run gets a session, then binds: exactly the state a real topic run reaches at its gate.
+    await seedBoundTopicRun(scratch, runId, boundId, 'sess-xyz')
+
+    const starts = await waitForArgs(join(home, 'started.log'), 2)
+    assert.equal(starts.length, 2, 'the scratch run started, then the daemon spawned the continued run')
+    const cont = starts[1]!
+    const worktree = worktreePath(target, runId)
+    assert.equal(cont[0], 'prompt', 'the run continues as a prompt run carrying the move note')
+    assert.equal(cont[cont.indexOf('--cwd') + 1], worktree, 'in a worktree under the BOUND project, not the scratch')
+    assert.equal(cont[cont.indexOf('--run-id') + 1], runId, 'reusing the topic run id, so it stays one run')
+    assert.equal(cont.includes('--continue-run'), true, 'reopening the moved run rather than starting fresh')
+    assert.equal(cont[cont.indexOf('--resume-session') + 1], 'sess-xyz', 'resuming the SAME agent session')
+    assert.equal(cont.includes('--topic'), false, 'it is an ordinary project run now')
+
+    // The re-home is structural: the run lives in a real worktree + branch under the target project.
+    assert.equal(await stat(worktree).then(s => s.isDirectory(), () => false), true, 'the worktree exists')
+    const branches = await nodeGitRunner()(['branch', '--list', runBranchName(runId)], target)
+    assert.match(branches, new RegExp(runBranchName(runId).replace('/', '\\/')), 'on its run branch')
+
+    // Its history moved with it, marked as a project run bound to the target.
+    const moved = JSON.parse(await readFile(join(worktree, FRAMEWORK_DIR, META_FILE), 'utf8')) as RunMeta
+    assert.equal(moved.id, runId)
+    assert.equal(moved.boundProjectId, boundId, 'the run records the project it bound to')
+    assert.equal(moved.topic, undefined, 'and no longer reads as a project-less topic run')
+
+    // The scratch it left is gone (not merely retained): the conversation moved on, it did not die there.
+    assert.equal(await stat(scratch).then(() => true, () => false), false, 'the scratch dir is removed')
+  } finally {
+    await runtime.suspendRuns().catch(() => {})
+    await runtime.dispose()
+    await rm(home, { recursive: true, force: true })
+    await rm(config, { recursive: true, force: true })
+    await rm(target, { recursive: true, force: true })
+  }
+})
+
+test('a bind to an unresolvable project retains the scratch and surfaces the failure, spawning nothing (#1122)', async () => {
+  const home = await realpath(await mkdtemp(join(tmpdir(), 'framework-rehome-fail-home-')))
+  const config = await realpath(await mkdtemp(join(tmpdir(), 'framework-rehome-fail-cfg-')))
+  const env = { XDG_CONFIG_HOME: config }
+  const log = join(home, 'started.log')
+  const runtime = createProjectRuntime({ cwd: home, env, binPath: await writeTopicStub(home, log) })
+  try {
+    const started = (await runtime.onStart('draft a plan', 'build', { topic: true })) as { ok: boolean; runId?: string }
+    const runId = started.runId!
+    const scratch = topicScratchPath(env, runId)
+
+    // Bind to a project id that was never registered: nothing to re-home into.
+    await seedBoundTopicRun(scratch, runId, 'ghost-project-000', 'sess-xyz')
+
+    // Wait for the daemon to see the bind and log its failure, rather than a second spawn.
+    let events = ''
+    for (let i = 0; i < 300 && !events.includes('could not re-home'); i++) {
+      await new Promise(r => setTimeout(r, 20))
+      events = await readFile(join(scratch, FRAMEWORK_DIR, EVENTS_FILE), 'utf8').catch(() => '')
+    }
+    assert.match(events, /could not re-home this run: unknown project ghost-project-000/, 'the failure is surfaced as an event')
+    // The topic run itself started; the re-home did not spawn anything on top of it.
+    const starts = await waitForArgs(log, 1)
+    assert.equal(starts.length, 1, 'only the topic run spawned; no continued run')
+    assert.equal(starts[0]!.includes('--topic'), true, 'and that one start is the topic run')
+    assert.equal(await stat(scratch).then(() => true, () => false), true, 'the scratch is retained so the conversation is not lost')
+  } finally {
+    await runtime.suspendRuns().catch(() => {})
+    await runtime.dispose()
+    await rm(home, { recursive: true, force: true })
+    await rm(config, { recursive: true, force: true })
+  }
+})
+
+test('moveTopicRunHistory copies the log and re-marks the meta as a bound project run (#1122)', async () => {
+  const base = await realpath(await mkdtemp(join(tmpdir(), 'framework-movehist-')))
+  try {
+    const scratch = join(base, 'scratch')
+    const worktree = join(base, 'worktree')
+    const dir = join(scratch, FRAMEWORK_DIR)
+    await mkdir(dir, { recursive: true })
+    const meta: RunMeta = {
+      version: RUN_META_VERSION,
+      status: 'running',
+      id: 'run1',
+      startedAt: '2026-07-24T00:00:00.000Z',
+      updatedAt: '2026-07-24T00:00:00.000Z',
+      passes: 0,
+      topic: true,
+      sessionId: 'sess-1',
+      intent: 'draft a plan',
+    }
+    await writeFile(join(dir, META_FILE), JSON.stringify(meta))
+    await writeFile(join(dir, EVENTS_FILE), JSON.stringify({ kind: 'log', message: 'hello' }) + '\n')
+
+    await moveTopicRunHistory(scratch, worktree, 'proj-abc')
+
+    const moved = JSON.parse(await readFile(join(worktree, FRAMEWORK_DIR, META_FILE), 'utf8')) as RunMeta
+    assert.equal(moved.topic, undefined, 'the topic flag is cleared')
+    assert.equal(moved.boundProjectId, 'proj-abc', 'the bound project is recorded')
+    assert.equal(moved.id, 'run1', 'the run id and its history are preserved')
+    assert.equal(moved.intent, 'draft a plan')
+    assert.match(await readFile(join(worktree, FRAMEWORK_DIR, EVENTS_FILE), 'utf8'), /hello/, 'the event log came along')
+  } finally {
+    await rm(base, { recursive: true, force: true })
   }
 })

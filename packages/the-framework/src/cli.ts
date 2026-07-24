@@ -1457,7 +1457,7 @@ async function runBuild(opts: CliOptions, io: CliIO): Promise<number> {
           return
         }
         if (entry.kind === 'bind') {
-          // #1122 re-homes the run into the bound project's worktree; here we only record it.
+          // Fold the bind onto meta + the event log; the daemon watches for it and re-homes (#1122).
           recordBind?.(entry.projectId)
           return
         }
