@@ -92,6 +92,16 @@ function PmTabs() {
   )
 }
 
+/** Package-manager tabs sitting tight above their command; both snippets share the global choice. */
+function PmSnippet({ get }: { get: (pm: Pm) => string }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-start' }}>
+      <PmTabs />
+      <PmCmd get={get} />
+    </div>
+  )
+}
+
 function Step({ kicker, children }: { kicker: string; children: ReactNode }) {
   return (
     <section style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -131,14 +141,11 @@ export default function Page() {
         </Step>
         <Step kicker="Install">
           <p style={pStyle}>Not installed yet? Install it globally:</p>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-start' }}>
-            <PmTabs />
-            <PmCmd get={(pm) => PMS[pm].install} />
-          </div>
+          <PmSnippet get={(pm) => PMS[pm].install} />
         </Step>
         <Step kicker="One-time run">
           <p style={pStyle}>You just want to try it out? Run it once, no install:</p>
-          <PmCmd get={(pm) => PMS[pm].try} />
+          <PmSnippet get={(pm) => PMS[pm].try} />
         </Step>
       </main>
       <Footer />
