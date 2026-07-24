@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { cardStyle, Note, SectionHead, sectionStyle, WipBadge } from './ui'
+import { cardStyle, SectionHead, sectionStyle, WipBadge } from './ui'
 
 const featureCardStyle = {
   ...cardStyle,
@@ -29,9 +29,6 @@ export function Features() {
             Use your existing AI subscription — The Framework orchestrates agents via your Claude Code / Codex
             installation.
           </FeatureText>
-          <Note label={<WipBadge style={{ marginRight: 3, display: 'inline-block' }} />}>
-            Orchestrate agents via Claude Code Web for 0% local CPU usage.
-          </Note>
         </div>
         <div style={{ ...featureCardStyle, gap: 14 }}>
           <h3 style={{ margin: 0, fontSize: 19, fontWeight: 600 }}>Dashboard</h3>
@@ -43,6 +40,22 @@ export function Features() {
         <div style={{ ...featureCardStyle, gap: 12 }}>
           <h3 style={{ margin: 0, fontSize: 19, fontWeight: 600 }}>Notifications</h3>
           <FeatureText>Get notified when AI is finished or needs you.</FeatureText>
+        </div>
+        {/* A future feature: dashed, like the prompts band's "＋ Add yours". */}
+        <div
+          style={{
+            ...featureCardStyle,
+            gap: 12,
+            gridColumn: '1 / -1',
+            background: 'transparent',
+            border: '1.5px dashed #4f585e',
+          }}
+        >
+          <h3 style={{ margin: 0, fontSize: 19, fontWeight: 600 }}>
+            Claude Code Web{' '}
+            <WipBadge style={{ marginLeft: 4, verticalAlign: 2, display: 'inline-block' }} />
+          </h3>
+          <FeatureText>Orchestrate agents via Claude Code Web for 0% local CPU usage.</FeatureText>
         </div>
       </div>
     </section>
