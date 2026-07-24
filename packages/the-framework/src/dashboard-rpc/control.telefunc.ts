@@ -52,6 +52,23 @@ export async function sendStop(projectId: string, runId?: string): Promise<void>
 }
 
 /**
+ * Arm or disarm a live session's end-of-session handoff (#1102): whether it pushes its branch and
+ * opens a draft PR when it finishes.
+ *
+ * Steering rather than a setting write, because it is about *this* session: the preference sets
+ * where the boxes start, and this is the user changing their mind for one run. The run echoes what
+ * it applied back as an event, so the boxes read from the run's meta rather than from local state
+ * that a reload would lose.
+ */
+export async function sendSetHandoff(projectId: string, runId: string, push: boolean, pr: boolean): Promise<void> {
+  return relayOr(runId, 'sendSetHandoff', [projectId, runId, push, pr], async () => {
+    // Opening a PR needs the branch on the remote, so the pair is normalised before it is stored
+    // rather than left for each reader to remember.
+    await appendControlFor(projectId, { kind: 'handoff', push: push || pr, pr }, runId)
+  }, undefined)
+}
+
+/**
  * Resolve the project's parked choice gate (#304/#332): `pick` is one option id for a
  * single-select, or the selected subset for a multi-select. `by` records who picked
  * (a human here, vs the autopilot countdown or a headless auto-accept).

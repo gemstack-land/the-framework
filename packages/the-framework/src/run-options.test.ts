@@ -1,6 +1,6 @@
 import { strict as assert } from 'node:assert'
 import { test } from 'node:test'
-import { runOptionsFromPreferences, autopilotEnabled, preferencesFromFileConfig } from './run-options.js'
+import { runOptionsFromPreferences, autopilotEnabled, handoffFromPreferences, preferencesFromFileConfig } from './run-options.js'
 import { resolvePreferences } from './registry.js'
 
 test('autopilot defaults on when nothing is set (#858)', () => {
@@ -10,13 +10,32 @@ test('autopilot defaults on when nothing is set (#858)', () => {
 
 test('an empty preference set still starts a run in autopilot (#858)', () => {
   // The four yml-owned toggles travel explicitly since #842, so the run states the settled answer
-  // rather than letting the repo file fill the silence.
+  // rather than letting the repo file fill the silence. The two handoff flags travel explicitly
+  // for the mirror-image reason (#1102): they default ON, so silence would re-arm them.
   assert.deepEqual(runOptionsFromPreferences({}), {
     autopilot: true,
     technical: false,
     vanilla: false,
     transparent: false,
+    autoPushBranch: true,
+    autoOpenPr: true,
   })
+})
+
+test('the handoff defaults to armed, and opening a PR implies pushing (#1102)', () => {
+  assert.deepEqual(handoffFromPreferences({}), { push: true, pr: true })
+  // Unticking only the push half while the PR half stays on cannot disarm the push: `gh` will not
+  // open a PR for a branch the remote has never seen, so the pair is normalised rather than left
+  // to fail at the end of a session.
+  assert.deepEqual(handoffFromPreferences({ autoPushBranch: false }), { push: true, pr: true })
+  assert.deepEqual(handoffFromPreferences({ autoOpenPr: false }), { push: true, pr: false })
+  assert.deepEqual(handoffFromPreferences({ autoPushBranch: false, autoOpenPr: false }), { push: false, pr: false })
+})
+
+test('a disarmed handoff travels as an explicit false, so the run cannot re-arm it (#1102)', () => {
+  const off = runOptionsFromPreferences({ autoPushBranch: false, autoOpenPr: false })
+  assert.equal(off.autoPushBranch, false)
+  assert.equal(off.autoOpenPr, false)
 })
 
 test('the yml-owned toggles travel as explicit booleans (#842)', () => {

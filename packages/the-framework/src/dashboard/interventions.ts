@@ -1,6 +1,6 @@
 import { listRuns, readLiveMetas, type LiveRun, type RunMeta } from '../store/index.js'
 import type { ProjectSummary } from './projects.js'
-import { readRunHandoff, runBranchFor, type RunHandoff } from './run-handoff.js'
+import { isSessionBranch, readRunHandoff, runBranchFor, type RunHandoff } from './run-handoff.js'
 import { ghPrList, type OpenPr, type PrLister } from './gh.js'
 import { interventionKey } from './keys.js'
 import { postDiscordWebhook } from './discord-webhook.js'
@@ -72,10 +72,11 @@ export interface InterventionsDeps {
 export const HANDOFF_LIMIT = 5
 
 /**
- * Build the cross-project interventions queue: every registered project's open, non-draft PRs,
- * plus any run currently paused on a choice gate (#636), newest first. Forgiving — a project
- * with no remote (or an unreadable one) simply contributes nothing. Draft PRs are excluded:
- * they are not yet asking for review.
+ * Build the cross-project interventions queue: every registered project's open PRs, plus any run
+ * currently paused on a choice gate (#636), newest first. Forgiving — a project with no remote
+ * (or an unreadable one) simply contributes nothing. Hand-opened draft PRs are excluded: they are
+ * not yet asking for review. A session's own draft is not (#1102), because that is how
+ * auto-handoff hands work back.
  */
 export async function buildInterventions(
   projects: ProjectSummary[],
@@ -87,7 +88,11 @@ export async function buildInterventions(
   for (const project of projects) {
     const open = await prs(project.path).catch(() => [])
     for (const pr of open) {
-      if (pr.isDraft) continue
+      // A draft opened by hand is not asking for review, so it stays off the queue. A draft the
+      // framework opened for a session is the opposite (#1102): auto-handoff opens it as a draft
+      // precisely so it does not ping reviewers, and if the queue then dropped it too, nothing
+      // would tell anyone the work exists — which is the whole of #860 again.
+      if (pr.isDraft && !isSessionBranch(pr.headRefName)) continue
       items.push({
         projectId: project.id,
         projectName: project.name,
@@ -120,8 +125,9 @@ export async function buildInterventions(
     // that committed real code and stopped produced neither, and nothing told anyone: the overview
     // drops it (it filters on `running`) and the handoff panel is behind clicking into that run.
     //
-    // Surfacing only. Pushing publishes the agent's work under the user's name, which stays their
-    // click (see `pushRunBranch`) — this just says there is a decision waiting.
+    // Surfacing only: this says there is a decision waiting, it does not take it. Since #1102 a
+    // session usually pushes itself, so what reaches here is the remainder — auto-handoff turned
+    // off for the project, or turned off for that session, or tried and failed.
     for (const item of await unpushedFor(project, deps).catch(() => [])) items.push(item)
   }
   items.sort((a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? ''))

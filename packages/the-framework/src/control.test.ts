@@ -133,3 +133,25 @@ test('a message carries the surface it came through, and a forged one is dropped
     await rm(cwd, { recursive: true, force: true })
   }
 })
+
+test('a handoff entry needs both booleans, so a half-written line cannot disarm a session (#1102)', async () => {
+  const dir = await tmpWorkspace()
+  try {
+    await resetControl(dir)
+    const seen: ControlEntry[] = []
+    const watcher = watchControl(dir, entry => seen.push(entry), 20)
+    try {
+      // Malformed first: a missing or non-boolean half must be dropped, not coerced. Getting this
+      // wrong would silently stop a session publishing its work.
+      await appendFile(controlPath(dir), JSON.stringify({ kind: 'handoff', push: true }) + '\n')
+      await appendFile(controlPath(dir), JSON.stringify({ kind: 'handoff', push: 'yes', pr: false }) + '\n')
+      await appendControl(dir, { kind: 'handoff', push: true, pr: false })
+      assert.ok(await until(() => seen.length > 0), 'the well-formed entry never arrived')
+      assert.deepEqual(seen, [{ kind: 'handoff', push: true, pr: false }])
+    } finally {
+      watcher.close()
+    }
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})

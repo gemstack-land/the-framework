@@ -4,10 +4,11 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 const onRunHandoff = vi.fn(async () => null as unknown)
 const sendPushBranch = vi.fn(async () => ({ ok: true }) as unknown)
 const sendOpenPullRequest = vi.fn(async () => ({ ok: true }) as unknown)
+const sendSetHandoff = vi.fn(async () => undefined as unknown)
 vi.mock('../server/reads.telefunc.js', () => ({ onRunHandoff }))
-vi.mock('../server/control.telefunc.js', () => ({ sendPushBranch, sendOpenPullRequest }))
+vi.mock('../server/control.telefunc.js', () => ({ sendPushBranch, sendOpenPullRequest, sendSetHandoff }))
 
-const { HandoffActions, HandoffSummary, RunHandoffDetails, handoffExpandable } = await import('./RunHandoff.js')
+const { HandoffActions, HandoffArm, HandoffSummary, RunHandoffDetails, handoffExpandable } = await import('./RunHandoff.js')
 const { useRunHandoff } = await import('../lib/use-run-handoff.js')
 
 /** A handoff for a session that did real work, on a repo with a remote and no PR yet. */
@@ -44,6 +45,8 @@ beforeEach(() => {
   sendPushBranch.mockClear()
   sendOpenPullRequest.mockClear()
   sendOpenPullRequest.mockResolvedValue({ ok: true })
+  sendSetHandoff.mockClear()
+  sendSetHandoff.mockResolvedValue(undefined)
 })
 afterEach(cleanup)
 
@@ -140,5 +143,47 @@ describe('run handoff (#799)', () => {
     onRunHandoff.mockReturnValue(new Promise(() => {}) as never)
     const { container } = render(<Harness />)
     expect(container.textContent).toBe('')
+  })
+})
+
+describe('the handoff checkboxes (#1102)', () => {
+  const armed = { push: true, pr: true }
+
+  test('both boxes start ticked, so a session left alone hands itself back', () => {
+    render(<HandoffArm projectId="p1" runId="run-1" state={armed} />)
+    expect(screen.getByText('Push branch')).toBeTruthy()
+    expect(screen.getByText('Open PR')).toBeTruthy()
+    const boxes = screen.getAllByRole('checkbox')
+    expect(boxes).toHaveLength(2)
+    for (const box of boxes) expect(box.getAttribute('data-checked')).not.toBeNull()
+  })
+
+  test('unticking Open PR leaves the push armed', async () => {
+    render(<HandoffArm projectId="p1" runId="run-1" state={armed} />)
+    fireEvent.click(screen.getByText('Open PR'))
+    await waitFor(() => expect(sendSetHandoff).toHaveBeenCalledWith('p1', 'run-1', true, false))
+  })
+
+  test('unticking Push branch unticks Open PR too: a PR cannot be opened for an unpushed branch', async () => {
+    render(<HandoffArm projectId="p1" runId="run-1" state={armed} />)
+    fireEvent.click(screen.getByText('Push branch'))
+    await waitFor(() => expect(sendSetHandoff).toHaveBeenCalledWith('p1', 'run-1', false, false))
+  })
+
+  test('ticking Open PR re-arms the push, since opening one needs the branch on the remote', async () => {
+    render(<HandoffArm projectId="p1" runId="run-1" state={{ push: false, pr: false }} />)
+    fireEvent.click(screen.getByText('Open PR'))
+    await waitFor(() => expect(sendSetHandoff).toHaveBeenCalledWith('p1', 'run-1', true, true))
+  })
+
+  test('the click holds until the run echoes it back, so the box does not bounce', async () => {
+    // The instruction round-trips through a file the run tails, so the events lag the click by a
+    // beat. Rendering the stale value in that window would flick the box back on under the cursor.
+    const { rerender } = render(<HandoffArm projectId="p1" runId="run-1" state={armed} />)
+    fireEvent.click(screen.getByText('Open PR'))
+    await waitFor(() => expect(sendSetHandoff).toHaveBeenCalled())
+    rerender(<HandoffArm projectId="p1" runId="run-1" state={armed} />)
+    const pr = screen.getAllByRole('checkbox')[1]
+    expect(pr?.getAttribute('data-checked')).toBeNull()
   })
 })

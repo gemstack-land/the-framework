@@ -109,6 +109,16 @@ export interface RunMeta {
   /** Whether the agent signalled `setReadyForMerge()` (#326): building (false/absent) vs ready (true). */
   readyForMerge?: boolean
   /**
+   * What this session's end-of-session handoff is armed to do (#1102): push its branch, and open
+   * a draft PR for it. Both start on.
+   *
+   * On the meta because the checkboxes that show it live in a different process from the run that
+   * obeys it, and a tab opened after the run started has no event history to fold — the same
+   * reason {@link browserStreamPort} is here. Absent means an older run, which the reader treats
+   * as armed, matching what that run will actually do.
+   */
+  handoff?: { push: boolean; pr: boolean }
+  /**
    * The choice gate the run is currently parked on (#636): set when a `choice` event fires and
    * cleared when its `choice-resolved` (or the run's `end`) arrives. Present means the run is
    * paused waiting for the user's answer — the second "needs you" source after open PRs (#624).
@@ -249,6 +259,9 @@ export function applyEventToMeta(meta: RunMeta, event: FrameworkEvent, at: strin
     }
     case 'browser-stream':
       next.browserStreamPort = event.port
+      break
+    case 'handoff-armed':
+      next.handoff = { push: event.push, pr: event.pr }
       break
     case 'settled':
       next.settledAt = at

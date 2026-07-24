@@ -2,6 +2,7 @@ import { nodeGitRunner, type GitRunner } from '../project.js'
 import { cachedPrView, forgetPr, nodeGhRunner, type GhRunner, type LinkedPr, type BranchPrLookup } from './gh.js'
 import { parseNumstat } from './file-diff.js'
 import { errorMessage } from '../error-message.js'
+import type { AutoHandoffSkip } from '../events.js'
 import type { RunMeta } from '../store/index.js'
 
 // What a finished session produced, and what is left to do with it (#799).
@@ -80,7 +81,20 @@ export interface RunHandoffDeps {
  */
 export function runBranchFor(run: { id: string; branch?: string; sessionName?: string }): string {
   if (run.branch) return run.branch
-  return run.sessionName ? `the-framework/${run.sessionName}` : `the-framework/run-${run.id}`
+  return run.sessionName ? `${SESSION_BRANCH_PREFIX}${run.sessionName}` : `${SESSION_BRANCH_PREFIX}run-${run.id}`
+}
+
+/** What every branch a session creates for itself is named under. */
+export const SESSION_BRANCH_PREFIX = 'the-framework/'
+
+/**
+ * Whether a branch is one a session made, rather than one the user did.
+ *
+ * Only a naming convention, so it is a guess for the case #326 allows — the agent picking its own
+ * branch name. Every caller uses it to decide how loudly to surface something, never to act.
+ */
+export function isSessionBranch(branch: string | undefined): boolean {
+  return Boolean(branch?.startsWith(SESSION_BRANCH_PREFIX))
 }
 
 /** `git` that resolves to '' instead of rejecting, for reads where "no answer" is a fine answer. */
@@ -186,9 +200,10 @@ export type HandoffResult = { ok: true; url?: string } | { ok: false; error: str
 /**
  * Push a finished session's branch to `origin`.
  *
- * Deliberately a click, not something teardown does on its own: pushing publishes the agent's
- * work under the user's name to a shared remote, and that is the user's call to make, not a
- * side effect of a run ending. The dashboard offers it; the human takes it.
+ * Publishing the agent's work under the user's name is the user's call, but since #1102 that call
+ * is made once, up front, by a checkbox that is armed by default, rather than re-taken by hand at
+ * the end of every session. The click is still here for a session that opted out, and it is what
+ * a failed auto-push falls back to.
  */
 export async function pushRunBranch(
   cwd: string,
@@ -221,14 +236,21 @@ export interface PullRequestDraft {
   title: string
   body: string
   base?: string
+  /**
+   * Open it as a GitHub draft (#1102). What auto-handoff uses: opening a PR by itself at the end
+   * of every session should not put a review request in anyone's inbox.
+   *
+   * Safe to do only because the interventions queue was taught to keep listing a draft on a
+   * session branch. Left off, a draft would be invisible in both places at once.
+   */
+  draft?: boolean
 }
 
 /**
  * Open a PR for a finished session's branch, pushing it first when the remote does not have it.
  *
- * Opened ready rather than draft on purpose: the interventions queue (#632) lists open *non-draft*
- * PRs as "needs you", so a draft would open the loop back into the dashboard and then not appear
- * in it. The point of the handoff is that the work lands somewhere the human will see it again.
+ * The button opens it ready for review, because a PR a human asked for by name is asking for
+ * review. {@link PullRequestDraft.draft} is the auto-handoff case, which is not.
  */
 export async function openRunPullRequest(
   cwd: string,
@@ -245,6 +267,7 @@ export async function openRunPullRequest(
   try {
     const args = ['pr', 'create', '--head', branch, '--title', draft.title, '--body', draft.body]
     if (draft.base) args.push('--base', draft.base)
+    if (draft.draft) args.push('--draft')
     const out = (await gh(args, cwd)).trim()
     // The branch has a PR now, so the cached "no PR" must go or the bar would keep offering to
     // open one for the next minute (#1028).
@@ -265,7 +288,11 @@ export async function openRunPullRequest(
  * is the intent plus which session did it. This is the handoff decision the dashboard's
  * open-PR button offers; the RPC layer only resolves which run it is about.
  */
-export async function openSessionPullRequest(cwd: string, run: RunMeta): Promise<HandoffResult> {
+export async function openSessionPullRequest(
+  cwd: string,
+  run: RunMeta,
+  options: { draft?: boolean } = {},
+): Promise<HandoffResult> {
   const branch = runBranchFor(run)
   const handoff = await readRunHandoff(cwd, branch).catch(() => undefined)
   if (handoff && !handoff.exists) return { ok: false, error: `branch ${branch} no longer exists` }
@@ -276,11 +303,97 @@ export async function openSessionPullRequest(cwd: string, run: RunMeta): Promise
     title: run.sessionName ?? run.intent?.split('\n')[0]?.slice(0, 72) ?? `Session ${run.id}`,
     body: sessionPrBody(run),
     ...(handoff?.base ? { base: handoff.base } : {}),
+    ...(options.draft ? { draft: true } : {}),
   })
 }
 
+/**
+ * What a session was left armed to do when it ends (#1102).
+ *
+ * Both start true. The point of the feature is that the common case costs nothing: a session that
+ * is simply left alone puts its branch on the remote and opens a PR for it.
+ */
+export interface HandoffIntent {
+  push: boolean
+  pr: boolean
+}
+
+/** Both halves armed — the default a session starts from. */
+export const ARMED_HANDOFF: HandoffIntent = { push: true, pr: true }
+
+/**
+ * What auto-handoff did, so the run can say it as an event (#835).
+ *
+ * A dashboard-started run is spawned with `stdio: 'ignore'`, so anything printed here reaches
+ * nobody: the outcome has to travel as an event or it does not travel at all. Skips are reported
+ * for the same reason a skipped on-before-mergeable is — silence reads as "it ran and did nothing".
+ */
+export type AutoHandoffOutcome =
+  | { outcome: 'skipped'; reason: AutoHandoffSkip }
+  | { outcome: 'done'; pushed: boolean; url?: string }
+  | { outcome: 'failed'; step: 'push' | 'pr'; error: string }
+
+/**
+ * Do the end-of-session handoff a session was left armed for (#1102): push the branch, open a
+ * draft PR for it, or both.
+ *
+ * Reads the branch first and refuses on everything that is not a clean hand-off — a branch that is
+ * gone, a session that committed nothing, a repo with no remote, a branch that already has a PR.
+ * Those are the cases where doing it anyway would produce a confusing artefact rather than help.
+ *
+ * The PR is a draft on purpose. Opening one by itself at the end of every session must not put a
+ * review request in anyone's inbox, and the interventions queue keeps listing a session's draft
+ * so the work still comes back to the human.
+ */
+export async function runAutoHandoff(
+  cwd: string,
+  run: HandoffRun,
+  intent: HandoffIntent,
+  deps: RunHandoffDeps & { gh?: GhRunner } = {},
+): Promise<AutoHandoffOutcome> {
+  if (!intent.push && !intent.pr) return { outcome: 'skipped', reason: 'not-armed' }
+  const branch = runBranchFor(run)
+  const { gh, ...readDeps } = deps
+  const state = await readRunHandoff(cwd, branch, readDeps).catch(() => undefined)
+  if (!state || !state.exists) return { outcome: 'skipped', reason: 'branch-gone' }
+  if (state.empty) return { outcome: 'skipped', reason: 'no-commits' }
+  if (!state.hasRemote) return { outcome: 'skipped', reason: 'no-remote' }
+  // A PR already covers both halves: it means the branch is published and the human has a place
+  // to answer. Opening a second one is the one mistake this must never make.
+  if (state.pr) return { outcome: 'skipped', reason: 'already-open' }
+
+  if (intent.pr) {
+    // `openRunPullRequest` pushes first, so the PR half subsumes the push half.
+    const opened = await openRunPullRequest(
+      cwd,
+      branch,
+      {
+        title: run.sessionName ?? run.intent?.split('\n')[0]?.slice(0, 72) ?? `Session ${run.id}`,
+        body: sessionPrBody(run),
+        draft: true,
+        ...(state.base ? { base: state.base } : {}),
+      },
+      { ...(readDeps.git ? { git: readDeps.git } : {}), ...(gh ? { gh } : {}) },
+    )
+    if (!opened.ok) return { outcome: 'failed', step: 'pr', error: opened.error }
+    return { outcome: 'done', pushed: true, ...(opened.url ? { url: opened.url } : {}) }
+  }
+
+  if (state.pushed) return { outcome: 'skipped', reason: 'already-pushed' }
+  const pushed = await pushRunBranch(cwd, branch, readDeps.git)
+  if (!pushed.ok) return { outcome: 'failed', step: 'push', error: pushed.error }
+  return { outcome: 'done', pushed: true }
+}
+
+/**
+ * The little a handoff needs to know about the run it is for: which branch, and what to say on
+ * the PR. Narrower than {@link RunMeta} so the run process can call this before its meta is
+ * final, and so a caller cannot quietly start depending on the rest of the run's state.
+ */
+export type HandoffRun = Pick<RunMeta, 'id' | 'branch' | 'sessionName' | 'intent'>
+
 /** The PR body: what was asked for, and which session did it. */
-function sessionPrBody(run: RunMeta): string {
+function sessionPrBody(run: HandoffRun): string {
   const lines: string[] = []
   if (run.intent) lines.push(run.intent.trim(), '')
   lines.push(`Opened from The Framework session \`${run.sessionName ?? run.id}\`.`)

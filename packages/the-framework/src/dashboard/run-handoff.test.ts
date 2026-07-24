@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
-import { readRunHandoff, runBranchFor, pushRunBranch, openRunPullRequest, gitReason } from './run-handoff.js'
+import { readRunHandoff, runBranchFor, pushRunBranch, openRunPullRequest, gitReason, runAutoHandoff, isSessionBranch } from './run-handoff.js'
 import { nodeGitRunner, GIT_SLOW_TIMEOUT_MS, type GitRunner } from '../project.js'
 import { CliTimeoutError, isCliTimeout } from '../cli-exec.js'
 
@@ -255,4 +255,134 @@ test('a real repo: the branch outlives its worktree and still reports its work (
   } finally {
     await rm(dir, { recursive: true, force: true })
   }
+})
+
+// The end-of-session handoff that fires by itself (#1102).
+
+/** A branch with one commit, a remote, and no PR: the case a handoff should act on. */
+const READY = {
+  ...REPO,
+  'rev-parse --verify --quiet refs/heads/the-framework/x': 'abc123\n',
+  remote: 'origin\n',
+  'symbolic-ref': 'origin/main\n',
+  log: `abc123${SEP}abc${SEP}did the thing`,
+  diff: '1\t0\tsrc/app.ts',
+  'rev-parse --verify --quiet refs/remotes': '',
+  branch: '',
+}
+
+test('an armed session opens a DRAFT PR, and pushes on the way (#1102)', async () => {
+  const gh: string[][] = []
+  const { git } = fakeGit({ ...READY, push: '' })
+  const outcome = await runAutoHandoff(
+    '/repo',
+    { id: 'r1', branch: 'the-framework/x', sessionName: 'x', intent: 'build it' },
+    { push: true, pr: true },
+    {
+      git,
+      pr: async () => undefined,
+      gh: async args => {
+        gh.push(args)
+        return 'https://github.com/o/r/pull/9\n'
+      },
+    },
+  )
+  assert.deepEqual(outcome, { outcome: 'done', pushed: true, url: 'https://github.com/o/r/pull/9' })
+  // The draft flag is the whole reason this is safe to fire on every session: without it every
+  // finished run would put a review request in someone's inbox.
+  assert.ok(gh[0]?.includes('--draft'), `expected --draft in ${JSON.stringify(gh[0])}`)
+  assert.ok(gh[0]?.includes('the-framework/x'))
+})
+
+test('push armed alone pushes and opens nothing (#1102)', async () => {
+  const pushes: string[][] = []
+  const { git: read } = fakeGit(READY)
+  const outcome = await runAutoHandoff(
+    '/repo',
+    { id: 'r1', branch: 'the-framework/x' },
+    { push: true, pr: false },
+    {
+      git: async (args, cwd) => {
+        if (args[0] === 'push') {
+          pushes.push(args)
+          return ''
+        }
+        return read(args, cwd)
+      },
+      pr: async () => undefined,
+      gh: async () => assert.fail('no PR should be opened when only the push is armed'),
+    },
+  )
+  assert.deepEqual(outcome, { outcome: 'done', pushed: true })
+  assert.deepEqual(pushes, [['push', '--set-upstream', 'origin', 'the-framework/x']])
+})
+
+test('a disarmed session hands off nothing at all (#1102)', async () => {
+  const outcome = await runAutoHandoff(
+    '/repo',
+    { id: 'r1', branch: 'the-framework/x' },
+    { push: false, pr: false },
+    { git: async () => assert.fail('a disarmed handoff must not touch git'), gh: async () => assert.fail('nor gh') },
+  )
+  assert.deepEqual(outcome, { outcome: 'skipped', reason: 'not-armed' })
+})
+
+test('a branch that already has a PR is never given a second one (#1102)', async () => {
+  const { git } = fakeGit(READY)
+  const outcome = await runAutoHandoff(
+    '/repo',
+    { id: 'r1', branch: 'the-framework/x' },
+    { push: true, pr: true },
+    {
+      git,
+      pr: async () => ({ number: 4, url: 'https://github.com/o/r/pull/4', state: 'OPEN', title: 'already' }),
+      gh: async () => assert.fail('opening a second PR is the one mistake this must not make'),
+    },
+  )
+  assert.deepEqual(outcome, { outcome: 'skipped', reason: 'already-open' })
+})
+
+test('a session that committed nothing is not published (#1102)', async () => {
+  const { git } = fakeGit({ ...READY, log: '', diff: '' })
+  const outcome = await runAutoHandoff(
+    '/repo',
+    { id: 'r1', branch: 'the-framework/x' },
+    { push: true, pr: true },
+    { git, pr: async () => undefined, gh: async () => assert.fail('nothing to open a PR for') },
+  )
+  assert.deepEqual(outcome, { outcome: 'skipped', reason: 'no-commits' })
+})
+
+test('a repo with no remote is a skip, not a failure (#1102)', async () => {
+  const { git } = fakeGit({ ...READY, remote: '' })
+  const outcome = await runAutoHandoff(
+    '/repo',
+    { id: 'r1', branch: 'the-framework/x' },
+    { push: true, pr: true },
+    { git, pr: async () => undefined, gh: async () => assert.fail('nowhere to push to') },
+  )
+  assert.deepEqual(outcome, { outcome: 'skipped', reason: 'no-remote' })
+})
+
+test('a failed push is reported with git’s own reason, so the bar can offer the retry (#1102)', async () => {
+  const { git: read } = fakeGit(READY)
+  const outcome = await runAutoHandoff(
+    '/repo',
+    { id: 'r1', branch: 'the-framework/x' },
+    { push: true, pr: false },
+    {
+      git: async (args, cwd) => {
+        if (args[0] === 'push') throw new Error('Command failed: git push\nfatal: no write access\n')
+        return read(args, cwd)
+      },
+      pr: async () => undefined,
+    },
+  )
+  assert.deepEqual(outcome, { outcome: 'failed', step: 'push', error: 'fatal: no write access' })
+})
+
+test('a session branch is recognised by its prefix, a hand-made one is not (#1102)', () => {
+  assert.equal(isSessionBranch('the-framework/x'), true)
+  assert.equal(isSessionBranch('feat/mine'), false)
+  assert.equal(isSessionBranch(undefined), false)
 })

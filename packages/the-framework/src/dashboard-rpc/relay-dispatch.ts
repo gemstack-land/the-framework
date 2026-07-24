@@ -1,5 +1,5 @@
 import { onProjectFiles, onProjectFileStatus, onFileDiff, onRunChanges, onFileContent, onGitStatus, onRunWorktree, onRunHandoff, onRun } from './reads.telefunc.js'
-import { sendStop, sendChoice, sendMessage, sendPushBranch, sendOpenPullRequest } from './control.telefunc.js'
+import { sendStop, sendChoice, sendMessage, sendSetHandoff, sendPushBranch, sendOpenPullRequest } from './control.telefunc.js'
 
 // The device side of the remote-run relay (#1067 slice 2). A daemon that relayed a run here asks this
 // to read/steer/hand off THAT run against THIS device's own checkout. Every entry is a run-scoped RPC
@@ -14,7 +14,7 @@ type RelayFn = (...args: unknown[]) => Promise<unknown>
 const RELAY_FNS = {
   onProjectFiles, onProjectFileStatus, onFileDiff, onRunChanges, onFileContent,
   onGitStatus, onRunWorktree, onRunHandoff, onRun,
-  sendStop, sendChoice, sendMessage, sendPushBranch, sendOpenPullRequest,
+  sendStop, sendChoice, sendMessage, sendSetHandoff, sendPushBranch, sendOpenPullRequest,
 } as unknown as Record<string, RelayFn>
 
 /** The names a relay caller may invoke. */

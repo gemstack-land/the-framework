@@ -102,14 +102,22 @@ export interface OpenPr {
   number: number
   title: string
   url: string
-  /** Draft PRs are not ready for review, so they are left off the queue. */
+  /**
+   * Draft PRs are generally left off the queue: a draft is not asking for review.
+   *
+   * The exception is a draft the framework opened for itself (#1102), which {@link headRefName}
+   * is what tells apart.
+   */
   isDraft: boolean
+  /** The branch the PR is from, so a session's own PR can be recognised as ours (#1102). */
+  headRefName?: string
   createdAt?: string
 }
 
 /** A checkout's open PRs; resolves `[]` when there is no remote or gh is unavailable. */
 export async function ghPrList(cwd: string): Promise<OpenPr[]> {
-  const args = ['pr', 'list', '--state', 'open', '--limit', '50', '--json', 'number,title,url,isDraft,createdAt']
+  const fields = 'number,title,url,isDraft,headRefName,createdAt'
+  const args = ['pr', 'list', '--state', 'open', '--limit', '50', '--json', fields]
   return ghJson<OpenPr[]>(args, cwd, [])
 }
 

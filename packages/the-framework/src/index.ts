@@ -106,9 +106,11 @@ export {
   loopStatus,
   sessionInfo,
   runProgress,
+  handoffState,
   type LoopStatus,
   type SessionInfo,
   type RunProgress,
+  type HandoffState,
 } from './run-view.js'
 export {
   assessRepo,

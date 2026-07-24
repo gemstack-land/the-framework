@@ -1,6 +1,6 @@
 import { strict as assert } from 'node:assert'
 import { test } from 'node:test'
-import { loopStatus, sessionInfo, deployPlan, runProgress } from './run-view.js'
+import { loopStatus, sessionInfo, deployPlan, runProgress, handoffState } from './run-view.js'
 import type { FrameworkEvent } from './events.js'
 
 test('runProgress starts building with no name and flips to ready on setReadyForMerge (#326)', () => {
@@ -53,4 +53,33 @@ test('deployPlan returns the chosen deploy target from the deploy event; latest 
     boot({ type: 'deploy', plan: { render: 'ssr', target: 'dokploy', reason: 'per-request data' }, result: { deployed: true } }),
   ])
   assert.deepEqual(plan, { render: 'ssr', target: 'dokploy', reason: 'per-request data' })
+})
+
+test('a run with no handoff events reads as armed, matching what it will do (#1102)', () => {
+  // An older run emits no `handoff-armed`. Reading that as disarmed would show two unticked boxes
+  // for a session that is in fact going to push and open a PR.
+  assert.deepEqual(handoffState([]), { push: true, pr: true })
+})
+
+test('handoffState takes the latest arming, so unticking a box sticks (#1102)', () => {
+  const events: FrameworkEvent[] = [
+    { kind: 'handoff-armed', push: true, pr: true },
+    { kind: 'handoff-armed', push: true, pr: false },
+  ]
+  assert.deepEqual(handoffState(events), { push: true, pr: false })
+})
+
+test('handoffState carries the outcome once the handoff has run (#1102)', () => {
+  const done: FrameworkEvent[] = [
+    { kind: 'handoff-armed', push: true, pr: true },
+    { kind: 'handoff', outcome: 'done', pushed: true, url: 'https://github.com/o/r/pull/3' },
+  ]
+  assert.deepEqual(handoffState(done).result, { outcome: 'done', url: 'https://github.com/o/r/pull/3' })
+
+  // A failure has to survive into the projection: it is what the bar shows beside the retry button.
+  const failed: FrameworkEvent[] = [{ kind: 'handoff', outcome: 'failed', step: 'push', error: 'fatal: no write access' }]
+  assert.deepEqual(handoffState(failed).result, { outcome: 'failed', error: 'fatal: no write access' })
+
+  const skipped: FrameworkEvent[] = [{ kind: 'handoff', outcome: 'skipped', reason: 'no-remote' }]
+  assert.deepEqual(handoffState(skipped).result, { outcome: 'skipped', reason: 'no-remote' })
 })

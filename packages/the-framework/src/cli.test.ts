@@ -87,6 +87,15 @@ test('parseArgs reads --browser (#452)', () => {
   assert.equal(parseArgs(['--browser', 'x']).browser, true)
 })
 
+test('the handoff flags default ON, which is what makes it zero-config (#1102)', () => {
+  // Unlike every other toggle here, saying nothing means yes: a plain run pushes its branch and
+  // opens a draft PR when it finishes.
+  assert.equal(parseArgs(['x']).autoPushBranch, true)
+  assert.equal(parseArgs(['x']).autoOpenPr, true)
+  assert.equal(parseArgs(['--no-auto-push-branch', 'x']).autoPushBranch, false)
+  assert.equal(parseArgs(['--no-auto-open-pr', 'x']).autoOpenPr, false)
+})
+
 test('parseArgs reads --resume-session to continue a finished run (#720)', () => {
   assert.equal(parseArgs(['x']).resumeSession, undefined)
   assert.equal(parseArgs(['prompt', 'keep going', '--resume-session', 'sess-42']).resumeSession, 'sess-42')

@@ -1,5 +1,5 @@
 import type { Preferences } from '@gemstack/the-framework'
-import { AGENTS, AGENT_LABELS, autopilotEnabled, type AgentName } from '@gemstack/the-framework/client'
+import { AGENTS, AGENT_LABELS, autopilotEnabled, handoffFromPreferences, type AgentName } from '@gemstack/the-framework/client'
 
 // The Global options as one table (#314), and the rules between them.
 //
@@ -49,6 +49,9 @@ export function runOptionRows(preferences: Preferences): RunOptionRows {
   const ecoMaintenance = preferences.ecoMaintenance ?? false
   const onBeforeMergeableQuality = preferences.onBeforeMergeableQuality ?? false
   const browser = preferences.browser ?? false
+  // Default-on (#1102), so it reads through `handoffFromPreferences` rather than `?? false` like
+  // the rest — and that helper is also what makes PR imply push.
+  const handoff = handoffFromPreferences(preferences)
   const agent = preferences.agent ?? 'claude' // #650: which coding agent drives the run
   // The stored agent as a display name; an unknown stored value falls back to Claude Code.
   const agentLabel = AGENT_LABELS[AGENTS.includes(agent as AgentName) ? (agent as AgentName) : 'claude']
@@ -112,6 +115,23 @@ export function runOptionRows(preferences: Preferences): RunOptionRows {
       title: "When the session signals it's ready for merge, run maintainability, readability, and security-audit passes",
       checked: onBeforeMergeableQuality && !transparent,
       ...overriddenByTransparent(transparent),
+    },
+    // Where the two handoff boxes get their default (#1102). A session's own action bar can still
+    // untick them for that one run; this is what every new session starts from.
+    {
+      key: 'autoPushBranch',
+      label: 'Push branch',
+      description: 'Pushes the session branch to origin when it finishes.',
+      title: "Push the session's branch to origin when it finishes, so the work is never left only on this machine",
+      checked: handoff.push,
+      ...(handoff.pr ? { disabled: true, disabledReason: 'opening a PR already pushes the branch' } : {}),
+    },
+    {
+      key: 'autoOpenPr',
+      label: 'Open PR',
+      description: 'Opens a draft pull request when it finishes.',
+      title: 'Open a draft pull request when the session finishes. Draft, so it does not request review; it still shows on the needs-you queue',
+      checked: handoff.pr,
     },
     // Claude-only (#801): the browser is wired through Claude Code's MCP config, so another agent's
     // driver takes no MCP servers and the box would be checkable but inert.

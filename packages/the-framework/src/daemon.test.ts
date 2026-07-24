@@ -69,6 +69,20 @@ test('startOptionFlags maps only enabled Global options to CLI flags (#314)', ()
   assert.deepEqual(startOptionFlags({ transparent: true }), ['--transparent'])
 })
 
+test('a disarmed handoff travels as the --no-* form, since it defaults on (#1102)', () => {
+  // The mirror image of #842's reason: these two are ON unless told otherwise, so an unticked box
+  // that sent nothing would be re-armed by the run's own default and the session would publish
+  // itself anyway.
+  assert.deepEqual(startOptionFlags({ autoPushBranch: false, autoOpenPr: false }), [
+    '--no-auto-push-branch',
+    '--no-auto-open-pr',
+  ])
+  assert.deepEqual(startOptionFlags({ autoPushBranch: true, autoOpenPr: true }), [
+    '--auto-push-branch',
+    '--auto-open-pr',
+  ])
+})
+
 test('startOptionFlags spells an explicit off as the --no-* form (#842)', () => {
   // The launcher resolves the repo yml itself now, so a toggle it shows as off has to travel as
   // one: without --no-autopilot the file would turn it back on inside the run (#841).

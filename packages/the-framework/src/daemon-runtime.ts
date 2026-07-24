@@ -100,6 +100,10 @@ export function startOptionFlags(options: StartRunOptions): string[] {
     ['technical', '--technical'],
     ['vanilla', '--vanilla'],
     ['transparent', '--transparent'],
+    // Tri-state for a different reason (#1102): these two default ON, so `false` must be said out
+    // loud or the run would re-arm what the launcher just disarmed.
+    ['autoPushBranch', '--auto-push-branch'],
+    ['autoOpenPr', '--auto-open-pr'],
   ] as const) {
     const value = options[key]
     if (value === true) flags.push(flag)

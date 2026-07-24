@@ -227,6 +227,8 @@ test('every boolean preference survives a save; the sanitizer cannot silently dr
     ecoMaintenance: true,
     onBeforeMergeableQuality: true,
     browser: true,
+    autoPushBranch: true,
+    autoOpenPr: true,
     transparent: true,
     notifyBrowser: true,
     notifyDiscord: true,

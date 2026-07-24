@@ -232,3 +232,22 @@ test('unpushed items key on the run, so each notifies once (#860)', () => {
     interventionKey({ ...base, kind: 'awaiting', awaitId: 'r1' }),
   )
 })
+
+test("a session's own draft PR still reaches the queue; a hand-made draft does not (#1102)", async () => {
+  // Auto-handoff opens a draft precisely so it does not ping reviewers. If the queue then dropped
+  // it too, nothing would tell anyone the work exists, which is #860 all over again.
+  const prs = async (): Promise<OpenPr[]> => [
+    { number: 9, title: 'session work', url: 'u9', isDraft: true, headRefName: 'the-framework/x', createdAt: '2026-07-16T00:00:00Z' },
+    { number: 10, title: 'my own wip', url: 'u10', isDraft: true, headRefName: 'feat/mine', createdAt: '2026-07-17T00:00:00Z' },
+  ]
+  const items = await buildInterventions([project('a', '/a')], { prs, liveRuns: noRuns, runs: async () => [] })
+  assert.deepEqual(items.map(i => i.number), [9])
+})
+
+test('a draft with no branch recorded is still treated as hand-made (#1102)', async () => {
+  // `headRefName` is new: an older gh, or a lookup that did not ask for it, must not turn every
+  // draft in the repo into a "needs you".
+  const prs = async (): Promise<OpenPr[]> => [{ number: 11, title: 'wip', url: 'u11', isDraft: true }]
+  const items = await buildInterventions([project('a', '/a')], { prs, liveRuns: noRuns, runs: async () => [] })
+  assert.deepEqual(items, [])
+})

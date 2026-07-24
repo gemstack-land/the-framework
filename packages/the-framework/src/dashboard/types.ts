@@ -53,6 +53,16 @@ export interface StartRunOptions {
   onBeforeMergeable?: boolean
   /** Give the agent a real browser via chrome-devtools-mcp during the run (#452); maps to `--browser`. */
   browser?: boolean
+  /**
+   * Push the session's branch to `origin` when it finishes (#1102); maps to `--auto-push-branch`.
+   *
+   * Tri-state like the four `the-framework.yml` toggles, and for the same reason: it defaults ON,
+   * so an explicit `false` has to travel as `--no-auto-push-branch` or the run's own default would
+   * turn back on what the launcher showed as off.
+   */
+  autoPushBranch?: boolean
+  /** Open a draft PR for the session's branch when it finishes (#1102); maps to `--auto-open-pr`. Implies {@link autoPushBranch}. */
+  autoOpenPr?: boolean
   /** The model to run the wrapped agent on (#628); maps to `--model`. Absent = the driver's own default. */
   model?: string
   /** Which coding agent drives the run (#650): `claude` or `codex`; maps to `--agent`. Absent = the default (`claude`). */

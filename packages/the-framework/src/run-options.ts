@@ -41,6 +41,18 @@ export function autopilotEnabled(preferences: Preferences): boolean {
 }
 
 /**
+ * The end-of-session handoff a set of preferences arms (#1102). Both halves default on, which is
+ * what makes it zero-config: a session left alone pushes its branch and opens a draft PR.
+ *
+ * Opening a PR implies pushing — `gh` will not open one for a branch the remote has never seen —
+ * so the pair is normalised here rather than in the three places that read it.
+ */
+export function handoffFromPreferences(preferences: Preferences): { push: boolean; pr: boolean } {
+  const pr = preferences.autoOpenPr ?? true
+  return { push: pr || (preferences.autoPushBranch ?? true), pr }
+}
+
+/**
  * The run options a set of already-resolved preferences implies.
  *
  * Takes the merged view, not the two tiers: who wins between the global and the project setting is
@@ -54,6 +66,7 @@ export function runOptionsFromPreferences(preferences: Preferences, context: str
   const technical = preferences.technical ?? false
   const onBeforeMergeableQuality = preferences.onBeforeMergeableQuality ?? false
   const browser = preferences.browser ?? false
+  const handoff = handoffFromPreferences(preferences)
   const model = preferences.model ?? ''
   const agent = preferences.agent ?? 'claude'
   const target = preferences.target ?? 'local'
@@ -73,6 +86,10 @@ export function runOptionsFromPreferences(preferences: Preferences, context: str
     transparent,
     ...(eco && !vanilla && !transparent && Object.keys(ecoDrops).length ? { eco: ecoDrops } : {}),
     ...(onBeforeMergeableQuality ? { onBeforeMergeable: true } : {}),
+    // Stated explicitly, `false` included: these default ON (#1102), so sending nothing would let
+    // the run's own default turn back on what the launcher just showed as off.
+    autoPushBranch: handoff.push,
+    autoOpenPr: handoff.pr,
     // Claude-only (#801): another agent's driver takes no MCP servers, so sending it would only earn
     // the CLI's "no effect" notice. Matches the box being disabled off Claude Code.
     ...(browser && agent === 'claude' ? { browser: true } : {}),

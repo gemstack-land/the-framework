@@ -34,6 +34,11 @@ export const PROJECT_PREFERENCE_KEYS = [
   'ecoMaintenance',
   'onBeforeMergeableQuality',
   'browser',
+  // Per-project by nature (#1102): whether a session should publish itself is a fact about the
+  // repo, not about the machine. A scratch repo wants it on; someone else's repo you have push
+  // rights to may well not.
+  'autoPushBranch',
+  'autoOpenPr',
   'transparent',
   'model',
   'agent',

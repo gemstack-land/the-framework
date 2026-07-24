@@ -31,6 +31,15 @@ export type ControlEntry =
    * and a run reading one falls back to its own surface exactly as before.
    */
   | { kind: 'message'; text: string; via?: string }
+  /**
+   * Re-arm or disarm the end-of-session handoff (#1102): whether this session pushes its branch
+   * and opens a draft PR when it finishes.
+   *
+   * Steering rather than an event because it is an instruction to the run, and it has to reach a
+   * run whose dashboard tab was opened after it started. The run echoes what it applied back as an
+   * event, which is what puts it on the meta the checkboxes read.
+   */
+  | { kind: 'handoff'; push: boolean; pr: boolean }
 
 /** The control log path for a workspace. */
 export function controlPath(cwd: string): string {
@@ -81,6 +90,9 @@ function isControlEntry(value: unknown): value is ControlEntry {
   if (!value || typeof value !== 'object') return false
   const v = value as Record<string, unknown>
   if (v['kind'] === 'stop') return true
+  // Both halves must be real booleans: a half-written entry would otherwise disarm by accident,
+  // and this decides whether the session's work reaches the remote at all.
+  if (v['kind'] === 'handoff') return typeof v['push'] === 'boolean' && typeof v['pr'] === 'boolean'
   // `via` is optional (older entries have none), but a present one must be a safe transport name:
   // it is written into a line-parsed conversation heading, and a surface names itself (#917).
   if (v['kind'] === 'message') {

@@ -12,10 +12,12 @@ export {
   sessionInfo,
   deployPlan,
   runProgress,
+  handoffState,
   type LoopStatus,
   type SessionInfo,
   type DeployPlan,
   type RunProgress,
+  type HandoffState,
 } from './run-view.js'
 // The Start-a-run presets (#433): pure prompt builders (no Node imports) the dashboard
 // prefills into the textarea, then runs verbatim as a `prompt` kind.
@@ -44,7 +46,7 @@ export { interventionKey, pickNewInterventions, activityKey, pickNewActivity } f
 export { PROJECT_PREFERENCE_KEYS, NOTIFICATION_DEFAULTS, MAX_SPEND_OFFSET, notificationEnabled, discordNotificationEnabled, type ProjectPreferences } from './preference-defaults.js'
 // The preferences -> run options mapping (#858), shared with the daemon so an unattended run
 // starts with the same settings a launcher-started one would. Pure field logic, no Node imports.
-export { runOptionsFromPreferences, autopilotEnabled, preferencesFromFileConfig } from './run-options.js'
+export { runOptionsFromPreferences, autopilotEnabled, handoffFromPreferences, preferencesFromFileConfig } from './run-options.js'
 // The Discord credential rules (#1095): the same precedence and validation the daemon enforces,
 // so the setup dialog rejects a malformed token before the round trip instead of guessing at it.
 export {

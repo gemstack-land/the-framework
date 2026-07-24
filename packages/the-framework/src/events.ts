@@ -65,6 +65,31 @@ export type OnBeforeMergeableSkip =
   /** `process.argv[1]` was empty, so there is no binary to spawn the follow-up with. */
   | 'no-bin-path'
 
+/**
+ * Why the end-of-session handoff (#1102) did nothing. Every one of these is a normal end rather
+ * than a fault, and each is reported so that "it was ticked and nothing happened" has an answer.
+ *
+ * Lives here beside {@link OnBeforeMergeableSkip} rather than with the handoff logic, because the
+ * event union is a leaf: the module that decides these imports the type, not the other way round.
+ */
+export type AutoHandoffSkip =
+  /** Neither box was ticked, so there was nothing to do. */
+  | 'not-armed'
+  /** The branch no longer exists (deleted, or never created). */
+  | 'branch-gone'
+  /** The session committed nothing the base branch does not already have. */
+  | 'no-commits'
+  /** The repo has no remote to push to. */
+  | 'no-remote'
+  /** The branch already has a PR: opening a second one is the one mistake this must not make. */
+  | 'already-open'
+  /** The branch is already on the remote at this commit, and only the push was asked for. */
+  | 'already-pushed'
+  /** The run was stopped (Stop button, Ctrl+C, budget cap) rather than finished. */
+  | 'run-stopped'
+  /** A fake/offline run: nothing real to publish. */
+  | 'fake-run'
+
 /** Who resolved a {@link ChoiceRequest}: a human, the autopilot countdown, or a headless auto-accept. */
 export type ChoiceBy = 'user' | 'autopilot' | 'auto'
 
@@ -156,6 +181,24 @@ export type FrameworkEvent =
    */
   | { kind: 'on-before-mergeable'; outcome: 'queued' | 'incomplete' }
   | { kind: 'on-before-mergeable'; outcome: 'skipped'; reason: OnBeforeMergeableSkip }
+  /**
+   * What the end-of-session handoff is armed to do (#1102), emitted at the start and again
+   * whenever the dashboard's checkboxes change it.
+   *
+   * This is what makes the boxes survive a reload: the control channel carries the instruction,
+   * but only an event reaches the run's meta, which is the one thing a tab opened later can read.
+   */
+  | { kind: 'handoff-armed'; push: boolean; pr: boolean }
+  /**
+   * What the end-of-session handoff actually did (#1102): pushed and/or opened a draft PR,
+   * declined for a reason that is not a fault, or failed at one of the two steps.
+   *
+   * Same reason as on-before-mergeable above: a dashboard-started run has no stdout anyone reads,
+   * so an outcome that is not an event is an outcome nobody learns.
+   */
+  | { kind: 'handoff'; outcome: 'skipped'; reason: AutoHandoffSkip }
+  | { kind: 'handoff'; outcome: 'done'; pushed: boolean; url?: string }
+  | { kind: 'handoff'; outcome: 'failed'; step: 'push' | 'pr'; error: string }
   /**
    * The work has settled and the run is parked on the user (#785): it stays open as a
    * conversation (#714), so its process is still alive and it still takes messages, but

@@ -1,4 +1,4 @@
-import type { FrameworkEvent } from './events.js'
+import type { AutoHandoffSkip, FrameworkEvent } from './events.js'
 
 // Derived run state for the dashboard's overview cards (#431): the production-grade
 // loop status, the deploy plan, and the live session link — each a pure projection of
@@ -84,6 +84,41 @@ export function runProgress(events: readonly FrameworkEvent[]): RunProgress {
     else if (event.kind === 'ready-for-merge') progress.readyForMerge = true
   }
   return progress
+}
+
+/** What a session will do with its work when it ends (#1102), and what it did. */
+export interface HandoffState {
+  /** Push the branch to `origin` on finish. */
+  push: boolean
+  /** Open a draft PR on finish. Implies {@link push}. */
+  pr: boolean
+  /** How the handoff ended, once it has run. Absent while the session is still going. */
+  result?: { outcome: 'skipped'; reason: AutoHandoffSkip } | { outcome: 'done'; url?: string } | { outcome: 'failed'; error: string }
+}
+
+/**
+ * What the session is armed to hand back, folded from its own events (#1102).
+ *
+ * Both halves start armed, so a run from before this existed — which emits no `handoff-armed` —
+ * reads as armed, which is what it will actually do once it is running new code. Latest wins: the
+ * checkboxes re-emit on every change.
+ */
+export function handoffState(events: readonly FrameworkEvent[]): HandoffState {
+  const state: HandoffState = { push: true, pr: true }
+  for (const event of events) {
+    if (event.kind === 'handoff-armed') {
+      state.push = event.push
+      state.pr = event.pr
+    } else if (event.kind === 'handoff') {
+      state.result =
+        event.outcome === 'done'
+          ? { outcome: 'done', ...(event.url ? { url: event.url } : {}) }
+          : event.outcome === 'failed'
+            ? { outcome: 'failed', error: event.error }
+            : { outcome: 'skipped', reason: event.reason }
+    }
+  }
+  return state
 }
 
 /** The wrapped agent session (#431): its id and a deep link, when one is known. */

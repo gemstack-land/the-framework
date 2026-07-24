@@ -1,6 +1,6 @@
 import type { BootstrapEvent } from '@gemstack/ai-autopilot'
 import type { DriverEvent, DriverRateLimit } from './driver/index.js'
-import { pickedIds, type ChoiceOption, type FrameworkEvent, type OnBeforeMergeableSkip } from './events.js'
+import { pickedIds, type AutoHandoffSkip, type ChoiceOption, type FrameworkEvent, type OnBeforeMergeableSkip } from './events.js'
 
 // The terminal surface for the run's event stream: render one {@link FrameworkEvent} as one
 // human-readable line. This is the CLI's counterpart to the dashboard's read-model
@@ -40,6 +40,21 @@ export function formatFrameworkEvent(event: FrameworkEvent): string {
           return `  ! post-merge cleanup: queueing did not complete cleanly`
         case 'skipped':
           return `  ~ post-merge cleanup skipped: ${skipReason(event.reason)}`
+      }
+    case 'handoff-armed': {
+      // Said as what will happen, not as two flags: the line is read once, at a glance.
+      if (event.pr) return `  when this ends: push the branch and open a draft PR`
+      if (event.push) return `  when this ends: push the branch`
+      return `  when this ends: nothing — push and PR are both off`
+    }
+    case 'handoff':
+      switch (event.outcome) {
+        case 'done':
+          return event.url ? `✓ opened ${event.url}` : `✓ branch pushed`
+        case 'skipped':
+          return `  ~ handoff skipped: ${handoffSkipReason(event.reason)}`
+        case 'failed':
+          return `  ! could not ${event.step === 'pr' ? 'open the PR' : 'push the branch'}: ${event.error}`
       }
     case 'usage': {
       const turns = `over ${event.turns} turn${event.turns === 1 ? '' : 's'}`
@@ -85,6 +100,28 @@ function skipReason(reason: OnBeforeMergeableSkip): string {
       return 'the session never called setSessionName()'
     case 'no-bin-path':
       return 'the framework binary path is unknown'
+  }
+}
+
+/** Why the end-of-session handoff did nothing (#1102), as a reason rather than a code. */
+function handoffSkipReason(reason: AutoHandoffSkip): string {
+  switch (reason) {
+    case 'not-armed':
+      return 'push and PR are both off for this session'
+    case 'branch-gone':
+      return 'the branch no longer exists'
+    case 'no-commits':
+      return 'the session committed nothing'
+    case 'no-remote':
+      return 'this repo has no remote to push to'
+    case 'already-open':
+      return 'the branch already has a pull request'
+    case 'already-pushed':
+      return 'the branch is already on the remote'
+    case 'run-stopped':
+      return 'the run was stopped'
+    case 'fake-run':
+      return 'this was a fake run'
   }
 }
 

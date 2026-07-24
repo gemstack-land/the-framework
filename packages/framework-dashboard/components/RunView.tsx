@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react'
 import type { FrameworkEvent } from '@gemstack/the-framework'
-import { runProgress, sessionInfo } from '@gemstack/the-framework/client'
+import { handoffState, runProgress, sessionInfo } from '@gemstack/the-framework/client'
 import { onRun, onRetainedWorktrees } from '../server/reads.telefunc.js'
 import { useLoaded } from '../lib/use-async.js'
 import { useRunHandoff } from '../lib/use-run-handoff.js'
@@ -11,7 +11,7 @@ import { RunFeed } from './RunFeed.js'
 import { ActionsRunNotice } from './ActionsRunNotice.js'
 import { RemoteRunNotice } from './RemoteRunNotice.js'
 import { ChangesSummary, RunChanges } from './RunChanges.js'
-import { HandoffActions, HandoffSummary, RunHandoffDetails, handoffExpandable } from './RunHandoff.js'
+import { HandoffActions, HandoffArm, HandoffSummary, RunHandoffDetails, handoffExpandable } from './RunHandoff.js'
 
 // One session's view, whether it is running or finished (#1026).
 //
@@ -96,6 +96,9 @@ export function RunView({
   const shown = live ? events : (archived ?? events)
   const session = sessionInfo(shown)
   const progress = runProgress(shown)
+  // What the session hands back when it ends (#1102), folded from its own events so the boxes read
+  // the same whether this tab watched the run start or was opened halfway through.
+  const armed = handoffState(shown)
   // Until the handoff has actually loaded, a just-stopped run keeps showing the file counts it
   // ended with (#1030): the summary swaps once, from the live counts to the handoff, instead of
   // blanking for the beat the handoff read takes. Same for the chevron, so it does not blink out.
@@ -116,6 +119,11 @@ export function RunView({
           showHandoff ? (
             <>
               <HandoffSummary handoff={handoff.handoff} />
+              {/* An automatic handoff that failed has to say so here (#1102): the buttons coming
+                  back is the offer to retry, but on its own it looks like nothing was tried. */}
+              {armed.result?.outcome === 'failed' && (
+                <span className="text-danger">auto-handoff failed: {armed.result.error}</span>
+              )}
               {handoff.error && <span className="text-danger">{handoff.error}</span>}
             </>
           ) : (
@@ -124,7 +132,15 @@ export function RunView({
         }
         expanded={open}
         {...(canExpand ? { onToggle: toggle } : {})}
-        actions={runId ? <HandoffActions projectId={projectId} runId={runId} state={handoff} /> : undefined}
+        actions={
+          runId ? (
+            live ? (
+              <HandoffArm projectId={projectId} runId={runId} state={armed} />
+            ) : (
+              <HandoffActions projectId={projectId} runId={runId} state={handoff} />
+            )
+          ) : undefined
+        }
       />
       {/* What the session has touched, behind the branch row's disclosure. While it runs that is
           its worktree; once it ends, the branch it left behind. The live read needs the run's id:

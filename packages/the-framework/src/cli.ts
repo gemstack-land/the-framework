@@ -25,7 +25,8 @@ import { startRelay, relayPublisher, type RelayPublisher } from './relay.js'
 import { randomUUID } from 'node:crypto'
 import { formatFrameworkEvent } from './terminal.js'
 import { CLAUDE_CODE_SESSION_LINK } from './session-link.js'
-import { type ChoicePick, type ChoiceRequest, type FrameworkEvent, type OnBeforeMergeableSkip } from './events.js'
+import { type AutoHandoffSkip, type ChoicePick, type ChoiceRequest, type FrameworkEvent, type OnBeforeMergeableSkip } from './events.js'
+import { runAutoHandoff } from './dashboard/run-handoff.js'
 import {
   runFramework,
   type AppPreview,
@@ -52,7 +53,7 @@ import { appendLog, type LogEntry } from './logs.js'
 import { appendMessage, isSafeVia } from './conversations.js'
 import type { RecordMessage } from './await-gate.js'
 import { preflight } from './preflight.js'
-import { RunStore, currentBranch, nodeStoreFs, renameRunBranch, runBranchName, type StoreFs } from './store/index.js'
+import { RunStore, commitPendingWork, currentBranch, nodeStoreFs, renameRunBranch, runBranchName, type StoreFs } from './store/index.js'
 import { materializePresets } from './presets.js'
 import { daemonStatus, ensureDaemon, isLoopbackHost, registerHomeProject, runDaemon, stopDaemon, DEFAULT_DAEMON_HOST, DEFAULT_DAEMON_PORT } from './daemon.js'
 import { resetControl, watchControl, type ControlWatcher } from './control.js'
@@ -206,6 +207,11 @@ Options:
   --browser              Give the agent a real browser during the run via
                          chrome-devtools-mcp: navigate pages, read console + network,
                          inspect the DOM, and screenshot. Off by default (#452).
+  --no-auto-push-branch  Do not push this session's branch to origin when it finishes.
+                         Pushing is the default, so the work does not sit on a local
+                         branch nobody is told about (#1102).
+  --no-auto-open-pr      Do not open a draft PR when the session finishes. Opening one
+                         is the default; it implies the push above (#1102).
   --unattended           Nobody is watching: choice gates take the recommended option
                          instead of waiting for an answer. Stop still works (#846).
   --kind <name>          Build event kind the preset's review loop fires for, e.g.
@@ -314,6 +320,13 @@ export interface CliOptions {
   onBeforeMergeable: boolean
   /** `--browser`: give the agent a real browser via chrome-devtools-mcp (navigate, console, network, DOM, screenshot) during the run (#452). */
   browser: boolean
+  /**
+   * `--auto-push-branch` / `--no-auto-push-branch` (#1102): push this session's branch to `origin`
+   * when it finishes. On by default, which is what makes the handoff zero-config.
+   */
+  autoPushBranch: boolean
+  /** `--auto-open-pr` / `--no-auto-open-pr` (#1102): open a draft PR when the session finishes. On by default; implies {@link autoPushBranch}. */
+  autoOpenPr: boolean
   buildEvent?: string | undefined
   maxPasses?: number
   maxCost?: number
@@ -377,6 +390,10 @@ export function parseArgs(argv: string[]): CliOptions {
     context: [],
     onBeforeMergeable: false,
     browser: false,
+    // On unless said otherwise (#1102): the whole point is that a session left alone hands its
+    // work back by itself.
+    autoPushBranch: true,
+    autoOpenPr: true,
     dashboard: true,
     relayServe: false,
     skipPermissions: false,
@@ -450,6 +467,18 @@ export function parseArgs(argv: string[]): CliOptions {
         break
       case '--browser':
         opts.browser = true
+        break
+      case '--auto-push-branch':
+        opts.autoPushBranch = true
+        break
+      case '--no-auto-push-branch':
+        opts.autoPushBranch = false
+        break
+      case '--auto-open-pr':
+        opts.autoOpenPr = true
+        break
+      case '--no-auto-open-pr':
+        opts.autoOpenPr = false
         break
       case '--eco-auto-planning':
         opts.eco.autoPlanning = true
@@ -812,6 +841,8 @@ interface RunEpilogue {
   browserStream: BrowserStream | undefined
   clearInterrupt: () => void
   maybeFireOnBeforeMergeable: () => Promise<void>
+  /** Hand the session's work back (#1102): push its branch and open a draft PR, if still armed. */
+  maybeAutoHandoff: () => Promise<void>
   /** Write the run's `.the-framework/LOGS.md` entry (#898). Idempotent: called on every exit path. */
   finishLog: () => Promise<void>
   /** True once the run stopped cleanly (interrupt / budget cap) rather than failed. */
@@ -842,6 +873,10 @@ async function settleRun(
     // Before the close, not after (#835): close() archives the log into `runs/`, so an
     // outcome appended afterwards would miss the copy the dashboard's history reads.
     await ctx.maybeFireOnBeforeMergeable()
+    // After the quality step, so whatever it committed is in what gets pushed; before the close,
+    // for the same reason as above — `close()` archives the log, and an outcome appended after it
+    // would miss the copy the dashboard's history reads (#835).
+    await ctx.maybeAutoHandoff()
     await ctx.finishLog()
     await ctx.store?.close() // flush the event log; best-effort
     // Stay up while the dashboard and/or the app are live, then tear both down.
@@ -1375,6 +1410,15 @@ async function runBuild(opts: CliOptions, io: CliIO): Promise<number> {
   // file was the only thing wiring it); and present while unrelated to this run, so a headless run
   // parked in the #714 chat loop forever. The daemon passes --run-id when it spawns, which is a
   // fact about *this* run rather than about the machine, so that is the signal now.
+  // What this session hands back when it ends (#1102). Mutable: the action bar's checkboxes can
+  // disarm it at any point up to the moment it settles, which is the whole point of them being
+  // pre-commitments rather than buttons. Opening a PR implies pushing, so the pair is normalised
+  // wherever it is set.
+  const armedHandoff = { push: opts.autoPushBranch || opts.autoOpenPr, pr: opts.autoOpenPr }
+  // Assigned once the journal exists, which is after the control watcher is wired: a change that
+  // arrives before then still lands on `armedHandoff`, it just has no event to announce it yet.
+  let announceHandoff: ((push: boolean, pr: boolean) => void) | undefined
+
   let control: ControlWatcher | undefined
   if (isSteerable(opts, newDashboard, await daemonStatus() !== undefined)) {
     try {
@@ -1387,6 +1431,12 @@ async function runBuild(opts: CliOptions, io: CliIO): Promise<number> {
         if (entry.kind === 'message') {
           // Carry the origin the sender named (#917), so the turn is recorded where it happened.
           messages.push(entry.text, entry.via)
+          return
+        }
+        if (entry.kind === 'handoff') {
+          armedHandoff.push = entry.push || entry.pr
+          armedHandoff.pr = entry.pr
+          announceHandoff?.(armedHandoff.push, armedHandoff.pr)
           return
         }
         const resolve = pendingChoices.get(entry.id)
@@ -1459,6 +1509,12 @@ async function runBuild(opts: CliOptions, io: CliIO): Promise<number> {
   })
   const onEvent = journal.onEvent
 
+  // Put the armed state on the run's meta (#1102), and keep it there as the checkboxes change it.
+  // The control channel carries the instruction, but only an event reaches meta, and meta is the
+  // only thing a dashboard tab opened mid-run can read the boxes back from.
+  announceHandoff = (push, pr) => onEvent({ kind: 'handoff-armed', push, pr })
+  announceHandoff(armedHandoff.push, armedHandoff.pr)
+
   // Fire the #326 on-before-mergeable prompt once a --on-before-mergeable run has settled and the agent
   // signalled setReadyForMerge(). Skipped for a fake/offline run and when the run was stopped —
   // and every outcome, including each skip, is emitted as an event so the dashboard can show it (#835).
@@ -1490,6 +1546,42 @@ async function runBuild(opts: CliOptions, io: CliIO): Promise<number> {
       opts.eco,
     )
     onEvent({ kind: 'on-before-mergeable', outcome })
+  }
+
+  // Hand the session's work back (#1102): push the branch and open a draft PR for it, unless the
+  // action bar's checkboxes were unticked. Runs after the on-before-mergeable step above, so
+  // anything that step committed is part of what gets published rather than a commit left behind.
+  const maybeAutoHandoff = async (): Promise<void> => {
+    const armed = { ...armedHandoff }
+    const skip = (reason: AutoHandoffSkip) => onEvent({ kind: 'handoff', outcome: 'skipped', reason })
+    if (!armed.push && !armed.pr) return skip('not-armed')
+    // A stopped run is a session the user cut short; publishing what it happened to reach is the
+    // opposite of what stopping meant. Same call the on-before-mergeable step makes.
+    if (journal.stoppedCleanly()) return skip('run-stopped')
+    if (fake) return skip('fake-run')
+
+    // The daemon commits whatever the agent left uncommitted, but only after this process exits
+    // (`tearDownWorktree`), so at this point the tree can still hold real work. Pushing first
+    // would publish a branch missing the session's last edits. Its own checkout only: a plain
+    // `framework "..."` runs in the user's tree, where committing for them is not ours to do.
+    if (opts.runId) await commitPendingWork(cwd)
+
+    // The branch as it is now, not as it was named at start: #326 lets the agent rename it, and
+    // the rename is exactly what the PR should be opened against.
+    const branch = await currentBranch(cwd)
+    if (!branch) return skip('branch-gone')
+    const sessionName = journal.sessionName()
+    const run = {
+      id: opts.runId ?? '',
+      branch,
+      ...(sessionName ? { sessionName } : {}),
+      ...(intent ? { intent } : {}),
+    }
+    const outcome = await runAutoHandoff(cwd, run, armed)
+    onEvent({ kind: 'handoff', ...outcome })
+    if (outcome.outcome === 'failed') io.err(`✗ could not ${outcome.step === 'pr' ? 'open the PR' : 'push the branch'}: ${outcome.error}`)
+    else if (outcome.outcome === 'done' && outcome.url) io.out(`\n◆ Opened ${outcome.url}`)
+    else if (outcome.outcome === 'done') io.out(`\n◆ Pushed ${branch}.`)
   }
 
   // A mode/kind given with no preset in effect has nothing to act on: note it.
@@ -1594,6 +1686,7 @@ async function runBuild(opts: CliOptions, io: CliIO): Promise<number> {
     browserStream,
     clearInterrupt,
     maybeFireOnBeforeMergeable,
+    maybeAutoHandoff,
     finishLog: journal.finishLog,
     isStopped: () => controller.signal.aborted || journal.stoppedCleanly(),
     failLabel,

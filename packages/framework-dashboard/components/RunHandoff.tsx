@@ -1,10 +1,12 @@
-import type { RunHandoff } from '@gemstack/the-framework'
+import { useEffect, useState } from 'react'
+import type { HandoffState, RunHandoff } from '@gemstack/the-framework'
 import { GitPullRequest, Upload } from 'lucide-react'
-import { sendOpenPullRequest, sendPushBranch } from '../server/control.telefunc.js'
+import { sendOpenPullRequest, sendPushBranch, sendSetHandoff } from '../server/control.telefunc.js'
 import type { RunHandoffState } from '../lib/use-run-handoff.js'
 import { cn } from '../lib/utils.js'
 import { DiffStat } from './DiffView.js'
 import { Button } from './ui/button.js'
+import { Checkbox } from './ui/checkbox.js'
 
 // The end-of-session handoff (#799): what this session produced, and the next step offered rather
 // than described. Before this, a finished session showed no branch, no commits and no diff, so
@@ -50,12 +52,98 @@ export function HandoffSummary({ handoff }: { handoff: RunHandoff | null }) {
 }
 
 /**
+ * What this session will do with its work when it ends (#1102), as two checkboxes in the bar.
+ *
+ * Pre-commitments, not buttons: whatever is still ticked when the session settles happens by
+ * itself. Both start ticked, which is the whole point — the common case costs nothing, and the
+ * work stops arriving on a local branch nobody was told about (#860). Unticking either one is how
+ * a session opts out, and after that the old button is what is left.
+ *
+ * Shown only while the session is live, because once it has settled the decision has been taken
+ * and what matters is what happened, which the summary says.
+ */
+export function HandoffArm({
+  projectId,
+  runId,
+  state,
+}: {
+  projectId: string
+  runId: string
+  state: HandoffState
+}) {
+  const [busy, setBusy] = useState(false)
+  // The event stream is the truth, but it round-trips through a file the run tails, so a click
+  // would visibly bounce back for a beat. `pending` holds what we last asked for until the events
+  // agree, the same shape the quota slider needed for a polled value (#979).
+  const [pending, setPending] = useState<{ push: boolean; pr: boolean } | null>(null)
+  const shown = pending ?? state
+  useEffect(() => {
+    if (pending && pending.push === state.push && pending.pr === state.pr) setPending(null)
+  }, [pending, state.push, state.pr])
+
+  const set = (next: { push: boolean; pr: boolean }): void => {
+    setPending(next)
+    setBusy(true)
+    void sendSetHandoff(projectId, runId, next.push, next.pr)
+      .catch(() => setPending(null))
+      .finally(() => setBusy(false))
+  }
+
+  // A PR needs the branch on the remote, so the two boxes are not independent: each carries the
+  // other where the pair would otherwise be impossible. Deciding this per box, rather than by
+  // normalising a pair, is what keeps it right in both directions — a shared rule cannot tell
+  // "ticked PR" from "unticked push" once it only has the resulting pair to look at.
+  return (
+    <div className="flex items-center gap-x-3 whitespace-nowrap text-xs text-muted-foreground">
+      <Arm
+        label="Push branch"
+        title="Push this session's branch to origin when it finishes."
+        checked={shown.push}
+        disabled={busy}
+        onChange={push => set(push ? { push: true, pr: shown.pr } : { push: false, pr: false })}
+      />
+      <Arm
+        label="Open PR"
+        title="Open a draft pull request when this session finishes. Implies pushing the branch."
+        checked={shown.pr}
+        disabled={busy}
+        onChange={pr => set(pr ? { push: true, pr: true } : { push: shown.push, pr: false })}
+      />
+    </div>
+  )
+}
+
+/** One armed step: a checkbox whose whole label is the hit target. */
+function Arm({
+  label,
+  title,
+  checked,
+  disabled,
+  onChange,
+}: {
+  label: string
+  title: string
+  checked: boolean
+  disabled: boolean
+  onChange: (checked: boolean) => void
+}) {
+  return (
+    <label className="flex cursor-pointer items-center gap-x-1.5 select-none" title={title}>
+      <Checkbox checked={checked} disabled={disabled} onCheckedChange={next => onChange(next === true)} />
+      {label}
+    </label>
+  )
+}
+
+/**
  * The next step, as a button, at the end of the action bar.
  *
- * Push and Open PR are clicks, never automatic: both publish the agent's work to a shared remote
- * under the user's name. They stay in the bar rather than behind the disclosure, because the whole
- * point of the handoff is to be offered without being looked for. Once a PR exists neither shows —
- * the bar links the PR, and the interventions queue (#632) has picked it up by then.
+ * What is left once a session has settled without handing itself off: it opted out of the
+ * checkboxes above, or the automatic attempt failed. Both publish the agent's work to a shared
+ * remote under the user's name, so the button stays the way to do it deliberately. They sit in the
+ * bar rather than behind the disclosure, because the point of the handoff is to be offered without
+ * being looked for. Once a PR exists neither shows — the bar links the PR, and the interventions
+ * queue (#632) has picked it up by then.
  */
 export function HandoffActions({
   projectId,
