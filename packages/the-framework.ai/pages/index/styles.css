@@ -42,6 +42,10 @@ section[id] {
 .nav-btn:hover {
   border-color: #859289 !important;
 }
+.nav-btn-primary:hover {
+  background: #b5cc92 !important;
+  border-color: #b5cc92 !important;
+}
 .pm-tab:hover {
   color: #d3c6aa !important;
 }
@@ -167,10 +171,12 @@ html:not([data-pm]) .pm-tab-npm {
 
 /* --- Responsive --- */
 @media (max-width: 480px) {
-  .nav-btn span {
+  .nav-btn span,
+  .nav-btn-primary span {
     display: none;
   }
-  .nav-btn {
+  .nav-btn,
+  .nav-btn-primary {
     padding: 7px 10px !important;
   }
   /* Stacked and centered footer. */

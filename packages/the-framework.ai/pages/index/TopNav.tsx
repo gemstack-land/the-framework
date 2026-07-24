@@ -74,6 +74,20 @@ export function TopNav() {
           <GitHubIcon size={16} />
           <span>GitHub</span>
         </a>
+        <a
+          href="/go-to-dashboard"
+          className="nav-btn-primary"
+          style={{
+            ...navBtnStyle,
+            background: '#a7c080',
+            border: '1px solid #a7c080',
+            color: '#2d353b',
+            fontWeight: 600,
+          }}
+        >
+          <img src="/assets/logo.svg" alt="" style={{ width: 16, height: 18, display: 'block' }} />
+          <span>Dashboard</span>
+        </a>
       </div>
     </nav>
   )
