@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { cardStyle, h3Style, kickerStyle, mono } from './ui'
+import { cardStyle, h3Style, mono } from './ui'
 
 const leadStyle = { color: '#d3c6aa', fontWeight: 600 } as const
 
@@ -56,8 +56,7 @@ export function Queues() {
   return (
     <section id="queues" style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-        <span style={kickerStyle}>02</span>
-        <h3 style={h3Style}>Queues</h3>
+        <h3 style={h3Style}>2. Queues</h3>
       </div>
       <div
         style={{

@@ -41,7 +41,7 @@ export function Prompts() {
         }}
       >
         <p style={{ margin: 0, fontSize: 15.5, lineHeight: 1.6, color: '#9da9a0', textWrap: 'pretty' }}>
-          <b style={{ color: '#d3c6aa', fontWeight: 600 }}>High-quality prompts</b> — state-of-the-art open source, or
+          Powered by <b style={{ color: '#d3c6aa', fontWeight: 600 }}>high-quality prompts</b> — state-of-the-art open source, or
           bring your own:
         </p>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
