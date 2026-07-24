@@ -2,13 +2,13 @@ import type { CSSProperties } from 'react'
 import { useCopy } from './copy'
 import { kickerStyle, mono } from './ui'
 
-const PMS = {
+export const PMS = {
   npm: { try: 'npx @gemstack/the-framework', install: 'npm i -g @gemstack/the-framework' },
   pnpm: { try: 'pnpm dlx @gemstack/the-framework', install: 'pnpm add -g @gemstack/the-framework' },
   bun: { try: 'bunx @gemstack/the-framework', install: 'bun add -g @gemstack/the-framework' },
   yarn: { try: 'yarn dlx @gemstack/the-framework', install: 'yarn global add @gemstack/the-framework' },
 } as const
-type Pm = keyof typeof PMS
+export type Pm = keyof typeof PMS
 
 const dollarStyle: CSSProperties = { userSelect: 'none', color: '#a7c080' }
 const commentStyle: CSSProperties = { color: '#859289' }
@@ -42,12 +42,12 @@ function Badge({ label, copied }: { label: string; copied: boolean }) {
 // The choice lives on <html data-pm>, set before first paint by the +Head
 // script (no FOUC) and mirrored to localStorage; CSS shows the matching
 // variant, so no React state is involved.
-const currentPm = (): Pm => {
+export const currentPm = (): Pm => {
   const p = document.documentElement.dataset.pm
   return p && p in PMS ? (p as Pm) : 'npm'
 }
 
-const pickPm = (name: Pm) => {
+export const pickPm = (name: Pm) => {
   document.documentElement.dataset.pm = name
   try {
     localStorage.setItem('pm', name)
