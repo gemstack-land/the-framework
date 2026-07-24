@@ -1,10 +1,10 @@
 import { h3Style, Note } from './ui'
 
 const ITEMS = [
-  'Avoiding AI from being lazy',
-  'Avoiding AI making implicit non-consensual decisions',
-  'Enhanced planning',
-  'Enhanced user confirmation — if variability, at-a-glance TL;DR choices',
+  'Anti-laziness',
+  'No non-consensual decisions without asking',
+  'Improved planning',
+  'Improved user confirmation',
 ]
 
 export function EnhancedSystemPrompt() {
