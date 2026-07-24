@@ -47,8 +47,8 @@ export const kickerStyle: CSSProperties = {
 }
 
 // Centered chapter break: the one centered element on a left-anchored page, so
-// the eye finds section boundaries instantly. The short tilted bar echoes the
-// hero's strikethrough (`transform`, not `rotate` — see styles.css on why).
+// the eye finds section boundaries instantly. The accent bar is straight — at
+// this size a tilt reads as misalignment, not as a hero-strike echo.
 export function SectionHead({ title, sub }: { title: ReactNode; sub?: string | React.ReactNode }) {
   return (
     <div
@@ -63,10 +63,7 @@ export function SectionHead({ title, sub }: { title: ReactNode; sub?: string | R
       }}
     >
       <h2 style={h2Style}>{title}</h2>
-      <span
-        aria-hidden
-        style={{ width: 44, height: 4, borderRadius: 2, background: '#a7c080', transform: 'rotate(-2deg)' }}
-      />
+      <span aria-hidden style={{ width: 52, height: 4, borderRadius: 2, background: '#a7c080' }} />
       {sub && <p style={{ margin: 0, fontSize: 17, lineHeight: 1.6, color: '#9da9a0' }}>{sub}</p>}
     </div>
   )
