@@ -194,10 +194,14 @@ export function RunHistory({
       <SidebarContent className="overflow-hidden">
         <ScrollArea className="min-h-0 flex-1">
           {/* pr-3 keeps the rows (and the active card) clear of the overlaid scrollbar (w-2.5). */}
-          <SidebarGroup className="pt-1 pr-3">
-            {/* Recents label sits under the launcher, over the run list (not a page-wide header). */}
+          <SidebarGroup className="pt-3 pr-3">
+            {/* The label sticks to the top of the scroll; the gradient strip under it (also sticky)
+                fades the rows into the background as they scroll up beneath the label. */}
             {hasRecents && (
-              <SidebarGroupLabel className="mt-2 font-normal uppercase tracking-wide text-muted-foreground">Recents</SidebarGroupLabel>
+              <div className="sticky top-0 z-10">
+                <SidebarGroupLabel className="bg-background font-normal tracking-wide text-muted-foreground">Recents</SidebarGroupLabel>
+                <div aria-hidden className="pointer-events-none h-4 bg-gradient-to-b from-background to-transparent" />
+              </div>
             )}
             <SidebarGroupContent>
               <SidebarMenu className="gap-0.5">
