@@ -46,12 +46,28 @@ export const kickerStyle: CSSProperties = {
   color: '#a7c080',
 }
 
-export function SectionHead({ title, sub, small }: { title: ReactNode; sub?: string | React.ReactNode; small?: boolean }) {
-  const H = small ? 'h3' : 'h2'
+// Centered chapter break: the one centered element on a left-anchored page, so
+// the eye finds section boundaries instantly. The short tilted bar echoes the
+// hero's strikethrough (`transform`, not `rotate` — see styles.css on why).
+export function SectionHead({ title, sub }: { title: ReactNode; sub?: string | React.ReactNode }) {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 12, maxWidth: 640 }}>
-      <H style={small ? h3Style : h2Style}>{title}</H>
-      {sub && <p style={{ margin: 0, fontSize: small ? 16 : 17, lineHeight: 1.6, color: '#9da9a0' }}>{sub}</p>}
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        textAlign: 'center',
+        gap: 12,
+        maxWidth: 640,
+        margin: '0 auto',
+      }}
+    >
+      <h2 style={h2Style}>{title}</h2>
+      <span
+        aria-hidden
+        style={{ width: 44, height: 4, borderRadius: 2, background: '#a7c080', transform: 'rotate(-2deg)' }}
+      />
+      {sub && <p style={{ margin: 0, fontSize: 17, lineHeight: 1.6, color: '#9da9a0' }}>{sub}</p>}
     </div>
   )
 }
