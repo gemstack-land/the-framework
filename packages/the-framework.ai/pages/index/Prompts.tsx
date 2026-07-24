@@ -20,8 +20,7 @@ export function Prompts() {
         <p style={{ margin: 0, textWrap: 'pretty' }}>
           <span style={noteLabelStyle}>Note</span>{' '}
           <span style={{ fontStyle: 'italic' }}>
-            Powered by <b style={{ color: '#d3c6aa', fontWeight: 600 }}>high-quality prompts</b> — state-of-the-art
-            open source, or bring your own:
+            Everything is powered by open source <b style={{ color: '#d3c6aa', fontWeight: 600 }}>state-of-the-art prompts</b>, or bring your own:
           </span>
         </p>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
