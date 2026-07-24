@@ -58,7 +58,28 @@ export function RunActionBar({
     <div className="@container flex items-center gap-2 overflow-hidden px-4 py-2">
       {/* Where this session is working (#798/#809): its branch, whether it holds uncommitted work,
           its size on disk, and the PR its branch has — read from this session's own worktree. */}
-      <GitStatusBar projectId={projectId} runId={runId} inline label={label} projectName={projectName} summary={summary} expanded={expanded} onToggle={onToggle} />
+      <GitStatusBar
+        projectId={projectId}
+        runId={runId}
+        inline
+        label={label}
+        projectName={projectName}
+        summary={summary}
+        expanded={expanded}
+        onToggle={onToggle}
+        // Beside the tree's clean/dirty, not at the far end of the bar: "dirty · ready for merge"
+        // is one line of facts about the session, where the end of the row is where its controls
+        // live. Capped, because one of these labels is not a word — a failure carries its reason,
+        // which had a banner row to itself and would otherwise take the row from the branch.
+        runState={
+          status && (
+            <span className="flex shrink-0 items-center gap-1.5" title={status.label}>
+              <span className={cn('h-2 w-2 shrink-0 rounded-full', status.dot)} aria-hidden />
+              <span className={cn('max-w-40 truncate', status.tone)}>{status.label}</span>
+            </span>
+          )
+        }
+      />
       {/* What the session IS sits at the start; what you can DO to it sits at the end. The spacer
           grows but never shrinks (#1030), so a tight row takes its width from the label. */}
       <div className="grow shrink-0" />
@@ -66,17 +87,6 @@ export function RunActionBar({
         {/* The handoff's next step stays visible — the one thing here that moves the session forward
             rather than just opening it somewhere. Everything else is in the ⋮ menu. */}
         {actions}
-        {/* The status sits next to the ⋮ rather than beside the name: it changes as the run goes,
-            and the end of the row is the one place a changing width shifts nothing after it. */}
-        {status && (
-          // Capped, because one of these labels is not a word: a failure carries its reason, which
-          // had a banner row to itself and would otherwise take the row from the branch. The full
-          // text stays on hover, and the feed's own `end` event has it in full either way.
-          <span className="flex items-center gap-1.5" title={status.label}>
-            <span className={cn('h-2 w-2 shrink-0 rounded-full', status.dot)} aria-hidden />
-            <span className={cn('max-w-40 truncate text-xs', status.tone)}>{status.label}</span>
-          </span>
-        )}
         <SessionActionsMenu
           projectId={projectId}
           runId={runId}

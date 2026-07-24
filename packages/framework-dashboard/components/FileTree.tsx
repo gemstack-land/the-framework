@@ -170,7 +170,9 @@ export function FileTree({
               {visible.length} of {files.length} files
             </p>
           )}
-          <Files className="min-h-0 flex-1 text-sm">{renderNode(tree)}</Files>
+          {/* p-0 overrides the primitive's own p-2: the panel around it already sets the inset, and
+              the doubled padding pushed the tree off the filter box above it. */}
+          <Files className="min-h-0 flex-1 p-0 text-sm">{renderNode(tree)}</Files>
         </>
       )}
     </div>

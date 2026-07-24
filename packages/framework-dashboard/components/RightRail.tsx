@@ -142,8 +142,16 @@ export function RightRail({
           </Button>
         ))}
       </div>
-      {/* The panel takes the rail's height, and no more: min-h-0 lets it scroll inside itself rather
-          than push the pinned verdict below it off the bottom. */}
+      {/* Directly under the tabs, and not one of them: the loop's verdict belongs to the run, so it
+          holds still while you move between panels. It never takes more than a third of the rail —
+          a pass with many blockers scrolls inside itself rather than squeezing the panel below. */}
+      {loop && (
+        <div className="max-h-[33%] shrink-0 overflow-y-auto px-2 pb-2">
+          <LoopStatusCard loop={loop} />
+        </div>
+      )}
+      {/* The panel takes what is left of the rail, and no more: min-h-0 lets it scroll inside itself
+          rather than push the verdict above it off the top. */}
       <div className="flex min-h-0 flex-1 flex-col">
         {tab === 'files' && hasFiles ? (
           <FileTree projectId={projectId} runId={runId} files={files} selected={context} onToggle={toggleContext} />
@@ -161,14 +169,6 @@ export function RightRail({
           <DocsPanel projectId={projectId} />
         )}
       </div>
-      {/* Pinned under the panel, and not one of the tabs: the loop's verdict belongs to the run, so
-          it holds still while you move between panels. It never takes more than a third of the rail
-          — a pass with many blockers scrolls inside itself rather than squeezing the panel above. */}
-      {loop && (
-        <div className="max-h-[33%] shrink-0 overflow-y-auto border-t border-border p-2">
-          <LoopStatusCard loop={loop} />
-        </div>
-      )}
     </aside>
   )
 }

@@ -9,7 +9,9 @@ import { Badge } from './ui/badge.js'
 export function LoopStatusCard({ loop }: { loop: LoopStatus }) {
   return (
     <section className="rounded-lg border border-border p-3">
-      <h3 className="mb-1 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+      {/* Titled like the sidebar's "Recents": a section label in the same voice, not a card heading
+          shouting in caps. Same size, weight and tone, so the two rails read as one app. */}
+      <h3 className="mb-1 flex h-8 items-center gap-2 text-xs font-normal tracking-wide text-muted-foreground">
         Loop status
         {/* "ended early", not "stopped": the loop finishing without passing is not the user
             stopping the session, and the session's status label may say "stopped" for that. */}
