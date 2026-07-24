@@ -302,7 +302,7 @@ export function Hero() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           <span style={kickerStyle}>What is it?</span>
           <p style={{ margin: 0, fontSize: 15.5, lineHeight: 1.7, color: '#9da9a0', textWrap: 'pretty' }}>
-            Turns AI agents into autonomous teammates that handle work end-to-end — while you stay in control of key
+            It turns AI agents into autonomous teammates that handle work end-to-end — while you stay in control of key
             decisions. See <a href="#how-it-works">How it works</a>.
           </p>
         </div>
