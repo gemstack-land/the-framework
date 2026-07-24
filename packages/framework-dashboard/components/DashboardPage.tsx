@@ -10,6 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from './ui/card.js'
 import { usePolled } from '../lib/use-async.js'
 import { usePreferences } from '../lib/preferences.js'
 import { OnboardingChecklist } from './OnboardingChecklist.js'
+import { HotTickets } from './HotTickets.js'
 import { cn } from '../lib/utils.js'
 import { formatDateTime, formatRelative } from '../lib/format-date.js'
 import { ScrollArea } from './ui/scroll-area.js'
@@ -42,6 +43,8 @@ export function DashboardPage({
         {!onboardingDismissed && <OnboardingChecklist dismissible onSelectProject={onSelectProject} />}
 
         <NeedsYou items={interventions} onSelectProject={onSelectProject} />
+
+        <HotTickets onSelectProject={onSelectProject} />
 
         {data === null ? (
           <p className="text-sm text-muted-foreground">Loading…</p>
