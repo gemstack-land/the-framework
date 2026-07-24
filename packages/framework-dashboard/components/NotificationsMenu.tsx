@@ -110,7 +110,7 @@ export function NotificationsMenu() {
             title="A session awaiting your answer, or a PR ready to review"
             className="items-start"
           >
-            <OptionLabel label="Needs you" description="A session awaiting you, or a PR to review" />
+            <OptionLabel label="Human Queue" description="A session awaiting you, or a PR to review" />
           </DropdownMenuCheckboxItem>
           <DropdownMenuCheckboxItem
             checked={activity}

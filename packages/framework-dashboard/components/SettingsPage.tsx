@@ -158,7 +158,7 @@ export function SettingsPage({ onSelectProject }: { onSelectProject?: ((id: stri
             }
           />
           <ToggleRow
-            label="Needs you"
+            label="Human Queue"
             description="A session awaiting your answer, or a PR ready to review."
             checked={preferences.notifyHumanIntervention ?? true}
             onChange={next => updatePreferences({ notifyHumanIntervention: next })}

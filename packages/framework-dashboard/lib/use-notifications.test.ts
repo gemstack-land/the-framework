@@ -32,7 +32,7 @@ describe('useInterventionNotifications (#627)', () => {
     expect(ctor).not.toHaveBeenCalled()
     rerender({ items: [item(1, 'u1'), item(2, 'u2')] }) // a genuinely new PR -> notify once
     expect(ctor).toHaveBeenCalledTimes(1)
-    expect(ctor.mock.calls[0]![0]).toContain('Needs you')
+    expect(ctor.mock.calls[0]![0]).toContain('Human Queue')
   })
 
   test('fires for a paused run that appears later, showing its question (#636)', () => {

@@ -65,7 +65,7 @@ function useNewItemNotifications<T>(items: T[], enabled: boolean, spec: Notifica
 const INTERVENTIONS: NotificationSpec<Intervention> = {
   pickNew: pickNewInterventions,
   keyOf: interventionKey,
-  title: (first, count) => (count === 1 ? `Needs you · ${first.projectName}` : `${count} items need you`),
+  title: (first, count) => (count === 1 ? `Human Queue · ${first.projectName}` : `${count} items in your Human Queue`),
   // A PR by number, a paused run by its question (#636), a finished run by what sits unpushed (#860).
   label: item => {
     if (item.kind === 'awaiting') return item.title
