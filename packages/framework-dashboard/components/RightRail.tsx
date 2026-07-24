@@ -126,7 +126,7 @@ export function RightRail({
     >
       {/* flex-wrap: up to 7 tabs share a w-80 rail, and without it the tail clipped (#948).
           Announced as the tabset it visually is. */}
-      <div role="tablist" aria-label="Rail panels" className="flex flex-wrap gap-1 border-b border-border p-2">
+      <div role="tablist" aria-label="Rail panels" className="flex flex-wrap gap-1 p-2">
         {tabs.map(t => (
           <Button
             key={t}
@@ -142,16 +142,8 @@ export function RightRail({
           </Button>
         ))}
       </div>
-      {/* Under the tabs, not one of them: the loop's verdict belongs to the run, so it holds still
-          while you move between panels. It never grows past a third of the rail — a pass with many
-          blockers scrolls inside itself rather than squeezing the panel below. */}
-      {loop && (
-        <div className="max-h-[33%] shrink-0 overflow-y-auto border-b border-border p-2">
-          <LoopStatusCard loop={loop} />
-        </div>
-      )}
-      {/* Whatever is left is the panel's, and never less than nothing: min-h-0 lets it scroll inside
-          rather than push the block above it off the rail. */}
+      {/* The panel takes the rail's height, and no more: min-h-0 lets it scroll inside itself rather
+          than push the pinned verdict below it off the bottom. */}
       <div className="flex min-h-0 flex-1 flex-col">
         {tab === 'files' && hasFiles ? (
           <FileTree projectId={projectId} runId={runId} files={files} selected={context} onToggle={toggleContext} />
@@ -169,6 +161,14 @@ export function RightRail({
           <DocsPanel projectId={projectId} />
         )}
       </div>
+      {/* Pinned under the panel, and not one of the tabs: the loop's verdict belongs to the run, so
+          it holds still while you move between panels. It never takes more than a third of the rail
+          — a pass with many blockers scrolls inside itself rather than squeezing the panel above. */}
+      {loop && (
+        <div className="max-h-[33%] shrink-0 overflow-y-auto border-t border-border p-2">
+          <LoopStatusCard loop={loop} />
+        </div>
+      )}
     </aside>
   )
 }
