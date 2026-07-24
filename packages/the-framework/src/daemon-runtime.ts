@@ -1,6 +1,6 @@
 import { spawn, type ChildProcess } from 'node:child_process'
 import { basename, join, resolve } from 'node:path'
-import { rm, stat } from 'node:fs/promises'
+import { mkdir, rm, stat } from 'node:fs/promises'
 import {
   runIdFromStartedAt,
   addWorktree,
@@ -17,6 +17,7 @@ import {
   removeWorktree,
   pruneWorktrees,
   readLiveMetas,
+  readLiveMeta,
   resolveRunCheckout,
   FRAMEWORK_DIR,
   EVENTS_FILE,
@@ -35,7 +36,7 @@ import { tailEvents } from './dashboard-rpc/events-tail.js'
 import { isSafeVia } from './conversations.js'
 import { createPreviewRuntime } from './preview-runtime.js'
 import { scopedKey, parseScopedKey, keyBelongsTo } from './runtime-keys.js'
-import { addProject, listProjects, projectId } from './registry.js'
+import { addProject, listProjects, projectId, topicScratchPath } from './registry.js'
 import { installProject, enumerateGitRepos } from './install.js'
 import { isGitRepo } from './project.js'
 import { isCliTimeout } from './cli-exec.js'
@@ -76,6 +77,20 @@ export function resolveSpawnBin(explicitBinPath: string | undefined): string {
 export async function cleanupTimedOutWorktree(repo: string, runId: string, err: unknown): Promise<void> {
   if (!isCliTimeout(err)) return
   await rm(worktreePath(repo, runId), { recursive: true, force: true }).catch(() => {})
+}
+
+/**
+ * Retire a finished topic run's scratch dir (#1120), by the same retention rule as a worktree
+ * ({@link createProjectRuntime}'s tearDownWorktree): a run that finished cleanly has nothing left to
+ * look at, so its scratch goes; a failed or stopped run keeps it, which is when you want to see what
+ * it died holding. The scratch is not a git checkout, so there is no branch to preserve and no work
+ * to commit — the run's own `run.json`/`events.jsonl` live inside it and go with it. Best-effort:
+ * this runs off a process-exit event with nothing to return to.
+ */
+export async function tearDownTopicScratch(scratchCwd: string): Promise<void> {
+  const meta = await readLiveMeta(scratchCwd).catch(() => undefined)
+  if (meta?.status !== 'done') return // failed / stopped / unreadable: keep it for inspection
+  await rm(scratchCwd, { recursive: true, force: true }).catch(() => {})
 }
 
 /** Spawn a detached, unref'd framework child (`node <binPath> <args...>`) that outlives us. */
@@ -222,6 +237,9 @@ export interface ProjectRuntime {
  */
 export function createProjectRuntime({ cwd, env, binPath }: ProjectRuntimeOptions): ProjectRuntime {
   const homeId = projectId(resolve(cwd))
+  // The run-key namespace for project-less topic runs (#1120): `@`-prefixed so it can never equal a
+  // real project id (projectId always appends `-<hash>`), so a topic run belongs to no project.
+  const TOPIC_PROJECT_KEY = '@topic'
   // Live run pids, keyed per run rather than per project (#736) — see onStart for the key.
   const activeRuns = new Map<string, number>()
   const starting = new Set<string>() // reserved keys mid-spawn, to close the async gap
@@ -353,6 +371,64 @@ export function createProjectRuntime({ cwd, env, binPath }: ProjectRuntimeOption
     }
   }
 
+  /**
+   * Start a project-less "topic" run (#1120): no project, no repo, no worktree. The run spawns in a
+   * neutral scratch dir under the config home, so the agent has nothing to touch — the "ask a
+   * question / plan / draft a ticket without a repo" path. It still produces the normal lifecycle
+   * (`events.jsonl`, `run.json`, settle) inside that dir, so its files are readable exactly like a
+   * worktree run's. Its `--run-id` is unique per start, so the busy guard never trips; it is keyed
+   * off {@link TOPIC_PROJECT_KEY} so it belongs to no registered project.
+   */
+  const onStartTopic = async (
+    prompt: string,
+    kind: StartRunKind,
+    options: StartRunOptions,
+  ): Promise<StartRunResult> => {
+    let realBin: string
+    try {
+      realBin = resolveSpawnBin(binPath)
+    } catch (err) {
+      return { ok: false, error: errorMessage(err) }
+    }
+    const runId = runIdFromStartedAt(new Date().toISOString())
+    const scratchCwd = topicScratchPath(env, runId)
+    try {
+      await mkdir(scratchCwd, { recursive: true })
+    } catch (err) {
+      return { ok: false, error: `could not create a scratch directory for this topic run: ${errorMessage(err)}` }
+    }
+    const key = scopedKey(TOPIC_PROJECT_KEY, runId)
+    starting.add(key)
+    try {
+      const runArgs =
+        kind === 'research'
+          ? ['research', ...(prompt ? [prompt] : [])]
+          : kind === 'prompt'
+            ? ['prompt', prompt]
+            : [prompt]
+      const child = spawnDetached(realBin, [
+        ...runArgs,
+        ...startOptionFlags(options),
+        '--no-dashboard',
+        '--cwd',
+        scratchCwd,
+        '--run-id',
+        runId,
+        '--topic',
+      ])
+      const settle = (): void => {
+        activeRuns.delete(key)
+        void tearDownTopicScratch(scratchCwd)
+      }
+      child.once('error', settle)
+      child.once('exit', settle)
+      if (child.pid !== undefined) activeRuns.set(key, child.pid)
+      return { ok: true, runId }
+    } finally {
+      starting.delete(key)
+    }
+  }
+
   // Start-from-dashboard (#345): spawn `framework "<prompt>" --no-dashboard --cwd <checkout>`
   // as a detached child — the same spawn ensureDaemon uses for the daemon itself. The run
   // streams into the page via its tailed event log, and its gates + Stop steer through the
@@ -395,6 +471,9 @@ export function createProjectRuntime({ cwd, env, binPath }: ProjectRuntimeOption
       }
       return result
     }
+    // Project-less topic run (#1120): no project, no repo, no worktree — spawned into a neutral
+    // scratch dir instead. Kept a branch of its own rather than overloading "absent projectId = home".
+    if (options.topic) return onStartTopic(prompt, kind, options)
     const projectKey = targetProjectId ?? homeId
     const projectCwd = await resolveProject(targetProjectId)
     if (!projectCwd) return { ok: false, error: `unknown project: ${targetProjectId}` }

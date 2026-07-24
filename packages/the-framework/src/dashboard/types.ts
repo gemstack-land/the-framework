@@ -101,6 +101,13 @@ export interface StartRunOptions {
    * ordinary local run and does not relay onward.
    */
   remote?: { url: string; token: string; label?: string }
+  /**
+   * Start this run project-less (#1120): it spawns in a neutral scratch dir with no repo or worktree,
+   * so the agent has no code to touch — the "ask a question / plan / draft a ticket without a repo"
+   * path. Set only by {@link sendStartTopic}; a project run leaves it absent. No `projectId` travels
+   * with it, and it allocates no worktree.
+   */
+  topic?: true
 }
 
 /**

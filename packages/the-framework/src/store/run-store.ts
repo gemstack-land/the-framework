@@ -147,6 +147,12 @@ export interface RunMeta {
   target?: 'local' | 'actions' | 'remote'
   /** The connected device a remote run (#1067) executes on, for the session list + notice after a reload. */
   remoteLabel?: string
+  /**
+   * A project-less "topic" run (#1120): started with no project, in a neutral scratch dir with no
+   * repo. Persisted so a reader can tell it from a project run without the daemon's memory (which a
+   * restart loses), and so teardown retains vs removes its scratch dir by the same policy as a worktree.
+   */
+  topic?: true
 }
 
 /**
@@ -215,6 +221,8 @@ export interface OpenStoreOptions {
   continueRun?: boolean
   /** Where this run executes (#1053): recorded on the meta so the run view can read it. */
   target?: 'local' | 'actions'
+  /** A project-less topic run (#1120): recorded on the meta so a reader can tell it from a project run. */
+  topic?: boolean
 }
 
 /**
@@ -291,7 +299,14 @@ export interface RunOwner {
 }
 
 /** The seed meta a run starts from, before any event is folded in. */
-function freshMeta(startedAt: string, intent?: string, owner?: RunOwner, id?: string, target?: 'local' | 'actions'): RunMeta {
+function freshMeta(
+  startedAt: string,
+  intent?: string,
+  owner?: RunOwner,
+  id?: string,
+  target?: 'local' | 'actions',
+  topic?: boolean,
+): RunMeta {
   return {
     version: RUN_META_VERSION,
     status: 'running',
@@ -303,6 +318,8 @@ function freshMeta(startedAt: string, intent?: string, owner?: RunOwner, id?: st
     ...(intent ? { intent } : {}),
     // Only `actions` travels; `local` is the default every reader already assumes.
     ...(target === 'actions' ? { target } : {}),
+    // Only the topic flag travels; a project run is the default (absent).
+    ...(topic ? { topic: true } : {}),
   }
 }
 
@@ -402,7 +419,7 @@ export class RunStore {
     await fs.mkdir(dir)
     const owner = opts.owner ?? { pid: process.pid, host: hostname() }
     const clock = opts.clock ?? (() => new Date().toISOString())
-    const store = new RunStore(fs, dir, clock, freshMeta(now, opts.intent, owner, opts.id, opts.target))
+    const store = new RunStore(fs, dir, clock, freshMeta(now, opts.intent, owner, opts.id, opts.target, opts.topic))
     if (opts.continueRun) {
       // Reopen: the log stays, the row keeps its original intent, and this process takes ownership
       // so a liveness probe (#716) reads the run as alive rather than as an orphan.

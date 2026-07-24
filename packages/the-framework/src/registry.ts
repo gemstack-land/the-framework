@@ -248,6 +248,20 @@ export function registryPath(env: NodeJS.ProcessEnv): string {
   return join(env.HOME ?? '', '.' + REGISTRY_FILE)
 }
 
+/** The dotted basename topic scratch dirs live under, mirroring the registry file's. */
+const TOPICS_DIR = 'the-framework-topics'
+
+/**
+ * The neutral scratch directory a project-less "topic" run (#1120) executes in: `<runId>/`
+ * under a config-home folder, resolved exactly like {@link registryPath} so it never lands in a
+ * repo. It is deliberately NOT a git checkout, which is what makes a topic run repo-less — a run
+ * to ask a question, plan, or draft a ticket with no code for the agent to touch.
+ */
+export function topicScratchPath(env: NodeJS.ProcessEnv, runId: string): string {
+  const root = env.XDG_CONFIG_HOME ? join(env.XDG_CONFIG_HOME, TOPICS_DIR) : join(env.HOME ?? '', '.' + TOPICS_DIR)
+  return join(root, runId)
+}
+
 /** Minimal fs seam so the registry is unit-testable without touching disk. */
 export interface RegistryFs {
   /** Rejects when the file is absent. */
