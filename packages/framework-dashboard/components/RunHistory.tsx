@@ -158,9 +158,10 @@ export function RunHistory({
     // follow-up), the sidebar carries the app's chrome — brand, global nav, and the utility
     // controls in the footer — so the workspace and right rail get the full height.
     <Sidebar collapsible="none" className="w-(--sidebar-width) border-r border-sidebar-border">
-      <SidebarHeader className="gap-3 pb-0">
-        {/* The mark + wordmark, the way home (#909), now that there is no navbar to hold them. */}
-        <div className="px-1 pt-1">
+      <SidebarHeader className="gap-1 pb-0">
+        {/* The mark + wordmark, the way home (#909), now that there is no navbar to hold them.
+            A touch of space below it, then New and Overview sit tight as one nav group. */}
+        <div className="px-1 pt-1 pb-1">
           <BrandLink working={working} onNavigate={onDashboard} />
         </div>
         {/* "New" starts a session — but where depends on what exists: with no project it prompts to
@@ -255,7 +256,8 @@ function OverviewButton({ active, count, onClick }: { active: boolean; count: nu
       onClick={onClick}
       aria-current={active ? 'page' : undefined}
       className={cn(
-        'flex w-full items-center gap-2 rounded-md px-2 py-2 text-sm font-medium transition-colors',
+        // Same box as New (h-9 px-2 gap-2) so the two rows' icons and labels line up exactly.
+        'flex h-9 w-full items-center gap-2 rounded-md px-2 text-sm font-medium transition-colors',
         active ? 'bg-sidebar-accent text-sidebar-accent-foreground' : 'text-foreground hover:bg-sidebar-accent/60',
       )}
     >
@@ -295,9 +297,10 @@ function NewButton({
   onProjectAdded?: (() => void) | undefined
 }) {
   const [adding, setAdding] = useState(false)
-  // The active fill (same tokens as the Overview item) only when this project's launcher is the
-  // current view; otherwise plain, since New is an action rather than a place.
-  const cls = cn('w-full justify-start gap-2', active && 'bg-sidebar-accent text-sidebar-accent-foreground')
+  // Same box as the Overview row (h-9 px-2 gap-2) so their icons and labels align; px-2 overrides
+  // the button size's default px-4. The active fill (same tokens as Overview) only on this project's
+  // launcher; otherwise plain, since New is an action rather than a place.
+  const cls = cn('h-9 w-full justify-start gap-2 px-2', active && 'bg-sidebar-accent text-sidebar-accent-foreground')
   const start = (id: string) => (onNewSessionInProject ? onNewSessionInProject(id) : onSelect(null))
 
   // In a project, or on the Overview with exactly one: start a session straight away.
