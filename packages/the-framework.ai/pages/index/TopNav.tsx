@@ -66,14 +66,6 @@ export function TopNav() {
           fontSize: 14.5,
         }}
       >
-        <a href={DISCORD_URL} className="nav-btn" style={navBtnStyle}>
-          <DiscordIcon width={16} height={13} />
-          <span>Discord</span>
-        </a>
-        <a href={GITHUB_URL} className="nav-btn" style={navBtnStyle}>
-          <GitHubIcon size={16} />
-          <span>GitHub</span>
-        </a>
         {/* Primary via green border, not fill — the multicolor logo drowns on a green background. */}
         <a
           href="/go-to-dashboard"
@@ -87,6 +79,14 @@ export function TopNav() {
         >
           <img src="/assets/logo.svg" alt="" style={{ width: 16, height: 18, display: 'block' }} />
           <span>Dashboard</span>
+        </a>
+        <a href={DISCORD_URL} className="nav-btn" style={navBtnStyle}>
+          <DiscordIcon width={16} height={13} />
+          <span>Discord</span>
+        </a>
+        <a href={GITHUB_URL} className="nav-btn" style={navBtnStyle}>
+          <GitHubIcon size={16} />
+          <span>GitHub</span>
         </a>
       </div>
     </nav>
