@@ -21,6 +21,7 @@ import {
   SidebarMenu,
   SidebarMenuItem,
 } from './ui/sidebar.js'
+import { ScrollArea } from './ui/scroll-area.js'
 
 // One rendered row of the rail, from either source (a project's own run, or a pooled cross-project
 // recent): the RunMeta to show, an optional project label (only on the Overview, where the rail
@@ -142,43 +143,47 @@ export function RunHistory({
           onProjectAdded={onProjectAdded}
         />
       </SidebarHeader>
-      <SidebarContent>
-        <SidebarGroup className="pt-1">
-          {/* Recents label sits under the launcher, over the run list (not a page-wide header). */}
-          {hasRecents && (
-            <SidebarGroupLabel className="uppercase tracking-wide text-muted-foreground">Recents</SidebarGroupLabel>
-          )}
-          <SidebarGroupContent>
-            <SidebarMenu className="gap-0.5">
-              {/* A just-started run, before its run.json exists — highlighted while following it. */}
-              {showOptimistic && (
-                <SidebarMenuItem>
-                  <RunRow status="running" intent={optimistic ?? undefined} subtitle="starting…" active={starting} dim onClick={() => onSelect(null)} />
-                </SidebarMenuItem>
-              )}
-              {rows.map(row => (
-                <SidebarMenuItem key={row.key}>
-                  <RunRow
-                    status={row.run.status}
-                    intent={runLabel(row.run)}
-                    driver={row.run.driver}
-                    // On the Overview the project is what tells the rows apart, so it leads the meta
-                    // line; a project's own rail already knows its project, so it shows just the time.
-                    subtitle={row.project ? `${row.project} · ${formatRelative(row.run.startedAt)}` : formatRelative(row.run.startedAt)}
-                    active={row.active}
-                    waiting={row.run.settledAt !== undefined}
-                    remote={row.run.target === 'remote'}
-                    {...(row.run.remoteLabel ? { remoteLabel: row.run.remoteLabel } : {})}
-                    onClick={row.onClick}
-                  />
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-            {!hasRecents && (
-              <p className="whitespace-nowrap px-2 py-1 text-sm text-muted-foreground">No sessions yet.</p>
+      {/* The themed ScrollArea (#913) instead of the sidebar's native overflow bar, matching the
+          Overview: suppress SidebarContent's own `overflow-auto` and let the ScrollArea own it. */}
+      <SidebarContent className="overflow-hidden">
+        <ScrollArea className="min-h-0 flex-1">
+          <SidebarGroup className="pt-1">
+            {/* Recents label sits under the launcher, over the run list (not a page-wide header). */}
+            {hasRecents && (
+              <SidebarGroupLabel className="uppercase tracking-wide text-muted-foreground">Recents</SidebarGroupLabel>
             )}
-          </SidebarGroupContent>
-        </SidebarGroup>
+            <SidebarGroupContent>
+              <SidebarMenu className="gap-0.5">
+                {/* A just-started run, before its run.json exists — highlighted while following it. */}
+                {showOptimistic && (
+                  <SidebarMenuItem>
+                    <RunRow status="running" intent={optimistic ?? undefined} subtitle="starting…" active={starting} dim onClick={() => onSelect(null)} />
+                  </SidebarMenuItem>
+                )}
+                {rows.map(row => (
+                  <SidebarMenuItem key={row.key}>
+                    <RunRow
+                      status={row.run.status}
+                      intent={runLabel(row.run)}
+                      driver={row.run.driver}
+                      // On the Overview the project is what tells the rows apart, so it leads the meta
+                      // line; a project's own rail already knows its project, so it shows just the time.
+                      subtitle={row.project ? `${row.project} · ${formatRelative(row.run.startedAt)}` : formatRelative(row.run.startedAt)}
+                      active={row.active}
+                      waiting={row.run.settledAt !== undefined}
+                      remote={row.run.target === 'remote'}
+                      {...(row.run.remoteLabel ? { remoteLabel: row.run.remoteLabel } : {})}
+                      onClick={row.onClick}
+                    />
+                  </SidebarMenuItem>
+                ))}
+              </SidebarMenu>
+              {!hasRecents && (
+                <p className="whitespace-nowrap px-2 py-1 text-sm text-muted-foreground">No sessions yet.</p>
+              )}
+            </SidebarGroupContent>
+          </SidebarGroup>
+        </ScrollArea>
       </SidebarContent>
     </Sidebar>
   )
