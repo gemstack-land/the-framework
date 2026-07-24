@@ -153,6 +153,12 @@ export interface RunMeta {
    * restart loses), and so teardown retains vs removes its scratch dir by the same policy as a worktree.
    */
   topic?: true
+  /**
+   * The project a topic run (#1120) bound itself to (#1121): set from a `bind` event when the agent
+   * calls `create_project`. Present means the run is no longer project-less; the worktree re-home it
+   * implies is #1122.
+   */
+  boundProjectId?: string
 }
 
 /**
@@ -273,6 +279,9 @@ export function applyEventToMeta(meta: RunMeta, event: FrameworkEvent, at: strin
       break
     case 'settled':
       next.settledAt = at
+      break
+    case 'bind':
+      next.boundProjectId = event.projectId
       break
     case 'driver':
       // Any new turn means the agent is working again, so the run is no longer parked (#785).

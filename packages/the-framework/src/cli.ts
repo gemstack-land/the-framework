@@ -18,6 +18,7 @@ import { createRunDriver } from './run-driver.js'
 import { githubSlugFor } from './dashboard/github.js'
 import type { ActionsDriverOptions } from './driver/index.js'
 import { launchSharedBrowser, withBrowser, type SharedBrowser } from './browser.js'
+import { runProjectsMcp, withProjectsMcp, RUN_CWD_ENV } from './projects-mcp.js'
 import { connectCdp, startBrowserStream, type BrowserStream } from './browser-stream.js'
 import { hostExecutor } from './host-exec.js'
 import { startDashboard, singleProjectProvider, resolveDashboardBundle, type Dashboard } from './dashboard/index.js'
@@ -355,6 +356,8 @@ export interface CliOptions {
   host?: string | undefined
   dashboard: boolean
   relayServe: boolean
+  /** `mcp-projects` (#1121, spike): run the projects MCP stdio server. Internal — a topic run spawns it. */
+  mcpProjects?: boolean
   share?: string | undefined
   sessionLink?: string | undefined
   permissionMode?: PermissionMode | undefined
@@ -661,6 +664,9 @@ export function parseArgs(argv: string[]): CliOptions {
     words.shift()
   } else if (words[0] === 'relay') {
     opts.relayServe = true
+    words.shift()
+  } else if (words[0] === 'mcp-projects') {
+    opts.mcpProjects = true
     words.shift()
   } else if (words[0] === 'stop') {
     opts.stop = true
@@ -1219,6 +1225,13 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
   // live (#230). It runs until interrupted; a run publishes to it with `--share`.
   if (opts.relayServe) return runRelayServer(opts, io)
 
+  // `mcp-projects` (#1121, spike): the projects MCP stdio server a topic run spawns so its agent can
+  // bind to a project by calling a tool. Reads the run's cwd from the env its parent handed it.
+  if (opts.mcpProjects) {
+    await runProjectsMcp({ runCwd: process.env[RUN_CWD_ENV] })
+    return 0
+  }
+
   // Resume a previous run's dashboard from its persisted log — the reload half of
   // #211. No agent runs; we just replay the saved events into a fresh stream so
   // the dashboard rehydrates exactly as it looked, then leave it up read-only.
@@ -1431,6 +1444,9 @@ async function runBuild(opts: CliOptions, io: CliIO): Promise<number> {
   // Assigned once the journal exists, which is after the control watcher is wired: a change that
   // arrives before then still lands on `armedHandoff`, it just has no event to announce it yet.
   let announceHandoff: ((push: boolean, pr: boolean) => void) | undefined
+  // Same deferral as announceHandoff: the projects MCP tool binds this topic run to a project
+  // (#1121, spike), and only an event puts that on the meta a later-opened tab can read.
+  let recordBind: ((projectId: string) => void) | undefined
 
   let control: ControlWatcher | undefined
   if (isSteerable(opts, newDashboard, await daemonStatus() !== undefined)) {
@@ -1450,6 +1466,11 @@ async function runBuild(opts: CliOptions, io: CliIO): Promise<number> {
           armedHandoff.push = entry.push || entry.pr
           armedHandoff.pr = entry.pr
           announceHandoff?.(armedHandoff.push, armedHandoff.pr)
+          return
+        }
+        if (entry.kind === 'bind') {
+          // #1122 re-homes the run into the bound project's worktree; here we only record it.
+          recordBind?.(entry.projectId)
           return
         }
         const resolve = pendingChoices.get(entry.id)
@@ -1527,6 +1548,8 @@ async function runBuild(opts: CliOptions, io: CliIO): Promise<number> {
   // only thing a dashboard tab opened mid-run can read the boxes back from.
   announceHandoff = (push, pr) => onEvent({ kind: 'handoff-armed', push, pr })
   announceHandoff(armedHandoff.push, armedHandoff.pr)
+  // Wired now the journal exists: a bind that arrives from the projects MCP tool folds to meta (#1121).
+  recordBind = projectId => onEvent({ kind: 'bind', projectId })
 
   // Fire the #326 on-before-mergeable prompt once a --on-before-mergeable run has settled and the agent
   // signalled setReadyForMerge(). Skipped for a fake/offline run and when the run was stopped —
@@ -1645,7 +1668,9 @@ async function runBuild(opts: CliOptions, io: CliIO): Promise<number> {
     ? fakeDriver()
     : createRunDriver({
         agent: opts.agent,
-        claudeOpts: withBrowser(claudeOpts, opts.browser, sharedBrowser?.browserUrl),
+        // A topic run (#1120) also gets the projects MCP server, so its agent can bind to a project
+        // by calling `create_project` (#1121, spike). Folded after the browser, same `mcpServers` map.
+        claudeOpts: withProjectsMcp(withBrowser(claudeOpts, opts.browser, sharedBrowser?.browserUrl), opts.topic, cwd),
         ...(opts.target ? { target: opts.target } : {}),
         ...(actionsConfig ? { actionsConfig } : {}),
       })

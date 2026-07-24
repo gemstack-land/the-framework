@@ -210,6 +210,12 @@ export type FrameworkEvent =
    */
   | { kind: 'settled' }
   /**
+   * A project-less topic run (#1120) bound itself to a project (#1121): the agent called the
+   * `create_project` MCP tool, which signalled the bind over the control channel. Recorded so the
+   * run's meta names the project it re-homes into (#1122). Spike: the tools-based bind variant.
+   */
+  | { kind: 'bind'; projectId: string }
+  /**
    * Cumulative token + cost usage for the run so far (#322). Emitted after each
    * agent turn that reports usage; the dashboard renders a live spend readout and
    * the run stops itself once `costUsd` reaches the budget cap, if one is set.

@@ -63,8 +63,10 @@
   },
   "dependencies": {
     "@gemstack/ai-autopilot": "workspace:^",
+    "@gemstack/mcp": "workspace:^",
     "telefunc": "^0.2.22",
-    "yaml": "^2.5.0"
+    "yaml": "^2.5.0",
+    "zod": "^4.0.0"
   },
   "devDependencies": {
     "@types/jsdom": "^28.0.3",

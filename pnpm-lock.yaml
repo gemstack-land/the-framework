@@ -422,12 +422,18 @@ importers:
       '@gemstack/ai-autopilot':
         specifier: workspace:^
         version: link:../ai-autopilot
+      '@gemstack/mcp':
+        specifier: workspace:^
+        version: link:../mcp
       telefunc:
         specifier: ^0.2.22
         version: 0.2.22(@babel/core@7.29.7)(@babel/parser@7.29.7)(@babel/types@7.29.7)(react-streaming@0.4.20(react-dom@19.2.7(react@19.2.7))(react@19.2.7))(react@19.2.7)(srvx@0.11.21)(vite@8.1.4(@types/node@20.19.43)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.22.4)(yaml@2.9.0))
       yaml:
         specifier: ^2.5.0
         version: 2.9.0
+      zod:
+        specifier: ^4.0.0
+        version: 4.4.3
     devDependencies:
       '@types/jsdom':
         specifier: ^28.0.3
