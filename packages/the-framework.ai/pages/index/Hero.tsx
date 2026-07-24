@@ -309,8 +309,7 @@ export function Hero() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           <span style={kickerStyle}>Any software</span>
           <p style={{ margin: 0, fontSize: 15.5, lineHeight: 1.7, color: '#9da9a0', textWrap: 'pretty' }}>
-            (Semi-)autonomously build anything from scripts and web apps to complex software (e.g.{' '}
-            <a href="https://telefunc.com/stream">Telefunc Stream</a>).
+            (Semi-)autonomously build anything from scripts and web apps to complex software.
           </p>
         </div>
       </div>
