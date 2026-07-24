@@ -17,9 +17,19 @@ export function HowItWorks() {
         </ol>
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 'clamp(44px, 8vw, 64px)' }}>
-        <EnhancedSystemPrompt />
+        {/* The two introduced things side by side, in the subtext's enumeration order. */}
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(min(420px, 100%), 1fr))',
+            gap: 'clamp(44px, 8vw, 64px) clamp(28px, 5vw, 48px)',
+            alignItems: 'start',
+          }}
+        >
+          <EnhancedSystemPrompt />
+          <Queues />
+        </div>
         <Prompts />
-        <Queues />
       </div>
     </section>
   )
