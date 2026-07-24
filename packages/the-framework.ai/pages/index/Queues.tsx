@@ -2,6 +2,8 @@ import type { ReactNode } from 'react'
 import type { EmojiChar } from './ui'
 import { cardStyle, CodeChip, Emoji, h3Style } from './ui'
 
+const leadStyle = { color: '#d3c6aa', fontWeight: 600 } as const
+
 function P({ children }: { children: ReactNode }) {
   return <p style={{ margin: 0, fontSize: 14, lineHeight: 1.6, color: '#9da9a0' }}>{children}</p>
 }
@@ -40,7 +42,7 @@ export function Queues() {
             confirmation otherwise).
           </P>
           <P>
-    Agents autonomously populating the AI queue is what <a href="#autonomous-ai" style={{ fontWeight: 600 }}>makes AI autonomous</a>.
+            Agents autonomously populating the AI queue is what <b style={leadStyle}>makes AI autonomous</b>.
           </P>
           <P>
             Technically, it's just a <CodeChip fontSize={12}>TODO_AGENTS.md</CodeChip> file in your Git repositories.
@@ -52,10 +54,7 @@ export function Queues() {
             (important) decisions with subtle pros and cons.
           </P>
           <P>
-            <a href="#features" style={{ fontWeight: 600 }}>
-              It's your cockpit
-            </a>{' '}
-            — it keeps humans under control.
+            <b style={leadStyle}>It's your cockpit</b> — it keeps humans under control.
           </P>
         </QueueCard>
       </div>

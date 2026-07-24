@@ -33,8 +33,8 @@ export function Features() {
         <div style={{ ...featureCardStyle, gap: 14 }}>
           <h3 style={{ margin: 0, fontSize: 19, fontWeight: 600 }}>Dashboard</h3>
           <FeatureText>
-            Pro-rata usage quota, current AI agents, <a href="#how-it-works">queued AI tasks</a>, {' '}
-            <a href="#how-it-works">queue of required reviews</a>, "hot" tickets, and more.
+            Pro-rata usage quota, current AI agents, queued AI tasks, queue of required reviews, "hot" tickets, and
+            more.
           </FeatureText>
         </div>
         <div style={{ ...featureCardStyle, gap: 12 }}>
