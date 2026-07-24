@@ -63,6 +63,35 @@ section[id] {
   color: #d3c6aa !important;
 }
 
+/* --- Package-manager choice ---
+ * Driven by <html data-pm>, set before first paint by the +Head script (no
+ * FOUC) and flipped on tab click; all four command variants are pre-rendered.
+ * The :not([data-pm]) rules keep npm visible without JS. */
+.pm-only {
+  display: none;
+}
+html[data-pm='npm'] .pm-only-npm,
+html[data-pm='pnpm'] .pm-only-pnpm,
+html[data-pm='bun'] .pm-only-bun,
+html[data-pm='yarn'] .pm-only-yarn,
+html:not([data-pm]) .pm-only-npm {
+  display: inline;
+}
+.pm-tab {
+  background: transparent;
+  border: 1px solid transparent;
+  color: #859289;
+}
+html[data-pm='npm'] .pm-tab-npm,
+html[data-pm='pnpm'] .pm-tab-pnpm,
+html[data-pm='bun'] .pm-tab-bun,
+html[data-pm='yarn'] .pm-tab-yarn,
+html:not([data-pm]) .pm-tab-npm {
+  background: #232a2e;
+  border-color: #475258;
+  color: #d3c6aa;
+}
+
 /* --- Section nav --- */
 .section-nav::-webkit-scrollbar {
   display: none;

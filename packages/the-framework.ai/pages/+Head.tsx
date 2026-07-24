@@ -1,6 +1,13 @@
 export default function Head() {
   return (
     <>
+      {/* Before first paint: restore the persisted package-manager choice (see styles.css). */}
+      <script
+        dangerouslySetInnerHTML={{
+          __html:
+            "try{var p=localStorage.getItem('pm');document.documentElement.dataset.pm=p==='pnpm'||p==='bun'||p==='yarn'?p:'npm'}catch(e){document.documentElement.dataset.pm='npm'}",
+        }}
+      />
       <meta property="og:url" content="https://the-framework.ai/" />
       <meta property="og:type" content="website" />
       <link rel="preconnect" href="https://fonts.googleapis.com" />

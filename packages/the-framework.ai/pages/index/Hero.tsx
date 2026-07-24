@@ -1,4 +1,3 @@
-import { useState } from 'react'
 import type { CSSProperties } from 'react'
 import { useCopy } from './copy'
 import { kickerStyle, mono } from './ui'
@@ -40,11 +39,24 @@ function Badge({ label, copied }: { label: string; copied: boolean }) {
   )
 }
 
+// The choice lives on <html data-pm>, set before first paint by the +Head
+// script (no FOUC) and mirrored to localStorage; CSS shows the matching
+// variant, so no React state is involved.
+const currentPm = (): Pm => {
+  const p = document.documentElement.dataset.pm
+  return p && p in PMS ? (p as Pm) : 'npm'
+}
+
+const pickPm = (name: Pm) => {
+  document.documentElement.dataset.pm = name
+  try {
+    localStorage.setItem('pm', name)
+  } catch {}
+}
+
 export function Hero() {
-  const [pm, setPm] = useState<Pm>('npm')
   const tryCopy = useCopy()
   const installCopy = useCopy()
-  const cmds = PMS[pm]
 
   return (
     <header
@@ -168,33 +180,21 @@ export function Hero() {
                 borderBottom: '1px solid #3d484d',
               }}
             >
-              {(Object.keys(PMS) as Pm[]).map((name) => {
-                const active = name === pm
-                return (
-                  <button
-                    key={name}
-                    className="pm-tab"
-                    onClick={() => setPm(name)}
-                    style={{
-                      background: active ? '#232a2e' : 'transparent',
-                      border: `1px solid ${active ? '#475258' : 'transparent'}`,
-                      color: active ? '#d3c6aa' : '#859289',
-                      borderRadius: 7,
-                      padding: '4px 13px',
-                      fontFamily: mono,
-                      fontSize: 12,
-                      cursor: 'pointer',
-                    }}
-                  >
-                    {name}
-                  </button>
-                )
-              })}
+              {(Object.keys(PMS) as Pm[]).map((name) => (
+                <button
+                  key={name}
+                  className={'pm-tab pm-tab-' + name}
+                  onClick={() => pickPm(name)}
+                  style={{ borderRadius: 7, padding: '4px 13px', fontFamily: mono, fontSize: 12, cursor: 'pointer' }}
+                >
+                  {name}
+                </button>
+              ))}
               <Badge label={tryCopy.copied ? 'copied!' : 'copy'} copied={tryCopy.copied} />
             </div>
             <div
               className="copy-box"
-              onClick={(e) => tryCopy.copy(cmds.try, e)}
+              onClick={(e) => tryCopy.copy(PMS[currentPm()].try, e)}
               style={{
                 position: 'relative',
                 cursor: 'pointer',
@@ -209,7 +209,11 @@ export function Hero() {
               <div style={cmdLineStyle}>
                 <span>
                   <span style={dollarStyle}>$ </span>
-                  {cmds.try}
+                  {(Object.keys(PMS) as Pm[]).map((name) => (
+                    <span key={name} className={'pm-only pm-only-' + name}>
+                      {PMS[name].try}
+                    </span>
+                  ))}
                 </span>
                 <span style={commentStyle}># One-shot (no install)</span>
               </div>
@@ -232,7 +236,7 @@ export function Hero() {
           Or install:
           <span
             className="install-chip"
-            onClick={(e) => installCopy.copy(`${cmds.install} && the-framework`, e)}
+            onClick={(e) => installCopy.copy(`${PMS[currentPm()].install} && the-framework`, e)}
             style={{
               position: 'relative',
               cursor: 'pointer',
@@ -249,7 +253,11 @@ export function Hero() {
           >
             <span>
               <span style={dollarStyle}>$ </span>
-              {cmds.install}
+              {(Object.keys(PMS) as Pm[]).map((name) => (
+                <span key={name} className={'pm-only pm-only-' + name}>
+                  {PMS[name].install}
+                </span>
+              ))}
             </span>
             <span
               className={'copy-tip-side' + (installCopy.copied ? ' copied' : '')}
