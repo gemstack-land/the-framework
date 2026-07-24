@@ -294,6 +294,11 @@ export interface CliOptions {
    * stays one row in the history.
    */
   continueRun?: boolean | undefined
+  /**
+   * `--topic` (#1120): this run is project-less. Set by the daemon when it spawns a topic run into a
+   * neutral scratch `--cwd`; recorded on the run's meta so a reader can tell it from a project run.
+   */
+  topic?: boolean | undefined
   model?: string | undefined
   /** `--resume-session <id>` (#720): continue a finished run's agent session — the prompt resumes that conversation (full prior context). Set by the dashboard when you message a run that has ended. */
   resumeSession?: string | undefined
@@ -547,6 +552,9 @@ export function parseArgs(argv: string[]): CliOptions {
         break
       case '--continue-run':
         opts.continueRun = true
+        break
+      case '--topic':
+        opts.topic = true
         break
       case '--model':
         opts.model = argv[++i]
@@ -1395,6 +1403,8 @@ async function runBuild(opts: CliOptions, io: CliIO): Promise<number> {
         ...(opts.continueRun ? { continueRun: true } : {}),
         // Where the run executes (#1053): the run view reads it to switch to the Actions affordance.
         ...(opts.target ? { target: opts.target } : {}),
+        // A project-less topic run (#1120): recorded so a reader can tell it from a project run.
+        ...(opts.topic ? { topic: true } : {}),
       })
     } catch (err) {
       io.err(`could not persist session state (${errorMessage(err)}); continuing without it`)

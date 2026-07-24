@@ -3,9 +3,10 @@ import assert from 'node:assert/strict'
 import { mkdtemp, mkdir, writeFile, readFile, rm, stat, realpath } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
-import { createProjectRuntime, cleanupTimedOutWorktree } from './daemon-runtime.js'
+import { createProjectRuntime, cleanupTimedOutWorktree, tearDownTopicScratch } from './daemon-runtime.js'
 import { CliTimeoutError } from './cli-exec.js'
-import { FRAMEWORK_DIR, WORKTREES_DIR, worktreePath } from './store/index.js'
+import { FRAMEWORK_DIR, WORKTREES_DIR, worktreePath, RUN_META_VERSION, type RunMeta } from './store/index.js'
+import { topicScratchPath } from './registry.js'
 import { nodeGitRunner } from './project.js'
 
 /**
@@ -103,6 +104,75 @@ test('a project that is not a git repo still falls back to the main checkout, an
     await runtime.dispose()
   } finally {
     await rm(cwd, { recursive: true, force: true })
+  }
+})
+
+/** Write a run's live meta into a checkout, so a teardown/read has a status to act on. */
+async function writeRunMeta(checkout: string, status: RunMeta['status'], extra: Partial<RunMeta> = {}): Promise<void> {
+  const dir = join(checkout, FRAMEWORK_DIR)
+  await mkdir(dir, { recursive: true })
+  const meta: RunMeta = {
+    version: RUN_META_VERSION,
+    status,
+    id: 'run1',
+    startedAt: '2026-07-24T00:00:00.000Z',
+    updatedAt: '2026-07-24T00:00:00.000Z',
+    passes: 0,
+    ...extra,
+  }
+  await writeFile(join(dir, 'run.json'), JSON.stringify(meta))
+}
+
+test('a project-less topic run spawns in a neutral scratch dir with no worktree (#1120)', async () => {
+  const home = await realpath(await mkdtemp(join(tmpdir(), 'framework-topic-home-')))
+  const config = await realpath(await mkdtemp(join(tmpdir(), 'framework-topic-cfg-')))
+  try {
+    const log = join(home, 'started.log')
+    // XDG_CONFIG_HOME steers the scratch dir the same way it steers the registry file.
+    const env = { XDG_CONFIG_HOME: config }
+    const runtime = createProjectRuntime({ cwd: home, env, binPath: await writeStub(home, log) })
+    const result = (await runtime.onStart('draft a ticket', 'build', { topic: true })) as { ok: boolean; runId?: string }
+
+    assert.equal(result.ok, true, 'a topic run starts without a project')
+    assert.ok(result.runId, 'and reports its allocated run id')
+    const scratch = topicScratchPath(env, result.runId!)
+    const args = (await startedArgs(log, 1))[0]!
+    assert.equal(args[args.indexOf('--cwd') + 1], scratch, 'spawned into the config-home scratch dir')
+    assert.equal(args[args.indexOf('--run-id') + 1], result.runId, 'with its allocated run id')
+    assert.equal(args.includes('--topic'), true, 'flagged as a topic run so its meta records it')
+    // The whole point: no repo, so no worktree anywhere near the home checkout.
+    assert.equal(await stat(join(home, FRAMEWORK_DIR, WORKTREES_DIR)).then(() => true, () => false), false, 'no worktree allocated')
+    assert.equal(await stat(scratch).then(s => s.isDirectory(), () => false), true, 'the scratch dir exists')
+    await runtime.dispose()
+  } finally {
+    await rm(home, { recursive: true, force: true })
+    await rm(config, { recursive: true, force: true })
+  }
+})
+
+test('a topic scratch dir is removed on a clean finish and retained on failure or stop (#1120)', async () => {
+  const base = await realpath(await mkdtemp(join(tmpdir(), 'framework-topic-teardown-')))
+  const exists = async (dir: string): Promise<boolean> => stat(dir).then(() => true, () => false)
+  try {
+    const done = join(base, 'done')
+    await writeRunMeta(done, 'done')
+    await tearDownTopicScratch(done)
+    assert.equal(await exists(done), false, 'a run that finished cleanly loses its scratch dir')
+
+    for (const status of ['failed', 'stopped'] as const) {
+      const dir = join(base, status)
+      await writeRunMeta(dir, status)
+      await tearDownTopicScratch(dir)
+      assert.equal(await exists(dir), true, `a ${status} run keeps its scratch dir for inspection`)
+    }
+
+    // An unreadable / still-running scratch is kept: only a proven clean finish is removed.
+    const running = join(base, 'running')
+    await writeRunMeta(running, 'running')
+    await tearDownTopicScratch(running)
+    assert.equal(await exists(running), true, 'a run still going keeps its scratch dir')
+  } finally {
+    await rm(base, { recursive: true, force: true })
   }
 })
 

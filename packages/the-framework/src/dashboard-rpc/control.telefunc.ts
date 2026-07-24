@@ -171,6 +171,25 @@ export async function sendStart(
 }
 
 /**
+ * Start a project-less "topic" run (#1120): the sibling of {@link sendStart} that takes no project.
+ * It spawns in a neutral scratch dir with no repo or worktree — the "ask a question / plan / draft a
+ * ticket without a repo" path. A separate RPC rather than an absent-projectId overload of `sendStart`,
+ * which keeps that call's home-default behavior untouched. The daemon takes the topic branch off the
+ * `topic` option; no `projectId` travels. Returns the same {@link StartRunResult} as `sendStart`.
+ */
+export async function sendStartTopic(
+  prompt: string,
+  kind: StartRunKind = 'build',
+  options: StartRunOptions = {},
+): Promise<StartRunResult> {
+  const { startRun } = getContext<DashboardContext>()
+  if (!startRun) return { ok: false, error: 'starting a session is not enabled on this server' }
+  const text = prompt.trim()
+  if (!text && kind !== 'research') return { ok: false, error: 'a non-empty prompt is required' }
+  return startRun(text, kind, { ...options, topic: true })
+}
+
+/**
  * Open a project's Preview (#475): serve its built result on demand and return the live URL.
  * The daemon provides the Preview handlers on the request context, so this runs in-process
  * (like `sendStart`). Idempotent — opening while a preview is up returns the running one.
