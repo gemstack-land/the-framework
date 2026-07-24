@@ -17,6 +17,7 @@ import {
   frameworkVersion,
   mergeRunConfig,
   parseArgs,
+  printStartupFooter,
   promptRunArgs,
   resolveDomainPreset,
   runCli,
@@ -922,4 +923,49 @@ test('a terminal --no-dashboard run does not stay open for chat, daemon or not (
 test('a run with a dashboard, or one the daemon started, stays open for chat (#714)', () => {
   assert.equal(isInteractive({}, true), true)
   assert.equal(isInteractive({ runId: 'r1' }, false), true)
+})
+
+test('the startup footer prints the commands and the version (#312)', async () => {
+  const { io, out } = capture()
+  await printStartupFooter(io, { background: true, fetchLatest: async () => frameworkVersion() })
+  assert.ok(out.includes('Type a prompt on the dashboard to start a session, or use:'))
+  assert.ok(out.includes(`The Framework v${frameworkVersion()}`))
+  assert.ok(out.includes(`✅ Up to date (v${frameworkVersion()})`))
+})
+
+test('the foreground footer drops `framework stop`, which only stops a detached dashboard (#312)', async () => {
+  const background = capture()
+  await printStartupFooter(background.io, { background: true, fetchLatest: async () => undefined })
+  const foreground = capture()
+  await printStartupFooter(foreground.io, { background: false, fetchLatest: async () => undefined })
+  assert.ok(background.out.some(l => l.includes('framework stop')))
+  assert.ok(!foreground.out.some(l => l.includes('framework stop')))
+  // Everything else is the same footer, including the version.
+  assert.ok(foreground.out.includes(`The Framework v${frameworkVersion()}`))
+})
+
+test('the version prints before npm answers, and a newer release is announced after (#312)', async () => {
+  const { io, out } = capture()
+  let release: (v: string) => void = () => {}
+  const pending = printStartupFooter(io, {
+    background: true,
+    fetchLatest: () => new Promise<string>(resolve => (release = resolve)),
+  })
+  // The static half is out while the registry call is still in flight — bare `framework` blocks on
+  // the server forever, so anything held back until after the await would never be printed there.
+  assert.ok(out.includes(`The Framework v${frameworkVersion()}`))
+  assert.ok(!out.some(l => l.includes('Update available')))
+  release('999.0.0')
+  await pending
+  assert.ok(out.some(l => l.includes('⬆️  Update available: v999.0.0')))
+})
+
+test('an unreachable npm registry costs the footer nothing (#312)', async () => {
+  const { io, out } = capture()
+  await printStartupFooter(io, {
+    background: true,
+    fetchLatest: () => Promise.reject(new Error('offline')),
+  })
+  assert.ok(out.includes(`The Framework v${frameworkVersion()}`))
+  assert.ok(!out.some(l => l.includes('Up to date') || l.includes('Update available')))
 })

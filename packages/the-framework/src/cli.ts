@@ -48,7 +48,7 @@ import {
 } from './config-layers.js'
 import { type EcoOptions } from './system-prompt.js'
 import { loadUserSystemPrompt, SYSTEM_PROMPT_FILE } from './system-prompt-file.js'
-import { checkForUpdate, formatUpdateStatus, nodeVersionFetcher } from './update-check.js'
+import { checkForUpdate, formatUpdateStatus, nodeVersionFetcher, type VersionFetcher } from './update-check.js'
 import { appendLog, type LogEntry } from './logs.js'
 import { appendMessage, isSafeVia } from './conversations.js'
 import type { RecordMessage } from './await-gate.js'
@@ -74,6 +74,7 @@ import {
   pruneProjectWorktrees,
   formatWorktreeList,
 } from './worktrees.js'
+import { removeMergedWorktrees } from './merged-worktrees.js'
 import { defaultWhat } from './preset-prompt.js'
 import { renderOnBeforeMergeablePrompt, type OnBeforeMergeableContext } from './on-before-mergeable-prompt.js'
 import { runPrompt } from './prompt-run.js'
@@ -152,7 +153,8 @@ Usage:
                                  --dry-run to preview; --max-repos / --max-cost to bound.
   framework worktrees             List the checkouts this project's sessions kept.
                                  rm <sessionId> removes one; prune removes every one
-                                 whose session is no longer running.
+                                 whose session is no longer running; sweep removes only
+                                 those whose branch has landed (#1036), keeping the branch.
   framework --fake                Run the offline demo (no CLI, no model, deterministic).
   framework doctor                Check prerequisites (Claude Code installed, etc.).
   framework relay                 Host a session relay so teammates can watch a session (#230).
@@ -671,6 +673,7 @@ export function parseArgs(argv: string[]): CliOptions {
     const sub = words.shift()
     if (sub === undefined || sub === 'list') opts.worktrees = { action: 'list' }
     else if (sub === 'prune') opts.worktrees = { action: 'prune' }
+    else if (sub === 'sweep') opts.worktrees = { action: 'sweep' }
     else if (sub === 'rm') {
       const runId = words.shift()
       opts.worktrees = { action: 'rm', ...(runId ? { runId } : {}) }
@@ -1820,6 +1823,8 @@ async function runForegroundDaemonCmd(opts: CliOptions, io: CliIO): Promise<numb
   if (existing) {
     io.out(`◆ dashboard already running in the background: ${existing.url}`)
     io.out('  Stop it with `framework stop`, or open the URL above.')
+    // The dashboard this defers to *is* the background one, so its footer is the background one.
+    await printStartupFooter(io, { background: true })
     return 0
   }
   // #1051: pre-generate the shared token for a non-loopback bind so onListening (sync) can print
@@ -1835,6 +1840,10 @@ async function runForegroundDaemonCmd(opts: CliOptions, io: CliIO): Promise<numb
           printNonLoopbackAccess(io, state.host ?? DEFAULT_DAEMON_HOST, state.url, token)
         }
         io.out('  Ctrl+C to stop. Server logs stream below.')
+        // #312 asks bare `framework` to print the commands + version too. onListening is sync and
+        // runDaemon then blocks until signalled, so this is fire-and-forget by necessity: the
+        // update line lands a moment later, above the server logs.
+        void printStartupFooter(io, { background: false })
       },
     })
   } catch (err) {
@@ -1885,21 +1894,49 @@ async function ensureDaemonCmd(opts: CliOptions, io: CliIO): Promise<number> {
   // host that is bound, not the flag, so re-reporting an already-running loopback daemon stays quiet.
   const boundHost = state.host ?? DEFAULT_DAEMON_HOST
   if (!isLoopbackHost(boundHost)) printNonLoopbackAccess(io, boundHost, state.url, await readDaemonToken())
-  io.out('')
-  io.out('Type a prompt on the dashboard to start a session, or use:')
-  io.out('  framework "<what to build>"   Build (streams to the dashboard)')
-  io.out('  framework stop                Stop the background dashboard')
-  io.out('  framework --help              All options')
-  io.out('')
-  io.out(`The Framework v${frameworkVersion()}`)
-  const status = await checkForUpdate(frameworkVersion(), nodeVersionFetcher())
-  const line = formatUpdateStatus(status)
-  if (line) io.out(line)
+  await printStartupFooter(io, { background: true })
   return 0
 }
 
+/**
+ * The startup footer every dashboard path prints (#312): the convenience commands, the version,
+ * and then — once npm answers — whether that version is the latest.
+ *
+ * The update line is deliberately not awaited before the static lines. #312 asks for the static
+ * info first, and the foreground path (bare `framework`) blocks on the server forever, so a line
+ * printed after the await would never appear there at all. `checkForUpdate` is already forgiving:
+ * offline or slow (2.5s cap) resolves to 'unknown', which prints nothing.
+ *
+ * `background: false` drops the `framework stop` line — that stops a *detached* dashboard, and the
+ * foreground path tells you Ctrl+C instead.
+ */
+export function printStartupFooter(
+  io: CliIO,
+  opts: { background: boolean; fetchLatest?: VersionFetcher },
+): Promise<void> {
+  const version = frameworkVersion()
+  io.out('')
+  io.out('Type a prompt on the dashboard to start a session, or use:')
+  io.out('  framework "<what to build>"   Build (streams to the dashboard)')
+  if (opts.background) io.out('  framework stop                Stop the background dashboard')
+  io.out('  framework --help              All options')
+  io.out('')
+  io.out(`The Framework v${version}`)
+  return checkForUpdate(version, opts.fetchLatest ?? nodeVersionFetcher())
+    .then(status => {
+      const line = formatUpdateStatus(status)
+      if (line) io.out(line)
+    })
+    .catch(() => {})
+}
+
 /** What `framework worktrees` was asked to do (#752). */
-export type WorktreesCommand = { action: 'list' } | { action: 'rm'; runId?: string } | { action: 'prune' }
+export type WorktreesCommand =
+  | { action: 'list' }
+  | { action: 'rm'; runId?: string }
+  | { action: 'prune' }
+  /** Remove only the checkouts whose branch has landed (#1036) — the daemon's sweep, on demand. */
+  | { action: 'sweep' }
 
 /**
  * `framework worktrees` (#752): the retained-worktree cleanup the dashboard already has (#737),
@@ -1926,6 +1963,18 @@ async function worktreesCmd(command: WorktreesCommand, cwd: string, io: CliIO): 
     }
     io.out(`◆ removed the worktree for session ${command.runId}.`)
     return 0
+  }
+  // The daemon runs this on a timer (#1036); here it is on demand, for a machine whose daemon is
+  // not running and for seeing what the sweep would say.
+  if (command.action === 'sweep') {
+    const { removed, failed } = await removeMergedWorktrees(cwd)
+    for (const item of removed) {
+      io.out(`◆ removed ${item.runId}: ${item.branch} ${item.via === 'pr' ? 'was merged on GitHub' : 'is merged into the base'}.`)
+    }
+    for (const item of failed) io.err(`✗ ${item.runId}: ${item.error}`)
+    if (removed.length === 0 && failed.length === 0) io.out('No landed worktrees to remove.')
+    else if (removed.length > 0) io.out(`The branches and the sessions are kept; only the checkouts were removed.`)
+    return failed.length > 0 ? 1 : 0
   }
   const { removed, skipped } = await pruneProjectWorktrees(cwd)
   for (const skip of skipped) io.out(`  kept ${skip.runId}: ${skip.reason}`)
