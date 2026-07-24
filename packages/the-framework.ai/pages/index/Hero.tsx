@@ -64,7 +64,7 @@ export function Hero() {
       style={{
         maxWidth: 1120,
         margin: '0 auto',
-        padding: 'clamp(16px, 3vw, 24px) clamp(14px, 4vw, 24px) 32px',
+        padding: 'clamp(32px, 6vw, 56px) clamp(14px, 4vw, 24px) 32px',
         textAlign: 'center',
         display: 'flex',
         flexDirection: 'column',
