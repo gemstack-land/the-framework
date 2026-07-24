@@ -135,9 +135,10 @@ body {
   white-space: nowrap;
   container-type: inline-size;
   /* Bleed to the card border (cancel the row's px-2) so the clip and the fade land on the border,
-     not a row-padding inside it; the text still starts a row-padding in via the matching inner pad. */
+     not a row-padding inside it. Only the left keeps an inner pad, so the text still starts aligned
+     with the subtitle above it while its end can still reach the right border when it scrolls. */
   margin-inline: -0.5rem;
-  padding-inline: 0.5rem;
+  padding-left: 0.5rem;
   -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 1.25rem), transparent);
   mask-image: linear-gradient(to right, #000 calc(100% - 1.25rem), transparent);
 }
