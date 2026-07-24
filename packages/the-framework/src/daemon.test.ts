@@ -17,11 +17,12 @@ import {
   startDaemonStateHeartbeat,
   startOptionFlags,
   registerHomeProject,
+  registerReposDirectory,
   isNestedWithin,
 } from './daemon.js'
 import { EVENTS_FILE, FRAMEWORK_DIR, addWorktree } from './store/index.js'
 import { controlPath } from './control.js'
-import { projectId, listProjects, addProject } from './registry.js'
+import { projectId, listProjects, addProject, writePreferences } from './registry.js'
 import { nodeGitRunner } from './project.js'
 
 // The new dashboard steers + starts over Telefunc (#405/#426), not the retired /api/* HTTP
@@ -864,5 +865,40 @@ test('registerHomeProject still adds an activated cwd that is not nested (#647)'
     assert.deepEqual(projects.map(p => p.path), [home])
   } finally {
     await rm(home, { recursive: true, force: true })
+  }
+})
+
+test('registerReposDirectory auto-adds the git repos when the opt-in is on (#1123)', async () => {
+  const root = await realpath(await mkdtemp(join(tmpdir(), 'framework-repos-')))
+  const env = await configEnv(root)
+  try {
+    // Two git repos and one plain directory directly inside the repos dir.
+    await mkdir(join(root, 'app-a', '.git'), { recursive: true })
+    await mkdir(join(root, 'app-b', '.git'), { recursive: true })
+    await mkdir(join(root, 'not-a-repo'), { recursive: true })
+    await writePreferences({ reposDirectory: root, reposDirectoryAutoGrant: true }, undefined, env)
+
+    await registerReposDirectory(env)
+
+    const projects = (await listProjects(undefined, env)).map(p => p.path).sort()
+    assert.deepEqual(projects, [join(root, 'app-a'), join(root, 'app-b')])
+  } finally {
+    await rm(root, { recursive: true, force: true })
+  }
+})
+
+test('registerReposDirectory adds nothing while the opt-in is off (#1123)', async () => {
+  const root = await realpath(await mkdtemp(join(tmpdir(), 'framework-repos-off-')))
+  const env = await configEnv(root)
+  try {
+    await mkdir(join(root, 'app-a', '.git'), { recursive: true })
+    // reposDirectory is set, but the auto-grant is not: the default must stay hands-off.
+    await writePreferences({ reposDirectory: root }, undefined, env)
+
+    await registerReposDirectory(env)
+
+    assert.deepEqual(await listProjects(undefined, env), [])
+  } finally {
+    await rm(root, { recursive: true, force: true })
   }
 })
