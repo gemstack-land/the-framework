@@ -131,8 +131,10 @@ export default function Page() {
         </Step>
         <Step kicker="Install">
           <p style={pStyle}>Not installed yet? Install it globally:</p>
-          <PmTabs />
-          <PmCmd get={(pm) => PMS[pm].install} />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-start' }}>
+            <PmTabs />
+            <PmCmd get={(pm) => PMS[pm].install} />
+          </div>
         </Step>
         <Step kicker="One-time run">
           <p style={pStyle}>You just want to try it out? Run it once, no install:</p>
