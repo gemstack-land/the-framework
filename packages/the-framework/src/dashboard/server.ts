@@ -16,6 +16,7 @@ import type { EventsSource, PreviewHandlers, RemoteRuns } from './telefunc-serve
 import { handleRelayRequest, RELAY_PREFIX, type RelayHandlers } from './relay-endpoints.js'
 import { BRIDGE_PREFIX, handleBridgeRequest, type BridgeHandlers } from './bridge-endpoints.js'
 import { bridgeQuestions } from './bridge-store.js'
+import { bridgeStarts } from './bridge-starts.js'
 
 /** Options for {@link startDashboard}. */
 export interface DashboardOptions {
@@ -215,6 +216,13 @@ export function startDashboard(opts: DashboardOptions = {}): Promise<Dashboard> 
           return pending ? { id: pending.id, label: pending.label } : undefined
         },
         answered: (sessionId, id, ok, note) => bridgeQuestions().resolveAnswer(sessionId, id, ok, note),
+        // The session start-queue (#1328). The claim happens inside claimNext, not in the route:
+        // two polling tabs handed the same request would create two cloud sessions.
+        start: () => {
+          const next = bridgeStarts().claimNext()
+          return next ? { id: next.id, repo: next.repo, branch: next.branch, prompt: next.prompt } : undefined
+        },
+        started: (id, ok, sessionId, note) => bridgeStarts().resolve(id, ok, sessionId, note),
         ...(opts.bridgeSessions ? { sessions: opts.bridgeSessions } : {}),
       }
     : undefined

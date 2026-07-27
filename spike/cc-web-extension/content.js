@@ -413,10 +413,189 @@ async function deliverAnswer(text) {
   return { ok: true, note: `filled ${composer.via}, no send button, sent Enter` }
 }
 
+// ---------------------------------------------------------------------------
+// Creating a session (#1328).
+//
+// A session created through this page with the repo picker is repo-bound, and those are the ones
+// that can push and open a PR; `claude --cloud` produces a bundle upload that cannot (#1320).
+// So the daemon queues a repo, a branch and a prompt, and this drives the same three controls a
+// person would: pick the repo, pick the branch, type the prompt, send.
+//
+// **Every selector here is a guess about someone else's UI**, which is the whole risk. So this
+// half is built to report rather than to insist: `probeNewSession` describes what it can see
+// without touching anything, and every failure below names the control it could not find. The
+// first live run is expected to be a probe, not a success.
+
+/** Visible text of a control, trimmed and collapsed, for matching menu entries. */
+function controlText(el) {
+  return (el.textContent ?? '').replace(/\s+/g, ' ').trim()
+}
+
+/** Whether a control is actually usable: rendered, enabled, not aria-hidden. */
+function usable(el) {
+  if (!el || el.disabled) return false
+  if (el.getAttribute?.('aria-hidden') === 'true') return false
+  return true
+}
+
+/**
+ * Everything on the page that behaves like a dropdown trigger.
+ *
+ * Several strategies rather than one selector because the page is not ours and the markup for a
+ * picker varies: an ARIA combobox, a menu/listbox button, or a plain button whose label happens
+ * to name a repo. Ordered from most explicit to least, so a confident match wins.
+ */
+function menuTriggers() {
+  const out = []
+  const add = (el, via) => {
+    if (usable(el) && !out.some(entry => entry.el === el)) out.push({ el, via, text: controlText(el) })
+  }
+  for (const el of deepQueryAll('[role="combobox"]')) add(el, 'combobox')
+  for (const el of deepQueryAll('button[aria-haspopup="listbox"], button[aria-haspopup="menu"], button[aria-haspopup="true"]')) add(el, 'haspopup')
+  for (const el of deepQueryAll('button[aria-expanded]')) add(el, 'expandable')
+  for (const el of deepQueryAll('button')) add(el, 'button')
+  return out
+}
+
+/** Options currently on offer in an open menu. */
+function menuOptions() {
+  return deepQueryAll('[role="option"], [role="menuitem"], [role="menuitemradio"]')
+    .filter(usable)
+    .map(el => ({ el, text: controlText(el) }))
+}
+
+/** Wait for `read` to return something truthy, or give up. */
+async function waitFor(read, timeoutMs, stepMs = 150) {
+  const deadline = Date.now() + timeoutMs
+  for (;;) {
+    const value = read()
+    if (value) return value
+    if (Date.now() >= deadline) return undefined
+    await new Promise(resolve => setTimeout(resolve, stepMs))
+  }
+}
+
+/** How long to wait for a menu to render, and for the page to become a session. */
+const MENU_WAIT_MS = 6000
+
+/**
+ * Open the picker whose current label best matches `hint`, then choose the entry matching `want`.
+ *
+ * Matching is exact-then-contains, case-insensitive, and a repo is also matched on its bare name
+ * so `owner/name` finds an entry rendered as just `name`. Returns a note either way; the caller
+ * turns that into the daemon-visible reason.
+ */
+async function pickFromMenu(hint, want, wantAliases = []) {
+  const wanted = [want, ...wantAliases].map(t => t.toLowerCase()).filter(Boolean)
+  const matches = text => {
+    const lower = text.toLowerCase()
+    return wanted.some(w => lower === w) || wanted.some(w => lower.includes(w))
+  }
+
+  // Already showing what we want (the page may default to it): nothing to do.
+  //
+  // Exact match only, unlike choosing from a menu below. Contains-matching here reads any
+  // trigger that merely mentions the text as "already set", so branch `main` would be satisfied
+  // by a repo trigger showing `domain-tools` and the branch would never be picked at all.
+  const showing = menuTriggers().find(trigger => wanted.some(w => trigger.text.toLowerCase() === w))
+  if (showing) return { ok: true, note: `${hint} already set to ${showing.text}` }
+
+  const hintLower = hint.toLowerCase()
+  const candidates = menuTriggers().filter(trigger => trigger.text.toLowerCase().includes(hintLower))
+  const triggers = candidates.length ? candidates : menuTriggers()
+  for (const trigger of triggers.slice(0, 8)) {
+    trigger.el.click()
+    const options = await waitFor(() => {
+      const found = menuOptions()
+      return found.length ? found : undefined
+    }, MENU_WAIT_MS)
+    if (!options) continue
+    const hit = options.find(option => matches(option.text))
+    if (hit) {
+      hit.el.click()
+      return { ok: true, note: `${hint}: clicked "${hit.text}" via ${trigger.via}` }
+    }
+    // Wrong menu: shut it again so the next trigger is not clicked through an overlay.
+    trigger.el.click()
+  }
+  return { ok: false, note: `${hint}: no menu offered "${want}"` }
+}
+
+/**
+ * Describe the controls on this page without touching any of them (#1328).
+ *
+ * The point is a productive first round trip: rather than "it did not work", this says what the
+ * page actually offers, so the selectors above can be aimed at the real markup. Text only, capped,
+ * so the report is safe to paste into an issue.
+ */
+function probeNewSession() {
+  return {
+    url: location.href,
+    sessionId: sessionIdFromUrl() ?? null,
+    composer: findComposer()?.via ?? null,
+    sendButton: Boolean(findSendButton()),
+    triggers: menuTriggers()
+      .slice(0, 40)
+      .map(trigger => ({ via: trigger.via, text: trigger.text.slice(0, 80) }))
+      .filter(trigger => trigger.text),
+    openOptions: menuOptions()
+      .slice(0, 40)
+      .map(option => option.text.slice(0, 80)),
+  }
+}
+
+/**
+ * Drive the new-session flow: repo, branch, prompt, send, and report the session it became.
+ *
+ * The session id is read from the URL rather than from anything on the page, because that is the
+ * one thing claude.ai is guaranteed to tell us and it is exactly what the daemon joins runs on.
+ * A send that never becomes a session URL is a failure with a reason, never a silent success:
+ * the daemon would otherwise record a run pointing nowhere.
+ */
+async function createSession({ repo, branch, prompt }) {
+  const composerWait = window.__tfComposerWaitMs ?? 20000
+  const composer = await waitFor(findComposer, composerWait)
+  if (!composer) return { ok: false, note: 'no composer on the new-session page' }
+
+  const bareRepo = String(repo).split('/').pop() ?? repo
+  const repoPick = await pickFromMenu('repository', repo, [bareRepo])
+  if (!repoPick.ok) return { ok: false, note: repoPick.note }
+  // The branch list usually reloads once a repo is chosen; asking too early reads the old one.
+  await new Promise(resolve => setTimeout(resolve, window.__tfMenuSettleMs ?? 800))
+  const branchPick = await pickFromMenu('branch', branch)
+  if (!branchPick.ok) return { ok: false, note: branchPick.note }
+
+  fillComposer(composer, prompt)
+  await new Promise(resolve => setTimeout(resolve, 400))
+  const button = findSendButton()
+  if (button) button.click()
+  else {
+    for (const type of ['keydown', 'keyup']) {
+      composer.el.dispatchEvent(
+        new KeyboardEvent(type, { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true, cancelable: true }),
+      )
+    }
+  }
+
+  const sessionId = await waitFor(sessionIdFromUrl, window.__tfSessionWaitMs ?? 60000, 500)
+  if (!sessionId) return { ok: false, note: `sent, but the page never became a session URL (${repoPick.note}; ${branchPick.note})` }
+  return { ok: true, sessionId, note: `${repoPick.note}; ${branchPick.note}; sent via ${button ? 'button' : 'enter'}` }
+}
+
 // The worker hands answers to the top frame only: the composer lives there, and a child frame
 // answering too would submit twice.
 if (IS_TOP && typeof chrome !== 'undefined' && chrome.runtime?.onMessage) {
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+    if (message?.type === 'tf-probe-newsession') {
+      sendResponse(probeNewSession())
+      return true
+    }
+    if (message?.type === 'tf-create-session' && message.start) {
+      void createSession(message.start)
+        .then(sendResponse)
+        .catch(err => sendResponse({ ok: false, note: String(err?.message ?? err) }))
+      return true
+    }
     if (message?.type !== 'tf-deliver-answer' || typeof message.text !== 'string') return false
     void deliverAnswer(message.text)
       .then(sendResponse)
@@ -430,6 +609,8 @@ if (IS_TOP && typeof chrome !== 'undefined' && chrome.runtime?.onMessage) {
 // added to the window claude.ai can see.
 if (typeof chrome === 'undefined') {
   window.__tfBridgeDeliverAnswer = deliverAnswer
+  window.__tfBridgeCreateSession = createSession
+  window.__tfBridgeProbeNewSession = probeNewSession
 }
 
 /**

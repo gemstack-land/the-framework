@@ -157,5 +157,169 @@ async function deliver(body, prepare) {
   dom.window.close()
 }
 
+// ---------------------------------------------------------------------------
+// Creating a session (#1328), against a fake new-session page.
+//
+// Every selector in `createSession` is a guess about someone else's markup, so what these prove
+// is the FLOW, not that claude.ai looks like this: that a repo and a branch are chosen from
+// menus before the prompt is sent, that the session id is read from the URL rather than from
+// anything on the page, and that each way it can go wrong is reported with the control it could
+// not find. Whether the real page matches is what `probeNewSession` is for.
+
+/** A stand-in new-session page: two menus, a composer, a send button. */
+function newSessionPage({ repos = ['someone/other-repo', 'gemstack-land/the-framework'], branches = ['main', 'dev'], composer = true, repoLabel = 'Select repository', branchLabel = 'Select branch' } = {}) {
+  const options = (items, menu) =>
+    items.map(text => `<div role="option" aria-hidden="true" data-menu="${menu}">${text}</div>`).join('')
+  return [
+    `<button id="repo-trigger" aria-haspopup="listbox">${repoLabel}</button>`,
+    `<div>${options(repos, 'repo')}</div>`,
+    `<button id="branch-trigger" aria-haspopup="listbox">${branchLabel}</button>`,
+    `<div>${options(branches, 'branch')}</div>`,
+    composer ? '<div contenteditable="true"></div>' : '<p>no composer here</p>',
+    '<button aria-label="Send message" id="send"></button>',
+  ].join('')
+}
+
+/**
+ * Run `createSession` against a fake page.
+ *
+ * The menus toggle on their trigger exactly as a real one would, and the send button is what
+ * turns the page into a session: jsdom cannot navigate, so the harness reconfigures the URL on
+ * click, which is the same observable the content script waits for.
+ */
+async function createOn(page, { becomesSession = 'session_01FAKE', ...opts } = {}) {
+  const dom = new JSDOM(`<!doctype html><html><body><main>${page}</main></body></html>`, {
+    // No session id yet: this is the page a session is started FROM.
+    url: 'https://claude.ai/code',
+    runScripts: 'outside-only',
+  })
+  dom.window.eval(script)
+  const w = dom.window
+  w.__tfComposerWaitMs = 200
+  w.__tfMenuSettleMs = 10
+  w.__tfSessionWaitMs = 2000
+
+  const toggle = menu => {
+    for (const option of w.document.querySelectorAll(`[data-menu="${menu}"]`)) {
+      option.setAttribute('aria-hidden', option.getAttribute('aria-hidden') === 'true' ? 'false' : 'true')
+    }
+  }
+  w.document.getElementById('repo-trigger')?.addEventListener('click', () => toggle('repo'))
+  w.document.getElementById('branch-trigger')?.addEventListener('click', () => toggle('branch'))
+  if (becomesSession) {
+    w.document.getElementById('send')?.addEventListener('click', () => {
+      dom.reconfigure({ url: `https://claude.ai/code/${becomesSession}` })
+    })
+  }
+
+  const result = await w.__tfBridgeCreateSession({
+    repo: 'gemstack-land/the-framework',
+    branch: 'main',
+    prompt: 'Spike and plan the queue ticket',
+    ...opts,
+  })
+  return { dom, w, result }
+}
+
+{
+  const { dom, w, result } = await createOn(newSessionPage())
+  const typed = w.document.querySelector('[contenteditable="true"]').textContent
+  const ok =
+    result.ok &&
+    result.sessionId === 'session_01FAKE' &&
+    typed === 'Spike and plan the queue ticket' &&
+    /repository: clicked "gemstack-land\/the-framework"/.test(result.note) &&
+    /branch: clicked "main"/.test(result.note)
+  if (!ok) failed++
+  console.log(`${ok ? 'PASS' : 'FAIL'}  create picks repo and branch, types the prompt, reports the session  (id=${result.sessionId}, note=${result.note})`)
+  dom.window.close()
+}
+
+{
+  // The repo the daemon asked for is not on offer: refuse, and say which control failed. Sending
+  // anyway would start a session against whatever repo happened to be selected.
+  const { dom, result } = await createOn(newSessionPage({ repos: ['someone/other-repo'] }))
+  const ok = !result.ok && /repository/.test(result.note) && !/branch:/.test(result.note)
+  if (!ok) failed++
+  console.log(`${ok ? 'PASS' : 'FAIL'}  create refuses when the repo is not offered  (note=${result.note})`)
+  dom.window.close()
+}
+
+{
+  const { dom, result } = await createOn(newSessionPage({ branches: ['dev'] }))
+  const ok = !result.ok && /branch/.test(result.note)
+  if (!ok) failed++
+  console.log(`${ok ? 'PASS' : 'FAIL'}  create refuses when the branch is not offered  (note=${result.note})`)
+  dom.window.close()
+}
+
+{
+  const { dom, result } = await createOn(newSessionPage({ composer: false }))
+  const ok = !result.ok && /no composer/.test(result.note)
+  if (!ok) failed++
+  console.log(`${ok ? 'PASS' : 'FAIL'}  create refuses a page with no composer  (note=${result.note})`)
+  dom.window.close()
+}
+
+{
+  // Sent, but the page never became a session. Reporting success here would leave the daemon
+  // holding a run that points nowhere, which is worse than a clean failure.
+  const { dom, result } = await createOn(newSessionPage(), { becomesSession: null })
+  const ok = !result.ok && /never became a session URL/.test(result.note)
+  if (!ok) failed++
+  console.log(`${ok ? 'PASS' : 'FAIL'}  create refuses when no session URL appears  (note=${result.note})`)
+  dom.window.close()
+}
+
+{
+  // A page already showing the wanted repo and branch: nothing to pick, and nothing clicked.
+  const { dom, result } = await createOn(
+    newSessionPage({ repoLabel: 'gemstack-land/the-framework', branchLabel: 'main' }),
+  )
+  const ok = result.ok && /already set to gemstack-land\/the-framework/.test(result.note) && /already set to main/.test(result.note)
+  if (!ok) failed++
+  console.log(`${ok ? 'PASS' : 'FAIL'}  create leaves an already-correct repo and branch alone  (note=${result.note})`)
+  dom.window.close()
+}
+
+{
+  // The exact-match guard: a repo whose name contains the branch text must not be mistaken for
+  // the branch already being set, or the branch is never chosen at all.
+  const { dom, result } = await createOn(
+    newSessionPage({ repos: ['acme/domain-tools'], branches: ['main', 'dev'], repoLabel: 'acme/domain-tools' }),
+    { repo: 'acme/domain-tools' },
+  )
+  const ok = result.ok && /branch: clicked "main"/.test(result.note)
+  if (!ok) failed++
+  console.log(`${ok ? 'PASS' : 'FAIL'}  a repo name containing the branch text does not skip the branch  (note=${result.note})`)
+  dom.window.close()
+}
+
+{
+  // The probe reads and reports; it must not open a menu or fill anything, because it is what
+  // runs first against a page nobody has inspected yet.
+  const dom = new JSDOM(`<!doctype html><html><body><main>${newSessionPage()}</main></body></html>`, {
+    url: 'https://claude.ai/code',
+    runScripts: 'outside-only',
+  })
+  dom.window.eval(script)
+  const report = dom.window.__tfBridgeProbeNewSession()
+  const hidden = [...dom.window.document.querySelectorAll('[role="option"]')].every(
+    el => el.getAttribute('aria-hidden') === 'true',
+  )
+  const typed = dom.window.document.querySelector('[contenteditable="true"]').textContent
+  const ok =
+    report.composer === 'contenteditable' &&
+    report.sendButton === true &&
+    report.sessionId === null &&
+    report.triggers.some(t => /Select repository/.test(t.text)) &&
+    report.triggers.some(t => /Select branch/.test(t.text)) &&
+    hidden &&
+    typed === ''
+  if (!ok) failed++
+  console.log(`${ok ? 'PASS' : 'FAIL'}  probe describes the controls without touching them  (triggers=${report.triggers.length}, menusStillClosed=${hidden})`)
+  dom.window.close()
+}
+
 console.log(failed ? `\n${failed} case(s) failed` : '\nall cases passed')
 process.exit(failed ? 1 : 0)

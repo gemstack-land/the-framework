@@ -63,6 +63,21 @@ export interface BridgeSession {
   url: string
 }
 
+/**
+ * A session the daemon wants the extension to create on claude.ai (#1328).
+ *
+ * This is the one shape that travels *out* of the bridge carrying free text, and that direction
+ * is what keeps the "deliberately tiny input" rule above intact: the daemon writes it, the
+ * extension reads it, and what comes back is only an id, a boolean and a session id.
+ */
+export interface BridgeStart {
+  id: string
+  /** `owner/name`, as the repo picker lists it. */
+  repo: string
+  branch: string
+  prompt: string
+}
+
 /** What the daemon wires behind the bridge. Absent when the feature is off, which 404s it. */
 export interface BridgeHandlers {
   /** The shared secret every bridge call must present. */
@@ -84,6 +99,15 @@ export interface BridgeHandlers {
   answer?: (sessionId: string) => { id: string; label: string } | undefined
   /** The extension's word on what a delivery attempt did. */
   answered?: (sessionId: string, id: string, ok: boolean, note?: string) => void
+  /**
+   * The next session the daemon wants created, claimed for whoever is asking (#1328).
+   *
+   * Claiming is the callee's job, not this route's: two tabs polling must not both be handed the
+   * same request, because a duplicate here is a duplicate cloud session on the user's account.
+   */
+  start?: () => BridgeStart | undefined
+  /** The extension's word on what a creation attempt did (#1328). */
+  started?: (id: string, ok: boolean, sessionId?: string, note?: string) => void
   now?: () => Date
 }
 
@@ -118,6 +142,8 @@ export async function handleBridgeRequest(
   if (pathname === `${BRIDGE_PREFIX}/hello`) return handleHello(req, res, handlers)
   if (pathname === `${BRIDGE_PREFIX}/answer`) return handleAnswer(req, res, handlers)
   if (pathname === `${BRIDGE_PREFIX}/answered`) return handleAnswered(req, res, handlers)
+  if (pathname === `${BRIDGE_PREFIX}/start`) return handleStart(req, res, handlers)
+  if (pathname === `${BRIDGE_PREFIX}/started`) return handleStarted(req, res, handlers)
   end(res, 404, 'not found')
 }
 
@@ -284,6 +310,50 @@ async function handleAnswered(req: IncomingMessage, res: ServerResponse, handler
   if (typeof ok !== 'boolean') return end(res, 400, 'ok must be a boolean')
   if (note !== undefined && typeof note !== 'string') return end(res, 400, 'note must be a string')
   handlers.answered?.(sessionId, id, ok, typeof note === 'string' ? note.slice(0, 300) : undefined)
+  end(res, 204, '')
+}
+
+/**
+ * `GET /_bridge/start`: the next session the daemon wants created, claimed by this call (#1328).
+ *
+ * Always 200 with `{start: ...}`, null when there is nothing to do, so the extension can poll it
+ * blindly alongside `/answer`. Degrades to null on a daemon that wired no queue, so an extension
+ * that knows about session creation does nothing at all against an older daemon.
+ *
+ * A GET that mutates, which is not the usual shape. The mutation is the point: handing the same
+ * request to two polling tabs would create two cloud sessions, so taking it off the queue has to
+ * happen in the same step as reading it.
+ */
+async function handleStart(req: IncomingMessage, res: ServerResponse, handlers: BridgeHandlers): Promise<void> {
+  if (req.method !== 'GET') return end(res, 405, 'method not allowed', { allow: 'GET' })
+  const start = handlers.start?.()
+  res.writeHead(200, { 'content-type': 'application/json' })
+  res.end(JSON.stringify({ start: start ?? null }))
+}
+
+/** `POST /_bridge/started`: what the extension's creation attempt did (#1328). */
+async function handleStarted(req: IncomingMessage, res: ServerResponse, handlers: BridgeHandlers): Promise<void> {
+  if (req.method !== 'POST') return end(res, 405, 'method not allowed', { allow: 'POST' })
+  let body: unknown
+  try {
+    body = await readJsonBody(req, MAX_BODY)
+  } catch (err) {
+    return end(res, 400, (err as Error).message)
+  }
+  if (typeof body !== 'object' || body === null) return end(res, 400, 'body must be an object')
+  const { id, ok, sessionId, note } = body as Record<string, unknown>
+  if (typeof id !== 'string' || !id || id.length > 64) return end(res, 400, 'id must be the start request id')
+  if (typeof ok !== 'boolean') return end(res, 400, 'ok must be a boolean')
+  if (sessionId !== undefined && (typeof sessionId !== 'string' || !SESSION_ID.test(sessionId))) {
+    return end(res, 400, 'sessionId must look like session_<id>')
+  }
+  if (note !== undefined && typeof note !== 'string') return end(res, 400, 'note must be a string')
+  handlers.started?.(
+    id,
+    ok,
+    typeof sessionId === 'string' ? sessionId : undefined,
+    typeof note === 'string' ? note.slice(0, 300) : undefined,
+  )
   end(res, 204, '')
 }
 
