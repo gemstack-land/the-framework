@@ -493,7 +493,11 @@ async function pickFromMenu(hint, want, wantAliases = []) {
   }
 
   // Already showing what we want (the page may default to it): nothing to do.
-  const showing = menuTriggers().find(trigger => matches(trigger.text))
+  //
+  // Exact match only, unlike choosing from a menu below. Contains-matching here reads any
+  // trigger that merely mentions the text as "already set", so branch `main` would be satisfied
+  // by a repo trigger showing `domain-tools` and the branch would never be picked at all.
+  const showing = menuTriggers().find(trigger => wanted.some(w => trigger.text.toLowerCase() === w))
   if (showing) return { ok: true, note: `${hint} already set to ${showing.text}` }
 
   const hintLower = hint.toLowerCase()
