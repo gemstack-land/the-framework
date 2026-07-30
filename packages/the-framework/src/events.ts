@@ -96,16 +96,30 @@ export type AutoHandoffSkip =
   | 'fake-run'
 
 /**
+ * Why an armed merge did not run (#1363). The run's config arms the merge; the authorization is
+ * the agent's, not the config's (rule settled on #1390): the agent must have declared the work
+ * done, and the framework must not already know of work pending in this session. The global
+ * `TODO_AGENTS.md` queue never withholds a merge — it is decoupled from sessions.
+ */
+export type MergeWithheldReason =
+  /** The agent never called setReadyForMerge(): the work was never declared done. */
+  | 'not-ready-for-merge'
+  /** The session's own `TODO_<SESSION_NAME>.agent.md` still has open entries. */
+  | 'session-todo-open'
+
+/**
  * How the merge half of a handoff went (#1216), when the run was armed for it. Lives here beside
  * {@link AutoHandoffSkip} for the same leaf-module reason.
  *
  * `auto-armed` is the preferred outcome: GitHub's own auto-merge takes the PR, so it lands when
  * its checks pass rather than before them. `merged` is the fallback where the repo does not allow
  * auto-merge and the PR was merged directly. `failed` never fails the handoff — the PR exists
- * either way, a human can still merge it by hand.
+ * either way, a human can still merge it by hand. `withheld` means the merge never ran at all
+ * (#1363): it was armed but not authorized, and the PR opened as a draft for a human instead.
  */
 export type AutoMergeOutcome =
   | { outcome: 'auto-armed' | 'merged' }
+  | { outcome: 'withheld'; reason: MergeWithheldReason }
   | { outcome: 'failed'; error: string }
 
 /** Who resolved a {@link ChoiceRequest}: a human, the autopilot countdown, or a headless auto-accept. */

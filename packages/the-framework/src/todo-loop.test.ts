@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { FakeDriver } from './driver/fake.js'
 import type { ChoicePick, ChoiceRequest, FrameworkEvent } from './events.js'
-import { appendTodoEntry, appendFlatTodoEntry, findTodoBacklog, insertTodoEntry, nextQueuedTicket, parseTodoEntries, runTodoLoop, ticketForPrompt } from './todo-loop.js'
+import { appendTodoEntry, appendFlatTodoEntry, findTodoBacklog, insertTodoEntry, nextQueuedTicket, parseTodoEntries, runTodoLoop, sessionTodoPending, ticketForPrompt } from './todo-loop.js'
 import { drainsQueue, presets } from './preset-catalog.js'
 import { AUTO_PM_DRAIN_JOB, AUTO_PM_JOBS } from './auto-pm.js'
 
@@ -521,4 +521,26 @@ test('the drain the sweep fires and the drain a click fires are the same drain (
   assert.equal(drainsQueue(AUTO_PM_DRAIN_JOB.prompt), true)
   // And nothing that merely puts work ON the queue counts as taking it off.
   for (const job of AUTO_PM_JOBS) assert.equal(drainsQueue(job.prompt), false, `${job.name} is not a drain`)
+})
+
+test('sessionTodoPending reads only the session-named TODO file (#1363)', async () => {
+  const cwd = await tmpWorkspace()
+  try {
+    // No file: no pendingness known. The global queue must not count — it is decoupled from
+    // sessions (#1390), and counting it would mean auto-merge never fires while any backlog exists.
+    await writeFile(join(cwd, 'TODO_AGENTS.md'), '- [ ] a standing project entry\n')
+    assert.equal(await sessionTodoPending(cwd, 'fix-login'), false)
+
+    // The session's own file with an open entry withholds; all-checked releases.
+    await writeFile(join(cwd, 'TODO_fix-login.agent.md'), '- [x] done part\n- [ ] open part\n')
+    assert.equal(await sessionTodoPending(cwd, 'fix-login'), true)
+    await writeFile(join(cwd, 'TODO_fix-login.agent.md'), '- [x] done part\n- [x] open part\n')
+    assert.equal(await sessionTodoPending(cwd, 'fix-login'), false)
+
+    // No session name, or one that cannot name a file, knows of nothing pending.
+    assert.equal(await sessionTodoPending(cwd, undefined), false)
+    assert.equal(await sessionTodoPending(cwd, '../escape'), false)
+  } finally {
+    await rm(cwd, { recursive: true, force: true })
+  }
 })

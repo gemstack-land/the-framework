@@ -52,7 +52,9 @@ Measure "variability":
 
 ## After applying changes
 
-After you're done, consider whether <SESSION_NAME> is finished and there isn't any work left to do — if that's the case then call setReadyForMerge()
+After you're done, decide: is <SESSION_NAME> finished, with no work left to do?
+- Yes: call setReadyForMerge() — required, the work is never merged without it
+- No: don't call it; say what's left instead
 
 
 

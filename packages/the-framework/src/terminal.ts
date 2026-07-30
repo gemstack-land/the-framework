@@ -1,6 +1,6 @@
 import type { BootstrapEvent } from '@gemstack/ai-autopilot'
 import type { DriverEvent, DriverRateLimit } from './driver/index.js'
-import { pickedIds, type AutoHandoffSkip, type ChoiceOption, type FrameworkEvent, type OnBeforeMergeableSkip } from './events.js'
+import { pickedIds, type AutoHandoffSkip, type AutoMergeOutcome, type ChoiceOption, type FrameworkEvent, type MergeWithheldReason, type OnBeforeMergeableSkip } from './events.js'
 
 // The terminal surface for the run's event stream: render one {@link FrameworkEvent} as one
 // human-readable line. This is the CLI's counterpart to the dashboard's read-model
@@ -58,15 +58,20 @@ export function formatFrameworkEvent(event: FrameworkEvent): string {
       if (event.push) return `  when this ends: push the branch`
       return `  when this ends: nothing — push and PR are both off`
     }
-    case 'handoff':
+    case 'handoff': {
+      // The merge half rides the same event (#1216) and gets its own line: after "auto-merge
+      // was on", silence about the merge reads as "it merged" (#1363), so every outcome —
+      // armed, merged, withheld, failed — is said.
+      const merge = event.outcome !== 'failed' && event.merge ? `\n${mergeLine(event.merge)}` : ''
       switch (event.outcome) {
         case 'done':
-          return event.url ? `✓ opened ${event.url}` : `✓ branch pushed`
+          return (event.url ? `✓ opened ${event.url}` : `✓ branch pushed`) + merge
         case 'skipped':
-          return `  ~ handoff skipped: ${handoffSkipReason(event.reason)}`
+          return `  ~ handoff skipped: ${handoffSkipReason(event.reason)}` + merge
         case 'failed':
           return `  ! could not ${event.step === 'pr' ? 'open the PR' : 'push the branch'}: ${event.error}`
       }
+    }
     case 'usage': {
       const turns = `over ${event.turns} turn${event.turns === 1 ? '' : 's'}`
       // No price to show: report the tokens the agent *did* report, rather than a
@@ -95,6 +100,33 @@ export function formatFrameworkEvent(event: FrameworkEvent): string {
       return formatBootstrapEvent(event.event)
     case 'end':
       return event.ok ? '✓ finished' : event.stopped ? '■ stopped' : `✗ failed: ${event.detail ?? 'unknown error'}`
+  }
+}
+
+/** One line for the merge half of a handoff (#1216/#1363), matching the CLI's own wording. */
+function mergeLine(merge: AutoMergeOutcome): string {
+  switch (merge.outcome) {
+    case 'auto-armed':
+      return '✓ auto-merge armed: the PR lands when its checks pass'
+    case 'merged':
+      return '✓ merged the PR'
+    case 'withheld':
+      return `  ~ merge withheld: ${mergeWithheldWhy(merge.reason)}`
+    case 'failed':
+      return `  ! could not merge the PR: ${merge.error}`
+  }
+}
+
+/**
+ * Say why an armed merge was withheld (#1363) in the reader's terms. Exported for the CLI's
+ * own stdout line, so the two surfaces cannot drift.
+ */
+export function mergeWithheldWhy(reason: MergeWithheldReason): string {
+  switch (reason) {
+    case 'not-ready-for-merge':
+      return 'the session never signalled ready-for-merge'
+    case 'session-todo-open':
+      return "the session's own TODO file still has open entries"
   }
 }
 

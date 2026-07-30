@@ -180,3 +180,30 @@ test('formatFrameworkEvent renders every post-merge cleanup outcome, naming the 
   assert.match(skipped('no-session-name'), /skipped: the session never called setSessionName\(\)/)
   assert.match(skipped('no-bin-path'), /skipped: the framework binary path is unknown/)
 })
+
+test('formatFrameworkEvent gives the merge half of a handoff its own line, withheld included (#1363)', () => {
+  // After "auto-merge was on", silence about the merge reads as "it merged" — every outcome is said.
+  assert.equal(
+    formatFrameworkEvent({ kind: 'handoff', outcome: 'done', pushed: true, url: 'https://x/pr/1', merge: { outcome: 'merged' } }),
+    '✓ opened https://x/pr/1\n✓ merged the PR',
+  )
+  assert.match(
+    formatFrameworkEvent({ kind: 'handoff', outcome: 'done', pushed: true, merge: { outcome: 'auto-armed' } })!,
+    /auto-merge armed: the PR lands when its checks pass/,
+  )
+  assert.match(
+    formatFrameworkEvent({ kind: 'handoff', outcome: 'done', pushed: true, merge: { outcome: 'failed', error: 'checks red' } })!,
+    /! could not merge the PR: checks red/,
+  )
+  // The gate (#1363): armed but not authorized. The reason travels in the reader's terms.
+  assert.match(
+    formatFrameworkEvent({ kind: 'handoff', outcome: 'done', pushed: true, merge: { outcome: 'withheld', reason: 'not-ready-for-merge' } })!,
+    /~ merge withheld: the session never signalled ready-for-merge/,
+  )
+  assert.match(
+    formatFrameworkEvent({ kind: 'handoff', outcome: 'skipped', reason: 'already-open', merge: { outcome: 'withheld', reason: 'session-todo-open' } })!,
+    /~ merge withheld: the session's own TODO file still has open entries/,
+  )
+  // No merge half: the line stays exactly what it was.
+  assert.equal(formatFrameworkEvent({ kind: 'handoff', outcome: 'done', pushed: true }), '✓ branch pushed')
+})

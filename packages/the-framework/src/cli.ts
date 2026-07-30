@@ -24,10 +24,10 @@ import { hostExecutor } from './host-exec.js'
 import { startDashboard, singleProjectProvider, resolveDashboardBundle, type Dashboard } from './dashboard/index.js'
 import { startRelay, relayPublisher, type RelayPublisher } from './relay.js'
 import { randomUUID } from 'node:crypto'
-import { formatFrameworkEvent } from './terminal.js'
+import { formatFrameworkEvent, mergeWithheldWhy } from './terminal.js'
 import { CLAUDE_CODE_SESSION_LINK } from './session-link.js'
-import { type AutoHandoffSkip, type ChoicePick, type ChoiceRequest, type FrameworkEvent, type OnBeforeMergeableSkip } from './events.js'
-import { runAutoHandoff } from './dashboard/run-handoff.js'
+import { type AutoHandoffSkip, type ChoicePick, type ChoiceRequest, type FrameworkEvent, type MergeWithheldReason, type OnBeforeMergeableSkip } from './events.js'
+import { runAutoHandoff, withheldMerge } from './dashboard/run-handoff.js'
 import {
   runFramework,
   type AppPreview,
@@ -39,6 +39,7 @@ import {
 import { FAKE_DEPLOY, FAKE_INTENT, FAKE_SIGNALS, fakeDriver } from './fake-script.js'
 import { readProjectSignals } from './project.js'
 import { isTicketPath } from './tickets.js'
+import { sessionTodoPending } from './todo-loop.js'
 import { loadFrameworkConfig, type FrameworkFileConfig } from './config.js'
 import {
   describeResolvedConfig,
@@ -1678,6 +1679,23 @@ async function runBuild(opts: CliOptions, io: CliIO): Promise<number> {
     // teardown still rescues the work onto the branch afterwards.
     if (opts.runId && !(await commitPendingWork(cwd))) return skip('commit-failed')
 
+    // The merge half is authorized, not just configured (#1363; rule settled on #1390): the
+    // agent's setReadyForMerge() — the same signal maybeFireOnBeforeMergeable requires above —
+    // is what says the work may land unattended, plus the session's own TODO file having no
+    // open entries. Never the global TODO_AGENTS.md: the queue is decoupled from sessions.
+    // Withheld is not skipped — push and PR go ahead, and with `armed.merge` off the PR opens
+    // as a draft for a human. Said on the handoff event (#835), or "auto-merge was on and
+    // nothing merged" has no answer.
+    let mergeGate: MergeWithheldReason | undefined
+    if (armed.merge) {
+      const ready = journal.sawReadyForMerge()
+      mergeGate = withheldMerge({
+        readyForMerge: ready,
+        sessionTodoOpen: ready && (await sessionTodoPending(cwd, journal.sessionName())),
+      })
+      if (mergeGate) armed.merge = false
+    }
+
     // The branch as it is now, not as it was named at start: #326 lets the agent rename it, and
     // the rename is exactly what the PR should be opened against.
     const branch = await currentBranch(cwd)
@@ -1689,7 +1707,11 @@ async function runBuild(opts: CliOptions, io: CliIO): Promise<number> {
       ...(sessionName ? { sessionName } : {}),
       ...(intent ? { intent } : {}),
     }
-    const outcome = await runAutoHandoff(cwd, run, armed)
+    const handedOff = await runAutoHandoff(cwd, run, armed)
+    const outcome =
+      mergeGate && handedOff.outcome !== 'failed'
+        ? { ...handedOff, merge: { outcome: 'withheld' as const, reason: mergeGate } }
+        : handedOff
     onEvent({ kind: 'handoff', ...outcome })
     if (outcome.outcome === 'failed') io.err(`✗ could not ${outcome.step === 'pr' ? 'open the PR' : 'push the branch'}: ${outcome.error}`)
     else if (outcome.outcome === 'done' && outcome.url) io.out(`\n◆ Opened ${outcome.url}`)
@@ -1699,6 +1721,7 @@ async function runBuild(opts: CliOptions, io: CliIO): Promise<number> {
     const merge = outcome.outcome !== 'failed' ? outcome.merge : undefined
     if (merge?.outcome === 'auto-armed') io.out('◆ Auto-merge armed: the PR lands when its checks pass.')
     else if (merge?.outcome === 'merged') io.out('◆ Merged the PR.')
+    else if (merge?.outcome === 'withheld') io.out(`◆ Merge withheld: ${mergeWithheldWhy(merge.reason)}.`)
     else if (merge?.outcome === 'failed') io.err(`✗ could not merge the PR: ${merge.error}`)
   }
 

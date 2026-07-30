@@ -193,6 +193,27 @@ export async function findTodoBacklog(cwd: string): Promise<TodoBacklog | undefi
 }
 
 /**
+ * Does this session's own backlog still have open work (#1363)?
+ *
+ * Reads only `TODO_<SESSION_NAME>.agent.md` — the file the [Research] preset (and a very-large
+ * scope) has the agent keep for its own session. Never the global `TODO_AGENTS.md`: the queue is
+ * decoupled from sessions (#1390), and withholding a merge on it would mean auto-merge never
+ * fires while the project has any backlog at all. `false` on a missing or unreadable file, and on
+ * a session name that could not name a file — no pendingness known is not pendingness.
+ *
+ * TEMPORARY SAFETY BELT, built to be deleted (#1390): the agent's setReadyForMerge() is the
+ * authorization, and this only catches the agent declaring done while its own session file says
+ * otherwise. When the agent's word is deemed enough, delete this function and its single call
+ * site in `maybeAutoHandoff`.
+ */
+export async function sessionTodoPending(cwd: string, sessionName: string | undefined): Promise<boolean> {
+  // The prompt asks for [a-z0-9-]+; anything wider (a path separator above all) names no file.
+  if (!sessionName || !/^[A-Za-z0-9._-]+$/.test(sessionName)) return false
+  const md = await readFile(join(cwd, `TODO_${sessionName}.agent.md`), 'utf8').catch(() => undefined)
+  return md !== undefined && parseTodoEntries(md).length > 0
+}
+
+/**
  * The ticket the next drain run will pick up, or `undefined` when there is none (#1117).
  *
  * "Next" is the first open entry of the flat backlog, because that is what the [Drain queue]

@@ -15,7 +15,7 @@ import type { Cached } from './cache.js'
 import { parseNumstat } from './file-diff.js'
 import { parsePorcelain } from './file-status.js'
 import { errorMessage } from '../error-message.js'
-import type { AutoHandoffSkip, AutoMergeOutcome } from '../events.js'
+import type { AutoHandoffSkip, AutoMergeOutcome, MergeWithheldReason } from '../events.js'
 import { commitPendingWork, currentBranch, startedAtFromRunId, FRAMEWORK_DIR, type RunMeta } from '../store/index.js'
 
 // What a finished session produced, and what is left to do with it (#799).
@@ -516,6 +516,25 @@ export interface HandoffIntent {
 
 /** Both halves armed — the default a session starts from. */
 export const ARMED_HANDOFF: HandoffIntent = { push: true, pr: true }
+
+/**
+ * Whether an armed merge may actually run (#1363), and if not, why.
+ *
+ * The rule settled on #1390: config *arms* the merge, the agent *authorizes* it. Landing on the
+ * default branch unattended takes (a) the agent having declared the session done via
+ * setReadyForMerge() — the same signal the on-before-mergeable step requires — and (b) the
+ * framework not already knowing of work pending in this session (its own TODO file; never the
+ * global queue, which is decoupled from sessions). A withheld merge is not a failed handoff:
+ * push and PR go ahead, the PR just opens as a draft for a human.
+ *
+ * (b) is a temporary safety belt: the agent's word should ultimately be enough. Deleting it means
+ * deleting `sessionTodoOpen` here and `sessionTodoPending` in todo-loop.ts.
+ */
+export function withheldMerge(deps: { readyForMerge: boolean; sessionTodoOpen: boolean }): MergeWithheldReason | undefined {
+  if (!deps.readyForMerge) return 'not-ready-for-merge'
+  if (deps.sessionTodoOpen) return 'session-todo-open'
+  return undefined
+}
 
 /**
  * What auto-handoff did, so the run can say it as an event (#835).

@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
-import { readRunHandoff, resolveRunPr, runBranchFor, pushRunBranch, openRunPullRequest, gitReason, runAutoHandoff, isSessionBranch, prBaseName, commitSessionWork } from './run-handoff.js'
+import { readRunHandoff, resolveRunPr, runBranchFor, pushRunBranch, openRunPullRequest, gitReason, runAutoHandoff, isSessionBranch, prBaseName, commitSessionWork, withheldMerge } from './run-handoff.js'
 import { pickRunPr } from './gh.js'
 import { nodeGitRunner, GIT_SLOW_TIMEOUT_MS, type GitRunner } from '../project.js'
 import { CliTimeoutError, isCliTimeout } from '../cli-exec.js'
@@ -716,4 +716,16 @@ test('resolveRunPr reports pending only while nothing was found and a lookup is 
   const found = await resolveRunPr('/repo', { id: 'r1', sessionName: 'named' }, prs)
   assert.equal(found.value, undefined)
   assert.equal(found.pending, true)
+})
+
+test('withheldMerge authorizes only a declared-done session with an empty session TODO (#1363)', () => {
+  // The rule settled on #1390: config arms the merge, the agent authorizes it. No signal means
+  // no merge, whatever else is true — this is what row 3 of the live matrix proved was missing
+  // (the daemon merged 3s after the PR opened, with setReadyForMerge never called).
+  assert.equal(withheldMerge({ readyForMerge: false, sessionTodoOpen: false }), 'not-ready-for-merge')
+  assert.equal(withheldMerge({ readyForMerge: false, sessionTodoOpen: true }), 'not-ready-for-merge')
+  // The temporary safety belt: the agent said done but its own session file says otherwise.
+  assert.equal(withheldMerge({ readyForMerge: true, sessionTodoOpen: true }), 'session-todo-open')
+  // Declared done, nothing pending in this session: the merge may run.
+  assert.equal(withheldMerge({ readyForMerge: true, sessionTodoOpen: false }), undefined)
 })
