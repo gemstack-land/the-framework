@@ -1,0 +1,23 @@
+{
+  "version": 2,
+  "status": "stopped",
+  "id": "2026-08-05T14-55-22-613Z",
+  "startedAt": "2026-08-05T14:55:23.983Z",
+  "updatedAt": "2026-08-05T15:14:41.847Z",
+  "passes": 0,
+  "pid": 741191,
+  "host": "rom-thinkpad-x280",
+  "intent": "Work on tickets/2026-07-31_avoid-term-spike.md. Do not start any other ticket.",
+  "kind": "prompt",
+  "handoff": {
+    "push": true,
+    "pr": true,
+    "merge": true
+  },
+  "ticket": "tickets/2026-07-31_avoid-term-spike.md",
+  "branch": "the-framework/avoid-term-spike",
+  "driver": "claude-code",
+  "workspace": "/home/rom/code/the-framework/.the-framework/worktrees/2026-08-05T14-55-22-613Z",
+  "sessionLink": "https://claude.ai/code",
+  "sessionId": "e08580a0-b432-47bf-8ffb-18b6122ce789"
+}
