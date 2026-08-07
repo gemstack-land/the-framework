@@ -4,7 +4,7 @@ import { closeSync, mkdtempSync, openSync, rmSync, writeFileSync } from 'node:fs
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { killTree, registerChild, unregisterChild } from './child-registry.js'
-import { combineFraming, makeEmit } from './session-support.js'
+import { makeEmit } from './session-support.js'
 import type { Driver, DriverEvent, DriverPromptOptions, DriverSession, DriverStartOptions, DriverTurn } from './types.js'
 
 /**
@@ -133,6 +133,28 @@ function trustAdvice(cwd: string): string {
 const SAFE_MODEL = /^[A-Za-z0-9._:-]+$/
 
 /**
+ * The rule between the task and the injected instructions in a hand-off prompt (#1497).
+ * Exported so a test can pin the exact seam the claude.ai reader sees.
+ */
+export const CLOUD_PROMPT_SEPARATOR = '==============================='
+
+/**
+ * Assemble the one prompt a cloud session receives (#1497). Unlike every streamed driver —
+ * where the system channel is invisible plumbing — this whole string is what a *human* reads
+ * when they open the claude.ai session. So the task comes first (it is what the user is
+ * looking for), and each injected block follows behind a hard `===` rule with a one-line
+ * label, because the blocks' own markdown headers run into each other and read as one
+ * confusing document without it.
+ */
+export function cloudHandOffPrompt(task: string, ...injected: (string | undefined)[]): string {
+  const blocks = injected.filter((part): part is string => Boolean(part))
+  if (blocks.length === 0) return task
+  const rule = `\n\n\n${CLOUD_PROMPT_SEPARATOR}\n\n\n`
+  const header = 'Instructions from The Framework, the tool that started this session:'
+  return `${task}${rule}${header}\n\n${blocks.join(rule)}`
+}
+
+/**
  * One hand-off to Claude Code on the web — **exactly one, for the life of the session.**
  *
  * A run is not a single prompt. The loop prompts again for every pass (plan, build, review,
@@ -168,7 +190,9 @@ export class CloudSession implements DriverSession {
 
   async prompt(text: string, opts: DriverPromptOptions = {}): Promise<DriverTurn> {
     if (this.disposed) throw new Error('[framework] claude-web session disposed')
-    const full = combineFraming(this.framing, opts.system, text)
+    // Task first, injected framing behind labeled rules (#1497): on claude.ai this string is
+    // read by a human, and the task is what they open the session to find.
+    const full = cloudHandOffPrompt(text, this.framing, opts.system)
     this.emit({ type: 'start', prompt: full })
 
     // Already handed off: say so and spend nothing. This is the guard that keeps one run to

@@ -1,6 +1,6 @@
 import { strict as assert } from 'node:assert'
 import { test } from 'node:test'
-import { CLOUD_COMMAND, CloudDriver, trustRootOf, type RunPtyOptions } from './cloud.js'
+import { CLOUD_COMMAND, CLOUD_PROMPT_SEPARATOR, CloudDriver, cloudHandOffPrompt, trustRootOf, type RunPtyOptions } from './cloud.js'
 import type { DriverEvent } from './types.js'
 
 /**
@@ -56,12 +56,26 @@ test('the session link rides an `action` event, the way the Actions run link doe
   assert.ok(events.some(e => e.type === 'result' && e.sessionLink === URL))
 })
 
-test('the prompt carries the session framing and the per-call system prompt', async () => {
+test('the task leads the prompt; framing and per-call system follow behind labeled rules (#1497)', async () => {
   const calls: RunPtyOptions[] = []
   const session = await driverWith(CREATED, calls).start({ cwd: '/repo', system: 'FRAMING' })
   await session.prompt('do the thing', { system: 'EXTRA' })
-  assert.equal(calls[0]?.prompt, 'FRAMING\n\nEXTRA\n\ndo the thing')
+  assert.equal(
+    calls[0]?.prompt,
+    [
+      'do the thing',
+      CLOUD_PROMPT_SEPARATOR,
+      'Instructions from The Framework, the tool that started this session:\n\nFRAMING',
+      CLOUD_PROMPT_SEPARATOR,
+      'EXTRA',
+    ].join('\n\n\n'),
+  )
   assert.equal(calls[0]?.cwd, '/repo')
+})
+
+test('cloudHandOffPrompt with nothing injected is the bare task — no rule, no label', () => {
+  assert.equal(cloudHandOffPrompt('do the thing'), 'do the thing')
+  assert.equal(cloudHandOffPrompt('do the thing', undefined, undefined), 'do the thing')
 })
 
 test('the invocation is stopped as soon as the session link lands', async () => {
