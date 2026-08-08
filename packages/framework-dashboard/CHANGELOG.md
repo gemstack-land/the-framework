@@ -1,5 +1,115 @@
 # @gemstack/framework-dashboard
 
+## 0.5.0
+
+### Minor Changes
+
+- 574d079: Launcher shows Docs and History in the main column (#1455 items 2/3): new `ProjectDocs` / `ProjectHistory` sections under the launcher reuse the rail's panels, and the right rail withholds its Docs/History tabs (and skips their polls) while the launcher is the main view. Session views keep the full rail.
+- 8bbfcf4: Transcript choice rows become the interaction itself (#1455 items 6/7): an open gate renders the same interactive ChoicePanel the rail held — answered right there in the flow — and a resolved one collapses to the shared expandable ✓ card instead of a "✓ chose" log line. With the gates inline, the right rail's Choices tab is retired (one less panel, and nothing yanks the rail when a question fires); the launcher's questions hub reuses the same AnsweredChoice card.
+- 92262ec: Launcher rework per the #1455 thread: the tickets section is removed (the /tickets page is the one clear path to the backlog), and "Waiting on you" becomes the main event — all choices at once in one big view with its own scroll area and a right-hand jump-nav (no pagination), with a question answered there collapsing to a single expandable ✓ line instead of vanishing.
+- 6a1e75d: The ticket lock is now the `.lock.md` file the ticketing format defines (#1420), replacing the PENDING placeholder mechanism: the daemon claims a ticket by writing and pushing `tickets/<STEM>.lock.md` (`CLAIMED: <AGENT_ID>`) before the agent starts, the fanned-out agent deletes the lock in the same commit as its plan, and the 6-hour staleness release is gone — a lock stands until the work lands or a human lifts it with the dashboard's new Release-lock button (`sendReleaseTicketLock`). Tickets show a "claimed" badge with the holder while locked.
+- 5206058: Record the model on the run (#1438): each leg's `session` event carries the model id the driver was started with, folded onto `RunMeta.model` and `sessionInfo()` (latest leg wins — a continuation may run a different model), shown in the transcript's session line and the run page's session-details strip.
+- a4b519d: Sessions end themselves, and Stop becomes a pause (#1390/#1391).
+
+  A finished session no longer parks on the human. Once the work and the backlog gate settle, the chat phase drains any message that already arrived and then the run ends at its own natural end — handoff included, so an armed merge fires there (still gated on the agent's ready-for-merge signal, #1363). The "waiting" limbo (`settled` event) is no longer emitted; the pill flips to done when the session actually ends. A follow-up message reopens the conversation via `--resume`, exactly like Claude Code web — the composer already did this for ended runs (#762). A run whose own terminal dashboard is the only surface keeps the old stay-open park (`stayOpenChat`), since it has no daemon to resume through.
+
+  Stop keeps its name and icon but is now a pause: it kills the current turn, publishes nothing, and the session stays resumable from the composer — cancel is just a pause never resumed.
+
+  Merge is the second session action (#1391). On a live run, the ⋮ menu's "Merge when finished" appends a `merge` control entry: the run arms the full publish ladder and records the _human_ authorization, which the merge gate honors instead of demanding the agent's signal — the session still merges at its own end, and a parked backlog offer resolves to "stop" so one click suffices. On an ended run with an open unmerged PR — the withheld-merge ending, where the agent never signalled and a draft PR was left behind — the action bar's "Merge PR" button merges it directly (`sendMerge` → `mergeSessionPr`), marking the draft ready on the way.
+
+### Patch Changes
+
+- fbf47c1: New `Auto-merge` setting (#1216), default off: a session armed for it merges the PR its handoff opens — GitHub auto-merge where the repo allows it, so the PR lands when its checks pass, else merged directly. Reachable as the `autoMerge` preference (launcher row, per-project overridable), the `the-framework.yml` key, and the `--auto-merge`/`--no-auto-merge` flags. The routine's [Drain queue] job turns it on for its own runs: what it implements was already triaged as consensual quick-win work, so its PRs land themselves and the #1334 loop closes without a human pressing merge.
+- a3a49bb: The launcher warns when the merge rung is armed on a repo with GitHub auto-merge disabled (#1417): the armed merge silently degrades to an immediate direct merge — the PR lands before CI has run (#1406) — so the warning says so before the session is spent and names the fix (enable "Allow auto-merge" in the repo settings + mark a check as required). Never a block. Backed by a new cached `gh api repos/{owner}/{repo}` read of `allow_auto_merge` (`ghRepoAutoMerge` / `onRepoAutoMerge`); "gh could not say" renders nothing rather than crying wolf.
+- a3dc9ee: The claimed badge (#1420) now names the lock's holder inline — `claimed · <agent-id>` — instead of hiding it behind the native `title` tooltip, which needs a 1-2s still hover nobody discovers. The tickets list truncates a long id to keep the dense rows aligned (full id stays in the tooltip); the detail page shows it in full.
+- 417a2a4: Stopping a settled session no longer blanks its view to "This session has no events." until a manual refresh (#1383). When a run ends, the view swaps its live events for the archived log — but the archive read answers `[]` both for "gone" and for "not archived yet", and a Stop races the archive write, so the swap could replace a populated feed with nothing. An empty archive now counts as not-there-yet: the events already on screen keep their place, and the empty-state line is reserved for a session that truly has no events anywhere.
+- 7ed6031: The launcher warns when a PR/merge rung is armed and `gh` cannot deliver it (#1419): the handoff publishes through the GitHub CLI, so a missing or logged-out `gh` used to surface hours later as publishing that silently stopped at the pushed branch. The #1326 preflight gains a `publish` half probing `gh --version` and `gh auth status` — warnings that name the fix (`brew install gh` / cli.github.com, `gh auth login`), never blocks: the session's own work needs no gh and the push rung is plain git. Probed only while a PR/merge rung is armed on a local run.
+- d5cef3f: Picking Haiku in the launcher now shows a warning under the composer (#1439) — never a block: Haiku consistently skips the session-finish protocol (0/5 in the #1334 model-tier test, every stronger tier passed), so a publishing run ends as an unmerged draft PR needing hand-holding. The warning says so before the session is spent and points at Fable for real work.
+- 4690f03: The armed-handoff line now owns the merge half (#1382). A run launched with auto-merge advertised "when this ends: push the branch and open a draft PR" and then opened a ready PR and merged it to main unattended — the most consequential thing a run can do was the one thing the line didn't say. The `handoff-armed` event and the run record's `handoff` mirror now carry the merge arming (display-only; the merge itself still fires off the run's own config, #1216), the transcript line says "push the branch, open a PR, and merge it", and the dashboard's checkbox relabels to "Open PR & merge". Older journals lack the field and keep their old reading: merge off.
+- 4a7b7c5: The session header's handoff checkbox no longer lies about a push-only run (#1376). The run writes its `handoff-armed` state as the very first event — before the live channel attaches — so a live tab folds a stream without it and `handoffState`'s armed-armed fallback showed a ticked "Open PR" on a session the launcher had explicitly set to push-only. The armed pair was already mirrored onto the run record for exactly this reader; the view just never used it. `handoffState` now takes a seed, and `RunView` passes the record's mirror — a `handoff-armed` event in the stream still wins, being newer than any snapshot.
+- b1ec5bf: The launcher now shows the whole publish ladder (#1379): **Push branch** → **Open PR** → **Auto-merge**, each enabled only while the rung below it is on. Previously only Open PR and Auto-merge were offered, so unticking Open PR silently meant "push-only" — the launcher read as "publishing off" while the session still pushed the branch. Unticking Push branch now publishes nothing, and `handoffFromPreferences` treats `autoPushBranch` as the master rather than letting an armed PR force the push back on. Defaults are unchanged: push and PR on, auto-merge off.
+- ed2a2ab: The live run feed no longer blanks mid-run on a stream reconnect (#1383). Every subscribe replays the whole log before following live, and the client used to clear its feed first — so after a transient channel drop the "stream lost" banner cleared and the transcript sat empty, bannerless, until the replay refilled it. The on-disk tail now sends a wire-only `stream-sync` marker when its replay is delivered, and a reconnecting client buffers the replay and swaps atomically on it — the feed never shows less than it already showed, the same rule #1402 set for the archive read. In-memory sources (the relay, relayed device runs) send no marker and fall back to a short grace deadline; a reconnect that dies mid-replay drops its partial buffer rather than swapping it in.
+- c1c4b3f: The transcript's kind badges are tinted for scanning (the #1455 colour idea): choice gates amber, clean end / ready-for-merge green, pushed surfaces (view/browser/preview) primary — failure red and the reader's blue turn still win, and the bulk of the log stays muted so the colours stay scannable.
+- fe32c33: The session log now says what a row is by its colour, and opens with the line you wrote. A failure renders red (#1199): both the agent erroring mid-run and the run settling badly, though a stopped run stays neutral because stopping was asked for and is not a fault. Your own turn renders blue (#1170), so it reads apart from the agent's work.
+
+  The prompt is also hoisted to the top of the log (#1170). It is emitted after the session and system-prompt events, so the one line you wrote used to open three rows down, underneath a char-count summary of a prompt you did not write. Only the first prompt moves; a later turn is part of the conversation and stays where it happened.
+
+- 550809a: The right rail's `Log` tab is now `History`, and every tab says what it holds on hover (#1145). One word only works for a reader who already knows the system: "Log" was read as agent output or a console stream rather than the project's durable, committed session history. The panel itself now names what it is and where it comes from, and its empty state says no finished sessions rather than no log entries.
+- 568a126: A session no longer spends a branch and a worktree on an agent that can never start (#1326). Preflight already checked that the picked agent's CLI was installed, but installed is not usable: a logged-out `claude` resolves on PATH and answers `--version` exactly like a working one, then dies before the session exists. That is what our first external-user report (#1323) looked like from outside, with run branches piling up across six projects while the dashboard sat on "Waiting for the session to start...".
+
+  Preflight now also asks the CLI whether it is authenticated (`claude auth status`, `codex login status`) and warns when the daemon runs as root, where `sudo` moves `HOME` and both agents lose their credentials the same way. The daemon runs these before it allocates a run's checkout, so a doomed start is refused with the command that fixes it instead of costing a branch, and the launcher shows the same thing before you press Start, the way it already warns about folder trust (#1318). A CLI too old to answer the question is treated as unknown rather than logged out, so an unreadable answer never blocks a setup that works.
+
+- ed5a1a5: The Overview's AI Queue card now lets you act on an entry, two ways. An entry that links somewhere is a link: a queued ticket (the `[Title](tickets/x.md)` style) opens that ticket's own page, and an absolute http(s) target opens in a new tab — an entry pointing anywhere else keeps its title and stays plain text rather than pretending to have a page. And every open entry carries a play button that spins up an agent working on that one entry immediately — the same unattended work the drain sweep would get to, but on your click, with the drain's own vocabulary narrowed to the entry so the agent checks off exactly the line you started. The card previously was read-only: titles you could not open, and no way to start a queued task short of draining the whole queue.
+- 665fde2: The session composer's gear now follows what the next action arms (#1172): while a run is live it is dropped entirely (it used to open an empty dropdown), and once the run has ended it returns as "Resume options" — Autopilot, the publish ladder (Push branch / Open PR / Auto-merge) and Browser, the options a Resume continuation actually resolves at start (#1469). Prompt-shaping rows and Run on / agent / model stay launcher-only.
+- 07379c8: Resuming an ended session no longer blanks its transcript, and a stopped session offers a Resume button (#1391). The flicker had two layers: the continuation bumped the new-run feed reset even though a resume appends to the same journal (nothing truncates, so nothing re-replays), and `currentRunEvents` sliced the live feed at the resume's second `session` boundary, hiding the pre-resume transcript until the run ended again. The Resume button is the composer's own continuation with a stock prompt — same run, same branch, same agent conversation — offered when the run ended stopped and reported a session id.
+- 6799642: A resumed session reads as running again: `isRunActive` and `runOutcome` now fold over the current `session` segment instead of the whole feed. The resume fix keeps the full multi-segment transcript on screen, which exposed the stopped segment's `end` event to the status folds — the pill stayed yellow "stopped" and the ⋮ menu hid "Stop session" while the resumed agent was live, and a resumed run that later finished clean would have stayed "stopped" for ever.
+- 0ce58a3: The settle moment now follows the #1173 maintainer decisions to the end. A branch with no diff never offers `Open PR` — GitHub would refuse it with "No commits between main and \<branch\>" — and when the session left work uncommitted, that work is named right in the bar (`Nothing committed — index.html left uncommitted.`), with the full list behind the bar's disclosure. The handoff read now carries the pending paths (`RunHandoff.pendingFiles`) instead of a bare count to make that possible. Unattended runs keep committing their work automatically on the way out, so for them the guard is a rare sight; an attended session parked in the chat can be told to commit right below the message.
+
+  The push setting the launcher gear no longer shows (one `Open PR` row since #1181) is now really available where the thread said it stays: `the-framework.yml` accepts `autoPushBranch` and `autoOpenPr` beside the other booleans, resolving through the usual layers (flag > yml > default on), narrated like the rest, and feeding the launcher's repo tier. The CLI pair became tri-state to let the file decide when the run says nothing. The postponed `Auto commit` / `Auto push` settings split is deliberately not added.
+
+- 80d5d97: The rail no longer shows a phantom second session when a run finishes as fast as it started. The "starting…" stand-in row waited for a `running` row to hand over to, but the runs list polls every two seconds, so a session that starts and finishes inside one interval is never once observed running — the stand-in then sat beside the finished session's own row, reading as a duplicate session that was starting, until a 20-second deadline swept it. It now retires on the real signal: the first run to appear that was not in the list when Start was clicked, whatever status it landed in. The deadline stays as the backstop for a start that produces no run at all.
+- 6dd4057: "Trigger routine now" answers (#1433): the RPC was fire-and-forget, so the button flashed for milliseconds and a sweep that ran and refused showed nothing — the stand-down reason (e.g. #1432's "the queue has work waiting and its routine is switched off") was recoverable only from the source. The RPC now awaits the tick and returns the report's per-project outcome lines; the Routine work card shows them in its note slot (folder-prefixed when several projects answered) and holds "Triggering…" until the sweep resolves. The two previously silent stand-down paths (queue empty on a drain-only sweep, drain routine switched off) now also write daemon log lines like every other stand-down.
+- d5f2c48: The Tickets list grows a plan column (#685). A ticket that already has a `<stem>.plan.md` shows a plan icon that links to a new page rendering the plan's markdown (`/{project}/tickets/{slug}/plan`); a ticket with no plan yet shows a spike button that starts a session with `Create tickets/<stem>.plan.md` to write one. The column replaces the old "planned" badge — the badge stated the fact, the column states it and gives the reader somewhere to go with it. The plan view reads the file through the existing confined `onFileContent` read, so no new server surface is added.
+- Updated dependencies [1a018d0]
+- Updated dependencies [288fa63]
+- Updated dependencies [a16e72f]
+- Updated dependencies [fbf47c1]
+- Updated dependencies [a3a49bb]
+- Updated dependencies [901ea0a]
+- Updated dependencies [57f4047]
+- Updated dependencies [a0c9db9]
+- Updated dependencies [e60b51a]
+- Updated dependencies [e72d0dd]
+- Updated dependencies [2908683]
+- Updated dependencies [03260d9]
+- Updated dependencies [660adf2]
+- Updated dependencies [7bfba05]
+- Updated dependencies [80d3b2c]
+- Updated dependencies [6b64d67]
+- Updated dependencies [7ed6031]
+- Updated dependencies [11beec4]
+- Updated dependencies [4690f03]
+- Updated dependencies [4a7b7c5]
+- Updated dependencies [4a7b7c5]
+- Updated dependencies [9b54b0b]
+- Updated dependencies [a7490f8]
+- Updated dependencies [7eaaa31]
+- Updated dependencies [b1ec5bf]
+- Updated dependencies [ed2a2ab]
+- Updated dependencies [6a1e75d]
+- Updated dependencies [dd865d8]
+- Updated dependencies [01aa1ca]
+- Updated dependencies [7aedf24]
+- Updated dependencies [ec108fc]
+- Updated dependencies [ba1fdab]
+- Updated dependencies [31da5d7]
+- Updated dependencies [568a126]
+- Updated dependencies [3702fab]
+- Updated dependencies [a0594fe]
+- Updated dependencies [e733e47]
+- Updated dependencies [665fde2]
+- Updated dependencies [152a0d7]
+- Updated dependencies [4b7b24b]
+- Updated dependencies [bcb3645]
+- Updated dependencies [173d090]
+- Updated dependencies [5206058]
+- Updated dependencies [5651aef]
+- Updated dependencies [a4b519d]
+- Updated dependencies [b5fd2a1]
+- Updated dependencies [cd80295]
+- Updated dependencies [0ce58a3]
+- Updated dependencies [7c4f9eb]
+- Updated dependencies [035614e]
+- Updated dependencies [ab10486]
+- Updated dependencies [c8be89f]
+- Updated dependencies [6dd4057]
+- Updated dependencies [1f76652]
+- Updated dependencies [79508d8]
+- Updated dependencies [7b903ce]
+- Updated dependencies [3bda885]
+- Updated dependencies [f9f8898]
+  - @gemstack/the-framework@1.5.0
+
 ## 0.4.1
 
 ### Patch Changes

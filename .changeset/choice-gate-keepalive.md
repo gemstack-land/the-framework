@@ -1,5 +1,0 @@
----
-'@gemstack/the-framework': patch
----
-
-A daemon-spawned run no longer dies silently while a choice gate waits for its answer (#1359). The run had nothing holding the Node event loop at a parked gate — spawned detached with all stdio ignored and `--no-dashboard`, a driver child per prompt, and a deliberately unref'd control watcher — so the moment `requestChoice` parked a bare Promise between turns, Node ran out of scheduled work and exited 0 mid-await: no `end` event, empty stderr, and every pick appended to `control.jsonl` read by nobody. A gate keepalive (a ref'd idle interval that exists only while a gate or chat wait is parked) now holds the process until the pick arrives or the run is stopped; the watcher itself stays unref'd. And a run that still dies holding a gate no longer asks its question forever: every path that flips a dead `running` run to `stopped` writes the `end` event the process never did (folded through the meta so `pendingChoice` clears), and the dashboard expires all open gates when a run's `end` streams in.

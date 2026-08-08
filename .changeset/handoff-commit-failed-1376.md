@@ -1,5 +1,0 @@
----
-'@gemstack/the-framework': patch
----
-
-A session's uncommitted work no longer strands silently at the handoff (#1376). The trivial-run repro: the agent wrote a file without committing (its trivial-scope judgment), the pre-handoff `commitPendingWork` lost git's `index.lock` race against the daemon's conversation committer — busiest at exactly that moment — and its failure was swallowed, so the handoff judged the branch "committed nothing" and skipped the armed push; teardown's identical commit landed seconds later, leaving the work on a local branch nobody was told about (the #860 failure shape, back through a new hole). From the dashboard the change simply vanished on Stop. Two fixes: `commitPendingWork` now retries through transient failures with a short backoff, and the handoff honors its result — a commit that still fails becomes an explicit `commit-failed` skip ("the session's pending work could not be committed, so nothing was published") instead of a silent wrong "empty" verdict.
